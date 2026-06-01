@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PollSlide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #13131c;
+    --surface2: #1c1c2e;
+    --border: rgba(255,255,255,0.07);
+    --accent: #6c63ff;
+    --accent2: #ff6584;
+    --accent3: #43e97b;
+    --accent4: #f7b731;
+    --text: #f0f0fa;
+    --muted: #8888aa;
+    --radius: 16px;
+    --radius-sm: 10px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; margin:0; padding:0; }
+  body::before { content:''; position:fixed; top:-40%; left:-20%; width:80vw; height:80vw; background:radial-gradient(circle,rgba(108,99,255,0.12) 0%,transparent 70%); pointer-events:none; z-index:0; }
+  body::after  { content:''; position:fixed; bottom:-30%; right:-10%; width:60vw; height:60vw; background:radial-gradient(circle,rgba(255,101,132,0.08) 0%,transparent 70%); pointer-events:none; z-index:0; }
+
+  /* Fixed centered — independent of LearnWorlds page wrappers */
+  #app {
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    z-index: 99999 !important;
+    width: calc(100% - 40px) !important;
+    max-width: 480px !important;
+    max-height: 90vh !important;
+    overflow-y: auto !important;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 30px;
+  }
+
+  .logo { font-family:'Syne',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.2em; text-transform:uppercase; color:var(--accent); margin-bottom:22px; display:flex; align-items:center; gap:7px; }
+  .logo-dot { width:7px; height:7px; background:var(--accent); border-radius:50%; animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
+  @keyframes slideUp { from{opacity:0;transform:translateY(22px) translateX(-50%)} to{opacity:1;transform:translateY(-50%) translateX(-50%)} }
+
+  h1 { font-family:'Syne',sans-serif; font-size:clamp(19px,5vw,25px); font-weight:800; line-height:1.25; margin-bottom:6px; }
+  .subtitle { color:var(--muted); font-size:14px; margin-bottom:22px; line-height:1.5; }
+
+  label { display:block; font-size:11px; font-weight:500; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; }
+  input[type="text"] { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:13px 15px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:16px; outline:none; transition:border-color 0.2s; margin-bottom:16px; }
+  input[type="text"]:focus { border-color:var(--accent); }
+  input[type="text"]::placeholder { color:var(--muted); }
+
+  .btn { width:100%; padding:13px 20px; border:none; border-radius:var(--radius-sm); font-family:'Syne',sans-serif; font-size:14px; font-weight:700; letter-spacing:0.05em; cursor:pointer; transition:all 0.2s; }
+  .btn-primary { background:var(--accent); color:#fff; }
+  .btn-primary:hover { background:#7c74ff; }
+  .btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
+
+  .q-badge { display:inline-flex; align-items:center; font-family:'Syne',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.15em; text-transform:uppercase; background:rgba(108,99,255,0.15); color:var(--accent); padding:4px 12px; border-radius:100px; border:1px solid rgba(108,99,255,0.25); margin-bottom:16px; }
+  .q-text { font-family:'Syne',sans-serif; font-size:clamp(15px,4vw,19px); font-weight:800; line-height:1.4; margin-bottom:20px; }
+
+  .options-grid { display:flex; flex-direction:column; gap:9px; margin-bottom:18px; }
+  .option { background:var(--surface2); border:1.5px solid var(--border); border-radius:var(--radius-sm); padding:12px 15px; cursor:pointer; display:flex; align-items:center; gap:12px; transition:all 0.18s; font-size:14px; text-align:left; color:var(--text); width:100%; }
+  .option:hover:not([disabled]) { border-color:var(--accent); background:rgba(108,99,255,0.08); }
+  .option.selected { border-color:var(--accent); background:rgba(108,99,255,0.15); }
+  .option.correct  { border-color:var(--accent3); background:rgba(67,233,123,0.12); color:var(--accent3); pointer-events:none; }
+  .option.wrong    { border-color:var(--accent2); background:rgba(255,101,132,0.12); color:var(--accent2); pointer-events:none; }
+  .option.neutral  { pointer-events:none; opacity:0.6; }
+  .opt-letter { width:28px; height:28px; border-radius:7px; background:var(--surface); border:1.5px solid var(--border); display:flex; align-items:center; justify-content:center; font-family:'Syne',sans-serif; font-weight:700; font-size:11px; flex-shrink:0; transition:all 0.18s; }
+  .option.selected .opt-letter { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .option.correct  .opt-letter { background:var(--accent3); border-color:var(--accent3); color:#000; }
+  .option.wrong    .opt-letter { background:var(--accent2); border-color:var(--accent2); color:#fff; }
+
+  textarea { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:13px 15px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:14px; outline:none; resize:vertical; min-height:90px; transition:border-color 0.2s; margin-bottom:18px; }
+  textarea:focus { border-color:var(--accent); }
+  textarea::placeholder { color:var(--muted); }
+
+  .rating-wrap { display:flex; gap:7px; margin-bottom:18px; flex-wrap:wrap; }
+  .r-btn { flex:1; min-width:36px; aspect-ratio:1; background:var(--surface2); border:1.5px solid var(--border); border-radius:var(--radius-sm); color:var(--text); font-family:'Syne',sans-serif; font-weight:700; font-size:15px; cursor:pointer; transition:all 0.18s; display:flex; align-items:center; justify-content:center; }
+  .r-btn:hover { border-color:var(--accent); }
+  .r-btn.sel { border-color:var(--accent); background:var(--accent); color:#fff; }
+
+  .multi-hint { font-size:12px; color:var(--accent); margin-bottom:10px; font-weight:500; }
+
+  .status-box { border-radius:var(--radius-sm); padding:14px; text-align:center; font-weight:500; font-size:14px; margin-bottom:16px; }
+  .status-box.submitted { background:rgba(67,233,123,0.08); border:1px solid rgba(67,233,123,0.2); color:var(--accent3); }
+  .status-box.closed    { background:rgba(247,183,49,0.08);  border:1px solid rgba(247,183,49,0.2);  color:var(--accent4); }
+  .status-box.error     { background:rgba(255,101,132,0.08); border:1px solid rgba(255,101,132,0.2); color:var(--accent2); }
+
+  .spinner { width:28px; height:28px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; margin:0 auto 14px; }
+  @keyframes spin { to{transform:rotate(360deg)} }
+  .center { text-align:center; }
+  /* Question image */
+  .q-image { width:100%; max-height:200px; object-fit:cover; border-radius:12px; margin-bottom:16px; border:1px solid var(--border); }
+  /* Option images */
+  .option { position:relative; }
+  .opt-img { width:42px; height:42px; border-radius:8px; object-fit:cover; flex-shrink:0; }
+  .option.has-img { padding:8px 12px; }
+  /* Countdown timer */
+  .timer-bar { display:flex; align-items:center; gap:10px; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 14px; margin-bottom:16px; }
+  .timer-ring { width:34px; height:34px; flex-shrink:0; }
+  .timer-text { font-family:'Syne',sans-serif; font-weight:700; font-size:15px; }
+  .timer-text.warn { color:var(--accent2); }
+  .timer-label { font-size:12px; color:var(--muted); }
+  .expired-box { background:rgba(247,183,49,0.1); border:1px solid rgba(247,183,49,0.25); color:var(--accent4); border-radius:var(--radius-sm); padding:14px; text-align:center; font-weight:500; font-size:14px; margin-bottom:14px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME",
+  authDomain: "echonest-live-survey.firebaseapp.com",
+  databaseURL: "https://echonest-live-survey-default-rtdb.firebaseio.com",
+  projectId: "echonest-live-survey",
+  storageBucket: "echonest-live-survey.firebasestorage.app",
+  messagingSenderId: "285529140046",
+  appId: "1:285529140046:web:983c1ee8000a2ca8f80c1f",
+  measurementId: "G-NWQY4YLNRC"
+};
+
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.database();
+
+// ─── URL PARSING ─────────────────────────────────────────────────────────────
+// QR uses hash: echonest.at/index#SESSIONCODE/0
+// Fallback: ?session=CODE&q=0
+function parseLocation() {
+  const hash = window.location.hash.replace('#','').trim();
+  if (hash && hash.includes('/')) {
+    const parts = hash.split('/');
+    return { session: parts[0].toUpperCase(), qIndex: parseInt(parts[1] || '-1') };
+  }
+  const params = new URLSearchParams(window.location.search);
+  return {
+    session: (params.get('session') || '').toUpperCase().trim(),
+    qIndex:  parseInt(params.get('q') || '-1')
+  };
+}
+const { session: SESSION, qIndex: Q_INDEX } = parseLocation();
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+// participantId is unique per person per SESSION (stored in sessionStorage)
+// It is NOT stored in Firebase participants node — only in per-question responses
+let participantId   = null;
+let participantName = null;
+let questionData    = null;
+let answered        = false;
+let selectedOptions = new Set();
+let answerStartTime = null;
+
+// stableQId is the Firebase key for this question's response bucket
+// Path: sessions/SESSION/responses/STABLE_QID/PARTICIPANT_ID
+const STABLE_QID = `q${Q_INDEX}_stable_${SESSION}`;
+
+// ─── RENDER ───────────────────────────────────────────────────────────────────
+function render(html) { document.getElementById('app').innerHTML = html; }
+
+// ─── BOOT ─────────────────────────────────────────────────────────────────────
+function bootApp() {
+  if (!SESSION || Q_INDEX < 0) {
+    render(`
+      <div class="logo"><span class="logo-dot"></span>PollSlide</div>
+      <div class="status-box error">Invalid link. Please scan the correct QR code.</div>
+      <p class="center" style="color:var(--muted);font-size:13px;">Ask the presenter for the right QR code.</p>
+    `);
+    return;
+  }
+
+  // Restore identity from sessionStorage if available
+  const storedId   = sessionStorage.getItem(`ql_pid_${SESSION}`);
+  const storedName = sessionStorage.getItem(`ql_pname_${SESSION}`);
+  if (storedId && storedName && storedName !== 'null' && storedName !== 'undefined') {
+    participantId   = storedId;
+    participantName = storedName;
+    loadQuestion();
+  } else {
+    showNameEntry();
+  }
+}
+
+// ─── NAME ENTRY ───────────────────────────────────────────────────────────────
+function showNameEntry() {
+  render(`
+    <div class="logo"><span class="logo-dot"></span>PollSlide</div>
+    <h1>Enter Your Name</h1>
+    <p class="subtitle">You only need to do this once per session.</p>
+    <label>Your Name</label>
+    <input type="text" id="nameInput" placeholder="Your name" maxlength="30" autofocus>
+    <button class="btn btn-primary" onclick="joinSession()">Continue →</button>
+    <p id="nameErr" style="color:var(--accent2);font-size:13px;margin-top:10px;text-align:center;"></p>
+  `);
+  document.getElementById('nameInput').addEventListener('keydown', e => { if(e.key==='Enter') joinSession(); });
+}
+
+function joinSession() {
+  const name = document.getElementById('nameInput').value.trim();
+  if (!name) { document.getElementById('nameErr').textContent = 'Please enter your name.'; return; }
+
+  participantName = name;
+  // Generate a unique ID for this person in this session
+  participantId = 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
+
+  sessionStorage.setItem(`ql_pid_${SESSION}`,  participantId);
+  sessionStorage.setItem(`ql_pname_${SESSION}`, participantName);
+
+  loadQuestion();
+}
+
+// ─── LOAD QUESTION ────────────────────────────────────────────────────────────
+async function loadQuestion() {
+  render(`<div class="spinner"></div><p class="center" style="color:var(--muted);font-size:13px;">Loading...</p>`);
+
+  // Load question definition from quiz_builder
+  const qSnap = await db.ref(`quiz_builder/${SESSION}/questions/${Q_INDEX}`).get();
+  if (!qSnap.exists()) {
+    render(`
+      <div class="logo"><span class="logo-dot"></span>PollSlide</div>
+      <div style="text-align:center;padding:10px 0 20px;">
+        <div style="font-size:40px;margin-bottom:12px;animation:gentle 2s ease-in-out infinite;">⏳</div>
+        <h1 style="margin-bottom:8px;">Waiting...</h1>
+        <p class="subtitle">Question ${Q_INDEX+1} isn't ready yet.<br>Stay on this page.</p>
+        <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px 16px;font-size:13px;color:var(--muted);margin-top:12px;">
+          Session <strong style="color:var(--accent4);">${SESSION}</strong>
+        </div>
+      </div>
+      <style>@keyframes gentle{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}</style>
+    `);
+    setTimeout(loadQuestion, 3000);
+    return;
+  }
+
+  questionData = qSnap.val();
+
+  // Check if this participant already answered this question
+  // Response is stored at: sessions/SESSION/responses/STABLE_QID/participantId
+  const myRespSnap = await db.ref(`sessions/${SESSION}/responses/${STABLE_QID}/${participantId}`).get();
+  if (myRespSnap.exists()) {
+    answered = true;
+    showAlreadyAnswered();
+    return;
+  }
+
+  answered = false;
+  answerStartTime = Date.now();
+  showQuestion(questionData);
+}
+
+// ─── SHOW QUESTION ────────────────────────────────────────────────────────────
+function showQuestion(q) {
+  const isMulti  = q.type === 'multiple_choice_multi';
+  const isText   = q.type === 'free_text';
+  const isRating = q.type === 'rating';
+  const letters  = ['A','B','C','D','E','F'];
+
+  let body = '';
+  if (isText) {
+    body = `
+      <textarea id="txtAns" placeholder="Type your answer here..."></textarea>
+      <button class="btn btn-primary" onclick="submitAnswer()">Submit Answer</button>`;
+  } else if (isRating) {
+    const max = q.ratingMax || 5;
+    const labels = q.ratingLabels || {};
+    body = `
+      <div class="rating-wrap" id="ratingWrap">
+        ${Array.from({length:max},(_,i)=>`<button class="r-btn" id="rb${i+1}" onclick="selectRating(${i+1})">${i+1}</button>`).join('')}
+      </div>
+      ${labels.low||labels.high ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:14px;"><span>${labels.low||''}</span><span>${labels.high||''}</span></div>` : ''}
+      <button class="btn btn-primary" id="submitBtn" onclick="submitAnswer()" disabled>Submit Rating</button>`;
+  } else {
+    body = `
+      ${isMulti ? '<p class="multi-hint">✓ Select all that apply</p>' : ''}
+      <div class="options-grid">
+        ${(q.options||[]).map((opt,i) => {
+          const hasImg = opt.img && opt.img.trim();
+          return `
+          <button class="option ${hasImg?'has-img':''}" id="opt${i}" onclick="toggleOpt(${i})">
+            <span class="opt-letter">${letters[i]}</span>
+            ${hasImg?`<img class="opt-img" src="${opt.img}" onerror="this.style.display='none'">`:''}
+            <span>${opt.text||''}</span>
+          </button>`;
+        }).join('')}
+      </div>
+      ${isMulti ? `<button class="btn btn-primary" id="submitBtn" onclick="submitAnswer()" disabled>Submit Answers</button>` : ''}`;
+  }
+
+  const qImage = q.image && q.image.trim()
+    ? `<img class="q-image" src="${q.image}" onerror="this.style.display='none'">` : '';
+
+  const timerHtml = (q.timer && q.timer > 0)
+    ? `<div class="timer-bar" id="timerBar">
+         <svg class="timer-ring" viewBox="0 0 36 36">
+           <circle cx="18" cy="18" r="16" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="3"/>
+           <circle id="timerCircle" cx="18" cy="18" r="16" fill="none" stroke="var(--accent)" stroke-width="3"
+                   stroke-dasharray="100.5" stroke-dashoffset="0" stroke-linecap="round"
+                   transform="rotate(-90 18 18)"/>
+         </svg>
+         <div>
+           <div class="timer-text" id="timerText">${q.timer}s</div>
+           <div class="timer-label">to answer</div>
+         </div>
+       </div>` : '';
+
+  render(`
+    <div class="logo"><span class="logo-dot"></span>PollSlide</div>
+    <div class="q-badge">Question ${Q_INDEX+1}</div>
+    ${timerHtml}
+    ${qImage}
+    <div class="q-text">${q.text}</div>
+    <div id="qBody">${body}</div>
+  `);
+
+  // Start countdown if timer set
+  if (q.timer && q.timer > 0) startTimer(q.timer);
+}
+
+// ─── COUNTDOWN TIMER ──────────────────────────────────────────────────────────
+let timerInterval = null;
+function startTimer(seconds) {
+  const total = seconds;
+  let remaining = seconds;
+  const circle = document.getElementById('timerCircle');
+  const text   = document.getElementById('timerText');
+  const circumference = 100.5;
+
+  if (timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    remaining--;
+    if (text) {
+      text.textContent = remaining + 's';
+      if (remaining <= 5) text.classList.add('warn');
+    }
+    if (circle) {
+      const offset = circumference * (1 - remaining / total);
+      circle.style.strokeDashoffset = offset;
+      if (remaining <= 5) circle.style.stroke = 'var(--accent2)';
+    }
+    if (remaining <= 0) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+      if (!answered) {
+        // Time's up — lock the question
+        answered = true;
+        const qb = document.getElementById('qBody');
+        if (qb) {
+          document.querySelectorAll('.option, .r-btn, #txtAns, #submitBtn').forEach(el => {
+            el.style.pointerEvents = 'none'; el.style.opacity = '0.5';
+          });
+          qb.insertAdjacentHTML('afterbegin', '<div class="expired-box">⏱ Time\'s up! Answering is now closed.</div>');
+        }
+      }
+    }
+  }, 1000);
+}
+
+// ─── INTERACTION ──────────────────────────────────────────────────────────────
+function toggleOpt(i) {
+  if (answered) return;
+  const isMulti = questionData.type === 'multiple_choice_multi';
+  if (!isMulti) {
+    selectedOptions.clear(); selectedOptions.add(i);
+    document.querySelectorAll('.option').forEach(el => el.classList.remove('selected'));
+    document.getElementById(`opt${i}`).classList.add('selected');
+    document.querySelectorAll('.option').forEach(el => el.style.pointerEvents = 'none');
+    answered = true;
+    submitToDb([i]);
+    document.getElementById('qBody').insertAdjacentHTML('beforeend',
+      '<div class="status-box submitted" style="margin-top:14px;">✓ Submitted!</div>');
+  } else {
+    if (selectedOptions.has(i)) { selectedOptions.delete(i); document.getElementById(`opt${i}`).classList.remove('selected'); }
+    else { selectedOptions.add(i); document.getElementById(`opt${i}`).classList.add('selected'); }
+    const sb = document.getElementById('submitBtn');
+    if (sb) sb.disabled = selectedOptions.size === 0;
+  }
+}
+
+function selectRating(val) {
+  document.querySelectorAll('.r-btn').forEach((b,i) => b.classList.toggle('sel', i+1 <= val));
+  window._rating = val;
+  const sb = document.getElementById('submitBtn');
+  if (sb) sb.disabled = false;
+}
+
+function submitAnswer() {
+  if (answered) return;
+  answered = true;
+  let answer;
+  const q = questionData;
+  if (q.type === 'free_text')            answer = document.getElementById('txtAns')?.value?.trim() || '';
+  else if (q.type === 'rating')          answer = window._rating || null;
+  else if (q.type === 'multiple_choice_multi') answer = Array.from(selectedOptions);
+  submitToDb(answer);
+  document.getElementById('qBody').innerHTML =
+    '<div class="status-box submitted">✓ Submitted!</div>';
+}
+
+async function submitToDb(answer) {
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  const elapsed = Date.now() - (answerStartTime || Date.now());
+  const q = questionData;
+  let isCorrect = null;
+
+  if ((q.type === 'multiple_choice' || q.type === 'multiple_choice_multi') &&
+      q.correctAnswer !== null && q.correctAnswer !== undefined) {
+    if (q.type === 'multiple_choice') {
+      const a = Array.isArray(answer) ? answer[0] : answer;
+      isCorrect = a === q.correctAnswer;
+    } else {
+      const correct = Array.isArray(q.correctAnswer) ? [...q.correctAnswer].sort().join(',') : String(q.correctAnswer);
+      const given   = Array.isArray(answer) ? [...answer].sort().join(',') : '';
+      isCorrect = correct === given;
+    }
+  }
+
+  // Store response directly in the question's bucket — no shared participants node
+  await db.ref(`sessions/${SESSION}/responses/${STABLE_QID}/${participantId}`).set({
+    participantId,
+    name: participantName,
+    answer: answer === null || answer === undefined ? '__none__' : JSON.stringify(answer),
+    elapsed,
+    isCorrect,
+    submittedAt: Date.now()
+  });
+}
+
+// ─── SCREENS ─────────────────────────────────────────────────────────────────
+function showAlreadyAnswered() {
+  render(`
+    <div class="logo"><span class="logo-dot"></span>PollSlide</div>
+    <div class="status-box submitted">✓ You already answered this question!</div>
+    <p class="center" style="color:var(--muted);font-size:13px;margin-top:8px;">
+      Scan the next question's QR when the presenter moves on.
+    </p>
+  `);
+}
+
+// ─── BOOT (called last, after all functions defined) ─────────────────────────
+// Force full reload when hash changes (new QR scanned for different question)
+window.addEventListener('hashchange', () => { window.location.reload(); });
+
+bootApp();
+</script>
+</body>
+</html>

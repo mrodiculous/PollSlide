@@ -1,0 +1,1751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PollSlide — Presenter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root {
+    --bg: #07070f;
+    --surface: #10101a;
+    --surface2: #18182a;
+    --surface3: #20203a;
+    --border: rgba(255,255,255,0.06);
+    --border2: rgba(255,255,255,0.1);
+    --accent: #6c63ff;
+    --accent2: #ff6584;
+    --accent3: #43e97b;
+    --accent4: #f7b731;
+    --text: #f0f0fa;
+    --muted: #7070a0;
+    --radius: 14px;
+    --radius-sm: 9px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+  /* ── TOP BAR ── */
+  .topbar { height:56px; background:var(--surface); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 18px; gap:12px; flex-shrink:0; z-index:100; }
+  .logo { font-family:'Syne',sans-serif; font-weight:800; font-size:16px; color:var(--accent); display:flex; align-items:center; gap:7px; flex-shrink:0; }
+  .logo-dot { width:7px; height:7px; background:var(--accent); border-radius:50%; animation:pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(1.4)} }
+  .active-pres { font-size:13px; font-weight:500; color:var(--muted); display:flex; align-items:center; gap:6px; }
+  .active-pres strong { color:var(--text); font-weight:600; }
+  .save-status { font-size:11px; color:var(--muted); display:flex; align-items:center; gap:5px; flex-shrink:0; }
+  .save-dot { width:6px; height:6px; border-radius:50%; background:var(--accent3); }
+  .save-dot.saving { background:var(--accent4); animation:pulse 0.7s infinite; }
+  .topbar-right { margin-left:auto; display:flex; gap:7px; align-items:center; }
+
+  /* ── BUTTONS ── */
+  .btn { padding:6px 14px; border-radius:var(--radius-sm); border:none; font-family:'Syne',sans-serif; font-size:12px; font-weight:700; cursor:pointer; transition:all 0.15s; letter-spacing:0.04em; white-space:nowrap; display:inline-flex; align-items:center; gap:5px; }
+  .btn-primary { background:var(--accent); color:#fff; }
+  .btn-primary:hover { background:#7c74ff; }
+  .btn-danger  { background:var(--accent2); color:#fff; }
+  .btn-danger:hover { background:#ff7a94; }
+  .btn-ghost   { background:var(--surface2); color:var(--text); border:1px solid var(--border2); }
+  .btn-ghost:hover { background:var(--surface3); }
+  .btn-success { background:var(--accent3); color:#000; }
+  .btn-success:hover { opacity:.85; }
+  .btn-reset   { background:rgba(255,101,132,0.12); color:var(--accent2); border:1px solid rgba(255,101,132,0.25); }
+  .btn-reset:hover { background:rgba(255,101,132,0.22); }
+  .btn-sm { padding:4px 10px; font-size:11px; }
+  .btn:disabled { opacity:.4; cursor:not-allowed; }
+
+  /* ── MAIN LAYOUT ── */
+  .main { display:flex; flex:1; overflow:hidden; }
+
+  /* ── RESIZE HANDLES ── */
+  .resize-handle-x {
+    width: 5px;
+    background: var(--border);
+    cursor: col-resize;
+    flex-shrink: 0;
+    transition: background 0.15s;
+    position: relative;
+    z-index: 10;
+  }
+  .resize-handle-x:hover,
+  .resize-handle-x.dragging { background: var(--accent); }
+  .resize-handle-x::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 1px;
+    height: 30px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 1px;
+  }
+
+  .resize-handle-y {
+    height: 5px;
+    background: var(--border);
+    cursor: row-resize;
+    flex-shrink: 0;
+    transition: background 0.15s;
+    position: relative;
+    z-index: 10;
+  }
+  .resize-handle-y:hover,
+  .resize-handle-y.dragging { background: var(--accent); }
+  .resize-handle-y::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    height: 1px;
+    width: 30px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 1px;
+  }
+
+  /* Prevent text selection while dragging */
+  .no-select { user-select: none; -webkit-user-select: none; }
+
+  /* ── LEFT SIDEBAR (two panels stacked) ── */
+  .sidebar { width:260px; min-width:160px; max-width:480px; background:var(--surface); display:flex; flex-direction:column; flex-shrink:0; overflow:hidden; }
+
+  /* PRESENTATIONS panel — top half */
+  .pres-panel { display:flex; flex-direction:column; border-bottom:2px solid var(--border2); flex-shrink:0; min-height:80px; overflow:hidden; }
+  .panel-hd { padding:11px 14px; background:var(--surface2); display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  .panel-hd-title { font-family:'Syne',sans-serif; font-size:10px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); }
+  .pres-list { overflow-y:auto; flex:1; padding:6px; }
+
+  .pres-item { padding:9px 11px; border-radius:var(--radius-sm); cursor:pointer; transition:all 0.15s; margin-bottom:3px; border:1.5px solid transparent; display:flex; align-items:center; gap:9px; }
+  .pres-item:hover { background:var(--surface2); }
+  .pres-item.active { background:rgba(108,99,255,0.14); border-color:rgba(108,99,255,0.3); }
+  .pres-icon { width:30px; height:30px; border-radius:8px; background:var(--surface3); display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+  .pres-item.active .pres-icon { background:var(--accent); }
+  .pres-meta { flex:1; min-width:0; }
+  .pres-name { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pres-sub  { font-size:10px; color:var(--muted); margin-top:1px; }
+  .pres-actions { display:flex; gap:4px; opacity:0; transition:opacity 0.15s; flex-shrink:0; }
+  .pres-item:hover .pres-actions { opacity:1; }
+  .icon-btn { width:22px; height:22px; border-radius:5px; background:transparent; border:1px solid var(--border); color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:11px; transition:all 0.15s; }
+  .icon-btn:hover { background:var(--surface3); color:var(--text); }
+  .icon-btn.del:hover { background:rgba(255,101,132,0.15); color:var(--accent2); border-color:rgba(255,101,132,0.4); }
+
+  /* QUESTIONS panel — bottom half */
+  .q-panel { display:flex; flex-direction:column; flex:1; overflow:hidden; }
+  .q-list  { flex:1; overflow-y:auto; padding:6px; }
+  .q-item  { padding:9px 11px; border-radius:var(--radius-sm); cursor:pointer; transition:all 0.15s; margin-bottom:3px; display:flex; gap:9px; align-items:flex-start; border:1.5px solid transparent; }
+  .q-item:hover { background:var(--surface2); }
+  .q-item.sel  { background:rgba(108,99,255,0.14); border-color:rgba(108,99,255,0.3); }
+  /* .q-item.live removed — all questions are always live */
+  .q-num  { width:22px; height:22px; border-radius:6px; background:var(--surface3); font-family:'Syne',sans-serif; font-weight:700; font-size:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:var(--muted); }
+  .q-item.sel .q-num  { background:var(--accent); color:#fff; }
+
+  .q-label    { font-size:12px; font-weight:500; line-height:1.4; word-break:break-word; }
+  .q-type-tag { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; margin-top:1px; }
+  .sidebar-foot { padding:8px; border-top:1px solid var(--border); flex-shrink:0; }
+
+  /* ── CENTER ── */
+  .center-panel { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:14px; }
+
+  /* ── RIGHT ── */
+  .right-panel { width:290px; min-width:160px; max-width:480px; background:var(--surface); border-left:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; overflow:hidden; }
+  .right-hd    { padding:11px 14px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; background:var(--surface2); flex-shrink:0; }
+  .right-scroll { flex:1; overflow-y:auto; padding:12px; }
+  .right-foot   { padding:10px 12px; border-top:1px solid var(--border); }
+  .sect-title   { font-family:'Syne',sans-serif; font-size:10px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); margin-bottom:8px; }
+
+  /* ── CARDS ── */
+  .card      { background:var(--surface); border:1px solid var(--border2); border-radius:var(--radius); overflow:hidden; }
+  .card-hd   { padding:12px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; }
+  .card-title { font-family:'Syne',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); }
+  .card-body  { padding:16px; }
+
+  /* ── FORM ── */
+  label { font-size:11px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:5px; }
+  input[type="text"], textarea, select { background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:8px 11px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:14px; outline:none; transition:border-color 0.15s; width:100%; }
+  input:focus, textarea:focus, select:focus { border-color:var(--accent); }
+  select { cursor:pointer; }
+  select option { background:var(--surface2); }
+  textarea { resize:vertical; min-height:68px; }
+  .form-row { margin-bottom:13px; }
+  .opt-row  { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+  .opt-letter { width:24px; height:24px; border-radius:5px; background:var(--surface2); font-family:'Syne',sans-serif; font-weight:700; font-size:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:var(--muted); }
+  .opt-letter.correct { background:var(--accent3); color:#000; }
+  input.opt-input { flex:1; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:6px 10px; color:var(--text); font-family:'DM Sans',sans-serif; font-size:13px; outline:none; }
+  input.opt-input:focus { border-color:var(--accent); }
+  .chk-btn { width:24px; height:24px; border-radius:5px; background:var(--surface2); border:1.5px solid var(--border); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:11px; transition:all 0.15s; flex-shrink:0; color:var(--muted); }
+  .chk-btn.on { background:var(--accent3); border-color:var(--accent3); color:#000; }
+  .del-btn { width:24px; height:24px; border-radius:5px; background:transparent; border:1px solid var(--border); color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:14px; transition:all 0.15s; flex-shrink:0; }
+  .del-btn:hover { background:rgba(255,101,132,0.15); color:var(--accent2); border-color:var(--accent2); }
+
+  /* ── RESULTS ── */
+  .resp-big { font-family:'Syne',sans-serif; font-size:26px; font-weight:800; color:var(--accent); display:flex; align-items:baseline; gap:6px; margin-bottom:12px; }
+  .resp-big span { font-size:12px; color:var(--muted); font-weight:400; font-family:'DM Sans',sans-serif; }
+  .bar-wrap { margin-bottom:10px; }
+  .bar-label { display:flex; justify-content:space-between; font-size:12px; margin-bottom:3px; }
+  .bar-label .bn { font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:70%; }
+  .bar-label .bv { font-family:'Syne',sans-serif; font-weight:700; color:var(--accent); flex-shrink:0; }
+  .bar-bg   { height:7px; background:var(--surface2); border-radius:100px; overflow:hidden; }
+  .bar-fill { height:100%; border-radius:100px; background:linear-gradient(90deg,var(--accent),#a78bfa); transition:width 0.4s ease; }
+  .bar-fill.correct { background:linear-gradient(90deg,var(--accent3),#6bffb5); }
+  .txt-resp { background:var(--surface2); border-radius:var(--radius-sm); padding:8px 11px; margin-bottom:6px; font-size:12px; border-left:2px solid var(--accent); }
+  .txt-resp .from { font-size:10px; color:var(--muted); margin-top:2px; }
+
+  /* ── PARTICIPANTS ── */
+  .p-row { display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border); font-size:12px; }
+  .p-row:last-child { border-bottom:none; }
+  .p-av   { width:24px; height:24px; border-radius:6px; background:var(--accent); display:flex; align-items:center; justify-content:center; font-family:'Syne',sans-serif; font-weight:700; font-size:10px; color:#fff; flex-shrink:0; }
+  .p-name { flex:1; font-weight:500; }
+  .p-score { font-family:'Syne',sans-serif; font-weight:700; font-size:11px; color:var(--accent); }
+
+  /* ── QR BLOCK ── */
+  .qr-block { background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius); padding:18px; display:flex; align-items:center; gap:18px; }
+  .qr-block canvas, .qr-block img { border-radius:7px; flex-shrink:0; }
+  .qr-info h3 { font-family:'Syne',sans-serif; font-size:15px; font-weight:800; margin-bottom:5px; }
+  .qr-info p  { font-size:12px; color:var(--muted); line-height:1.5; margin-bottom:8px; }
+  .qr-url { font-size:10px; color:var(--muted); word-break:break-all; background:var(--surface3); border-radius:5px; padding:6px 9px; cursor:pointer; }
+  .qr-url:hover { color:var(--accent); }
+
+  /* ── LIVE BAR ── */
+  .live-bar { background:var(--surface2); border:1px solid rgba(67,233,123,0.25); border-radius:var(--radius); padding:12px 16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .live-badge { font-family:'Syne',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--accent3); display:flex; align-items:center; gap:5px; }
+  .live-dot { width:7px; height:7px; background:var(--accent3); border-radius:50%; animation:pulse 1.2s infinite; }
+  .revealed-bar   { border-color:rgba(255,101,132,0.2); }
+  .revealed-badge { color:var(--accent2); }
+  .revealed-dot   { background:var(--accent2); animation:none; }
+
+  /* ── TALLY TABLE ── */
+  .tally-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .tally-table th { text-align:left; padding:7px 9px; color:var(--muted); font-size:10px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase; border-bottom:1px solid var(--border); }
+  .tally-table td { padding:8px 9px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .tally-table tr:last-child td { border-bottom:none; }
+  .tally-table tr.winner td { color:var(--accent4); }
+  .tick { color:var(--accent3); font-weight:700; }
+  .cross { color:var(--accent2); }
+  .dash { color:var(--muted); }
+
+  /* ── MODALS ── */
+  .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.78); display:flex; align-items:center; justify-content:center; z-index:500; backdrop-filter:blur(4px); }
+  .modal { background:var(--surface); border:1px solid var(--border2); border-radius:18px; padding:26px; width:90%; animation:slideUp 0.3s cubic-bezier(0.16,1,0.3,1); }
+  @keyframes slideUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+  .modal h2 { font-family:'Syne',sans-serif; font-size:18px; font-weight:800; margin-bottom:7px; }
+  .modal p  { color:var(--muted); font-size:13px; line-height:1.6; margin-bottom:18px; }
+  .modal-btns { display:flex; gap:8px; justify-content:flex-end; margin-top:16px; }
+  #qrModalCode { display:flex; justify-content:center; margin-bottom:12px; }
+  #qrModalCode canvas, #qrModalCode img { border-radius:9px; }
+  .qr-modal-url { font-size:11px; color:var(--muted); word-break:break-all; background:var(--surface2); border-radius:7px; padding:9px; margin-bottom:12px; cursor:pointer; text-align:center; }
+
+  /* ── SETUP / EMPTY ── */
+  .setup { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; padding:40px; text-align:center; gap:14px; }
+  .setup-icon { font-size:38px; }
+
+  /* ── INLINE EDIT (presentation name) ── */
+  .inline-edit { background:transparent; border:none; border-bottom:1px dashed var(--border2); color:var(--text); font-family:'Syne',sans-serif; font-weight:700; font-size:13px; outline:none; padding:2px 4px; width:100%; }
+  .inline-edit:focus { border-bottom-color:var(--accent); background:rgba(108,99,255,0.06); border-radius:4px 4px 0 0; }
+
+  /* ── TOAST ── */
+  .toast { position:fixed; bottom:20px; right:20px; background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius-sm); padding:10px 16px; font-size:13px; font-weight:500; z-index:9999; animation:slideUp 0.25s ease; }
+  .toast.success { border-color:var(--accent3); color:var(--accent3); }
+  .toast.info    { border-color:var(--accent);  color:var(--accent); }
+  .toast.warn    { border-color:var(--accent4); color:var(--accent4); }
+  .toast.danger  { border-color:var(--accent2); color:var(--accent2); }
+
+  .hidden { display:none !important; }
+  ::-webkit-scrollbar { width:4px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:var(--surface3); border-radius:3px; }
+</style>
+</head>
+<body>
+
+<!-- ── TOP BAR ── -->
+<div class="topbar">
+  <div class="logo"><span class="logo-dot"></span>PollSlide</div>
+  <div class="active-pres" id="activePres">Select a presentation</div>
+  <div class="save-status">
+    <span class="save-dot" id="saveDot"></span>
+    <span id="saveText">Saved</span>
+  </div>
+  <div class="topbar-right">
+    <button class="btn btn-ghost" id="addQBtn" onclick="addQuestion()" disabled>+ Question</button>
+    <button class="btn btn-reset" id="resetBtn" onclick="confirmReset()" disabled>↺ Reset Tally</button>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- ── SIDEBAR ── -->
+  <div class="sidebar">
+
+    <!-- PRESENTATIONS panel -->
+    <div class="pres-panel">
+      <div class="panel-hd">
+        <span class="panel-hd-title">Presentations</span>
+      </div>
+      <div class="pres-list" id="presList">
+        <div style="padding:16px;text-align:center;color:var(--muted);font-size:12px;">No presentations yet.</div>
+      </div>
+      <div style="padding:8px;border-top:1px solid var(--border);flex-shrink:0;">
+        <button class="btn btn-primary" style="width:100%;justify-content:center;padding:9px 14px;font-size:12px;" onclick="createPresentation()">+ Create New Presentation</button>
+      </div>
+    </div>
+
+    <!-- ── VERTICAL RESIZE: presentations ↔ questions ── -->
+    <div class="resize-handle-y" id="resizeVertical" title="Drag to resize"></div>
+
+    <!-- QUESTIONS panel -->
+    <div class="q-panel">
+      <div class="panel-hd">
+        <span class="panel-hd-title">Questions (<span id="qCount">0</span>)</span>
+      </div>
+      <div class="q-list" id="qList">
+        <div style="padding:16px;text-align:center;color:var(--muted);font-size:12px;">Select a presentation first.</div>
+      </div>
+      <div class="sidebar-foot">
+        <button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:11px;" id="addQBtn2" onclick="addQuestion()" disabled>+ Add Question</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── HORIZONTAL RESIZE: sidebar ↔ center ── -->
+  <div class="resize-handle-x" id="resizeLeft" title="Drag to resize"></div>
+
+  <!-- ── CENTER ── -->
+  <div class="center-panel" id="centerPanel">
+    <div class="setup">
+      <div class="setup-icon">🎯</div>
+      <div>
+        <h2 style="font-family:'Syne',sans-serif;font-size:21px;font-weight:800;margin-bottom:8px;">Welcome to PollSlide</h2>
+        <p style="color:var(--muted);font-size:14px;line-height:1.7;margin-bottom:20px;">Each presentation has its own questions and session code.<br>Create one in the sidebar to get started.</p>
+        <button class="btn btn-primary" style="font-size:14px;padding:11px 28px;justify-content:center;" onclick="createPresentation()">+ Create Your First Presentation</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── HORIZONTAL RESIZE: center ↔ right ── -->
+  <div class="resize-handle-x" id="resizeRight" title="Drag to resize"></div>
+
+  <!-- ── RIGHT ── -->
+  <div class="right-panel">
+    <div class="right-hd">
+      <span style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Live Results</span>
+      <span id="respCounter" style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent);font-size:12px;">—</span>
+    </div>
+    <div class="right-scroll" id="rightScroll">
+      <div style="padding-top:28px;text-align:center;color:var(--muted);font-size:13px;">Launch a question<br>to see live results here.</div>
+    </div>
+    <div class="right-foot">
+      <div class="sect-title">Respondents (<span id="pCount">0</span>)</div>
+      <div id="pList" style="max-height:180px;overflow-y:auto;">
+        <div style="color:var(--muted);font-size:12px;">No responses yet.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Reset Tally Modal -->
+<div class="overlay hidden" id="resetModal">
+  <div class="modal" style="max-width:400px;">
+    <h2>Reset Tally?</h2>
+    <p>This clears all scores, responses, and answer history for <strong id="resetPresName" style="color:var(--text);"></strong>. Your questions stay intact.</p>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeReset()">Cancel</button>
+      <button class="btn btn-danger" onclick="doReset()">Yes, Reset Everything</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Presentation Tally Modal -->
+<div class="overlay hidden" id="resetPresModal">
+  <div class="modal" style="max-width:400px;">
+    <h2>Reset Presentation Tally?</h2>
+    <p>This clears all scores and responses for <strong id="resetPresName" style="color:var(--text);"></strong>. All questions stay live and QR codes keep working.</p>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closeResetPres()">Cancel</button>
+      <button class="btn btn-danger" onclick="doResetPres()">Yes, Reset Tally</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Presentation Modal -->
+<div class="overlay hidden" id="deletePresModal">
+  <div class="modal" style="max-width:400px;">
+    <h2>Delete Presentation?</h2>
+    <p>This permanently deletes <strong id="deletePresName" style="color:var(--text);"></strong> and all its questions. This cannot be undone.</p>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="document.getElementById('deletePresModal').classList.add('hidden')">Cancel</button>
+      <button class="btn btn-danger" onclick="doDeletePres()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rename Presentation Modal -->
+<div class="overlay hidden" id="renamePresModal" onclick="if(event.target===this)document.getElementById('renamePresModal').classList.add('hidden')">
+  <div class="modal" style="max-width:380px;">
+    <h2>Rename Presentation</h2>
+    <p>Enter a new name below.</p>
+    <input type="text" id="renameInput" maxlength="60" placeholder="Presentation name..." style="margin-bottom:0;">
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="document.getElementById('renamePresModal').classList.add('hidden')">Cancel</button>
+      <button class="btn btn-primary" onclick="doRenamePres()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Full QR Modal -->
+<div class="overlay hidden" id="qrModal" onclick="if(event.target===this)closeQRModal()">
+  <div class="modal" style="max-width:320px;text-align:center;">
+    <h2 id="qrModalTitle" style="margin-bottom:4px;">QR Code</h2>
+    <p id="qrModalDesc" style="margin-bottom:16px;"></p>
+    <div id="qrModalCode"></div>
+    <div class="qr-modal-url" id="qrModalURL" onclick="copyQRURL()">—</div>
+    <button class="btn btn-primary" onclick="copyQRURL()" style="width:100%;justify-content:center;margin-bottom:7px;padding:10px;">Copy Link</button>
+    <button class="btn btn-ghost"   onclick="closeQRModal()" style="width:100%;justify-content:center;padding:10px;">Close</button>
+  </div>
+</div>
+
+<!-- Question Tally Modal -->
+<div class="overlay hidden" id="tallyModal" onclick="if(event.target===this)document.getElementById('tallyModal').classList.add('hidden')">
+  <div class="modal" style="max-width:680px;width:95%;max-height:88vh;overflow-y:auto;">
+    <h2>📊 Question Tally — <span id="tallyPresName" style="color:var(--accent4);"></span></h2>
+    <p>Responses for this question.</p>
+    <div id="tallyContent"></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="document.getElementById('tallyModal').classList.add('hidden')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Presentation Tally Modal -->
+<div class="overlay hidden" id="presTallyModal" onclick="if(event.target===this)document.getElementById('presTallyModal').classList.add('hidden')">
+  <div class="modal" style="max-width:720px;width:95%;max-height:90vh;overflow-y:auto;">
+    <h2>🏆 Presentation Tally — <span id="presTallyName" style="color:var(--accent4);"></span></h2>
+    <p style="color:var(--muted);font-size:13px;margin-bottom:16px;">Ranked by most correct answers across all questions. All respondents shown.</p>
+    <div id="presTallyContent"></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="document.getElementById('presTallyModal').classList.add('hidden')">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script>
+// ─── FIREBASE ─────────────────────────────────────────────────────────────────
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME",
+  authDomain: "echonest-live-survey.firebaseapp.com",
+  databaseURL: "https://echonest-live-survey-default-rtdb.firebaseio.com",
+  projectId: "echonest-live-survey",
+  storageBucket: "echonest-live-survey.firebasestorage.app",
+  messagingSenderId: "285529140046",
+  appId: "1:285529140046:web:983c1ee8000a2ca8f80c1f",
+  measurementId: "G-NWQY4YLNRC"
+};
+const BASE_URL = "https://app.pollslide.com/answer";
+
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.database();
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let presentations = {};   // { presId: { name, sessionCode, createdAt } }
+let activePresId  = null; // currently selected presentation
+let questions     = [];   // questions for active presentation
+let selIdx        = null; // selected question index in editor
+let liveQIdx      = null;
+let liveQId       = null;
+let respListener  = null; // active listener for current question
+let respListeners = {}; // all active listeners by qIdx
+let participantListener = null;
+let participantData = {};
+let saveTimeout   = null;
+let currentQRURL  = '';
+let deletePresTarget = null;
+let renamePresTarget = null;
+
+// ─── BOOT ─────────────────────────────────────────────────────────────────────
+loadPresentations();
+
+// ─── SAVE STATUS ──────────────────────────────────────────────────────────────
+function markSaving() { document.getElementById('saveDot').className='save-dot saving'; document.getElementById('saveText').textContent='Saving...'; }
+function markSaved()  { document.getElementById('saveDot').className='save-dot'; document.getElementById('saveText').textContent='Saved'; }
+function scheduleSave() { markSaving(); clearTimeout(saveTimeout); saveTimeout=setTimeout(saveCurrentPresentation, 800); }
+
+// ─── PRESENTATIONS — LOAD / SAVE ─────────────────────────────────────────────
+async function loadPresentations() {
+  try {
+    const snap = await db.ref('presentations').get();
+    if (snap.exists()) {
+      presentations = snap.val() || {};
+    }
+  } catch(e) { console.error('Load failed', e); }
+
+  // Restore last active
+  const lastActive = localStorage.getItem('ql_active_pres');
+  renderPresList();
+
+  if (lastActive && presentations[lastActive]) {
+    selectPresentation(lastActive);
+  } else {
+    const ids = Object.keys(presentations);
+    if (ids.length > 0) selectPresentation(ids[0]);
+  }
+}
+
+async function saveAllPresentations() {
+  try {
+    await db.ref('presentations').set(presentations);
+    markSaved();
+  } catch(e) { document.getElementById('saveText').textContent='Save failed'; }
+}
+
+async function saveCurrentPresentation() {
+  if (!activePresId) return;
+  try {
+    const pres = presentations[activePresId];
+    // Save full presentation record
+    await db.ref(`presentations/${activePresId}`).set(pres);
+    // ALSO mirror questions to quiz_builder/sessionCode so participants can find them by QR
+    if (pres.sessionCode && pres.questions) {
+      await db.ref(`quiz_builder/${pres.sessionCode}/questions`).set(pres.questions);
+    }
+    markSaved();
+  } catch(e) { document.getElementById('saveText').textContent='Save failed'; }
+}
+
+// ─── CREATE PRESENTATION ──────────────────────────────────────────────────────
+async function createPresentation() {
+  const id   = 'pres_' + Date.now();
+  const code = genCode();
+  const name = 'New Presentation';
+
+  presentations[id] = {
+    id,
+    name,
+    sessionCode: code,
+    createdAt: Date.now(),
+    questions: []
+  };
+
+  await db.ref(`presentations/${id}`).set(presentations[id]);
+  renderPresList();
+  selectPresentation(id);
+  // Immediately open rename
+  openRenamePres(id);
+  toast('Presentation created!', 'success');
+}
+
+// ─── SELECT PRESENTATION ──────────────────────────────────────────────────────
+function selectPresentation(id) {
+  activePresId = id;
+  localStorage.setItem('ql_active_pres', id);
+
+  const pres = presentations[id];
+  if (!pres) return;
+
+  questions = pres.questions ? [...pres.questions] : [];
+  selIdx = null;
+  if (respListener) { respListener(); respListener = null; }
+  // Restore live state from localStorage
+  const savedLiveIdx = localStorage.getItem('ql_liveQIdx_' + pres.sessionCode);
+  const savedLiveId  = localStorage.getItem('ql_liveQId_' + pres.sessionCode);
+  liveQIdx = savedLiveIdx !== null ? parseInt(savedLiveIdx) : null;
+  liveQId  = savedLiveId  || null;
+  // Mirror questions to quiz_builder path so participants can find them
+  if (pres.sessionCode && questions.length > 0) {
+    db.ref(`quiz_builder/${pres.sessionCode}/questions`).set(questions).catch(()=>{});
+  }
+
+  // Update topbar
+  document.getElementById('activePres').innerHTML = `<strong>${pres.name}</strong> <span style="font-size:11px;color:var(--muted);margin-left:4px;">· ${pres.sessionCode}</span>`;
+  document.getElementById('addQBtn').disabled  = false;
+  document.getElementById('addQBtn2').disabled = false;
+  document.getElementById('resetBtn').disabled = false;
+
+  renderPresList();
+  renderQList();
+  // Respondents are tracked per-question, not per-session
+
+  if (questions.length > 0) {
+    selectQ(0);
+  } else {
+    showSetup();
+  }
+}
+
+// ─── DELETE / RENAME PRESENTATIONS ───────────────────────────────────────────
+function openDeletePres(id) {
+  deletePresTarget = id;
+  document.getElementById('deletePresName').textContent = presentations[id]?.name || 'this presentation';
+  document.getElementById('deletePresModal').classList.remove('hidden');
+}
+
+async function doDeletePres() {
+  if (!deletePresTarget) return;
+  document.getElementById('deletePresModal').classList.add('hidden');
+
+  await db.ref(`presentations/${deletePresTarget}`).remove();
+  delete presentations[deletePresTarget];
+
+  if (activePresId === deletePresTarget) {
+    activePresId = null;
+    questions = [];
+    selIdx = null;
+    document.getElementById('activePres').textContent = 'Select a presentation';
+    document.getElementById('addQBtn').disabled  = true;
+    document.getElementById('addQBtn2').disabled = true;
+    document.getElementById('resetBtn').disabled = true;
+    showSetup();
+    renderQList();
+  }
+
+  deletePresTarget = null;
+  renderPresList();
+  toast('Presentation deleted.', 'warn');
+}
+
+function openRenamePres(id) {
+  renamePresTarget = id;
+  document.getElementById('renameInput').value = presentations[id]?.name || '';
+  document.getElementById('renamePresModal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('renameInput').select(), 80);
+}
+
+async function doRenamePres() {
+  if (!renamePresTarget) return;
+  const name = document.getElementById('renameInput').value.trim();
+  if (!name) return;
+  presentations[renamePresTarget].name = name;
+  await db.ref(`presentations/${renamePresTarget}/name`).set(name);
+  if (renamePresTarget === activePresId) {
+    const pres = presentations[activePresId];
+    document.getElementById('activePres').innerHTML = `<strong>${pres.name}</strong> <span style="font-size:11px;color:var(--muted);margin-left:4px;">· ${pres.sessionCode}</span>`;
+  }
+  renamePresTarget = null;
+  document.getElementById('renamePresModal').classList.add('hidden');
+  renderPresList();
+  toast('Renamed!', 'success');
+}
+
+document.getElementById('renameInput').addEventListener('keydown', e => { if(e.key==='Enter') doRenamePres(); });
+
+// ─── RENDER PRESENTATIONS LIST ────────────────────────────────────────────────
+function renderPresList() {
+  const list = document.getElementById('presList');
+  const ids  = Object.keys(presentations).sort((a,b) => (presentations[a].createdAt||0)-(presentations[b].createdAt||0));
+
+  if (ids.length === 0) {
+    list.innerHTML = `<div style="padding:20px 14px;text-align:center;">
+      <div style="font-size:28px;margin-bottom:8px;">📋</div>
+      <div style="color:var(--muted);font-size:12px;line-height:1.6;margin-bottom:12px;">No presentations yet.<br>Create one to get started.</div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:11px;" onclick="createPresentation()">+ Create Presentation</button>
+    </div>`;
+    return;
+  }
+
+  const emojis = ['🎯','📊','🚀','💡','🏆','🎓','📋','⚡','🔥','🌟'];
+  list.innerHTML = ids.map((id, i) => {
+    const p   = presentations[id];
+    const qn  = (p.questions||[]).length;
+    const isA = id === activePresId;
+    return `
+      <div class="pres-item ${isA?'active':''}" onclick="selectPresentation('${id}')">
+        <div class="pres-icon">${emojis[i % emojis.length]}</div>
+        <div class="pres-meta">
+          <div class="pres-name">${p.name}</div>
+          <div class="pres-sub">${qn} question${qn!==1?'s':''} · ${p.sessionCode}</div>
+        </div>
+        <div class="pres-actions">
+          <button class="icon-btn" onclick="event.stopPropagation();showPresTally('${id}')" title="View Tally" style="color:var(--accent);">📊</button>
+          <button class="icon-btn" onclick="event.stopPropagation();openRenamePres('${id}')" title="Rename">✏️</button>
+          <button class="icon-btn" onclick="event.stopPropagation();confirmResetPres('${id}')" title="Reset Tally" style="color:var(--accent2);">↺</button>
+          <button class="icon-btn del" onclick="event.stopPropagation();openDeletePres('${id}')" title="Delete">🗑</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ─── RESET TALLY ──────────────────────────────────────────────────────────────
+function confirmReset() {
+  if (!activePresId) return;
+  document.getElementById('resetPresName').textContent = `"${presentations[activePresId]?.name}"`;
+  document.getElementById('resetModal').classList.remove('hidden');
+}
+function closeReset() { document.getElementById('resetModal').classList.add('hidden'); }
+
+async function doReset() {
+  closeReset();
+  const pres = presentations[activePresId];
+  if (!pres) return;
+  const code = pres.sessionCode;
+  try {
+    // Step 1: Detach all listeners
+    if (respListener) { respListener(); respListener = null; }
+    Object.values(respListeners).forEach(off => off());
+    respListeners = {};
+    liveQIdx = null; liveQId = null;
+    // Step 2: Delete from Firebase first
+    await db.ref(`sessions/${code}/responses`).remove();
+    if (questions.length > 0) {
+      await db.ref(`quiz_builder/${code}/questions`).set(questions);
+    }
+    // Step 3: Clear UI after Firebase delete completes
+    clearRightPanel();
+    renderQList();
+    toast('All tallies reset. Questions remain live.', 'success');
+  } catch(e) { toast('Reset failed. Check connection.', 'danger'); }
+}
+// ─── PER-PRESENTATION RESET ─────────────────────────────────────────────────
+let resetPresTarget = null;
+
+function confirmResetPres(presId) {
+  resetPresTarget = presId;
+  const pres = presentations[presId];
+  document.getElementById('resetPresName').textContent = `"${pres?.name}"`;
+  document.getElementById('resetPresModal').classList.remove('hidden');
+}
+
+function closeResetPres() {
+  document.getElementById('resetPresModal').classList.add('hidden');
+  resetPresTarget = null;
+}
+
+async function doResetPres() {
+  const targetId = resetPresTarget; // save before closeResetPres nulls it
+  closeResetPres();
+  if (!targetId) return;
+  const pres = presentations[targetId];
+  if (!pres) return;
+  const code = pres.sessionCode;
+  const qs   = pres.questions || [];
+  try {
+    // Step 1: Detach ALL listeners first so nothing re-fires during delete
+    if (respListener) { respListener(); respListener = null; }
+    Object.values(respListeners).forEach(off => off());
+    respListeners = {};
+    liveQIdx = null; liveQId = null;
+    localStorage.removeItem('ql_liveQIdx_' + code);
+    localStorage.removeItem('ql_liveQId_' + code);
+
+    // Step 2: Delete from Firebase BEFORE updating UI
+    await db.ref(`sessions/${code}/responses`).remove();
+    if (qs.length > 0) {
+      await db.ref(`quiz_builder/${code}/questions`).set(qs);
+    }
+
+    // Step 3: Now update UI — Firebase is already empty so re-attaching listeners is safe
+    if (targetId === activePresId) {
+      const rs = document.getElementById('rightScroll');
+      const rc = document.getElementById('respCounter');
+      const pc = document.getElementById('pCount');
+      const pl = document.getElementById('pList');
+      if (rs) rs.innerHTML = '<div style="padding-top:28px;text-align:center;color:var(--muted);font-size:13px;">Tally cleared.</div>';
+      if (rc) rc.textContent = '0 responses';
+      if (pc) pc.textContent = '0';
+      if (pl) pl.innerHTML = '<div style="color:var(--muted);font-size:12px;">No responses yet.</div>';
+      renderQList();
+    }
+    toast(`"${pres.name}" tally reset. Questions remain live.`, 'success');
+  } catch(e) { toast('Reset failed. Check connection.', 'danger'); }
+}
+
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function clearRightPanel() {
+  // Detach ALL response listeners — both the current one and any per-question ones
+  if (respListener) { respListener(); respListener = null; }
+  Object.values(respListeners).forEach(off => off());
+  respListeners = {};
+  liveQIdx = null; liveQId = null;
+
+  const rs = document.getElementById('rightScroll');
+  const rc = document.getElementById('respCounter');
+  const pc = document.getElementById('pCount');
+  const pl = document.getElementById('pList');
+  if (rs) rs.innerHTML = '<div style="padding-top:28px;text-align:center;color:var(--muted);font-size:13px;">Tally cleared.</div>';
+  if (rc) rc.textContent = '0 responses';
+  if (pc) pc.textContent = '0';
+  if (pl) pl.innerHTML = '<div style="color:var(--muted);font-size:12px;">No responses yet.</div>';
+  // Clear persisted live state for active presentation
+  if (activePresId && presentations[activePresId]) {
+    const code = presentations[activePresId].sessionCode;
+    localStorage.removeItem('ql_liveQIdx_' + code);
+    localStorage.removeItem('ql_liveQId_' + code);
+  }
+}
+
+// ─── LAUNCH QUESTION ─────────────────────────────────────────────────────────
+async function launchQuestion(idx) {
+  if (!activePresId) return;
+  if (respListener) { respListener(); respListener = null; }
+
+  liveQIdx = idx;
+  const q    = questions[idx];
+  // Use stable qId so participant responses always match regardless of when launched
+  const qId  = `q${idx}_stable_${presentations[activePresId].sessionCode}`;
+  liveQId    = qId;
+  const code = presentations[activePresId].sessionCode;
+  // Persist so page reload restores live state
+  localStorage.setItem('ql_liveQIdx_' + code, idx);
+  localStorage.setItem('ql_liveQId_' + code, qId);
+
+  const payload = {
+    id: qId, qIndex: idx, index: idx+1, total: questions.length,
+    text: q.text, type: q.type,
+    options: q.options||null,
+    correctAnswer: q.correctAnswer!==undefined ? q.correctAnswer : null,
+    ratingMax: q.ratingMax||null, ratingLabels: q.ratingLabels||null,
+    status: 'active', launchedAt: Date.now()
+  };
+
+  await db.ref(`sessions/${code}/currentQuestion`).set(payload);
+  renderQList();
+  renderLiveView(idx, qId, q);
+  listenResponses(idx, qId, q);
+  toast(`Q${idx+1} is now live!`, 'success');
+}
+
+// ─── CLOSE / REVEAL removed — questions always stay live ─────────────────────
+
+// ─── LIVE VIEW ────────────────────────────────────────────────────────────────
+function renderLiveView(idx, qId, q) {
+  const typeLabels = { multiple_choice:'Single Choice', multiple_choice_multi:'Multi Select', free_text:'Free Text', rating:'Rating' };
+  const letters    = ['A','B','C','D','E','F'];
+  const correct    = Array.isArray(q.correctAnswer) ? q.correctAnswer : [q.correctAnswer];
+  const qUrl       = getQuestionURL(idx);
+
+  let optPreview = '';
+  if (q.type !== 'free_text' && q.type !== 'rating' && q.options) {
+    optPreview = `<div style="display:flex;flex-direction:column;gap:6px;margin-top:10px;">
+      ${(q.options||[]).map((o,i) => `
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
+          <div style="width:22px;height:22px;border-radius:5px;background:${correct.includes(i)?'var(--accent3)':'var(--surface2)'};color:${correct.includes(i)?'#000':'var(--muted)'};font-family:'Syne',sans-serif;font-weight:700;font-size:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${letters[i]}</div>
+          <span>${o.text}</span>
+          ${correct.includes(i)?'<span style="color:var(--accent3);font-size:10px;font-weight:600;margin-left:auto;">✓</span>':''}
+        </div>`).join('')}
+    </div>`;
+  }
+
+  document.getElementById('centerPanel').innerHTML = `
+    <div class="live-bar" id="liveBar">
+      <div class="live-badge" id="liveBadge"><span class="live-dot" id="liveDot"></span>LIVE</div>
+      <div style="flex:1;font-size:12px;color:var(--muted);">Q${idx+1} of ${questions.length} — ${typeLabels[q.type]||q.type}</div>
+      <button class="btn btn-ghost btn-sm" onclick="showQuestionTally(${idx})">📊 Tally</button>
+      <button class="btn btn-reset btn-sm" onclick="resetQuestionTally(${idx})">↺ Reset Q</button>
+      <button class="btn btn-ghost btn-sm" onclick="editQuestion(${idx})">✏️ Edit</button>
+    </div>
+
+    <div class="card">
+      <div class="card-hd">
+        <div class="card-title">Q${idx+1}: ${typeLabels[q.type]||q.type}</div>
+        <button class="btn btn-ghost btn-sm" onclick="showQRModal(${idx})">🔍 Fullscreen QR</button>
+      </div>
+      <div class="card-body">
+        <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;line-height:1.35;margin-bottom:12px;">${q.text}</div>
+        ${optPreview}
+      </div>
+    </div>
+
+    <div class="qr-block">
+      <div id="qrInline_${idx}"></div>
+      <div class="qr-info">
+        <h3>Scan for Q${idx+1}</h3>
+        <p>This QR links directly to this question only.</p>
+        <div class="qr-url" onclick="copyURL(${idx})" title="Click to copy">${qUrl}</div>
+      </div>
+    </div>
+
+
+  `;
+
+  setTimeout(() => {
+    const el = document.getElementById(`qrInline_${idx}`);
+    if (el) { el.innerHTML=''; new QRCode(el,{text:qUrl,width:110,height:110,colorDark:'#ffffff',colorLight:'#18182a',correctLevel:QRCode.CorrectLevel.M}); }
+  }, 50);
+}
+
+// ─── LISTEN RESPONSES ────────────────────────────────────────────────────────
+function listenResponses(qIdx, qId, q) {
+  if (respListener) { respListener(); respListener = null; }
+  const code = presentations[activePresId]?.sessionCode;
+  const ref  = db.ref(`sessions/${code}/responses/${qId}`);
+  const fn   = ref.on('value', snap => {
+    const responses = snap.exists() ? Object.values(snap.val()) : [];
+    const rc = document.getElementById('respCounter');
+    if (rc) rc.textContent = `${responses.length} response${responses.length!==1?'s':''}`;
+    renderRightPanel(q, responses);
+    // Update respondents list from this question's responses only
+    const pCount = document.getElementById('pCount');
+    const pList  = document.getElementById('pList');
+    if (pCount) pCount.textContent = responses.length;
+    if (pList) {
+      if (responses.length === 0) {
+        pList.innerHTML = '<div style="color:var(--muted);font-size:12px;">No responses yet.</div>';
+      } else {
+        pList.innerHTML = responses.map(r =>
+          `<div class="p-row">
+            <div class="p-av">${(r.name||'?')[0].toUpperCase()}</div>
+            <div class="p-name">${r.name||'Anonymous'}</div>
+            <div class="p-score" style="color:${r.isCorrect===true?'var(--accent3)':r.isCorrect===false?'var(--accent2)':'var(--muted)'}">
+              ${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}
+            </div>
+          </div>`
+        ).join('');
+      }
+    }
+  });
+  respListener = () => ref.off('value', fn);
+}
+
+function renderRightPanel(q, responses) {
+  const rs = document.getElementById('rightScroll');
+  if (!rs) return;
+  const total = responses.length;
+  const letters = ['A','B','C','D','E','F'];
+
+  if (q.type === 'free_text') {
+    rs.innerHTML = `<div class="resp-big">${total} <span>responses</span></div>
+      ${total===0?'<div style="color:var(--muted);font-size:13px;">Waiting...</div>':
+        responses.map(r=>`<div class="txt-resp">${r.answer==='__none__'?'<em style="color:var(--muted)">No answer</em>':safeJ(r.answer)}<div class="from">— ${r.name}</div></div>`).join('')}`;
+  } else if (q.type === 'rating') {
+    const max=q.ratingMax||5; const counts={};
+    for(let i=1;i<=max;i++) counts[i]=0;
+    responses.forEach(r=>{try{const v=JSON.parse(r.answer);if(v)counts[v]=(counts[v]||0)+1;}catch(e){}});
+    const avg=total>0?(Object.entries(counts).reduce((s,[k,v])=>s+(+k*v),0)/total).toFixed(1):'—';
+    rs.innerHTML=`<div class="resp-big">${total} <span>avg ${avg}</span></div>
+      ${Object.entries(counts).map(([val,cnt])=>`<div class="bar-wrap">
+        <div class="bar-label"><span class="bn">★ ${val}</span><span class="bv">${cnt}</span></div>
+        <div class="bar-bg"><div class="bar-fill" style="width:${total>0?Math.round(cnt/total*100):0}%"></div></div>
+      </div>`).join('')}`;
+  } else {
+    const correct=Array.isArray(q.correctAnswer)?q.correctAnswer:[q.correctAnswer];
+    const counts=(q.options||[]).map((_,i)=>({i,count:0}));
+    responses.forEach(r=>{try{const a=JSON.parse(r.answer);(Array.isArray(a)?a:[a]).forEach(v=>{if(counts[v])counts[v].count++;});}catch(e){}});
+    const mode = q.displayMode || 'bars';
+    const pct = (c) => total>0?Math.round(c/total*100):0;
+    const palette = ['#6c63ff','#ff6584','#43e97b','#f7b731','#4facfe','#a78bfa'];
+
+    let inner = '';
+    if (mode === 'leaderboard') {
+      // Show respondents ranked, correct first
+      const sorted = [...responses].sort((a,b)=>{
+        if(b.isCorrect===true&&a.isCorrect!==true)return 1;
+        if(a.isCorrect===true&&b.isCorrect!==true)return -1;
+        return (a.submittedAt||0)-(b.submittedAt||0);
+      });
+      const medals=['🥇','🥈','🥉'];
+      inner = sorted.map((r,rank)=>`<div class="p-row">
+        <div style="width:24px;text-align:center;font-size:13px;">${rank<3?medals[rank]:'#'+(rank+1)}</div>
+        <div class="p-name">${r.name||'Anonymous'}</div>
+        <div class="p-score" style="color:${r.isCorrect===true?'var(--accent3)':r.isCorrect===false?'var(--accent2)':'var(--muted)'}">${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}</div>
+      </div>`).join('') || '<div style="color:var(--muted);font-size:13px;">Waiting...</div>';
+    } else if (mode === 'number') {
+      inner = counts.map(({i,count})=>`
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:30px;color:${correct.includes(i)?'var(--accent3)':'var(--accent)'};min-width:60px;">${count}</div>
+          <div><div style="font-size:14px;font-weight:600;">${letters[i]}. ${(q.options[i]||{}).text||''}</div>
+          <div style="font-size:12px;color:var(--muted);">${pct(count)}% of votes</div></div>
+        </div>`).join('');
+    } else if (mode === 'donut' || mode === 'pie') {
+      // Build SVG donut/pie
+      let cum = 0;
+      const r0 = mode==='donut'?16:18;
+      const cx=21, cy=21;
+      const segs = counts.filter(c=>c.count>0).map(({i,count})=>{
+        const frac = total>0?count/total:0;
+        const start = cum; cum += frac;
+        const a0 = start*2*Math.PI - Math.PI/2;
+        const a1 = cum*2*Math.PI - Math.PI/2;
+        const large = frac>0.5?1:0;
+        const x0=cx+r0*Math.cos(a0), y0=cy+r0*Math.sin(a0);
+        const x1=cx+r0*Math.cos(a1), y1=cy+r0*Math.sin(a1);
+        if(mode==='donut'){
+          return `<path d="M ${x0} ${y0} A ${r0} ${r0} 0 ${large} 1 ${x1} ${y1}" fill="none" stroke="${palette[i%palette.length]}" stroke-width="7"/>`;
+        } else {
+          return `<path d="M ${cx} ${cy} L ${x0} ${y0} A ${r0} ${r0} 0 ${large} 1 ${x1} ${y1} Z" fill="${palette[i%palette.length]}"/>`;
+        }
+      }).join('');
+      const legend = counts.map(({i,count})=>`
+        <div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;">
+          <span style="width:12px;height:12px;border-radius:3px;background:${palette[i%palette.length]};flex-shrink:0;"></span>
+          <span style="flex:1;">${letters[i]}. ${(q.options[i]||{}).text||''}</span>
+          <span style="font-family:'Syne',sans-serif;font-weight:700;">${pct(count)}%</span>
+        </div>`).join('');
+      inner = `<div style="display:flex;justify-content:center;margin-bottom:14px;">
+        <svg viewBox="0 0 42 42" style="width:150px;height:150px;">${segs||'<circle cx="21" cy="21" r="'+r0+'" fill="none" stroke="var(--surface2)" stroke-width="7"/>'}</svg>
+      </div>${legend}`;
+    } else {
+      // Default: bars
+      inner = counts.map(({i,count})=>{
+        const opt=(q.options[i]||{});
+        const hasImg=opt.img&&opt.img.trim();
+        return `<div class="bar-wrap">
+        <div class="bar-label"><span class="bn">${hasImg?`<img src="${opt.img}" style="width:18px;height:18px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:5px;" onerror="this.style.display='none'">`:''}${letters[i]}. ${opt.text||''}</span><span class="bv">${count} (${pct(count)}%)</span></div>
+        <div class="bar-bg"><div class="bar-fill ${correct.includes(i)?'correct':''}" style="width:${pct(count)}%"></div></div>
+      </div>`;}).join('');
+    }
+
+    rs.innerHTML=`<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>${inner}`;
+  }
+}
+
+// ─── TALLY ────────────────────────────────────────────────────────────────────
+async function showTally() {
+  if (!activePresId) { toast('Select a presentation first.','warn'); return; }
+  const pres = presentations[activePresId];
+  document.getElementById('tallyPresName').textContent = pres.name;
+  document.getElementById('tallyContent').innerHTML = '<div style="color:var(--muted);padding:20px;text-align:center;">Loading...</div>';
+  document.getElementById('tallyModal').classList.remove('hidden');
+
+  // Delegate to showPresTally which uses the correct data model
+  document.getElementById('tallyModal').classList.add('hidden');
+  showPresTally(activePresId);
+}
+
+// ─── PER-QUESTION RESET ──────────────────────────────────────────────────────
+async function resetQuestionTally(qIdx) {
+  if (!activePresId) return;
+  const code = presentations[activePresId].sessionCode;
+  const stableQId = `q${qIdx}_stable_${code}`;
+  try {
+    // Step 1: Detach listeners
+    if (respListener) { respListener(); respListener = null; }
+    if (respListeners[qIdx]) { respListeners[qIdx](); delete respListeners[qIdx]; }
+    // Step 2: Delete from Firebase first
+    await db.ref(`sessions/${code}/responses/${stableQId}`).remove();
+    // Step 3: Clear UI after delete
+    clearRightPanel();
+    toast(`Q${qIdx+1} cleared. Participants can answer again.`, 'success');
+    await launchQuestion(qIdx);
+  } catch(e) { toast('Reset failed.', 'danger'); }
+}
+
+function editQuestion(idx) {
+  // Switch from live view back to editor for this question
+  liveQIdx = null;
+  liveQId = null;
+  if (respListener) { respListener(); respListener = null; }
+  selIdx = idx;
+  renderQList();
+  renderEditor(idx);
+}
+
+// ─── PRESENTATION TALLY ──────────────────────────────────────────────────────
+async function showPresTally(presId) {
+  const pres = presentations[presId];
+  if (!pres) return;
+  const code = pres.sessionCode;
+  const qs   = pres.questions || [];
+
+  document.getElementById('presTallyName').textContent = pres.name;
+  document.getElementById('presTallyContent').innerHTML =
+    '<div style="color:var(--muted);padding:20px;text-align:center;"><div class="spinner" style="margin:0 auto 12px;"></div>Loading...</div>';
+  document.getElementById('presTallyModal').classList.remove('hidden');
+
+  // Load all responses for this session
+  const respSnap = await db.ref(`sessions/${code}/responses`).get();
+  const allResp  = respSnap.exists() ? respSnap.val() : {};
+
+  if (qs.length === 0) {
+    document.getElementById('presTallyContent').innerHTML =
+      '<div style="color:var(--muted);padding:20px;">No questions in this presentation yet.</div>';
+    return;
+  }
+
+  // Build a map of all respondents across all questions
+  // Key: participantId → { name, answers: { qIdx: { isCorrect, answer } } }
+  const respondents = {}; // participantId → { name, perQ: {} }
+
+  qs.forEach((q, qIdx) => {
+    const stableQId = `q${qIdx}_stable_${code}`;
+    const qResps = allResp[stableQId] || {};
+    Object.entries(qResps).forEach(([pid, r]) => {
+      if (!respondents[pid]) {
+        respondents[pid] = { name: r.name || 'Anonymous', perQ: {} };
+      }
+      respondents[pid].perQ[qIdx] = {
+        isCorrect: r.isCorrect,
+        answer: r.answer
+      };
+    });
+  });
+
+  const allPeople = Object.entries(respondents).map(([pid, data]) => {
+    const correctCount = Object.values(data.perQ).filter(a => a.isCorrect === true).length;
+    const answeredCount = Object.values(data.perQ).length;
+    return { pid, name: data.name, perQ: data.perQ, correctCount, answeredCount };
+  });
+
+  // Sort: most correct first, then most answered, then alphabetical
+  allPeople.sort((a, b) => {
+    if (b.correctCount !== a.correctCount) return b.correctCount - a.correctCount;
+    if (b.answeredCount !== a.answeredCount) return b.answeredCount - a.answeredCount;
+    return a.name.localeCompare(b.name);
+  });
+
+  if (allPeople.length === 0) {
+    document.getElementById('presTallyContent').innerHTML =
+      '<div style="color:var(--muted);padding:20px;text-align:center;">No responses yet for this presentation.</div>';
+    return;
+  }
+
+  const medals  = ['🥇','🥈','🥉'];
+  const letters = ['A','B','C','D','E','F'];
+
+  // Column headers — one per question
+  const qHeaders = qs.map((q, i) =>
+    `<th style="text-align:center;min-width:40px;padding:8px 6px;" title="${q.text||'Q'+(i+1)}">Q${i+1}</th>`
+  ).join('');
+
+  // Rows — one per person
+  const rows = allPeople.map((person, rank) => {
+    const isWinner = rank === 0;
+    const rankDisplay = rank < 3 ? medals[rank] : `#${rank+1}`;
+
+    const qCells = qs.map((q, qIdx) => {
+      const resp = person.perQ[qIdx];
+      if (!resp) return `<td style="text-align:center;color:var(--muted);font-size:13px;">—</td>`;
+      if (resp.isCorrect === true)  return `<td style="text-align:center;color:var(--accent3);font-weight:700;font-size:14px;">✓</td>`;
+      if (resp.isCorrect === false) return `<td style="text-align:center;color:var(--accent2);font-weight:700;font-size:14px;">✗</td>`;
+      // Free text / rating — just show answered dot
+      return `<td style="text-align:center;color:var(--muted);font-size:14px;">·</td>`;
+    }).join('');
+
+    const hasCorrect = qs.some(q => q.correctAnswer !== undefined && q.correctAnswer !== null);
+
+    return `<tr style="${isWinner ? 'color:var(--accent4);' : ''}">
+      <td style="padding:9px 10px;font-size:15px;text-align:center;">${rankDisplay}</td>
+      <td style="padding:9px 10px;font-weight:600;font-size:13px;">${person.name}</td>
+      ${qCells}
+      ${hasCorrect
+        ? `<td style="text-align:center;padding:9px 10px;font-family:'Syne',sans-serif;font-weight:700;color:var(--accent3);">${person.correctCount}/${qs.filter(q=>q.correctAnswer!==undefined&&q.correctAnswer!==null).length}</td>`
+        : ''}
+      <td style="text-align:center;padding:9px 10px;color:var(--muted);font-size:12px;">${person.answeredCount}/${qs.length}</td>
+    </tr>`;
+  }).join('');
+
+  const hasCorrect = qs.some(q => q.correctAnswer !== undefined && q.correctAnswer !== null);
+  const correctHeader = hasCorrect
+    ? `<th style="text-align:center;padding:8px 10px;">Correct</th>` : '';
+
+  const winner = allPeople[0];
+
+  document.getElementById('presTallyContent').innerHTML = `
+    <div style="background:linear-gradient(135deg,rgba(255,200,0,0.1),rgba(255,200,0,0.03));border:1px solid rgba(255,200,0,0.2);border-radius:12px;padding:16px;text-align:center;margin-bottom:18px;">
+      <div style="font-size:28px;margin-bottom:6px;">🏆</div>
+      <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--accent4);">${winner.name}</div>
+      <div style="font-size:13px;color:var(--muted);margin-top:3px;">
+        ${hasCorrect ? `${winner.correctCount} correct answer${winner.correctCount!==1?'s':''} · ` : ''}
+        ${winner.answeredCount} of ${qs.length} question${qs.length!==1?'s':''} answered
+      </div>
+    </div>
+
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);">
+            <th style="text-align:center;padding:8px 10px;color:var(--muted);font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">#</th>
+            <th style="text-align:left;padding:8px 10px;color:var(--muted);font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Name</th>
+            ${qHeaders}
+            ${correctHeader}
+            <th style="text-align:center;padding:8px 10px;color:var(--muted);font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">Answered</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:14px;font-size:12px;color:var(--muted);text-align:center;">
+      ${allPeople.length} respondent${allPeople.length!==1?'s':''} · ${qs.length} question${qs.length!==1?'s':''}
+      &nbsp;·&nbsp; ✓ correct &nbsp; ✗ incorrect &nbsp; · answered (no correct/wrong) &nbsp; — not answered
+    </div>
+  `;
+}
+
+// ─── PER-QUESTION TALLY ──────────────────────────────────────────────────────
+async function showQuestionTally(qIdx) {
+  if (!activePresId) return;
+  const pres = presentations[activePresId];
+  const code = pres.sessionCode;
+  const q    = questions[qIdx];
+
+  document.getElementById('tallyPresName').textContent = `Q${qIdx+1}: ${q.text||'Untitled'}`;
+  document.getElementById('tallyContent').innerHTML = '<div style="color:var(--muted);padding:20px;text-align:center;">Loading...</div>';
+  document.getElementById('tallyModal').classList.remove('hidden');
+
+  // Read directly from this question's response bucket — no shared participants node
+  const stableQId = `q${qIdx}_stable_${code}`;
+  const respSnap  = await db.ref(`sessions/${code}/responses/${stableQId}`).get();
+
+  if (!respSnap.exists()) {
+    document.getElementById('tallyContent').innerHTML = '<div style="color:var(--muted);padding:20px;text-align:center;">No responses yet for this question.</div>';
+    return;
+  }
+
+  const responses = Object.values(respSnap.val());
+  if (responses.length === 0) {
+    document.getElementById('tallyContent').innerHTML = '<div style="color:var(--muted);padding:20px;text-align:center;">No responses yet for this question.</div>';
+    return;
+  }
+
+  const letters = ['A','B','C','D','E','F'];
+  const correct = Array.isArray(q.correctAnswer) ? q.correctAnswer : [q.correctAnswer];
+
+  // Build answer summary bars (for MC questions)
+  let summaryHtml = '';
+  if (q.type === 'multiple_choice' || q.type === 'multiple_choice_multi') {
+    const counts = (q.options||[]).map((_,i) => ({ i, count:0 }));
+    responses.forEach(r => {
+      try { const a=JSON.parse(r.answer); (Array.isArray(a)?a:[a]).forEach(v=>{if(counts[v])counts[v].count++;}); } catch(e) {}
+    });
+    const total = responses.length;
+    summaryHtml = `
+      <div style="margin-bottom:16px;">
+        <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:10px;">Answer Breakdown (${total} responses)</div>
+        ${counts.map(({i,count}) => `
+          <div style="margin-bottom:9px;">
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;">
+              <span style="font-weight:500;">${letters[i]}. ${(q.options[i]||{}).text||''} ${correct.includes(i)?'✓':''}</span>
+              <span style="font-family:Syne,sans-serif;font-weight:700;color:${correct.includes(i)?'var(--accent3)':'var(--accent)'};">${count} (${total>0?Math.round(count/total*100):0}%)</span>
+            </div>
+            <div style="height:7px;background:var(--surface2);border-radius:100px;overflow:hidden;">
+              <div style="height:100%;border-radius:100px;width:${total>0?Math.round(count/total*100):0}%;background:${correct.includes(i)?'linear-gradient(90deg,var(--accent3),#6bffb5)':'linear-gradient(90deg,var(--accent),#a78bfa)'};"></div>
+            </div>
+          </div>`).join('')}
+      </div>`;
+  } else if (q.type === 'free_text') {
+    summaryHtml = `
+      <div style="margin-bottom:16px;">
+        <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:10px;">Text Responses (${responses.length})</div>
+        ${responses.map(r=>`<div style="background:var(--surface2);border-left:2px solid var(--accent);border-radius:8px;padding:8px 12px;margin-bottom:7px;font-size:13px;">
+          ${r.answer==='__none__'?'<em style="color:var(--muted)">No answer</em>':safeJ(r.answer)}
+          <div style="font-size:10px;color:var(--muted);margin-top:3px;">— ${r.name}</div>
+        </div>`).join('')}
+      </div>`;
+  }
+
+  // Build per-respondent table directly from responses
+  const medals = ['🥇','🥈','🥉'];
+  // Sort: correct first, then by submission time
+  const sorted = [...responses].sort((a,b) => {
+    if (b.isCorrect === true && a.isCorrect !== true) return 1;
+    if (a.isCorrect === true && b.isCorrect !== true) return -1;
+    return (a.submittedAt||0) - (b.submittedAt||0);
+  });
+
+  const rows = sorted.map((r, rank) => {
+    let answerText = '—';
+    try {
+      const a = JSON.parse(r.answer);
+      if (q.type === 'multiple_choice' || q.type === 'multiple_choice_multi') {
+        const arr = Array.isArray(a) ? a : [a];
+        answerText = arr.map(i => letters[i]).join(', ');
+      } else if (r.answer !== '__none__') {
+        answerText = String(a);
+      }
+    } catch(e) {}
+    const resultCell = r.isCorrect === true
+      ? `<td class="tick" style="text-align:center;">✓</td>`
+      : r.isCorrect === false
+        ? `<td class="cross" style="text-align:center;">✗</td>`
+        : `<td class="dash" style="text-align:center;">·</td>`;
+    return `<tr>
+      <td>${rank<3?medals[rank]:'#'+(rank+1)}</td>
+      <td><strong>${r.name||'Anonymous'}</strong></td>
+      <td style="font-size:12px;">${answerText}</td>
+      ${resultCell}
+    </tr>`;
+  }).join('');
+
+  document.getElementById('tallyContent').innerHTML = `
+    ${summaryHtml}
+    <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:10px;">Per-Participant</div>
+    <div style="overflow-x:auto;">
+      <table class="tally-table">
+        <thead><tr><th>#</th><th>Name</th><th>Answer</th><th style="text-align:center;">Result</th></tr></thead>
+        <tbody>${rows||'<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:16px;">No responses yet.</td></tr>'}</tbody>
+      </table>
+    </div>`;
+}
+
+// ─── PARTICIPANTS ─────────────────────────────────────────────────────────────
+
+// ─── QUESTION EDITOR ─────────────────────────────────────────────────────────
+function addQuestion() {
+  if (!activePresId) return;
+  questions.push({ text:'', type:'multiple_choice', options:[{text:'',img:''},{text:'',img:''},{text:'',img:''},{text:'',img:''}], correctAnswer:0, image:'', timer:0, displayMode:'bars' });
+  presentations[activePresId].questions = questions;
+  renderQList();
+  const newIdx = questions.length - 1;
+  selIdx = newIdx;
+  renderEditor(newIdx);
+  scheduleSave();
+  // Focus the textarea so presenter can start typing immediately
+  setTimeout(() => {
+    const ta = document.querySelector('#centerPanel textarea');
+    if (ta) ta.focus();
+  }, 80);
+}
+
+function renderQList() {
+  document.getElementById('qCount').textContent = questions.length;
+  const icons = { multiple_choice:'⊙', multiple_choice_multi:'☑', free_text:'✎', rating:'★' };
+  const list  = document.getElementById('qList');
+
+  if (!activePresId) {
+    list.innerHTML = '<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px;">Select a presentation first.</div>';
+    return;
+  }
+  if (questions.length === 0) {
+    list.innerHTML = '<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px;">No questions yet.</div>';
+    return;
+  }
+  list.innerHTML = questions.map((q,i)=>`
+    <div class="q-item ${i===selIdx?'sel':''}" onclick="selectQ(${i})">
+      <div class="q-num">${i+1}</div>
+      <div>
+        <div class="q-label">${q.text||'<span style="color:var(--muted);font-style:italic;">Untitled</span>'}</div>
+        <div class="q-type-tag">${icons[q.type]||'?'} ${(q.type||'').replace(/_/g,' ')}</div>
+      </div>
+    </div>`).join('');
+}
+
+function selectQ(idx) {
+  selIdx = idx;
+  renderQList();
+  // A question is "live" if it has a stable qId — always show live view and listen
+  const code = presentations[activePresId]?.sessionCode || '';
+  const stableQId = `q${idx}_stable_${code}`;
+  // If this question has been launched (liveQIdx matches) or has been saved before, show live view
+  if (liveQIdx === idx && liveQId) {
+    renderLiveView(idx, liveQId, questions[idx]);
+    listenResponses(idx, liveQId, questions[idx]);
+  } else if (code && questions[idx]) {
+    // Always attach listener for any saved question so responses show up
+    if (respListener) { respListener(); respListener = null; }
+    if (respListeners[idx]) { respListeners[idx](); delete respListeners[idx]; }
+    const ref = db.ref(`sessions/${code}/responses/${stableQId}`);
+    const fn = ref.on('value', snap => {
+      const responses = snap.exists() ? Object.values(snap.val()) : [];
+      const rc = document.getElementById('respCounter');
+      if (rc) rc.textContent = `${responses.length} response${responses.length!==1?'s':''}`;
+      renderRightPanel(questions[idx], responses);
+      const pCount = document.getElementById('pCount');
+      const pList  = document.getElementById('pList');
+      if (pCount) pCount.textContent = responses.length;
+      if (pList) {
+        if (responses.length === 0) {
+          pList.innerHTML = '<div style="color:var(--muted);font-size:12px;">No responses yet.</div>';
+        } else {
+          pList.innerHTML = responses.map(r =>
+            `<div class="p-row">
+              <div class="p-av">${(r.name||'?')[0].toUpperCase()}</div>
+              <div class="p-name">${r.name||'Anonymous'}</div>
+              <div class="p-score" style="color:${r.isCorrect===true?'var(--accent3)':r.isCorrect===false?'var(--accent2)':'var(--muted)'}">
+                ${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}
+              </div>
+            </div>`
+          ).join('');
+        }
+      }
+    });
+    respListeners[idx] = () => ref.off('value', fn);
+    respListener = respListeners[idx]; // also track as current
+    renderEditor(idx);
+  } else {
+    renderEditor(idx);
+  }
+}
+
+function showSetup() {
+  const hasPres = activePresId && presentations[activePresId];
+  document.getElementById('centerPanel').innerHTML = hasPres ? `
+    <div class="setup">
+      <div class="setup-icon">🎯</div>
+      <div>
+        <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:8px;">Ready to Go</h2>
+        <p style="color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:18px;">Add a question, fill in the details,<br>then click <strong style="color:var(--accent3);">▶ Save &amp; Go Live</strong> when ready.<br><br>Use <strong style="color:var(--accent2);">↺ Reset Tally</strong> before your presentation.</p>
+        <button class="btn btn-primary" style="font-size:13px;padding:10px 22px;justify-content:center;" onclick="addQuestion()">+ Add First Question</button>
+      </div>
+    </div>` : `
+    <div class="setup">
+      <div class="setup-icon">🎯</div>
+      <div>
+        <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:8px;">Welcome to PollSlide</h2>
+        <p style="color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:18px;">Each presentation has its own questions<br>and session code. Create one to begin.</p>
+        <button class="btn btn-primary" style="font-size:13px;padding:10px 22px;justify-content:center;" onclick="createPresentation()">+ Create Your First Presentation</button>
+      </div>
+    </div>`;
+}
+
+function renderEditor(idx) {
+  const q       = questions[idx];
+  const letters = ['A','B','C','D','E','F'];
+  const qUrl    = getQuestionURL(idx);
+
+  const optHtml = (q.type==='multiple_choice'||q.type==='multiple_choice_multi') ? `
+    <div class="form-row">
+      <label>Options <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(click ✓ to mark correct · 🖼 to add image/GIF)</span></label>
+      ${(q.options||[]).map((opt,i)=>{
+        const isMulti=q.type==='multiple_choice_multi';
+        const isC=isMulti?(Array.isArray(q.correctAnswer)?q.correctAnswer:[]).includes(i):q.correctAnswer===i;
+        const hasImg = opt.img && opt.img.trim();
+        return `<div style="margin-bottom:7px;">
+          <div class="opt-row" style="margin-bottom:0;">
+            <div class="opt-letter ${isC?'correct':''}">${letters[i]}</div>
+            <input class="opt-input" type="text" placeholder="Option ${letters[i]}" value="${(opt.text||'').replace(/"/g,'&quot;')}" oninput="updateOpt(${idx},${i},this.value)">
+            <div class="chk-btn ${hasImg?'on':''}" style="${hasImg?'background:var(--accent);border-color:var(--accent);color:#fff;':''}" onclick="toggleOptImg(${idx},${i})" title="Add image/GIF">🖼</div>
+            <div class="chk-btn ${isC?'on':''}" onclick="toggleCorrect(${idx},${i})" title="Mark correct">✓</div>
+            ${i>=2?`<button class="del-btn" onclick="removeOpt(${idx},${i})">×</button>`:'<div style="width:24px"></div>'}
+          </div>
+          <div id="optImgRow_${idx}_${i}" style="display:${hasImg||opt._showImg?'flex':'none'};gap:8px;align-items:center;margin-top:5px;margin-left:32px;">
+            <input class="opt-input" type="text" placeholder="Paste image or GIF URL (https://...)" value="${(opt.img||'').replace(/"/g,'&quot;')}" oninput="updateOptImg(${idx},${i},this.value)" style="font-size:12px;">
+            ${hasImg?`<img src="${opt.img}" style="width:34px;height:34px;border-radius:6px;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">`:''}
+          </div>
+        </div>`;
+      }).join('')}
+      ${q.options.length<6?`<button class="btn btn-ghost btn-sm" style="margin-top:5px;" onclick="addOpt(${idx})">+ Add Option</button>`:''}
+    </div>` : '';
+
+  const ratingHtml = q.type==='rating' ? `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+      <div><label>Max Rating</label>
+        <select onchange="updateQ(${idx},'ratingMax',+this.value)" style="width:100%;">
+          ${[3,4,5,6,7,8,9,10].map(n=>`<option value="${n}" ${(q.ratingMax||5)===n?'selected':''}>${n}</option>`).join('')}
+        </select></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+      <div><label>Low Label</label><input type="text" placeholder="e.g. Poor" value="${(q.ratingLabels||{}).low||''}" oninput="updateQNested(${idx},'ratingLabels','low',this.value)"></div>
+      <div><label>High Label</label><input type="text" placeholder="e.g. Excellent" value="${(q.ratingLabels||{}).high||''}" oninput="updateQNested(${idx},'ratingLabels','high',this.value)"></div>
+    </div>` : '';
+
+  document.getElementById('centerPanel').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Question ${idx+1}</span>
+      <div style="display:flex;gap:7px;">
+        <button class="btn btn-ghost btn-sm" style="color:var(--accent2);" onclick="deleteQ(${idx})">Delete</button>
+        <button class="btn btn-reset btn-sm" onclick="resetQuestionTally(${idx})">↺ Reset</button>
+        <button class="btn btn-ghost btn-sm" onclick="showQuestionTally(${idx})">📊 Tally</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
+        <div class="form-row" style="margin:0">
+          <label>Question Text</label>
+          <textarea placeholder="Type your question here..." oninput="updateQ(${idx},'text',this.value)">${q.text||''}</textarea>
+        </div>
+        <div class="form-row" style="margin:0">
+          <label>Question Type</label>
+          <select onchange="changeType(${idx},this.value)" style="width:100%;">
+            <option value="multiple_choice"       ${q.type==='multiple_choice'?'selected':''}>Single Choice</option>
+            <option value="multiple_choice_multi" ${q.type==='multiple_choice_multi'?'selected':''}>Multiple Choice (select all)</option>
+            <option value="free_text"             ${q.type==='free_text'?'selected':''}>Free Text</option>
+            <option value="rating"                ${q.type==='rating'?'selected':''}>Rating Scale</option>
+          </select>
+        </div>
+
+        <div class="form-row" style="margin:0">
+          <label>Question Image / GIF <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(optional — shows above the question)</span></label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" placeholder="Paste image or GIF URL (https://...)" value="${(q.image||'').replace(/"/g,'&quot;')}" oninput="updateQ(${idx},'image',this.value)" style="font-size:13px;">
+            ${q.image&&q.image.trim()?`<img src="${q.image}" style="width:40px;height:40px;border-radius:7px;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">`:''}
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="form-row" style="margin:0">
+            <label>Countdown Timer</label>
+            <select onchange="updateQ(${idx},'timer',+this.value)" style="width:100%;">
+              <option value="0"  ${!q.timer?'selected':''}>No timer</option>
+              <option value="10" ${q.timer===10?'selected':''}>10 seconds</option>
+              <option value="15" ${q.timer===15?'selected':''}>15 seconds</option>
+              <option value="20" ${q.timer===20?'selected':''}>20 seconds</option>
+              <option value="30" ${q.timer===30?'selected':''}>30 seconds</option>
+              <option value="45" ${q.timer===45?'selected':''}>45 seconds</option>
+              <option value="60" ${q.timer===60?'selected':''}>60 seconds</option>
+              <option value="90" ${q.timer===90?'selected':''}>90 seconds</option>
+              <option value="120" ${q.timer===120?'selected':''}>2 minutes</option>
+            </select>
+          </div>
+          <div class="form-row" style="margin:0">
+            <label>Results Display</label>
+            <select onchange="updateQ(${idx},'displayMode',this.value)" style="width:100%;">
+              <option value="bars"        ${(q.displayMode||'bars')==='bars'?'selected':''}>Bar chart</option>
+              <option value="donut"       ${q.displayMode==='donut'?'selected':''}>Donut chart</option>
+              <option value="pie"         ${q.displayMode==='pie'?'selected':''}>Pie chart</option>
+              <option value="leaderboard" ${q.displayMode==='leaderboard'?'selected':''}>Leaderboard (names)</option>
+              <option value="number"      ${q.displayMode==='number'?'selected':''}>Big numbers</option>
+            </select>
+          </div>
+        </div>
+
+        ${optHtml}
+        ${ratingHtml}
+      </div>
+    </div>
+
+    <div class="qr-block">
+      <div id="qrEditor_${idx}"></div>
+      <div class="qr-info">
+        <h3>QR for Q${idx+1}</h3>
+        <p>Scan this to answer this specific question.</p>
+        <div class="qr-url" onclick="copyURL(${idx})" title="Click to copy">${qUrl}</div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:7px;align-items:center;">
+      ${idx>0?`<button class="btn btn-ghost btn-sm" onclick="moveQ(${idx},-1)">↑ Up</button>`:''}
+      ${idx<questions.length-1?`<button class="btn btn-ghost btn-sm" onclick="moveQ(${idx},1)">↓ Down</button>`:''}
+      <button class="btn btn-success" onclick="saveAndLaunch(${idx})" style="margin-left:auto;padding:8px 18px;font-size:13px;">▶ Save &amp; Go Live</button>
+    </div>
+  `;
+
+  setTimeout(()=>{
+    const el=document.getElementById(`qrEditor_${idx}`);
+    if(el){el.innerHTML='';new QRCode(el,{text:qUrl,width:110,height:110,colorDark:'#ffffff',colorLight:'#18182a',correctLevel:QRCode.CorrectLevel.M});}
+  },50);
+}
+
+// ─── EDITOR HELPERS ───────────────────────────────────────────────────────────
+function updateQ(idx,key,val){ questions[idx][key]=val; saveBack(); }
+function updateQNested(idx,key,sub,val){ if(!questions[idx][key])questions[idx][key]={}; questions[idx][key][sub]=val; saveBack(); }
+function updateOpt(idx,oi,val){ questions[idx].options[oi].text=val; saveBack(); }
+function updateOptImg(idx,oi,val){ questions[idx].options[oi].img=val; saveBack(); }
+function toggleOptImg(idx,oi){
+  const opt = questions[idx].options[oi];
+  // Toggle showing the image input row
+  opt._showImg = !opt._showImg;
+  // If hiding and no URL entered, clear the flag cleanly
+  renderEditor(idx);
+}
+function saveBack(){
+  // Strip temporary UI flags before persisting
+  questions.forEach(q => { if(q.options) q.options.forEach(o => { delete o._showImg; }); });
+  presentations[activePresId].questions=[...questions];
+  scheduleSave();
+}
+
+function changeType(idx,type){
+  questions[idx].type=type;
+  if(type==='multiple_choice'){if(!questions[idx].options?.length)questions[idx].options=[{text:'',img:''},{text:'',img:''},{text:'',img:''},{text:'',img:''}];if(Array.isArray(questions[idx].correctAnswer))questions[idx].correctAnswer=0;}
+  else if(type==='multiple_choice_multi'){if(!questions[idx].options?.length)questions[idx].options=[{text:'',img:''},{text:'',img:''},{text:'',img:''},{text:'',img:''}];questions[idx].correctAnswer=[];}
+  else if(type==='rating'){questions[idx].ratingMax=5;questions[idx].ratingLabels={low:'',high:''};delete questions[idx].options;delete questions[idx].correctAnswer;}
+  else{delete questions[idx].options;delete questions[idx].correctAnswer;}
+  saveBack(); renderEditor(idx);
+}
+
+function toggleCorrect(idx,oi){
+  const q=questions[idx];
+  if(q.type==='multiple_choice_multi'){const a=Array.isArray(q.correctAnswer)?q.correctAnswer:[];q.correctAnswer=a.includes(oi)?a.filter(x=>x!==oi):[...a,oi];}
+  else{q.correctAnswer=oi;}
+  saveBack(); renderEditor(idx);
+}
+
+function addOpt(idx){if(questions[idx].options.length>=6)return;questions[idx].options.push({text:'',img:''});saveBack();renderEditor(idx);}
+function removeOpt(idx,oi){
+  if(questions[idx].options.length<=2)return;
+  questions[idx].options.splice(oi,1);
+  const q=questions[idx];
+  if(q.type==='multiple_choice'){if(q.correctAnswer>=oi)q.correctAnswer=Math.max(0,q.correctAnswer-1);}
+  else{q.correctAnswer=(Array.isArray(q.correctAnswer)?q.correctAnswer:[]).filter(x=>x!==oi).map(x=>x>oi?x-1:x);}
+  saveBack();renderEditor(idx);
+}
+function deleteQ(idx){
+  questions.splice(idx,1);
+  if(liveQIdx===idx){liveQIdx=null;liveQId=null;}
+  else if(liveQIdx>idx) liveQIdx--;
+  selIdx=Math.min(idx,questions.length-1);
+  saveBack();renderQList();
+  if(questions.length>0) renderEditor(selIdx); else showSetup();
+}
+function moveQ(idx,dir){
+  const ni=idx+dir;if(ni<0||ni>=questions.length)return;
+  [questions[idx],questions[ni]]=[questions[ni],questions[idx]];
+  if(liveQIdx===idx)liveQIdx=ni;else if(liveQIdx===ni)liveQIdx=idx;
+  selIdx=ni;saveBack();renderQList();renderEditor(ni);
+}
+function saveAndNext(idx){renderQList();if(idx+1<questions.length)selectQ(idx+1);else toast('All questions saved!','success');}
+
+function saveAndLaunch(idx) {
+  const q = questions[idx];
+  if (!q.text || !q.text.trim()) {
+    toast('Please enter a question before going live.', 'warn');
+    return;
+  }
+  saveBack();
+  renderQList();
+  launchQuestion(idx);
+  toast(`Q${idx+1} saved and now live!`, 'success');
+}
+
+// ─── QR HELPERS ───────────────────────────────────────────────────────────────
+function getQuestionURL(idx) {
+  const code = presentations[activePresId]?.sessionCode || '';
+  return `${BASE_URL}#${code}/${idx}`;
+}
+
+function showQRModal(idx){
+  const url=getQuestionURL(idx); currentQRURL=url;
+  document.getElementById('qrModalTitle').textContent=`Q${idx+1} — QR Code`;
+  document.getElementById('qrModalDesc').textContent=`Scan to answer Question ${idx+1}`;
+  document.getElementById('qrModalURL').textContent=url;
+  const el=document.getElementById('qrModalCode');el.innerHTML='';
+  new QRCode(el,{text:url,width:210,height:210,colorDark:'#ffffff',colorLight:'#10101a',correctLevel:QRCode.CorrectLevel.M});
+  document.getElementById('qrModal').classList.remove('hidden');
+}
+function closeQRModal(){document.getElementById('qrModal').classList.add('hidden');}
+async function copyQRURL(){await navigator.clipboard.writeText(currentQRURL).catch(()=>{});toast('Link copied!','success');}
+async function copyURL(idx){await navigator.clipboard.writeText(getQuestionURL(idx)).catch(()=>{});toast('Link copied!','success');}
+
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+function genCode(){ return Math.random().toString(36).substr(2,7).toUpperCase().replace(/[01IO]/g,'X'); }
+function safeJ(str){ try{return JSON.parse(str);}catch(e){return str;} }
+
+function toast(msg,type='info'){
+  const el=document.createElement('div');el.className=`toast ${type}`;el.textContent=msg;
+  document.body.appendChild(el);setTimeout(()=>el.remove(),3500);
+}
+// ─── PANEL RESIZE ─────────────────────────────────────────────────────────────
+(function() {
+  const STORAGE = {
+    sidebarW: 'ql_sidebar_w',
+    rightW:   'ql_right_w',
+    presH:    'ql_pres_h'
+  };
+
+  function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
+
+  function applyWidths() {
+    const sw = parseInt(localStorage.getItem(STORAGE.sidebarW) || '260');
+    const rw = parseInt(localStorage.getItem(STORAGE.rightW)   || '290');
+    const ph = parseInt(localStorage.getItem(STORAGE.presH)    || '0');
+    document.querySelector('.sidebar').style.width     = sw + 'px';
+    document.querySelector('.right-panel').style.width = rw + 'px';
+    if (ph > 0) {
+      const pp = document.querySelector('.pres-panel');
+      if (pp) pp.style.height = ph + 'px';
+    }
+  }
+
+  function makeHorizDragger(handleId, targetSelector, storageKey, getSize, dir=1) {
+    const handle = document.getElementById(handleId);
+    if (!handle) return;
+    let startX, startW;
+    handle.addEventListener('mousedown', e => {
+      e.preventDefault();
+      startX = e.clientX;
+      startW = getSize();
+      handle.classList.add('dragging');
+      document.body.classList.add('no-select');
+      const onMove = e => {
+        const delta = (e.clientX - startX) * dir;
+        const newW  = clamp(startW + delta, 160, 560);
+        document.querySelector(targetSelector).style.width = newW + 'px';
+        localStorage.setItem(storageKey, newW);
+      };
+      const onUp = () => {
+        handle.classList.remove('dragging');
+        document.body.classList.remove('no-select');
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup',   onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup',   onUp);
+    });
+    // Touch support
+    handle.addEventListener('touchstart', e => {
+      e.preventDefault();
+      startX = e.touches[0].clientX;
+      startW = getSize();
+      handle.classList.add('dragging');
+      const onMove = e => {
+        const delta = (e.touches[0].clientX - startX) * dir;
+        const newW  = clamp(startW + delta, 160, 560);
+        document.querySelector(targetSelector).style.width = newW + 'px';
+        localStorage.setItem(storageKey, newW);
+      };
+      const onUp = () => {
+        handle.classList.remove('dragging');
+        handle.removeEventListener('touchmove', onMove);
+        handle.removeEventListener('touchend',  onUp);
+      };
+      handle.addEventListener('touchmove', onMove, { passive:false });
+      handle.addEventListener('touchend',  onUp);
+    }, { passive:false });
+  }
+
+  function makeVertDragger(handleId, targetSelector, storageKey) {
+    const handle = document.getElementById(handleId);
+    if (!handle) return;
+    let startY, startH;
+    handle.addEventListener('mousedown', e => {
+      e.preventDefault();
+      const el = document.querySelector(targetSelector);
+      startY = e.clientY;
+      startH = el.getBoundingClientRect().height;
+      handle.classList.add('dragging');
+      document.body.classList.add('no-select');
+      const onMove = e => {
+        const delta = e.clientY - startY;
+        const sidebar = document.querySelector('.sidebar');
+        const sidebarH = sidebar.getBoundingClientRect().height;
+        const newH = clamp(startH + delta, 80, sidebarH - 120);
+        document.querySelector(targetSelector).style.height = newH + 'px';
+        localStorage.setItem(storageKey, newH);
+      };
+      const onUp = () => {
+        handle.classList.remove('dragging');
+        document.body.classList.remove('no-select');
+        document.removeEventListener('mousemove', onMove);
+        document.removeEventListener('mouseup',   onUp);
+      };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup',   onUp);
+    });
+    handle.addEventListener('touchstart', e => {
+      e.preventDefault();
+      const el = document.querySelector(targetSelector);
+      startY = e.touches[0].clientY;
+      startH = el.getBoundingClientRect().height;
+      handle.classList.add('dragging');
+      const onMove = e => {
+        const delta = e.touches[0].clientY - startY;
+        const sidebar = document.querySelector('.sidebar');
+        const sidebarH = sidebar.getBoundingClientRect().height;
+        const newH = clamp(startH + delta, 80, sidebarH - 120);
+        document.querySelector(targetSelector).style.height = newH + 'px';
+        localStorage.setItem(storageKey, newH);
+      };
+      const onUp = () => {
+        handle.classList.remove('dragging');
+        handle.removeEventListener('touchmove', onMove);
+        handle.removeEventListener('touchend',  onUp);
+      };
+      handle.addEventListener('touchmove', onMove, { passive:false });
+      handle.addEventListener('touchend',  onUp);
+    }, { passive:false });
+  }
+
+  // Apply saved sizes on load
+  applyWidths();
+
+  // Set up draggers
+  makeHorizDragger(
+    'resizeLeft', '.sidebar', STORAGE.sidebarW,
+    () => document.querySelector('.sidebar').getBoundingClientRect().width
+  );
+  makeHorizDragger(
+    'resizeRight', '.right-panel', STORAGE.rightW,
+    () => document.querySelector('.right-panel').getBoundingClientRect().width,
+    -1  // drag left = right panel grows
+  );
+  makeVertDragger('resizeVertical', '.pres-panel', STORAGE.presH);
+})();
+
+</script>
+</body>
+</html>

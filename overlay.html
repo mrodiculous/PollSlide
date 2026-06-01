@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PollSlide — Overlay</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root {
+    --bg: #08081040;
+    --surface: rgba(16,16,26,0.97);
+    --surface2: rgba(24,24,42,0.97);
+    --accent: #6c63ff;
+    --accent2: #ff6584;
+    --accent3: #43e97b;
+    --accent4: #f7b731;
+    --text: #f0f0fa;
+    --muted: #8888aa;
+    --border: rgba(255,255,255,0.07);
+    --radius: 12px;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; overflow:hidden; }
+  body { font-family:'DM Sans',sans-serif; background:var(--surface); color:var(--text); display:flex; flex-direction:column; }
+
+  /* HEADER */
+  .hdr { padding:10px 16px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:10px; background:var(--surface2); flex-shrink:0; }
+  .logo { font-family:'Syne',sans-serif; font-weight:800; font-size:14px; color:var(--accent); }
+  .sess-tag { font-size:10px; color:var(--muted); padding:3px 9px; background:rgba(108,99,255,0.1); border:1px solid rgba(108,99,255,0.2); border-radius:100px; }
+  .status { margin-left:auto; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; padding:3px 9px; border-radius:100px; }
+  .status.live     { background:rgba(67,233,123,0.15);  color:var(--accent3); border:1px solid rgba(67,233,123,0.25); }
+  .status.revealed { background:rgba(255,101,132,0.1);  color:var(--accent2); border:1px solid rgba(255,101,132,0.2); }
+  .status.waiting  { background:rgba(108,99,255,0.1);   color:var(--accent);  border:1px solid rgba(108,99,255,0.2); }
+
+  /* QUESTION STRIP */
+  .q-strip { padding:11px 16px 10px; border-bottom:1px solid var(--border); background:var(--surface2); flex-shrink:0; }
+  .q-num   { font-size:10px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; background:rgba(108,99,255,0.15); color:var(--accent); padding:3px 9px; border-radius:100px; border:1px solid rgba(108,99,255,0.2); display:inline-block; margin-bottom:6px; }
+  .q-text  { font-family:'Syne',sans-serif; font-size:13px; font-weight:700; line-height:1.4; }
+
+  /* RESULTS */
+  .results { flex:1; overflow-y:auto; padding:12px 16px; }
+  .resp-hd { display:flex; align-items:baseline; gap:6px; margin-bottom:12px; }
+  .resp-n  { font-family:'Syne',sans-serif; font-size:26px; font-weight:800; color:var(--accent); }
+  .resp-lb { font-size:12px; color:var(--muted); }
+
+  .bar-item { margin-bottom:9px; }
+  .bar-top  { display:flex; justify-content:space-between; margin-bottom:3px; font-size:12px; }
+  .bar-n    { font-weight:500; max-width:70%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bar-v    { font-family:'Syne',sans-serif; font-weight:700; font-size:11px; color:var(--accent); }
+  .bar-bg   { height:8px; background:rgba(255,255,255,0.05); border-radius:100px; overflow:hidden; }
+  .bar-fill { height:100%; border-radius:100px; background:linear-gradient(90deg,var(--accent),#a78bfa); transition:width 0.5s cubic-bezier(0.34,1.56,0.64,1); }
+  .bar-fill.correct { background:linear-gradient(90deg,var(--accent3),#6bffb5); }
+
+  .txt-resp { background:rgba(255,255,255,0.04); border-radius:7px; padding:7px 11px; margin-bottom:6px; font-size:12px; border-left:2px solid var(--accent); }
+  .txt-from { font-size:10px; color:var(--muted); margin-top:2px; }
+
+  /* QR FOOTER */
+  .qr-foot { padding:10px 16px; border-top:1px solid var(--border); background:var(--surface2); flex-shrink:0; display:flex; align-items:center; gap:12px; }
+  #qrSmall canvas, #qrSmall img { border-radius:6px; }
+  .qr-code-lbl { font-family:'Syne',sans-serif; font-size:18px; font-weight:800; color:var(--accent4); letter-spacing:0.12em; }
+  .qr-sub      { font-size:11px; color:var(--muted); margin-top:1px; }
+
+  /* LEADERBOARD */
+  .lb-wrap { flex:1; overflow-y:auto; padding:12px 16px; }
+  .lb-title { font-family:'Syne',sans-serif; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:var(--muted); margin-bottom:10px; }
+  .lb-row { display:flex; align-items:center; gap:9px; padding:7px 0; border-bottom:1px solid var(--border); }
+  .lb-row:last-child { border-bottom:none; }
+  .lb-medal { font-size:15px; width:20px; text-align:center; flex-shrink:0; }
+  .lb-rank  { font-family:'Syne',sans-serif; font-weight:700; font-size:11px; color:var(--muted); width:20px; flex-shrink:0; }
+  .lb-name  { flex:1; font-size:12px; font-weight:500; }
+  .lb-cor   { font-size:11px; color:var(--accent3); font-weight:600; margin-right:4px; }
+  .lb-pts   { font-family:'Syne',sans-serif; font-weight:700; font-size:12px; color:var(--accent4); }
+
+  /* WAITING */
+  .wait { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:28px 16px; text-align:center; }
+  .wait-icon  { font-size:30px; margin-bottom:10px; animation:float 3s ease-in-out infinite; }
+  .wait-title { font-family:'Syne',sans-serif; font-size:15px; font-weight:800; margin-bottom:5px; }
+  .wait-sub   { font-size:12px; color:var(--muted); line-height:1.5; }
+  @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-5px)} }
+
+  /* SETUP */
+  .setup { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center; gap:12px; }
+  .setup input { background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.12); border-radius:8px; padding:9px 14px; color:var(--text); font-size:14px; text-align:center; letter-spacing:0.12em; font-family:'Syne',sans-serif; font-weight:700; width:145px; outline:none; }
+  .setup input:focus { border-color:var(--accent); }
+  .setup button { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:9px 20px; font-family:'Syne',sans-serif; font-weight:700; font-size:12px; cursor:pointer; }
+
+  ::-webkit-scrollbar { width:3px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:2px; }
+</style>
+</head>
+<body>
+
+<div class="hdr">
+  <div class="logo">PollSlide</div>
+  <div class="sess-tag" id="sessLabel">—</div>
+  <div class="status waiting" id="statusBadge">Connecting...</div>
+</div>
+
+<div id="mainContent" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+  <div class="setup">
+    <div style="font-size:32px;">🎯</div>
+    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;">Keynote Overlay</div>
+    <p style="font-size:12px;color:var(--muted);">Enter your session code</p>
+    <input type="text" id="codeIn" placeholder="ABC123" maxlength="10">
+    <button onclick="connect()">Connect</button>
+    <p id="setupErr" style="color:var(--accent2);font-size:11px;"></p>
+  </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME",
+  authDomain: "echonest-live-survey.firebaseapp.com",
+  databaseURL: "https://echonest-live-survey-default-rtdb.firebaseio.com",
+  projectId: "echonest-live-survey",
+  storageBucket: "echonest-live-survey.firebasestorage.app",
+  messagingSenderId: "285529140046",
+  appId: "1:285529140046:web:983c1ee8000a2ca8f80c1f",
+  measurementId: "G-NWQY4YLNRC"
+};
+
+const BASE_URL = "https://app.pollslide.com/answer";
+
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.database();
+
+let sessionCode = '';
+let currentQId  = null;
+let respOff     = null;
+
+// Auto-connect from URL ?session=CODE
+const autoCode = new URLSearchParams(window.location.search).get('session');
+if (autoCode) {
+  document.getElementById('codeIn').value = autoCode.toUpperCase();
+  connect();
+}
+
+document.getElementById('codeIn').addEventListener('input', e => {
+  e.target.value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g,'');
+});
+
+async function connect() {
+  const code = document.getElementById('codeIn').value.trim().toUpperCase();
+  if (!code) return;
+  sessionCode = code;
+  document.getElementById('sessLabel').textContent = code;
+  setStatus('waiting', '⏳ Waiting');
+  showWait('Waiting for presenter to launch a question...');
+  listen();
+}
+
+function listen() {
+  db.ref(`sessions/${sessionCode}/currentQuestion`).on('value', snap => {
+    if (!snap.exists()) { showWait('Waiting for first question...'); setStatus('waiting','⏳ Waiting'); return; }
+    const q = snap.val();
+
+    if (q.status === 'active') {
+      if (q.id !== currentQId) { currentQId = q.id; showLive(q); }
+      setStatus('live','● LIVE');
+    } else if (q.status === 'reveal') {
+      setStatus('revealed','✓ Revealed');
+      markRevealed();
+    } else {
+      setStatus('waiting','⏳ Waiting');
+      showWait('Next question coming up...');
+    }
+  });
+}
+
+function setStatus(cls, txt) {
+  const el = document.getElementById('statusBadge');
+  el.textContent = txt;
+  el.className = 'status ' + cls;
+}
+
+function showLive(q) {
+  if (respOff) { respOff(); respOff = null; }
+  const letters = ['A','B','C','D','E','F'];
+  const correct = Array.isArray(q.correctAnswer) ? q.correctAnswer : [q.correctAnswer];
+  const qIdx    = q.qIndex !== undefined ? q.qIndex : (q.index - 1);
+
+  let barsHTML = '';
+  if (q.type !== 'free_text' && q.type !== 'rating' && q.options) {
+    barsHTML = q.options.map((o,i) => `
+      <div class="bar-item">
+        <div class="bar-top"><span class="bar-n">${letters[i]}. ${o.text}</span><span class="bar-v" id="bv${i}">—</span></div>
+        <div class="bar-bg"><div class="bar-fill ${correct.includes(i)?'correct':''}" id="bf${i}" style="width:0%"></div></div>
+      </div>`).join('');
+  }
+
+  setContent(`
+    <div class="q-strip">
+      <div class="q-num">Q${q.index} / ${q.total}</div>
+      <div class="q-text">${q.text}</div>
+    </div>
+    <div class="results" id="resultsArea">
+      <div class="resp-hd"><span class="resp-n" id="respN">0</span><span class="resp-lb">responses</span></div>
+      <div id="barsWrap">${barsHTML || '<div id="textList"></div>'}</div>
+    </div>
+    ${buildQR(qIdx)}
+  `);
+
+  // Live response listener
+  const ref = db.ref(`sessions/${sessionCode}/responses/${q.id}`);
+  const handler = ref.on('value', snap => {
+    const responses = snap.exists() ? Object.values(snap.val()) : [];
+    const n = document.getElementById('respN');
+    if (n) n.textContent = responses.length;
+    const total = responses.length;
+
+    if (q.type === 'free_text') {
+      const tl = document.getElementById('textList');
+      if (tl) tl.innerHTML = responses.slice(-5).map(r => `
+        <div class="txt-resp">
+          ${r.answer==='__none__'?'<em style="color:var(--muted)">No answer</em>':safeJSON(r.answer)}
+          <div class="txt-from">— ${r.name}</div>
+        </div>`).join('');
+    } else if (q.options) {
+      const counts = new Array(q.options.length).fill(0);
+      responses.forEach(r => { try { const a=JSON.parse(r.answer); (Array.isArray(a)?a:[a]).forEach(i=>{if(i>=0&&i<counts.length)counts[i]++;}); } catch(e){} });
+      counts.forEach((c,i) => {
+        const pct = total>0?Math.round(c/total*100):0;
+        const bv = document.getElementById(`bv${i}`);
+        const bf = document.getElementById(`bf${i}`);
+        if (bv) bv.textContent = `${c} (${pct}%)`;
+        if (bf) bf.style.width = pct + '%';
+      });
+    }
+  });
+  respOff = () => ref.off('value', handler);
+}
+
+function markRevealed() {
+  const badge = document.getElementById('statusBadge');
+  if (badge) { badge.textContent = '✓ Revealed'; badge.className = 'status revealed'; }
+}
+
+function showWait(msg) {
+  setContent(`
+    <div class="wait">
+      <div class="wait-icon">⏳</div>
+      <div class="wait-title">${msg}</div>
+      <div class="wait-sub">Questions appear here as soon<br>as the presenter launches them.</div>
+    </div>
+    ${sessionCode ? buildQR(null) : ''}
+  `);
+}
+
+function buildQR(qIdx) {
+  if (!sessionCode) return '';
+  const url = qIdx !== null && qIdx !== undefined
+    ? `${BASE_URL}#${sessionCode}/${qIdx}`
+    : `${BASE_URL}#${sessionCode}/0`;
+  return `
+    <div class="qr-foot">
+      <div id="qrSmall"></div>
+      <div>
+        <div class="qr-code-lbl">${sessionCode}</div>
+        <div class="qr-sub">${qIdx !== null && qIdx !== undefined ? `Scan for Q${qIdx+1}` : 'Scan to join'}</div>
+      </div>
+    </div>`;
+}
+
+function setContent(html) {
+  document.getElementById('mainContent').innerHTML = html;
+  const el = document.getElementById('qrSmall');
+  if (el && sessionCode) {
+    const qIdx = currentQId ? parseInt((currentQId||'').split('_')[0].replace('q','')) : null;
+    const url  = qIdx !== null && !isNaN(qIdx)
+      ? `${BASE_URL}#${sessionCode}/${qIdx}`
+      : `${BASE_URL}#${sessionCode}/0`;
+    try { new QRCode(el, { text:url, width:60, height:60, colorDark:'#ffffff', colorLight:'rgba(0,0,0,0)', correctLevel:QRCode.CorrectLevel.M }); } catch(e) {}
+  }
+}
+
+function safeJSON(str) { try { return JSON.parse(str); } catch(e) { return str; } }
+</script>
+</body>
+</html>
