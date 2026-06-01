@@ -116,6 +116,8 @@
   /* Option images */
   .option { position:relative; }
   .opt-img { width:42px; height:42px; border-radius:8px; object-fit:cover; flex-shrink:0; }
+  video.q-image { width:100%; max-height:240px; object-fit:contain; background:#000; }
+  video.opt-img { width:42px; height:42px; border-radius:8px; object-fit:cover; flex-shrink:0; }
   .option.has-img { padding:8px 12px; }
   /* Countdown timer */
   .timer-bar { display:flex; align-items:center; gap:10px; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius-sm); padding:10px 14px; margin-bottom:16px; }
@@ -271,6 +273,30 @@ async function loadQuestion() {
 }
 
 // ─── SHOW QUESTION ────────────────────────────────────────────────────────────
+function isVideoUrl(url) {
+  if (!url) return false;
+  const u = url.split('?')[0].toLowerCase();
+  return u.endsWith('.mp4') || u.endsWith('.webm') || u.endsWith('.mov') || u.endsWith('.m4v') || u.includes('/video/');
+}
+
+function videoAttrs(opts) {
+  opts = opts || { loop:true, autoplay:true, muted:true, controls:false };
+  let a = 'playsinline ';
+  if (opts.loop) a += 'loop ';
+  if (opts.muted || opts.autoplay) a += 'muted ';   // autoplay needs muted
+  if (opts.autoplay) a += 'autoplay ';
+  if (opts.controls) a += 'controls ';
+  return a;
+}
+
+function mediaTag(url, opts, className) {
+  if (!url || !url.trim()) return '';
+  if (isVideoUrl(url)) {
+    return `<video class="${className}" src="${url}" ${videoAttrs(opts)}></video>`;
+  }
+  return `<img class="${className}" src="${url}" onerror="this.style.display='none'">`;
+}
+
 function showQuestion(q) {
   const isMulti  = q.type === 'multiple_choice_multi';
   const isText   = q.type === 'free_text';
@@ -300,7 +326,7 @@ function showQuestion(q) {
           return `
           <button class="option ${hasImg?'has-img':''}" id="opt${i}" onclick="toggleOpt(${i})">
             <span class="opt-letter">${letters[i]}</span>
-            ${hasImg?`<img class="opt-img" src="${opt.img}" onerror="this.style.display='none'">`:''}
+            ${hasImg?mediaTag(opt.img, opt.videoOpts, 'opt-img'):''}
             <span>${opt.text||''}</span>
           </button>`;
         }).join('')}
@@ -308,8 +334,7 @@ function showQuestion(q) {
       ${isMulti ? `<button class="btn btn-primary" id="submitBtn" onclick="submitAnswer()" disabled>Submit Answers</button>` : ''}`;
   }
 
-  const qImage = q.image && q.image.trim()
-    ? `<img class="q-image" src="${q.image}" onerror="this.style.display='none'">` : '';
+  const qImage = mediaTag(q.image, q.videoOpts, 'q-image');
 
   const timerHtml = (q.timer && q.timer > 0)
     ? `<div class="timer-bar" id="timerBar">
