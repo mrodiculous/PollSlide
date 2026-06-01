@@ -25,6 +25,17 @@
     --radius: 14px;
     --radius-sm: 9px;
   }
+  /* ── LIGHT THEME ── */
+  body.light {
+    --bg: #f4f5fa;
+    --surface: #ffffff;
+    --surface2: #eef0f6;
+    --surface3: #e2e5ef;
+    --border: rgba(0,0,0,0.08);
+    --border2: rgba(0,0,0,0.13);
+    --text: #1a1a2e;
+    --muted: #6b6b8a;
+  }
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
 
@@ -255,6 +266,45 @@
   ::-webkit-scrollbar { width:4px; }
   ::-webkit-scrollbar-track { background:transparent; }
   ::-webkit-scrollbar-thumb { background:var(--surface3); border-radius:3px; }
+  /* ── MOBILE RESPONSIVE ── */
+  @media (max-width: 860px) {
+    body { overflow:auto; height:auto; min-height:100vh; }
+    .topbar { flex-wrap:wrap; height:auto; min-height:56px; padding:8px 12px; gap:8px; position:sticky; top:0; }
+    .active-pres { order:5; width:100%; font-size:12px; }
+    .topbar-right { gap:5px; }
+    .topbar-right .btn { padding:6px 10px; font-size:11px; }
+
+    .main { flex-direction:column; overflow:visible; height:auto; }
+
+    /* Sidebar becomes a horizontal scroll strip at top */
+    .sidebar { width:100% !important; max-width:100% !important; flex-direction:column; max-height:none; border-right:none; border-bottom:1px solid var(--border); }
+    .pres-panel { max-height:none; }
+    .pres-list { max-height:140px; }
+    .q-list { max-height:200px; }
+
+    /* Hide drag handles on mobile (no mouse) */
+    .resize-handle-x, .resize-handle-y { display:none !important; }
+
+    /* Stack center and right panels */
+    .center-panel { width:100% !important; padding:14px; }
+    .right-panel { width:100% !important; max-width:100% !important; border-left:none; border-top:2px solid var(--border2); max-height:none; }
+    .right-scroll { max-height:none; }
+
+    /* Cards and forms breathe more */
+    .card-body { padding:14px; }
+    .qr-block { flex-direction:column; text-align:center; }
+    .modal { width:94%; padding:20px; max-height:88vh; overflow-y:auto; }
+
+    /* Bigger tap targets */
+    .q-item, .pres-item { padding:12px 11px; }
+    input[type="text"], textarea, select, .opt-input { font-size:16px; } /* prevents iOS zoom */
+  }
+
+  @media (max-width: 480px) {
+    .logo span:not(.logo-dot) { display:none; } /* logo mark only on tiny screens */
+    .topbar-right .btn { font-size:10px; padding:5px 8px; }
+    .center-panel { padding:10px; }
+  }
 </style>
 </head>
 <body>
@@ -268,6 +318,7 @@
     <span id="saveText">Saved</span>
   </div>
   <div class="topbar-right">
+    <button class="btn btn-ghost" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark">🌙</button>
     <button class="btn btn-ghost" id="addQBtn" onclick="addQuestion()" disabled>+ Question</button>
     <button class="btn btn-reset" id="resetBtn" onclick="confirmReset()" disabled>↺ Reset Tally</button>
   </div>
@@ -449,6 +500,21 @@ const BASE_URL = "https://app.pollslide.com/answer";
 
 firebase.initializeApp(FIREBASE_CONFIG);
 const db = firebase.database();
+
+// ─── THEME TOGGLE ─────────────────────────────────────────────────────────────
+function toggleTheme() {
+  const isLight = document.body.classList.toggle('light');
+  localStorage.setItem('ql_theme', isLight ? 'light' : 'dark');
+  const btn = document.getElementById('themeBtn');
+  if (btn) btn.textContent = isLight ? '☀️' : '🌙';
+}
+// Restore saved theme immediately
+(function() {
+  if (localStorage.getItem('ql_theme') === 'light') {
+    document.body.classList.add('light');
+    setTimeout(() => { const b = document.getElementById('themeBtn'); if (b) b.textContent = '☀️'; }, 0);
+  }
+})();
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let presentations = {};   // { presId: { name, sessionCode, createdAt } }

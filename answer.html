@@ -22,6 +22,15 @@
     --radius: 16px;
     --radius-sm: 10px;
   }
+  body.light {
+    --bg: #f4f5fa;
+    --surface: #ffffff;
+    --surface2: #eef0f6;
+    --border: rgba(0,0,0,0.1);
+    --text: #1a1a2e;
+    --muted: #6b6b8a;
+  }
+  body.light::before, body.light::after { opacity:0.4; }
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; margin:0; padding:0; }
   body::before { content:''; position:fixed; top:-40%; left:-20%; width:80vw; height:80vw; background:radial-gradient(circle,rgba(108,99,255,0.12) 0%,transparent 70%); pointer-events:none; z-index:0; }
@@ -43,6 +52,12 @@
     border-radius: var(--radius);
     padding: 30px;
   }
+  @media (max-width: 480px) {
+    #app { padding: 22px 18px; width: calc(100% - 24px) !important; }
+    h1 { font-size: 21px; }
+  }
+  /* Small theme toggle pinned top-right of card */
+  .theme-mini { position:absolute; top:14px; right:14px; background:var(--surface2); border:1px solid var(--border); border-radius:8px; width:30px; height:30px; cursor:pointer; font-size:14px; display:flex; align-items:center; justify-content:center; z-index:2; }
 
   .logo { font-family:'Syne',sans-serif; font-size:11px; font-weight:700; letter-spacing:0.2em; text-transform:uppercase; color:var(--accent); margin-bottom:22px; display:flex; align-items:center; gap:7px; }
   .logo-dot { width:7px; height:7px; background:var(--accent); border-radius:50%; animation:pulse 2s infinite; }
