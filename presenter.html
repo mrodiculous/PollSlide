@@ -668,16 +668,50 @@ async function generatePairingCode() {
       createdAt: Date.now(),
       expiresAt: expiresAt
     });
-    // Show the code to the user
-    alert(
-      'Your Mac App pairing code:\n\n' +
-      '        ' + code + '\n\n' +
-      'Open the PollSlide Companion app on your Mac and enter this code.\n\n' +
-      'This code expires in 10 minutes and can only be used once.'
-    );
+    // Copy to clipboard automatically
+    try { await navigator.clipboard.writeText(code); } catch(e) {}
+    // Show a re-copyable display
+    showPairingCodeModal(code);
   } catch(e) {
     console.error(e);
     toast('Could not generate pairing code. Check connection.', 'danger');
+  }
+}
+
+function showPairingCodeModal(code) {
+  // Remove any existing modal
+  const old = document.getElementById('pairCodeModal');
+  if (old) old.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'pairCodeModal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:30px;max-width:380px;width:100%;text-align:center;">
+      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;margin-bottom:8px;">Connect Mac App</div>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:20px;">Enter this code in the PollSlide Companion app on your Mac.</p>
+      <div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:8px;">
+        <div id="pairCodeText" style="font-family:'Syne',sans-serif;font-size:34px;font-weight:800;letter-spacing:0.15em;color:var(--accent);background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:14px 22px;">${code}</div>
+        <button onclick="copyPairCode('${code}')" id="copyPairBtn" title="Copy code" style="background:var(--accent);border:none;border-radius:10px;width:48px;height:48px;cursor:pointer;color:#fff;font-size:18px;">📋</button>
+      </div>
+      <p id="pairCopiedMsg" style="color:var(--accent3);font-size:12px;height:16px;margin-bottom:16px;">✓ Copied to clipboard</p>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:18px;">Expires in 10 minutes · single use</p>
+      <button onclick="document.getElementById('pairCodeModal').remove()" style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Done</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+}
+
+async function copyPairCode(code) {
+  try {
+    await navigator.clipboard.writeText(code);
+    const msg = document.getElementById('pairCopiedMsg');
+    if (msg) { msg.textContent = '✓ Copied to clipboard'; msg.style.opacity = '1'; }
+  } catch(e) {
+    const msg = document.getElementById('pairCopiedMsg');
+    if (msg) { msg.textContent = 'Press Cmd+C to copy'; }
   }
 }
 
