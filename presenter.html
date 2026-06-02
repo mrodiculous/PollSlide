@@ -1125,6 +1125,33 @@ async function launchQuestion(idx) {
 // ─── CLOSE / REVEAL removed — questions always stay live ─────────────────────
 
 // ─── LIVE VIEW ────────────────────────────────────────────────────────────────
+function renderQuestionMedia(q, idx) {
+  if (!q.image || !q.image.trim()) return '';
+  const code = presentations[activePresId]?.sessionCode || '';
+  // Restore saved size for this question's media (resizable by the user)
+  const savedW = localStorage.getItem(`ql_qmedia_w_${code}_${idx}`) || '100%';
+  const savedH = localStorage.getItem(`ql_qmedia_h_${code}_${idx}`) || '260px';
+  const inner = isVideoUrl(q.image)
+    ? `<video src="${q.image}" style="width:100%;height:100%;object-fit:contain;border-radius:10px;background:#000;" ${q.videoOpts?.loop?'loop':''} ${q.videoOpts?.autoplay?'autoplay':''} ${(q.videoOpts?.muted||q.videoOpts?.autoplay)?'muted':''} ${q.videoOpts?.controls?'controls':''} playsinline></video>`
+    : `<img src="${q.image}" style="width:100%;height:100%;object-fit:contain;border-radius:10px;" onerror="this.parentElement.style.display='none'">`;
+  return `
+    <div id="qMediaBox_${idx}"
+         style="position:relative;width:${savedW};height:${savedH};max-width:100%;min-width:120px;min-height:80px;resize:both;overflow:hidden;margin-bottom:14px;border:1px dashed var(--border2);border-radius:12px;padding:4px;"
+         onmouseup="saveQMediaSize(${idx})"
+         title="Drag the bottom-right corner to resize">
+      ${inner}
+      <div style="position:absolute;bottom:2px;right:2px;font-size:10px;color:var(--muted);pointer-events:none;background:var(--surface);padding:1px 5px;border-radius:4px;opacity:0.7;">⤡ resize</div>
+    </div>`;
+}
+
+function saveQMediaSize(idx) {
+  const box = document.getElementById(`qMediaBox_${idx}`);
+  if (!box) return;
+  const code = presentations[activePresId]?.sessionCode || '';
+  localStorage.setItem(`ql_qmedia_w_${code}_${idx}`, box.style.width);
+  localStorage.setItem(`ql_qmedia_h_${code}_${idx}`, box.style.height);
+}
+
 function renderLiveView(idx, qId, q) {
   const typeLabels = { multiple_choice:'Single Choice', multiple_choice_multi:'Multi Select', free_text:'Free Text', rating:'Rating' };
   const letters    = ['A','B','C','D','E','F'];
@@ -1133,12 +1160,13 @@ function renderLiveView(idx, qId, q) {
 
   let optPreview = '';
   if (q.type !== 'free_text' && q.type !== 'rating' && q.options) {
+    // Live view: show options neutrally — never reveal the correct answer here.
+    // (The correct answer is only highlighted in the edit view.)
     optPreview = `<div style="display:flex;flex-direction:column;gap:6px;margin-top:10px;">
       ${(q.options||[]).map((o,i) => `
         <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
-          <div style="width:22px;height:22px;border-radius:5px;background:${correct.includes(i)?'var(--accent3)':'var(--surface2)'};color:${correct.includes(i)?'#000':'var(--muted)'};font-family:'Syne',sans-serif;font-weight:700;font-size:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${letters[i]}</div>
+          <div style="width:22px;height:22px;border-radius:5px;background:var(--surface2);color:var(--muted);font-family:'Syne',sans-serif;font-weight:700;font-size:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${letters[i]}</div>
           <span>${o.text}</span>
-          ${correct.includes(i)?'<span style="color:var(--accent3);font-size:10px;font-weight:600;margin-left:auto;">✓</span>':''}
         </div>`).join('')}
     </div>`;
   }
@@ -1159,6 +1187,7 @@ function renderLiveView(idx, qId, q) {
       </div>
       <div class="card-body">
         <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;line-height:1.35;margin-bottom:12px;">${q.text}</div>
+        ${renderQuestionMedia(q, idx)}
         ${optPreview}
       </div>
     </div>
