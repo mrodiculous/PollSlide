@@ -66,6 +66,24 @@
   .btn-sm { padding:4px 10px; font-size:11px; }
   .btn:disabled { opacity:.4; cursor:not-allowed; }
 
+  /* ── MAXIMIZED RESULTS ── */
+  .right-panel.maximized {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    z-index: 99998 !important;
+    border: none !important;
+  }
+  .right-panel.maximized .right-hd { padding: 18px 28px; }
+  .right-panel.maximized .right-scroll { padding: 30px 8vw; }
+  .right-panel.maximized .resp-big { font-size: 44px !important; }
+  .right-panel.maximized .bar-label { font-size: 22px !important; }
+  .right-panel.maximized .bar-bg { height: 16px !important; }
+  .right-panel.maximized .bar-wrap { margin-bottom: 18px !important; }
+  .right-panel.maximized #maxBtn { width: 38px; height: 38px; font-size: 18px; }
+  .right-panel.maximized .right-foot { padding: 18px 8vw; }
+
   /* ── MAIN LAYOUT ── */
   .main { display:flex; flex:1; overflow:hidden; }
 
@@ -415,10 +433,13 @@
   <div class="resize-handle-x" id="resizeRight" title="Drag to resize"></div>
 
   <!-- ── RIGHT ── -->
-  <div class="right-panel">
+  <div class="right-panel" id="rightPanel">
     <div class="right-hd">
       <span style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Live Results</span>
-      <span id="respCounter" style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent);font-size:12px;">—</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span id="respCounter" style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent);font-size:12px;">—</span>
+        <button onclick="toggleMaximize()" id="maxBtn" title="Maximize results (great for projecting)" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">⛶</button>
+      </div>
     </div>
     <div class="right-scroll" id="rightScroll">
       <div style="padding-top:28px;text-align:center;color:var(--muted);font-size:13px;">Launch a question<br>to see live results here.</div>
@@ -617,10 +638,67 @@ function friendlyAuthError(code) {
 
 function showUserMenu() {
   const email = currentUser ? currentUser.email : '';
-  if (confirm('Signed in as ' + email + '\n\nClick OK to sign out.')) {
+  const choice = prompt(
+    'Signed in as ' + email + '\n\n' +
+    'Type a number and press OK:\n' +
+    '1 = Connect Mac App (get pairing code)\n' +
+    '2 = Sign out\n' +
+    '(Cancel to close)'
+  );
+  if (choice === '1') {
+    generatePairingCode();
+  } else if (choice === '2') {
     auth.signOut(); location.reload();
   }
 }
+
+// ─── MAC APP PAIRING CODE GENERATOR ───────────────────────────────────────────
+async function generatePairingCode() {
+  if (!userId) { toast('Please sign in first.', 'danger'); return; }
+  // 6-character code, uppercase letters + digits, no ambiguous chars
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+
+  const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+  try {
+    await db.ref(`pairing/${code}`).set({
+      userId: userId,
+      email: currentUser ? currentUser.email : '',
+      createdAt: Date.now(),
+      expiresAt: expiresAt
+    });
+    // Show the code to the user
+    alert(
+      'Your Mac App pairing code:\n\n' +
+      '        ' + code + '\n\n' +
+      'Open the PollSlide Companion app on your Mac and enter this code.\n\n' +
+      'This code expires in 10 minutes and can only be used once.'
+    );
+  } catch(e) {
+    console.error(e);
+    toast('Could not generate pairing code. Check connection.', 'danger');
+  }
+}
+
+// ─── MAXIMIZE RESULTS PANEL ───────────────────────────────────────────────────
+function toggleMaximize() {
+  const panel = document.getElementById('rightPanel');
+  const isMax = panel.classList.toggle('maximized');
+  const btn = document.getElementById('maxBtn');
+  if (btn) btn.textContent = isMax ? '✕' : '⛶';
+}
+// ESC exits maximize
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const panel = document.getElementById('rightPanel');
+    if (panel && panel.classList.contains('maximized')) {
+      panel.classList.remove('maximized');
+      const btn = document.getElementById('maxBtn');
+      if (btn) btn.textContent = '⛶';
+    }
+  }
+});
 
 document.getElementById('authPass').addEventListener('keydown', e => { if(e.key==='Enter') submitAuth(); });
 document.getElementById('authEmail').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('authPass').focus(); });
@@ -988,6 +1066,7 @@ async function launchQuestion(idx) {
     options: q.options||null,
     correctAnswer: q.correctAnswer!==undefined ? q.correctAnswer : null,
     ratingMax: q.ratingMax||null, ratingLabels: q.ratingLabels||null,
+    image: q.image || null, videoOpts: q.videoOpts || null,
     status: 'active', launchedAt: Date.now()
   };
 
