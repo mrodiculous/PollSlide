@@ -848,6 +848,17 @@ function selectPresentation(id) {
   const pres = presentations[id];
   if (!pres) return;
 
+  // Publish a public pointer so the paired Mac companion app knows which
+  // session to follow. Exposes only the session code (already public via QR),
+  // never the user's private presentation data.
+  if (userId && pres.sessionCode) {
+    db.ref(`mac_link/${userId}`).set({
+      sessionCode: pres.sessionCode,
+      presentationName: pres.name || '',
+      updatedAt: Date.now()
+    }).catch(()=>{});
+  }
+
   questions = pres.questions ? [...pres.questions] : [];
   selIdx = null;
   if (respListener) { respListener(); respListener = null; }
