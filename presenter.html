@@ -174,8 +174,9 @@
   .q-type-tag { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; margin-top:1px; }
   .sidebar-foot { padding:8px; border-top:1px solid var(--border); flex-shrink:0; }
 
-  /* ── CENTER ── */
-  .center-panel { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:14px; min-height:0; min-width:0; }
+  /* ── CENTER ── (mirrors sidebar: fixed container + inner scroll area) */
+  .center-panel { flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; }
+  .center-scroll { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:14px; min-height:0; }
 
   /* ── RIGHT ── */
   .right-panel { width:290px; min-width:160px; max-width:480px; background:var(--surface); border-left:1px solid var(--border); display:flex; flex-direction:column; flex-shrink:0; overflow:hidden; }
@@ -304,7 +305,7 @@
     .resize-handle-x, .resize-handle-y { display:none !important; }
 
     /* Stack center and right panels */
-    .center-panel { width:100% !important; padding:14px; }
+    .center-panel { width:100% !important; } .center-scroll { padding:14px; }
     .right-panel { width:100% !important; max-width:100% !important; border-left:none; border-top:2px solid var(--border2); max-height:none; }
     .right-scroll { max-height:none; }
 
@@ -321,7 +322,7 @@
   @media (max-width: 480px) {
     .logo span:not(.logo-dot) { display:none; } /* logo mark only on tiny screens */
     .topbar-right .btn { font-size:10px; padding:5px 8px; }
-    .center-panel { padding:10px; }
+    .center-scroll { padding:10px; }
   }
 </style>
 </head>
@@ -418,7 +419,8 @@
   <div class="resize-handle-x" id="resizeLeft" title="Drag to resize"></div>
 
   <!-- ── CENTER ── -->
-  <div class="center-panel" id="centerPanel">
+  <div class="center-panel">
+   <div class="center-scroll" id="centerPanel">
     <div class="setup">
       <div class="setup-icon">🎯</div>
       <div>
@@ -427,6 +429,7 @@
         <button class="btn btn-primary" style="font-size:14px;padding:11px 28px;justify-content:center;" onclick="createPresentation()">+ Create Your First Presentation</button>
       </div>
     </div>
+  </div>
   </div>
 
   <!-- ── HORIZONTAL RESIZE: center ↔ right ── -->
