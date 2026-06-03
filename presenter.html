@@ -441,6 +441,7 @@
         <button onclick="toggleMaximize()" id="maxBtn" title="Maximize results (great for projecting)" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">⛶</button>
       </div>
     </div>
+    <div id="revealBar" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border);min-height:20px;"></div>
     <div class="right-scroll" id="rightScroll">
       <div style="padding-top:28px;text-align:center;color:var(--muted);font-size:13px;">Launch a question<br>to see live results here.</div>
     </div>
@@ -761,6 +762,12 @@ let liveQIdx      = null;
 let liveQId       = null;
 let respListener  = null; // active listener for current question
 let respListeners = {}; // all active listeners by qIdx
+// ── Answer reveal state ──
+let revealed = false;          // has the correct answer been revealed?
+let revealArmed = false;       // has the countdown started (on first answer)?
+let revealTimer = null;        // countdown interval
+let revealSeconds = 30;        // default reveal delay
+let revealRemaining = 0;       // seconds left in countdown
 let participantListener = null;
 let participantData = {};
 let saveTimeout   = null;
@@ -1073,6 +1080,12 @@ function clearRightPanel() {
   Object.values(respListeners).forEach(off => off());
   respListeners = {};
   liveQIdx = null; liveQId = null;
+  // Reset reveal state
+  if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
+  revealed = false;
+  revealArmed = false;
+  const rb = document.getElementById('revealBar');
+  if (rb) rb.innerHTML = '';
 
   const rs = document.getElementById('rightScroll');
   const rc = document.getElementById('respCounter');
@@ -1119,6 +1132,10 @@ async function launchQuestion(idx) {
   renderQList();
   renderLiveView(idx, qId, q);
   listenResponses(idx, qId, q);
+  // Set reveal delay from the question (default 30s) and arm the reveal —
+  // the countdown does NOT start here; it starts on the FIRST answer.
+  revealSeconds = (q.revealDelay !== undefined && q.revealDelay !== null) ? q.revealDelay : 30;
+  armReveal(q);
   toast(`Q${idx+1} is now live!`, 'success');
 }
 
@@ -1219,6 +1236,10 @@ function listenResponses(qIdx, qId, q) {
     const responses = snap.exists() ? Object.values(snap.val()) : [];
     const rc = document.getElementById('respCounter');
     if (rc) rc.textContent = `${responses.length} response${responses.length!==1?'s':''}`;
+    // Start the reveal countdown on the first answer
+    if (responses.length > 0 && !revealArmed && !revealed) {
+      beginRevealCountdown();
+    }
     renderRightPanel(q, responses);
     // Update respondents list from this question's responses only
     const pCount = document.getElementById('pCount');
@@ -1228,19 +1249,104 @@ function listenResponses(qIdx, qId, q) {
       if (responses.length === 0) {
         pList.innerHTML = '<div style="color:var(--muted);font-size:12px;">No responses yet.</div>';
       } else {
-        pList.innerHTML = responses.map(r =>
-          `<div class="p-row">
+        // Before reveal: show only that the person answered (neutral dot), never right/wrong.
+        // After reveal: show ✓/✗.
+        pList.innerHTML = responses.map(r => {
+          const scoreCell = revealed
+            ? `<div class="p-score" style="color:${r.isCorrect===true?'var(--accent3)':r.isCorrect===false?'var(--accent2)':'var(--muted)'}">${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}</div>`
+            : `<div class="p-score" style="color:var(--accent3)">●</div>`;
+          return `<div class="p-row">
             <div class="p-av">${(r.name||'?')[0].toUpperCase()}</div>
             <div class="p-name">${r.name||'Anonymous'}</div>
-            <div class="p-score" style="color:${r.isCorrect===true?'var(--accent3)':r.isCorrect===false?'var(--accent2)':'var(--muted)'}">
-              ${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}
-            </div>
-          </div>`
-        ).join('');
+            ${scoreCell}
+          </div>`;
+        }).join('');
       }
     }
   });
   respListener = () => ref.off('value', fn);
+}
+
+// ─── ANSWER REVEAL ────────────────────────────────────────────────────────────
+// armReveal: called when a question launches. Sets up reveal state but does NOT
+// start the countdown — the countdown begins on the first answer (see listenResponses).
+function armReveal(q) {
+  const hasCorrect = q && q.type !== 'free_text' && q.type !== 'rating' &&
+                     q.correctAnswer !== undefined && q.correctAnswer !== null;
+  revealed = false;
+  revealArmed = false;
+  if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
+
+  if (!hasCorrect) {
+    // No correct answer to reveal — opinion polls show normally
+    revealed = true;
+    renderRevealControl(false);
+    return;
+  }
+  // Waiting for the first answer to start the countdown
+  renderRevealControl(true);
+}
+
+// beginRevealCountdown: starts the actual countdown. Called once, on first answer.
+function beginRevealCountdown() {
+  if (revealArmed || revealed) return; // already counting or already revealed
+  revealArmed = true;
+  revealRemaining = revealSeconds;
+  renderRevealControl(true);
+  revealTimer = setInterval(() => {
+    revealRemaining--;
+    updateRevealCountdownLabel();
+    if (revealRemaining <= 0) doReveal();
+  }, 1000);
+}
+
+function doReveal() {
+  revealed = true;
+  if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
+  renderRevealControl(false);
+  // Re-render the right pane with current data by nudging the listener:
+  // simplest is to re-trigger a read.
+  const code = presentations[activePresId]?.sessionCode;
+  if (code && liveQId) {
+    db.ref(`sessions/${code}/responses/${liveQId}`).get().then(snap => {
+      const responses = snap.exists() ? Object.values(snap.val()) : [];
+      if (liveQIdx !== null) renderRightPanel(questions[liveQIdx], responses);
+      // refresh respondent list too
+      const pList = document.getElementById('pList');
+      if (pList && responses.length) {
+        pList.innerHTML = responses.map(r =>
+          `<div class="p-row"><div class="p-av">${(r.name||'?')[0].toUpperCase()}</div>
+            <div class="p-name">${r.name||'Anonymous'}</div>
+            <div class="p-score" style="color:${r.isCorrect===true?'var(--accent3)':r.isCorrect===false?'var(--accent2)':'var(--muted)'}">${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}</div>
+          </div>`).join('');
+      }
+    });
+  }
+}
+
+function renderRevealControl(showControl) {
+  const bar = document.getElementById('revealBar');
+  if (!bar) return;
+  if (revealed) {
+    bar.innerHTML = `<span style="color:var(--accent3);font-size:12px;font-weight:600;">✓ Answer revealed</span>`;
+    return;
+  }
+  if (!showControl) { bar.innerHTML = ''; return; }
+  if (!revealArmed) {
+    // Waiting for the first answer to start the countdown
+    bar.innerHTML = `
+      <span style="font-size:12px;color:var(--muted);">⏳ Reveal starts on first answer</span>
+      <button onclick="doReveal()" style="background:var(--surface3);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:'Syne',sans-serif;font-weight:700;font-size:11px;padding:5px 11px;cursor:pointer;">Reveal now</button>`;
+  } else {
+    bar.innerHTML = `
+      <span style="font-size:12px;color:var(--muted);">Reveal in <strong id="revealCount" style="color:var(--accent4);">${revealRemaining}s</strong></span>
+      <button onclick="doReveal()" style="background:var(--accent);border:none;border-radius:7px;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:11px;padding:5px 11px;cursor:pointer;">Reveal now</button>`;
+  }
+}
+
+function updateRevealCountdownLabel() {
+  const el = document.getElementById('revealCount');
+  if (el) el.textContent = Math.max(0, revealRemaining) + 's';
 }
 
 function renderRightPanel(q, responses) {
@@ -1273,22 +1379,29 @@ function renderRightPanel(q, responses) {
 
     let inner = '';
     if (mode === 'leaderboard') {
-      // Show respondents ranked, correct first
+      // Rank by: correct first, then fastest (lowest elapsed time)
       const sorted = [...responses].sort((a,b)=>{
         if(b.isCorrect===true&&a.isCorrect!==true)return 1;
         if(a.isCorrect===true&&b.isCorrect!==true)return -1;
-        return (a.submittedAt||0)-(b.submittedAt||0);
+        // both same correctness → faster answer ranks higher
+        return (a.elapsed||999999)-(b.elapsed||999999);
       });
       const medals=['🥇','🥈','🥉'];
-      inner = sorted.map((r,rank)=>`<div class="p-row">
-        <div style="width:24px;text-align:center;font-size:13px;">${rank<3?medals[rank]:'#'+(rank+1)}</div>
-        <div class="p-name">${r.name||'Anonymous'}</div>
-        <div class="p-score" style="color:${r.isCorrect===true?'var(--accent3)':r.isCorrect===false?'var(--accent2)':'var(--muted)'}">${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}</div>
-      </div>`).join('') || '<div style="color:var(--muted);font-size:13px;">Waiting...</div>';
+      inner = sorted.map((r,rank)=>{
+        const scoreCell = revealed
+          ? `<div class="p-score" style="color:${r.isCorrect===true?'var(--accent3)':r.isCorrect===false?'var(--accent2)':'var(--muted)'}">${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}</div>`
+          : `<div class="p-score" style="color:var(--accent3)">●</div>`;
+        const speedLabel = (revealed && r.elapsed) ? `<span style="font-size:10px;color:var(--muted);margin-left:6px;">${(r.elapsed/1000).toFixed(1)}s</span>` : '';
+        return `<div class="p-row">
+          <div style="width:24px;text-align:center;font-size:13px;">${revealed?(rank<3?medals[rank]:'#'+(rank+1)):'•'}</div>
+          <div class="p-name">${r.name||'Anonymous'}${speedLabel}</div>
+          ${scoreCell}
+        </div>`;
+      }).join('') || '<div style="color:var(--muted);font-size:13px;">Waiting...</div>';
     } else if (mode === 'number') {
       inner = counts.map(({i,count})=>`
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:30px;color:${correct.includes(i)?'var(--accent3)':'var(--accent)'};min-width:60px;">${count}</div>
+          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:30px;color:${(revealed&&correct.includes(i))?'var(--accent3)':'var(--accent)'};min-width:60px;">${count}</div>
           <div><div style="font-size:14px;font-weight:600;">${letters[i]}. ${(q.options[i]||{}).text||''}</div>
           <div style="font-size:12px;color:var(--muted);">${pct(count)}% of votes</div></div>
         </div>`).join('');
@@ -1325,9 +1438,11 @@ function renderRightPanel(q, responses) {
       inner = counts.map(({i,count})=>{
         const opt=(q.options[i]||{});
         const hasImg=opt.img&&opt.img.trim();
+        // Only show the green "correct" highlight after reveal
+        const showCorrect = revealed && correct.includes(i);
         return `<div class="bar-wrap">
         <div class="bar-label"><span class="bn">${hasImg?`<img src="${opt.img}" style="width:18px;height:18px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:5px;" onerror="this.style.display='none'">`:''}${letters[i]}. ${opt.text||''}</span><span class="bv">${count} (${pct(count)}%)</span></div>
-        <div class="bar-bg"><div class="bar-fill ${correct.includes(i)?'correct':''}" style="width:${pct(count)}%"></div></div>
+        <div class="bar-bg"><div class="bar-fill ${showCorrect?'correct':''}" style="width:${pct(count)}%"></div></div>
       </div>`;}).join('');
     }
 
@@ -1619,7 +1734,7 @@ async function showQuestionTally(qIdx) {
 // ─── QUESTION EDITOR ─────────────────────────────────────────────────────────
 function addQuestion() {
   if (!activePresId) return;
-  questions.push({ text:'', type:'multiple_choice', options:[{text:'',img:''},{text:'',img:''},{text:'',img:''},{text:'',img:''}], correctAnswer:0, image:'', timer:0, displayMode:'bars' });
+  questions.push({ text:'', type:'multiple_choice', options:[{text:'',img:''},{text:'',img:''},{text:'',img:''},{text:'',img:''}], correctAnswer:0, image:'', timer:0, displayMode:'bars', revealDelay:30 });
   presentations[activePresId].questions = questions;
   renderQList();
   const newIdx = questions.length - 1;
@@ -1830,6 +1945,20 @@ function renderEditor(idx) {
               <option value="number"      ${q.displayMode==='number'?'selected':''}>Big numbers</option>
             </select>
           </div>
+        </div>
+
+        <div class="form-row" style="margin:0">
+          <label>Reveal Correct Answer After <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(hides right/wrong until then; you can also Reveal Now during the poll)</span></label>
+          <select onchange="updateQ(${idx},'revealDelay',+this.value)" style="width:100%;">
+            <option value="10" ${q.revealDelay===10?'selected':''}>10 seconds</option>
+            <option value="15" ${q.revealDelay===15?'selected':''}>15 seconds</option>
+            <option value="20" ${q.revealDelay===20?'selected':''}>20 seconds</option>
+            <option value="30" ${(q.revealDelay===30||q.revealDelay===undefined||q.revealDelay===null)?'selected':''}>30 seconds (default)</option>
+            <option value="45" ${q.revealDelay===45?'selected':''}>45 seconds</option>
+            <option value="60" ${q.revealDelay===60?'selected':''}>60 seconds</option>
+            <option value="90" ${q.revealDelay===90?'selected':''}>90 seconds</option>
+            <option value="120" ${q.revealDelay===120?'selected':''}>2 minutes</option>
+          </select>
         </div>
 
         ${optHtml}
