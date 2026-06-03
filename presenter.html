@@ -377,7 +377,7 @@
     <button class="btn btn-ghost" id="userBtn" onclick="showUserMenu()" title="Account" style="display:none;">👤</button>
     <button class="btn btn-ghost" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark">🌙</button>
     <button class="btn btn-ghost" id="addQBtn" onclick="addQuestion()" disabled>+ Question</button>
-    <button class="btn btn-reset" id="resetBtn" onclick="confirmReset()" disabled>↺ Reset Tally</button>
+    <button class="btn btn-reset" id="resetBtn" onclick="confirmResetAll()" disabled>↺ Reset All Tallies</button>
   </div>
 </div>
 
@@ -995,6 +995,40 @@ function renderPresList() {
 }
 
 // ─── RESET TALLY ──────────────────────────────────────────────────────────────
+// ─── RESET ALL TALLIES (every question in every presentation) ────────────────
+function confirmResetAll() {
+  if (!userId || !presentations || Object.keys(presentations).length === 0) return;
+  const presCount = Object.keys(presentations).length;
+  const qCount = Object.values(presentations).reduce((n,p) => n + (p.questions||[]).length, 0);
+  const msg = `This will clear answers from ALL ${qCount} question${qCount!==1?'s':''} across ALL ${presCount} presentation${presCount!==1?'s':''}.
+
+This cannot be undone. Are you sure?`;
+  if (confirm(msg)) doResetAll();
+}
+
+async function doResetAll() {
+  // Detach all listeners first
+  if (respListener) { respListener(); respListener = null; }
+  Object.values(respListeners).forEach(off => off());
+  respListeners = {};
+  liveQIdx = null; liveQId = null;
+  clearRightPanel();
+
+  try {
+    const jobs = [];
+    for (const [presId, pres] of Object.entries(presentations)) {
+      const code = pres.sessionCode;
+      if (!code) continue;
+      // Delete ALL responses for this presentation's session
+      jobs.push(db.ref(`sessions/${code}/responses`).remove());
+    }
+    await Promise.all(jobs);
+    renderQList();
+    toast('All tallies cleared across every presentation. Questions remain live.', 'success');
+  } catch(e) { toast('Reset failed. Check connection.', 'danger'); }
+}
+
+// Legacy per-presentation reset (still used by individual question Reset buttons)
 function confirmReset() {
   if (!activePresId) return;
   document.getElementById('resetPresName').textContent = `"${presentations[activePresId]?.name}"`;
@@ -1008,20 +1042,17 @@ async function doReset() {
   if (!pres) return;
   const code = pres.sessionCode;
   try {
-    // Step 1: Detach all listeners
     if (respListener) { respListener(); respListener = null; }
     Object.values(respListeners).forEach(off => off());
     respListeners = {};
     liveQIdx = null; liveQId = null;
-    // Step 2: Delete from Firebase first
     await db.ref(`sessions/${code}/responses`).remove();
     if (questions.length > 0) {
       await db.ref(`quiz_builder/${code}/questions`).set(questions);
     }
-    // Step 3: Clear UI after Firebase delete completes
     clearRightPanel();
     renderQList();
-    toast('All tallies reset. Questions remain live.', 'success');
+    toast('Tallies reset for this presentation. Questions remain live.', 'success');
   } catch(e) { toast('Reset failed. Check connection.', 'danger'); }
 }
 // ─── PER-PRESENTATION RESET ─────────────────────────────────────────────────
@@ -1235,10 +1266,9 @@ function renderLiveView(idx, qId, q) {
 }
 
 // ─── COPY HELPERS (for pasting into the user's presentation) ──────────────────
-// Copy the QR + caption as an image the user can paste onto a Keynote/PowerPoint slide.
-async function copyQRBox(idx) {
+// Download the QR + caption as a PNG image to drag into Keynote/PowerPoint.
+function copyQRBox(idx) {
   const qUrl = getQuestionURL(idx);
-  // Build an offscreen canvas: white card with QR + "Scan to answer" + URL
   const tmp = document.createElement('div');
   tmp.style.cssText = 'position:fixed;left:-9999px;top:0;';
   document.body.appendChild(tmp);
@@ -1246,45 +1276,36 @@ async function copyQRBox(idx) {
   tmp.appendChild(qrDiv);
   new QRCode(qrDiv, { text:qUrl, width:300, height:300, colorDark:'#0b0b15', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M });
 
-  setTimeout(async () => {
+  setTimeout(() => {
     const qrCanvas = qrDiv.querySelector('canvas');
     const qrImg = qrDiv.querySelector('img');
-    const size = 300;
-    const pad = 40, textH = 90;
+    const size = 300, pad = 40, textH = 90;
     const canvas = document.createElement('canvas');
     canvas.width = size + pad*2;
     canvas.height = size + pad*2 + textH;
     const ctx = canvas.getContext('2d');
-    // White rounded card
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-    // Draw QR
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
     const src = qrCanvas || qrImg;
-    if (src) ctx.drawImage(src, pad, pad, size, size);
-    // Caption
-    ctx.fillStyle = '#0b0b15';
-    ctx.font = 'bold 34px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('Scan to answer', canvas.width/2, size + pad + 48);
-    ctx.fillStyle = '#555';
-    ctx.font = '20px sans-serif';
-    ctx.fillText('Point your phone camera here', canvas.width/2, size + pad + 78);
-
-    try {
-      const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
-      await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
-      toast('QR box copied! Paste it onto your slide.', 'success');
-    } catch(e) {
-      // Fallback: open the image in a new tab so they can drag/save it
-      canvas.toBlob(b => { const u=URL.createObjectURL(b); window.open(u,'_blank'); });
-      toast('QR image opened — right-click to copy or save.', 'info');
-    }
-    document.body.removeChild(tmp);
-  }, 120);
+    const drawAndSave = () => {
+      if (src) ctx.drawImage(src, pad, pad, size, size);
+      ctx.fillStyle = '#0b0b15'; ctx.font = 'bold 34px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('Scan to answer', canvas.width/2, size + pad + 48);
+      ctx.fillStyle = '#555'; ctx.font = '20px sans-serif';
+      ctx.fillText('Point your phone camera here', canvas.width/2, size + pad + 78);
+      canvas.toBlob(b => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(b); a.download = 'pollslide-qr-q' + (idx+1) + '.png';
+        a.click(); URL.revokeObjectURL(a.href);
+        toast('QR image downloaded — drag it onto your slide.', 'success');
+      }, 'image/png');
+      document.body.removeChild(tmp);
+    };
+    if (qrImg && !qrImg.complete) { qrImg.onload = drawAndSave; } else { drawAndSave(); }
+  }, 150);
 }
 
-// Copy the question as a clean "presentation slide" image (how a viewer would see it).
-async function copyQuestionSlide(idx) {
+// Download the question as a clean "presentation slide" image.
+function copyQuestionSlide(idx) {
   const q = questions[idx];
   const letters = ['A','B','C','D','E','F'];
   const W = 1280, H = 720;
@@ -1320,14 +1341,12 @@ async function copyQuestionSlide(idx) {
       oy += 78;
     });
   }
-  try {
-    const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
-    await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
-    toast('Question slide copied! Paste it into your presentation.', 'success');
-  } catch(e) {
-    canvas.toBlob(b => { const u=URL.createObjectURL(b); window.open(u,'_blank'); });
-    toast('Slide image opened — right-click to copy or save.', 'info');
-  }
+  canvas.toBlob(b => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b); a.download = 'pollslide-question-' + (idx+1) + '.png';
+    a.click(); URL.revokeObjectURL(a.href);
+    toast('Question slide downloaded — drag it onto your slide.', 'success');
+  }, 'image/png');
 }
 
 function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
@@ -1883,6 +1902,14 @@ function showLiveOrEdit(idx) {
     renderEditor(idx);
     return;
   }
+  // Reset reveal state when switching to a different question —
+  // the new question's reveal hasn't fired yet, so nothing should be shown.
+  revealed = false;
+  revealArmed = false;
+  if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
+  const rb = document.getElementById('revealBar');
+  if (rb) rb.innerHTML = '';
+
   // Live view: use the stable qId so it always matches participant responses
   const stableQId = `q${idx}_stable_${code}`;
   liveQIdx = idx;
