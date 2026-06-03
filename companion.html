@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PollSlide Companion</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #07070f;
+    --surface: #10101a;
+    --surface2: #18182a;
+    --border: rgba(255,255,255,0.08);
+    --border2: rgba(255,255,255,0.14);
+    --text: #f4f4fc;
+    --muted: #9090b8;
+    --accent: #6c63ff;
+    --accent2: #ff6584;
+    --accent3: #43e97b;
+    --accent4: #f7b731;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { height:100%; }
+  body {
+    font-family:'Inter',sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    display:flex;
+    flex-direction:column;
+    overflow:hidden;
+    user-select:none;
+    -webkit-user-select:none;
+  }
+
+  /* Header */
+  .hd {
+    display:flex; align-items:center; gap:8px;
+    padding:12px 16px;
+    background:var(--surface);
+    border-bottom:1px solid var(--border);
+    flex-shrink:0;
+    -webkit-app-region:drag;  /* lets you drag the window by the header */
+  }
+  .logo-dot { width:9px; height:9px; border-radius:50%; background:var(--accent); }
+  .logo-txt { font-family:'Syne',sans-serif; font-weight:800; font-size:15px; }
+  .live-pill {
+    margin-left:auto;
+    font-size:10px; font-weight:700;
+    color:var(--accent3);
+    background:rgba(67,233,123,0.15);
+    padding:3px 9px; border-radius:100px;
+    -webkit-app-region:no-drag;
+  }
+
+  /* View toggle */
+  .toggle-bar {
+    display:flex; gap:5px; padding:8px 12px;
+    background:var(--surface);
+    border-bottom:1px solid var(--border);
+    flex-shrink:0;
+    flex-wrap:wrap;
+  }
+  .toggle-btn {
+    font-family:'Syne',sans-serif; font-weight:700; font-size:11px;
+    color:var(--muted);
+    background:var(--surface2);
+    border:1px solid var(--border);
+    border-radius:7px;
+    padding:5px 10px;
+    cursor:pointer;
+  }
+  .toggle-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+  /* Body scroll area */
+  .body { flex:1; overflow-y:auto; padding:16px; }
+
+  /* Question */
+  .q-media { width:100%; max-height:200px; object-fit:contain; border-radius:10px; margin-bottom:12px; background:#000; }
+  .q-text { font-family:'Syne',sans-serif; font-size:18px; font-weight:800; line-height:1.35; margin-bottom:14px; }
+
+  /* Reveal bar */
+  .reveal-bar {
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:8px 0; margin-bottom:10px;
+    font-size:12px; color:var(--muted);
+    border-bottom:1px solid var(--border);
+  }
+  .reveal-strong { color:var(--accent4); font-weight:700; }
+
+  /* Result bars */
+  .resp-big { font-family:'Syne',sans-serif; font-weight:800; font-size:24px; margin-bottom:14px; }
+  .resp-big span { font-size:13px; color:var(--muted); font-weight:600; }
+  .bar-wrap { margin-bottom:12px; }
+  .bar-label { display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px; }
+  .bar-bg { height:11px; background:rgba(255,255,255,0.07); border-radius:100px; overflow:hidden; }
+  .bar-fill { height:100%; background:linear-gradient(90deg,var(--accent),#a78bfa); border-radius:100px; transition:width 0.4s ease; }
+  .bar-fill.correct { background:linear-gradient(90deg,var(--accent3),#6effb0); }
+
+  /* Leaderboard rows */
+  .p-row { display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--border); font-size:13px; }
+  .p-rank { width:26px; text-align:center; }
+  .p-name { flex:1; }
+  .p-score { font-family:'Syne',sans-serif; font-weight:700; }
+
+  /* Waiting state */
+  .waiting { display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:12px; color:var(--muted); text-align:center; padding:24px; }
+  .waiting-icon { font-size:30px; opacity:0.6; }
+
+  .txt-resp { background:var(--surface2); border:1px solid var(--border); border-radius:9px; padding:10px 12px; margin-bottom:8px; font-size:13px; }
+  .txt-resp .from { color:var(--muted); font-size:11px; margin-top:4px; }
+</style>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+</head>
+<body>
+
+<div class="hd">
+  <span class="logo-dot"></span>
+  <span class="logo-txt">PollSlide</span>
+  <span class="live-pill" id="livePill" style="display:none;">LIVE</span>
+</div>
+
+<div class="toggle-bar" id="toggleBar" style="display:none;">
+  <button class="toggle-btn active" data-mode="bars"        onclick="setMode('bars')">Bars</button>
+  <button class="toggle-btn"        data-mode="donut"       onclick="setMode('donut')">Donut</button>
+  <button class="toggle-btn"        data-mode="number"      onclick="setMode('number')">Numbers</button>
+  <button class="toggle-btn"        data-mode="leaderboard" onclick="setMode('leaderboard')">Leaderboard</button>
+</div>
+
+<div class="body" id="body">
+  <div class="waiting">
+    <div class="waiting-icon">⏳</div>
+    <div id="waitMsg">Connecting…</div>
+  </div>
+</div>
+
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME",
+  authDomain: "echonest-live-survey.firebaseapp.com",
+  databaseURL: "https://echonest-live-survey-default-rtdb.firebaseio.com",
+  projectId: "echonest-live-survey",
+  storageBucket: "echonest-live-survey.firebasestorage.app",
+  messagingSenderId: "285529140046",
+  appId: "1:285529140046:web:983c1ee8000a2ca8f80c1f",
+  measurementId: "G-NWQY4YLNRC"
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.database();
+
+const letters = ['A','B','C','D','E','F'];
+
+// ── Read the userId from the URL hash: companion#<userId> ──
+let userId = (location.hash || '').replace(/^#/, '').trim();
+
+// ── State ──
+let sessionCode = null;
+let curQ = null;             // current question payload
+let responses = [];          // current responses array
+let viewMode = 'bars';       // user-chosen display
+let revealed = false;
+let revealArmed = false;
+let revealTimer = null;
+let revealRemaining = 0;
+let revealSeconds = 30;
+let curQId = null;
+
+// View toggle
+function setMode(m) {
+  viewMode = m;
+  document.querySelectorAll('.toggle-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === m);
+  });
+  renderResults();
+}
+
+function isVideoUrl(url) {
+  if (!url) return false;
+  const u = url.split('?')[0].toLowerCase();
+  return u.endsWith('.mp4')||u.endsWith('.webm')||u.endsWith('.mov')||u.endsWith('.m4v')||u.includes('/video/');
+}
+function mediaTag(url, opts) {
+  if (!url || !url.trim()) return '';
+  if (isVideoUrl(url)) {
+    opts = opts || {loop:true,autoplay:true,muted:true,controls:false};
+    let a = 'playsinline ';
+    if (opts.loop) a += 'loop ';
+    if (opts.muted||opts.autoplay) a += 'muted ';
+    if (opts.autoplay) a += 'autoplay ';
+    if (opts.controls) a += 'controls ';
+    return `<video class="q-media" src="${url}" ${a}></video>`;
+  }
+  return `<img class="q-media" src="${url}" onerror="this.style.display='none'">`;
+}
+
+function showWaiting(msg) {
+  document.getElementById('livePill').style.display = 'none';
+  document.getElementById('toggleBar').style.display = 'none';
+  document.getElementById('body').innerHTML =
+    `<div class="waiting"><div class="waiting-icon">⏳</div><div>${msg}</div></div>`;
+}
+
+// ── Boot ──
+if (!userId) {
+  showWaiting('No account linked. Re-pair the Mac app.');
+} else {
+  watchMacLink();
+}
+
+function watchMacLink() {
+  showWaiting('Waiting for your presentation…');
+  db.ref(`mac_link/${userId}`).on('value', snap => {
+    const data = snap.val();
+    if (!data || !data.sessionCode) {
+      showWaiting('Open a presentation on pollslide.com to begin.');
+      return;
+    }
+    if (sessionCode !== data.sessionCode) {
+      sessionCode = data.sessionCode;
+      watchLiveQuestion();
+    }
+  });
+}
+
+function watchLiveQuestion() {
+  db.ref(`sessions/${sessionCode}/currentQuestion`).on('value', snap => {
+    const q = snap.val();
+    if (!q || !q.text) {
+      curQ = null;
+      showWaiting('Waiting for a question to go live…');
+      return;
+    }
+    // New question launched → reset reveal state
+    if (curQId !== q.id) {
+      curQId = q.id;
+      resetReveal(q);
+      watchResponses(q.id);
+    }
+    curQ = q;
+    renderAll();
+  });
+}
+
+function watchResponses(qId) {
+  // Detach previous
+  if (window._respRef) window._respRef.off();
+  window._respRef = db.ref(`sessions/${sessionCode}/responses/${qId}`);
+  window._respRef.on('value', snap => {
+    responses = snap.exists() ? Object.values(snap.val()) : [];
+    // Start countdown on first answer
+    if (responses.length > 0 && !revealArmed && !revealed) beginRevealCountdown();
+    renderAll();
+  });
+}
+
+// ── Reveal logic (mirrors presenter) ──
+function resetReveal(q) {
+  revealed = false; revealArmed = false;
+  if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
+  revealSeconds = (q.revealDelay !== undefined && q.revealDelay !== null) ? q.revealDelay : 30;
+  const hasCorrect = q.type !== 'free_text' && q.type !== 'rating' &&
+                     q.correctAnswer !== undefined && q.correctAnswer !== null;
+  if (!hasCorrect) revealed = true; // opinion polls always "revealed"
+}
+function beginRevealCountdown() {
+  if (revealArmed || revealed) return;
+  revealArmed = true;
+  revealRemaining = revealSeconds;
+  renderAll();
+  revealTimer = setInterval(() => {
+    revealRemaining--;
+    const el = document.getElementById('revealCount');
+    if (el) el.textContent = Math.max(0, revealRemaining) + 's';
+    if (revealRemaining <= 0) { revealed = true; clearInterval(revealTimer); revealTimer = null; renderAll(); }
+  }, 1000);
+}
+
+// ── Rendering ──
+function renderAll() {
+  if (!curQ) return;
+  document.getElementById('livePill').style.display = '';
+  const isChoice = curQ.type !== 'free_text' && curQ.type !== 'rating';
+  document.getElementById('toggleBar').style.display = isChoice ? 'flex' : 'none';
+
+  const media = mediaTag(curQ.image, curQ.videoOpts);
+  let revealBar = '';
+  const hasCorrect = curQ.type !== 'free_text' && curQ.type !== 'rating' &&
+                     curQ.correctAnswer !== undefined && curQ.correctAnswer !== null;
+  if (hasCorrect && !revealed) {
+    revealBar = revealArmed
+      ? `<div class="reveal-bar"><span>Reveal in <strong class="reveal-strong" id="revealCount">${revealRemaining}s</strong></span></div>`
+      : `<div class="reveal-bar"><span>⏳ Reveal starts on first answer</span></div>`;
+  } else if (hasCorrect && revealed) {
+    revealBar = `<div class="reveal-bar"><span style="color:var(--accent3);font-weight:600;">✓ Answer revealed</span></div>`;
+  }
+
+  document.getElementById('body').innerHTML =
+    media +
+    `<div class="q-text">${curQ.text}</div>` +
+    revealBar +
+    `<div id="resultsArea"></div>`;
+  renderResults();
+}
+
+function renderResults() {
+  const area = document.getElementById('resultsArea');
+  if (!area || !curQ) return;
+  const total = responses.length;
+
+  if (curQ.type === 'free_text') {
+    area.innerHTML = `<div class="resp-big">${total} <span>responses</span></div>` +
+      (total===0 ? '<div style="color:var(--muted);font-size:13px;">Waiting…</div>'
+        : responses.map(r => `<div class="txt-resp">${escapeHtml(safeAnswer(r.answer))}<div class="from">— ${escapeHtml(r.name||'Anonymous')}</div></div>`).join(''));
+    return;
+  }
+  if (curQ.type === 'rating') {
+    const max = curQ.ratingMax || 5; const counts = {};
+    for (let i=1;i<=max;i++) counts[i]=0;
+    responses.forEach(r=>{ try{const v=JSON.parse(r.answer); if(v)counts[v]=(counts[v]||0)+1;}catch(e){} });
+    const avg = total>0 ? (Object.entries(counts).reduce((s,[k,v])=>s+(+k*v),0)/total).toFixed(1) : '—';
+    area.innerHTML = `<div class="resp-big">${total} <span>avg ${avg}</span></div>` +
+      Object.entries(counts).map(([val,cnt])=>`<div class="bar-wrap">
+        <div class="bar-label"><span>★ ${val}</span><span>${cnt}</span></div>
+        <div class="bar-bg"><div class="bar-fill" style="width:${total>0?Math.round(cnt/total*100):0}%"></div></div>
+      </div>`).join('');
+    return;
+  }
+
+  // Choice questions
+  const correct = Array.isArray(curQ.correctAnswer) ? curQ.correctAnswer : [curQ.correctAnswer];
+  const counts = (curQ.options||[]).map((_,i)=>({i,count:0}));
+  responses.forEach(r=>{ try{const a=JSON.parse(r.answer);(Array.isArray(a)?a:[a]).forEach(v=>{if(counts[v])counts[v].count++;});}catch(e){} });
+  const pct = c => total>0?Math.round(c/total*100):0;
+  const palette = ['#6c63ff','#ff6584','#43e97b','#f7b731','#4facfe','#a78bfa'];
+
+  let inner = '';
+  if (viewMode === 'leaderboard') {
+    const sorted = [...responses].sort((a,b)=>{
+      if(b.isCorrect===true&&a.isCorrect!==true)return 1;
+      if(a.isCorrect===true&&b.isCorrect!==true)return -1;
+      return (a.elapsed||999999)-(b.elapsed||999999);
+    });
+    const medals=['🥇','🥈','🥉'];
+    inner = sorted.map((r,rank)=>{
+      const score = revealed
+        ? `<span class="p-score" style="color:${r.isCorrect===true?'var(--accent3)':r.isCorrect===false?'var(--accent2)':'var(--muted)'}">${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}</span>`
+        : `<span class="p-score" style="color:var(--accent3)">●</span>`;
+      const speed = (revealed && r.elapsed) ? `<span style="font-size:10px;color:var(--muted);margin-left:6px;">${(r.elapsed/1000).toFixed(1)}s</span>` : '';
+      return `<div class="p-row">
+        <span class="p-rank">${revealed?(rank<3?medals[rank]:'#'+(rank+1)):'•'}</span>
+        <span class="p-name">${escapeHtml(r.name||'Anonymous')}${speed}</span>${score}
+      </div>`;
+    }).join('') || '<div style="color:var(--muted);font-size:13px;">Waiting…</div>';
+  } else if (viewMode === 'number') {
+    inner = counts.map(({i,count})=>`
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:28px;color:${(revealed&&correct.includes(i))?'var(--accent3)':'var(--accent)'};min-width:54px;">${count}</div>
+        <div><div style="font-size:14px;font-weight:600;">${letters[i]}. ${escapeHtml((curQ.options[i]||{}).text||'')}</div>
+        <div style="font-size:12px;color:var(--muted);">${pct(count)}%</div></div>
+      </div>`).join('');
+  } else if (viewMode === 'donut') {
+    let cum=0; const r0=16, cx=21, cy=21;
+    const segs = counts.filter(c=>c.count>0).map(({i,count})=>{
+      const frac=total>0?count/total:0; const start=cum; cum+=frac;
+      const a0=start*2*Math.PI-Math.PI/2, a1=cum*2*Math.PI-Math.PI/2;
+      const large=frac>0.5?1:0;
+      const x0=cx+r0*Math.cos(a0), y0=cy+r0*Math.sin(a0);
+      const x1=cx+r0*Math.cos(a1), y1=cy+r0*Math.sin(a1);
+      return `<path d="M ${x0} ${y0} A ${r0} ${r0} 0 ${large} 1 ${x1} ${y1}" fill="none" stroke="${palette[i%palette.length]}" stroke-width="7"/>`;
+    }).join('');
+    const legend = counts.map(({i,count})=>`
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;">
+        <span style="width:12px;height:12px;border-radius:3px;background:${palette[i%palette.length]};"></span>
+        <span style="flex:1;">${letters[i]}. ${escapeHtml((curQ.options[i]||{}).text||'')}</span>
+        <span style="font-family:'Syne',sans-serif;font-weight:700;">${pct(count)}%</span>
+      </div>`).join('');
+    inner = `<div style="display:flex;justify-content:center;margin-bottom:14px;">
+      <svg viewBox="0 0 42 42" style="width:140px;height:140px;">${segs||'<circle cx="21" cy="21" r="16" fill="none" stroke="var(--surface2)" stroke-width="7"/>'}</svg></div>${legend}`;
+  } else {
+    // Bars (default)
+    inner = counts.map(({i,count})=>{
+      const opt=(curQ.options[i]||{});
+      const showCorrect = revealed && correct.includes(i);
+      return `<div class="bar-wrap">
+        <div class="bar-label"><span>${letters[i]}. ${escapeHtml(opt.text||'')}</span><span>${count} (${pct(count)}%)</span></div>
+        <div class="bar-bg"><div class="bar-fill ${showCorrect?'correct':''}" style="width:${pct(count)}%"></div></div>
+      </div>`;
+    }).join('');
+  }
+
+  area.innerHTML = `<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>${inner}`;
+}
+
+function safeAnswer(a) {
+  if (a === '__none__') return 'No answer';
+  try { const v = JSON.parse(a); return typeof v === 'string' ? v : a; } catch(e) { return a; }
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// Re-read userId if the hash changes (Mac app can update it)
+window.addEventListener('hashchange', () => {
+  const newId = (location.hash||'').replace(/^#/, '').trim();
+  if (newId && newId !== userId) { userId = newId; location.reload(); }
+});
+</script>
+</body>
+</html>
