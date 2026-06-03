@@ -766,6 +766,7 @@ let selIdx        = null; // selected question index in editor
 let liveQIdx      = null;
 let liveQId       = null;
 let editMode      = false; // when true, show editor for selected question; else live view
+let liveStartedAt = 0;    // timestamp (ms) when the current question was made live — used to filter old responses
 let respListener  = null; // active listener for current question
 let respListeners = {}; // all active listeners by qIdx
 // ── Answer reveal state ──
@@ -1170,6 +1171,7 @@ async function launchQuestion(idx) {
   // Set reveal delay and arm BEFORE listener fires so revealed state is correct
   revealSeconds = (q.revealDelay !== undefined && q.revealDelay !== null) ? q.revealDelay : 30;
   armReveal(q);
+  liveStartedAt = Date.now(); // mark start of this live session
   renderLiveView(idx, qId, q);
   listenResponses(idx, qId, q);
   toast(`Q${idx+1} is now live!`, 'success');
@@ -1295,17 +1297,17 @@ function copyQRBox(idx) {
     document.body.removeChild(tmp);
     // Try clipboard first; fall back to download if blocked
     canvas.toBlob(async blob => {
+      // Try clipboard API first (works in Chrome with HTTPS + focus)
+      let copied = false;
       try {
         await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
-        toast('QR box copied! Paste into your presentation slide.', 'success');
-      } catch(e) {
-        // Clipboard blocked (browser permission) — download instead
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'pollslide-qr-q' + (idx+1) + '.png';
-        a.click();
-        URL.revokeObjectURL(a.href);
-        toast('Saved as image — drag it onto your slide.', 'info');
+        copied = true;
+      } catch(e) { copied = false; }
+      if (copied) {
+        toast('QR image copied! Paste into your presentation (Cmd+V).', 'success');
+      } else {
+        // Fallback: show in an overlay so the user can right-click → Copy Image
+        showImageCopyModal(URL.createObjectURL(blob), 'QR box for Q' + (idx+1));
       }
     }, 'image/png');
   };
@@ -1347,18 +1349,39 @@ function copyQuestionSlide(idx) {
     });
   }
   canvas.toBlob(async blob => {
+    let copied = false;
     try {
       await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
-      toast('Question slide copied! Paste into your presentation.', 'success');
-    } catch(e) {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'pollslide-question-' + (idx+1) + '.png';
-      a.click();
-      URL.revokeObjectURL(a.href);
-      toast('Saved as image — drag it onto your slide.', 'info');
+      copied = true;
+    } catch(e) { copied = false; }
+    if (copied) {
+      toast('Question slide copied! Paste into your presentation (Cmd+V).', 'success');
+    } else {
+      showImageCopyModal(URL.createObjectURL(blob), 'Question ' + (idx+1) + ' slide');
     }
   }, 'image/png');
+}
+
+// Show an image in a modal so the user can right-click → Copy Image
+// This is the universal fallback when clipboard API is blocked
+function showImageCopyModal(src, label) {
+  const old = document.getElementById('imgCopyModal');
+  if (old) old.remove();
+  const overlay = document.createElement('div');
+  overlay.id = 'imgCopyModal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:200000;background:rgba(0,0,0,0.75);display:flex;align-items:center;justify-content:center;padding:20px;';
+  overlay.onclick = e => { if(e.target===overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div style="background:var(--surface);border-radius:16px;padding:24px;max-width:560px;width:100%;text-align:center;">
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:17px;margin-bottom:6px;">Copy ${label}</div>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:14px;">Right-click the image → <strong>Copy Image</strong>, then paste into your presentation.</p>
+      <img src="${src}" style="max-width:100%;border-radius:10px;border:1px solid var(--border);cursor:context-menu;" title="Right-click → Copy Image">
+      <div style="margin-top:14px;display:flex;gap:10px;justify-content:center;">
+        <a href="${src}" download style="padding:9px 18px;background:var(--accent);color:#fff;border-radius:9px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;text-decoration:none;">⬇ Download instead</a>
+        <button onclick="document.getElementById('imgCopyModal').remove()" style="padding:9px 18px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:9px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;">Close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
 }
 
 function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
@@ -1372,8 +1395,10 @@ function listenResponses(qIdx, qId, q) {
     const responses = snap.exists() ? Object.values(snap.val()) : [];
     const rc = document.getElementById('respCounter');
     if (rc) rc.textContent = `${responses.length} response${responses.length!==1?'s':''}`;
-    // Start the reveal countdown on the first answer
-    if (responses.length > 0 && !revealArmed && !revealed) {
+    // Start the reveal countdown on the first NEW answer (submitted after this session started).
+    // Pre-existing responses from previous sessions should NOT trigger the countdown.
+    const newResponses = responses.filter(r => (r.submittedAt || 0) >= liveStartedAt);
+    if (newResponses.length > 0 && !revealArmed && !revealed) {
       beginRevealCountdown();
     }
     renderRightPanel(q, responses);
@@ -1922,6 +1947,7 @@ function showLiveOrEdit(idx) {
   if (rb) rb.innerHTML = '';
   // Arm reveal immediately so opinion polls (no correct answer) are pre-set to revealed=true
   armReveal(questions[idx]);
+  liveStartedAt = Date.now(); // mark when this question session started
 
   // Live view: use the stable qId so it always matches participant responses
   const stableQId = `q${idx}_stable_${code}`;
