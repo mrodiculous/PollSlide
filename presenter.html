@@ -1167,12 +1167,11 @@ async function launchQuestion(idx) {
 
   await db.ref(`sessions/${code}/currentQuestion`).set(payload);
   renderQList();
-  renderLiveView(idx, qId, q);
-  listenResponses(idx, qId, q);
-  // Set reveal delay from the question (default 30s) and arm the reveal —
-  // the countdown does NOT start here; it starts on the FIRST answer.
+  // Set reveal delay and arm BEFORE listener fires so revealed state is correct
   revealSeconds = (q.revealDelay !== undefined && q.revealDelay !== null) ? q.revealDelay : 30;
   armReveal(q);
+  renderLiveView(idx, qId, q);
+  listenResponses(idx, qId, q);
   toast(`Q${idx+1} is now live!`, 'success');
 }
 
@@ -1276,35 +1275,50 @@ function copyQRBox(idx) {
   tmp.appendChild(qrDiv);
   new QRCode(qrDiv, { text:qUrl, width:300, height:300, colorDark:'#0b0b15', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M });
 
-  setTimeout(() => {
-    const qrCanvas = qrDiv.querySelector('canvas');
-    const qrImg = qrDiv.querySelector('img');
+  const buildCanvas = (src) => {
     const size = 300, pad = 40, textH = 90;
     const canvas = document.createElement('canvas');
     canvas.width = size + pad*2;
     canvas.height = size + pad*2 + textH;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
-    const src = qrCanvas || qrImg;
-    const drawAndSave = () => {
-      if (src) ctx.drawImage(src, pad, pad, size, size);
-      ctx.fillStyle = '#0b0b15'; ctx.font = 'bold 34px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('Scan to answer', canvas.width/2, size + pad + 48);
-      ctx.fillStyle = '#555'; ctx.font = '20px sans-serif';
-      ctx.fillText('Point your phone camera here', canvas.width/2, size + pad + 78);
-      canvas.toBlob(b => {
+    if (src) ctx.drawImage(src, pad, pad, size, size);
+    ctx.fillStyle = '#0b0b15'; ctx.font = 'bold 34px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('Scan to answer', canvas.width/2, size + pad + 48);
+    ctx.fillStyle = '#555'; ctx.font = '20px sans-serif';
+    ctx.fillText('Point your phone camera here', canvas.width/2, size + pad + 78);
+    return canvas;
+  };
+
+  const tryCopy = (src) => {
+    const canvas = buildCanvas(src);
+    document.body.removeChild(tmp);
+    // Try clipboard first; fall back to download if blocked
+    canvas.toBlob(async blob => {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+        toast('QR box copied! Paste into your presentation slide.', 'success');
+      } catch(e) {
+        // Clipboard blocked (browser permission) — download instead
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(b); a.download = 'pollslide-qr-q' + (idx+1) + '.png';
-        a.click(); URL.revokeObjectURL(a.href);
-        toast('QR image downloaded — drag it onto your slide.', 'success');
-      }, 'image/png');
-      document.body.removeChild(tmp);
-    };
-    if (qrImg && !qrImg.complete) { qrImg.onload = drawAndSave; } else { drawAndSave(); }
+        a.href = URL.createObjectURL(blob);
+        a.download = 'pollslide-qr-q' + (idx+1) + '.png';
+        a.click();
+        URL.revokeObjectURL(a.href);
+        toast('Saved as image — drag it onto your slide.', 'info');
+      }
+    }, 'image/png');
+  };
+
+  setTimeout(() => {
+    const qrCanvas = qrDiv.querySelector('canvas');
+    const qrImg   = qrDiv.querySelector('img');
+    const src = qrCanvas || qrImg;
+    if (qrImg && !qrImg.complete) { qrImg.onload = () => tryCopy(src); }
+    else { tryCopy(src); }
   }, 150);
 }
 
-// Download the question as a clean "presentation slide" image.
 function copyQuestionSlide(idx) {
   const q = questions[idx];
   const letters = ['A','B','C','D','E','F'];
@@ -1312,14 +1326,9 @@ function copyQuestionSlide(idx) {
   const canvas = document.createElement('canvas');
   canvas.width = W; canvas.height = H;
   const ctx = canvas.getContext('2d');
-  // Background
   ctx.fillStyle = '#0b0b15'; ctx.fillRect(0,0,W,H);
-  // Accent bar
   ctx.fillStyle = '#6c63ff'; ctx.fillRect(0,0,W,8);
-  // Question text (wrapped)
-  ctx.fillStyle = '#ffffff';
-  ctx.font = 'bold 52px sans-serif';
-  ctx.textAlign = 'left';
+  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 52px sans-serif'; ctx.textAlign = 'left';
   const words = (q.text||'').split(' ');
   let line = '', y = 140; const maxW = W-160;
   for (const w of words) {
@@ -1328,24 +1337,27 @@ function copyQuestionSlide(idx) {
     else line = test;
   }
   if (line) ctx.fillText(line, 80, y);
-  // Options
   if (q.options && (q.type==='multiple_choice'||q.type==='multiple_choice_multi')) {
     let oy = y + 70;
-    ctx.font = '36px sans-serif';
     q.options.forEach((o,i) => {
       ctx.fillStyle = '#18182a'; roundRect(ctx, 80, oy-40, W-160, 60, 12); ctx.fill();
-      ctx.fillStyle = '#6c63ff'; ctx.font = 'bold 30px sans-serif';
-      ctx.fillText(letters[i], 104, oy);
-      ctx.fillStyle = '#ffffff'; ctx.font = '32px sans-serif';
-      ctx.fillText(o.text||'', 160, oy);
+      ctx.fillStyle = '#6c63ff'; ctx.font = 'bold 30px sans-serif'; ctx.fillText(letters[i], 104, oy);
+      ctx.fillStyle = '#ffffff'; ctx.font = '32px sans-serif'; ctx.fillText(o.text||'', 160, oy);
       oy += 78;
     });
   }
-  canvas.toBlob(b => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(b); a.download = 'pollslide-question-' + (idx+1) + '.png';
-    a.click(); URL.revokeObjectURL(a.href);
-    toast('Question slide downloaded — drag it onto your slide.', 'success');
+  canvas.toBlob(async blob => {
+    try {
+      await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+      toast('Question slide copied! Paste into your presentation.', 'success');
+    } catch(e) {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'pollslide-question-' + (idx+1) + '.png';
+      a.click();
+      URL.revokeObjectURL(a.href);
+      toast('Saved as image — drag it onto your slide.', 'info');
+    }
   }, 'image/png');
 }
 
@@ -1902,13 +1914,14 @@ function showLiveOrEdit(idx) {
     renderEditor(idx);
     return;
   }
-  // Reset reveal state when switching to a different question —
-  // the new question's reveal hasn't fired yet, so nothing should be shown.
+  // Reset reveal state SYNCHRONOUSLY before any rendering or listener fires
   revealed = false;
   revealArmed = false;
   if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
   const rb = document.getElementById('revealBar');
   if (rb) rb.innerHTML = '';
+  // Arm reveal immediately so opinion polls (no correct answer) are pre-set to revealed=true
+  armReveal(questions[idx]);
 
   // Live view: use the stable qId so it always matches participant responses
   const stableQId = `q${idx}_stable_${code}`;
@@ -1916,8 +1929,6 @@ function showLiveOrEdit(idx) {
   liveQId  = stableQId;
   renderLiveView(idx, stableQId, questions[idx]);
   listenResponses(idx, stableQId, questions[idx]);
-  // Make sure this question is published as answerable + becomes the active
-  // currentQuestion (so the QR scanner / companion follows it)
   publishLive(idx, stableQId);
 }
 
@@ -1939,7 +1950,7 @@ async function publishLive(idx, qId) {
   localStorage.setItem('ql_liveQIdx_' + code, idx);
   localStorage.setItem('ql_liveQId_' + code, qId);
   await db.ref(`sessions/${code}/currentQuestion`).set(payload).catch(()=>{});
-  armReveal(q);
+  // armReveal is called synchronously in showLiveOrEdit before this runs
 }
 
 // Switch the currently-selected question into edit mode
