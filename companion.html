@@ -139,7 +139,6 @@
 <div class="hd">
   <span class="logo-dot"></span>
   <span class="logo-txt">PollSlide</span>
-  <button id="qrToggle" onclick="toggleQR()" style="margin-left:auto;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:'Syne',sans-serif;font-weight:700;font-size:11px;padding:5px 10px;cursor:pointer;display:none;-webkit-app-region:no-drag;">QR</button>
   <span class="live-pill" id="livePill" style="display:none;">LIVE</span>
 </div>
 
@@ -188,7 +187,7 @@ let revealTimer = null;
 let revealRemaining = 0;
 let revealSeconds = 30;
 let curQId = null;
-let showQR = true;   // QR pane visible by default so the audience can scan
+let showQR = false;  // QR removed from companion — the OCR scanner must not read our own QR
 
 // View toggle
 function setMode(m) {
@@ -304,7 +303,6 @@ function beginRevealCountdown() {
 function renderAll() {
   if (!curQ) return;
   document.getElementById('livePill').style.display = '';
-  document.getElementById('qrToggle').style.display = '';
   const isChoice = curQ.type !== 'free_text' && curQ.type !== 'rating';
   document.getElementById('toggleBar').style.display = isChoice ? 'flex' : 'none';
 
@@ -368,10 +366,7 @@ window.addEventListener('resize', () => {
   _resizeT = setTimeout(() => { if (curQ) renderAll(); }, 150);
 });
 
-function toggleQR() {
-  showQR = !showQR;
-  renderAll();
-}
+function toggleQR() { /* QR display removed from companion */ }
 
 function renderResults() {
   const area = document.getElementById('resultsArea');

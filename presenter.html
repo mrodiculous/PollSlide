@@ -765,6 +765,7 @@ let questions     = [];   // questions for active presentation
 let selIdx        = null; // selected question index in editor
 let liveQIdx      = null;
 let liveQId       = null;
+let editMode      = false; // when true, show editor for selected question; else live view
 let respListener  = null; // active listener for current question
 let respListeners = {}; // all active listeners by qIdx
 // ── Answer reveal state ──
@@ -1205,7 +1206,7 @@ function renderLiveView(idx, qId, q) {
     <div class="card">
       <div class="card-hd">
         <div class="card-title">Q${idx+1}: ${typeLabels[q.type]||q.type}</div>
-        <button class="btn btn-ghost btn-sm" onclick="showQRModal(${idx})">🔍 Fullscreen QR</button>
+        <button class="btn btn-ghost btn-sm" onclick="copyQuestionSlide(${idx})" title="Copy this question as a clean slide to paste into your presentation">📋 Copy as slide</button>
       </div>
       <div class="card-body">
         <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;line-height:1.35;margin-bottom:12px;">${q.text}</div>
@@ -1220,6 +1221,7 @@ function renderLiveView(idx, qId, q) {
         <h3>Scan for Q${idx+1}</h3>
         <p>This QR links directly to this question only.</p>
         <div class="qr-url" onclick="copyURL(${idx})" title="Click to copy">${qUrl}</div>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="copyQRBox(${idx})" title="Copy the QR + caption to paste into your presentation slide">📋 Copy QR box for slide</button>
       </div>
     </div>
 
@@ -1231,6 +1233,104 @@ function renderLiveView(idx, qId, q) {
     if (el) { el.innerHTML=''; new QRCode(el,{text:qUrl,width:110,height:110,colorDark:'#ffffff',colorLight:'#18182a',correctLevel:QRCode.CorrectLevel.M}); }
   }, 50);
 }
+
+// ─── COPY HELPERS (for pasting into the user's presentation) ──────────────────
+// Copy the QR + caption as an image the user can paste onto a Keynote/PowerPoint slide.
+async function copyQRBox(idx) {
+  const qUrl = getQuestionURL(idx);
+  // Build an offscreen canvas: white card with QR + "Scan to answer" + URL
+  const tmp = document.createElement('div');
+  tmp.style.cssText = 'position:fixed;left:-9999px;top:0;';
+  document.body.appendChild(tmp);
+  const qrDiv = document.createElement('div');
+  tmp.appendChild(qrDiv);
+  new QRCode(qrDiv, { text:qUrl, width:300, height:300, colorDark:'#0b0b15', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M });
+
+  setTimeout(async () => {
+    const qrCanvas = qrDiv.querySelector('canvas');
+    const qrImg = qrDiv.querySelector('img');
+    const size = 300;
+    const pad = 40, textH = 90;
+    const canvas = document.createElement('canvas');
+    canvas.width = size + pad*2;
+    canvas.height = size + pad*2 + textH;
+    const ctx = canvas.getContext('2d');
+    // White rounded card
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    // Draw QR
+    const src = qrCanvas || qrImg;
+    if (src) ctx.drawImage(src, pad, pad, size, size);
+    // Caption
+    ctx.fillStyle = '#0b0b15';
+    ctx.font = 'bold 34px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Scan to answer', canvas.width/2, size + pad + 48);
+    ctx.fillStyle = '#555';
+    ctx.font = '20px sans-serif';
+    ctx.fillText('Point your phone camera here', canvas.width/2, size + pad + 78);
+
+    try {
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+      await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
+      toast('QR box copied! Paste it onto your slide.', 'success');
+    } catch(e) {
+      // Fallback: open the image in a new tab so they can drag/save it
+      canvas.toBlob(b => { const u=URL.createObjectURL(b); window.open(u,'_blank'); });
+      toast('QR image opened — right-click to copy or save.', 'info');
+    }
+    document.body.removeChild(tmp);
+  }, 120);
+}
+
+// Copy the question as a clean "presentation slide" image (how a viewer would see it).
+async function copyQuestionSlide(idx) {
+  const q = questions[idx];
+  const letters = ['A','B','C','D','E','F'];
+  const W = 1280, H = 720;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  // Background
+  ctx.fillStyle = '#0b0b15'; ctx.fillRect(0,0,W,H);
+  // Accent bar
+  ctx.fillStyle = '#6c63ff'; ctx.fillRect(0,0,W,8);
+  // Question text (wrapped)
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 52px sans-serif';
+  ctx.textAlign = 'left';
+  const words = (q.text||'').split(' ');
+  let line = '', y = 140; const maxW = W-160;
+  for (const w of words) {
+    const test = line + w + ' ';
+    if (ctx.measureText(test).width > maxW && line) { ctx.fillText(line, 80, y); line = w+' '; y += 64; }
+    else line = test;
+  }
+  if (line) ctx.fillText(line, 80, y);
+  // Options
+  if (q.options && (q.type==='multiple_choice'||q.type==='multiple_choice_multi')) {
+    let oy = y + 70;
+    ctx.font = '36px sans-serif';
+    q.options.forEach((o,i) => {
+      ctx.fillStyle = '#18182a'; roundRect(ctx, 80, oy-40, W-160, 60, 12); ctx.fill();
+      ctx.fillStyle = '#6c63ff'; ctx.font = 'bold 30px sans-serif';
+      ctx.fillText(letters[i], 104, oy);
+      ctx.fillStyle = '#ffffff'; ctx.font = '32px sans-serif';
+      ctx.fillText(o.text||'', 160, oy);
+      oy += 78;
+    });
+  }
+  try {
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+    await navigator.clipboard.write([ new ClipboardItem({ 'image/png': blob }) ]);
+    toast('Question slide copied! Paste it into your presentation.', 'success');
+  } catch(e) {
+    canvas.toBlob(b => { const u=URL.createObjectURL(b); window.open(u,'_blank'); });
+    toast('Slide image opened — right-click to copy or save.', 'info');
+  }
+}
+
+function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
 
 // ─── LISTEN RESPONSES ────────────────────────────────────────────────────────
 function listenResponses(qIdx, qId, q) {
@@ -1477,23 +1577,13 @@ async function resetQuestionTally(qIdx) {
     // Step 1: Detach listeners
     if (respListener) { respListener(); respListener = null; }
     if (respListeners[qIdx]) { respListeners[qIdx](); delete respListeners[qIdx]; }
-    // Step 2: Delete from Firebase first
+    // Step 2: Delete responses from Firebase (clears tally) — question STAYS live
     await db.ref(`sessions/${code}/responses/${stableQId}`).remove();
-    // Step 3: Clear UI after delete
+    // Step 3: Clear UI and re-show the live view (still answerable)
     clearRightPanel();
     toast(`Q${qIdx+1} cleared. Participants can answer again.`, 'success');
-    await launchQuestion(qIdx);
+    showLiveOrEdit(qIdx);
   } catch(e) { toast('Reset failed.', 'danger'); }
-}
-
-function editQuestion(idx) {
-  // Switch from live view back to editor for this question
-  liveQIdx = null;
-  liveQId = null;
-  if (respListener) { respListener(); respListener = null; }
-  selIdx = idx;
-  renderQList();
-  renderEditor(idx);
 }
 
 // ─── PRESENTATION TALLY ──────────────────────────────────────────────────────
@@ -1778,49 +1868,64 @@ function renderQList() {
 
 function selectQ(idx) {
   selIdx = idx;
+  editMode = false;  // default to LIVE view; editing is explicit
   renderQList();
-  // A question is "live" if it has a stable qId — always show live view and listen
+  showLiveOrEdit(idx);
+}
+
+// Decide whether to show the live view or the editor for a question.
+// Model: every saved question is "live" (answerable) at all times. We show the
+// live view by default. The user clicks "Edit" to modify, which is the only
+// time a question is treated as offline (for that user's editing session).
+function showLiveOrEdit(idx) {
   const code = presentations[activePresId]?.sessionCode || '';
-  const stableQId = `q${idx}_stable_${code}`;
-  // If this question has been launched (liveQIdx matches) or has been saved before, show live view
-  if (liveQIdx === idx && liveQId) {
-    renderLiveView(idx, liveQId, questions[idx]);
-    listenResponses(idx, liveQId, questions[idx]);
-  } else if (code && questions[idx]) {
-    // Always attach listener for any saved question so responses show up
-    if (respListener) { respListener(); respListener = null; }
-    if (respListeners[idx]) { respListeners[idx](); delete respListeners[idx]; }
-    const ref = db.ref(`sessions/${code}/responses/${stableQId}`);
-    const fn = ref.on('value', snap => {
-      const responses = snap.exists() ? Object.values(snap.val()) : [];
-      const rc = document.getElementById('respCounter');
-      if (rc) rc.textContent = `${responses.length} response${responses.length!==1?'s':''}`;
-      renderRightPanel(questions[idx], responses);
-      const pCount = document.getElementById('pCount');
-      const pList  = document.getElementById('pList');
-      if (pCount) pCount.textContent = responses.length;
-      if (pList) {
-        if (responses.length === 0) {
-          pList.innerHTML = '<div style="color:var(--muted);font-size:12px;">No responses yet.</div>';
-        } else {
-          pList.innerHTML = responses.map(r =>
-            `<div class="p-row">
-              <div class="p-av">${(r.name||'?')[0].toUpperCase()}</div>
-              <div class="p-name">${r.name||'Anonymous'}</div>
-              <div class="p-score" style="color:${r.isCorrect===true?'var(--accent3)':r.isCorrect===false?'var(--accent2)':'var(--muted)'}">
-                ${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}
-              </div>
-            </div>`
-          ).join('');
-        }
-      }
-    });
-    respListeners[idx] = () => ref.off('value', fn);
-    respListener = respListeners[idx]; // also track as current
+  if (editMode || !code || !questions[idx]) {
     renderEditor(idx);
-  } else {
-    renderEditor(idx);
+    return;
   }
+  // Live view: use the stable qId so it always matches participant responses
+  const stableQId = `q${idx}_stable_${code}`;
+  liveQIdx = idx;
+  liveQId  = stableQId;
+  renderLiveView(idx, stableQId, questions[idx]);
+  listenResponses(idx, stableQId, questions[idx]);
+  // Make sure this question is published as answerable + becomes the active
+  // currentQuestion (so the QR scanner / companion follows it)
+  publishLive(idx, stableQId);
+}
+
+// Publish a question as the active one so participants & companion see it
+async function publishLive(idx, qId) {
+  if (!activePresId) return;
+  const q = questions[idx];
+  const code = presentations[activePresId].sessionCode;
+  const payload = {
+    id: qId, qIndex: idx, index: idx+1, total: questions.length,
+    text: q.text, type: q.type,
+    options: q.options||null,
+    correctAnswer: q.correctAnswer!==undefined ? q.correctAnswer : null,
+    ratingMax: q.ratingMax||null, ratingLabels: q.ratingLabels||null,
+    image: q.image || null, videoOpts: q.videoOpts || null,
+    revealDelay: q.revealDelay!==undefined ? q.revealDelay : 30,
+    status: 'active', launchedAt: Date.now()
+  };
+  localStorage.setItem('ql_liveQIdx_' + code, idx);
+  localStorage.setItem('ql_liveQId_' + code, qId);
+  await db.ref(`sessions/${code}/currentQuestion`).set(payload).catch(()=>{});
+  armReveal(q);
+}
+
+// Switch the currently-selected question into edit mode
+function editQuestion(idx) {
+  editMode = true;
+  renderEditor(idx);
+}
+
+// Save edits and return the question to live view (it stays answerable)
+function doneEditing(idx) {
+  editMode = false;
+  scheduleSave();
+  showLiveOrEdit(idx);
 }
 
 function showSetup() {
@@ -1983,7 +2088,7 @@ function renderEditor(idx) {
     <div style="display:flex;gap:7px;align-items:center;">
       ${idx>0?`<button class="btn btn-ghost btn-sm" onclick="moveQ(${idx},-1)">↑ Up</button>`:''}
       ${idx<questions.length-1?`<button class="btn btn-ghost btn-sm" onclick="moveQ(${idx},1)">↓ Down</button>`:''}
-      <button class="btn btn-success" onclick="saveAndLaunch(${idx})" style="margin-left:auto;padding:8px 18px;font-size:13px;">▶ Save &amp; Go Live</button>
+      <button class="btn btn-success" onclick="doneEditing(${idx})" style="margin-left:auto;padding:8px 18px;font-size:13px;">✓ Done &amp; Go Live</button>
     </div>
   `;
 
