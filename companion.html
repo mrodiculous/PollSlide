@@ -71,12 +71,18 @@
   }
   .toggle-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
 
-  /* Body scroll area */
+  /* Body scroll area — responsive: side-by-side when wide, stacked when narrow */
   .body { flex:1; overflow-y:auto; padding:16px; }
+  .panes { display:flex; gap:18px; align-items:flex-start; }
+  .panes.stacked { flex-direction:column; }
+  .pane-q { flex:1; min-width:0; }
+  .pane-r { flex:1; min-width:0; }
+  .panes.stacked .pane-q, .panes.stacked .pane-r { width:100%; }
+
 
   /* Question */
-  .q-media { width:100%; max-height:200px; object-fit:contain; border-radius:10px; margin-bottom:12px; background:#000; }
-  .q-text { font-family:'Syne',sans-serif; font-size:18px; font-weight:800; line-height:1.35; margin-bottom:14px; }
+  .q-media { width:100%; max-height:220px; object-fit:contain; border-radius:10px; margin-bottom:12px; background:#000; }
+  .q-text { font-family:'Syne',sans-serif; font-size:18px; font-weight:800; line-height:1.35; margin-bottom:4px; }
 
   /* Reveal bar */
   .reveal-bar {
@@ -108,15 +114,32 @@
 
   .txt-resp { background:var(--surface2); border:1px solid var(--border); border-radius:9px; padding:10px 12px; margin-bottom:8px; font-size:13px; }
   .txt-resp .from { color:var(--muted); font-size:11px; margin-top:4px; }
+
+  /* QR pane — shown so the audience can scan to answer */
+  .qr-pane {
+    display:flex; align-items:center; gap:14px;
+    background:var(--surface2);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:14px;
+    margin-bottom:16px;
+  }
+  .qr-box { background:#ffffff; padding:8px; border-radius:10px; flex-shrink:0; line-height:0; }
+  .qr-box img, .qr-box canvas { display:block; }
+  .qr-info h3 { font-family:'Syne',sans-serif; font-size:14px; font-weight:800; margin-bottom:4px; }
+  .qr-info p { font-size:12px; color:var(--muted); line-height:1.4; }
+  .qr-collapsed { cursor:pointer; }
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
 
 <div class="hd">
   <span class="logo-dot"></span>
   <span class="logo-txt">PollSlide</span>
+  <button id="qrToggle" onclick="toggleQR()" style="margin-left:auto;background:var(--surface2);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:'Syne',sans-serif;font-weight:700;font-size:11px;padding:5px 10px;cursor:pointer;display:none;-webkit-app-region:no-drag;">QR</button>
   <span class="live-pill" id="livePill" style="display:none;">LIVE</span>
 </div>
 
@@ -149,6 +172,7 @@ firebase.initializeApp(FIREBASE_CONFIG);
 const db = firebase.database();
 
 const letters = ['A','B','C','D','E','F'];
+const BASE_URL = "https://app.pollslide.com/answer";
 
 // ── Read the userId from the URL hash: companion#<userId> ──
 let userId = (location.hash || '').replace(/^#/, '').trim();
@@ -164,6 +188,7 @@ let revealTimer = null;
 let revealRemaining = 0;
 let revealSeconds = 30;
 let curQId = null;
+let showQR = true;   // QR pane visible by default so the audience can scan
 
 // View toggle
 function setMode(m) {
@@ -279,6 +304,7 @@ function beginRevealCountdown() {
 function renderAll() {
   if (!curQ) return;
   document.getElementById('livePill').style.display = '';
+  document.getElementById('qrToggle').style.display = '';
   const isChoice = curQ.type !== 'free_text' && curQ.type !== 'rating';
   document.getElementById('toggleBar').style.display = isChoice ? 'flex' : 'none';
 
@@ -294,12 +320,57 @@ function renderAll() {
     revealBar = `<div class="reveal-bar"><span style="color:var(--accent3);font-weight:600;">✓ Answer revealed</span></div>`;
   }
 
-  document.getElementById('body').innerHTML =
-    media +
-    `<div class="q-text">${curQ.text}</div>` +
-    revealBar +
-    `<div id="resultsArea"></div>`;
+  // QR pane — links to this specific question so the audience can scan & answer
+  const qIdx = (curQ.qIndex !== undefined && curQ.qIndex !== null) ? curQ.qIndex : 0;
+  const answerUrl = `${BASE_URL}#${sessionCode}/${qIdx}`;
+  const qrPane = showQR
+    ? `<div class="qr-pane">
+         <div class="qr-box" id="qrBox"></div>
+         <div class="qr-info">
+           <h3>Scan to answer</h3>
+           <p>Point your phone camera here to join this question.</p>
+         </div>
+       </div>`
+    : '';
+
+  // Responsive: side-by-side when the window is wide, stacked when narrow
+  const wide = window.innerWidth >= 620;
+
+  document.getElementById('body').innerHTML = `
+    <div class="panes ${wide ? '' : 'stacked'}">
+      <div class="pane-q">
+        ${media}
+        <div class="q-text">${escapeHtml(curQ.text)}</div>
+        ${qrPane}
+      </div>
+      <div class="pane-r">
+        ${revealBar}
+        <div id="resultsArea"></div>
+      </div>
+    </div>`;
+
+  // Draw the QR (after the element exists)
+  if (showQR) {
+    const box = document.getElementById('qrBox');
+    if (box && window.QRCode) {
+      box.innerHTML = '';
+      new QRCode(box, { text: answerUrl, width: 96, height: 96, colorDark:'#0b0b15', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    }
+  }
+
   renderResults();
+}
+
+// Re-render on resize so the layout switches between side-by-side and stacked
+let _resizeT = null;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeT);
+  _resizeT = setTimeout(() => { if (curQ) renderAll(); }, 150);
+});
+
+function toggleQR() {
+  showQR = !showQR;
+  renderAll();
 }
 
 function renderResults() {
