@@ -147,6 +147,9 @@
   <button class="toggle-btn"        data-mode="donut"       onclick="setMode('donut')">Donut</button>
   <button class="toggle-btn"        data-mode="number"      onclick="setMode('number')">Numbers</button>
   <button class="toggle-btn"        data-mode="leaderboard" onclick="setMode('leaderboard')">Leaderboard</button>
+  <div style="flex:1;"></div>
+  <button class="toggle-btn" id="mediaToggleBtn" onclick="toggleMedia()" title="Show/hide question image or video">🖼 Media</button>
+  <button class="toggle-btn" id="revealBtn" onclick="forceReveal()" title="Reveal the correct answer now">Reveal</button>
 </div>
 
 <div class="body" id="body">
@@ -188,9 +191,27 @@ let revealRemaining = 0;
 let revealSeconds = 30;
 let curQId = null;
 let liveStartedAt = 0; // timestamp when current question went live
-let showQR = false;  // QR removed from companion — the OCR scanner must not read our own QR
+let showQR = false;  // QR removed from companion
+let showMedia = true; // whether to show question image/video in companion — the OCR scanner must not read our own QR
 
 // View toggle
+function toggleMedia() {
+  showMedia = !showMedia;
+  const btn = document.getElementById('mediaToggleBtn');
+  if (btn) { btn.classList.toggle('active', showMedia); }
+  renderAll();
+}
+
+function forceReveal() {
+  if (!revealed) {
+    revealed = true;
+    if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
+    renderAll();
+  }
+  const btn = document.getElementById('revealBtn');
+  if (btn) { btn.classList.add('active'); btn.style.color = 'var(--accent3)'; }
+}
+
 function setMode(m) {
   viewMode = m;
   document.querySelectorAll('.toggle-btn').forEach(b => {
@@ -306,10 +327,14 @@ function beginRevealCountdown() {
 function renderAll() {
   if (!curQ) return;
   document.getElementById('livePill').style.display = '';
+  const rBtn = document.getElementById('revealBtn');
+  if (rBtn) { rBtn.classList.toggle('active', revealed); }
+  const mBtn = document.getElementById('mediaToggleBtn');
+  if (mBtn) { mBtn.classList.toggle('active', showMedia); }
   const isChoice = curQ.type !== 'free_text' && curQ.type !== 'rating';
   document.getElementById('toggleBar').style.display = isChoice ? 'flex' : 'none';
 
-  const media = mediaTag(curQ.image, curQ.videoOpts);
+  const media = (showMedia && curQ.image) ? mediaTag(curQ.image, curQ.videoOpts) : '';
   let revealBar = '';
   const hasCorrect = curQ.type !== 'free_text' && curQ.type !== 'rating' &&
                      curQ.correctAnswer !== undefined && curQ.correctAnswer !== null;

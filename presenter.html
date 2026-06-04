@@ -1432,8 +1432,13 @@ function listenResponses(qIdx, qId, q) {
 // armReveal: called when a question launches. Sets up reveal state but does NOT
 // start the countdown — the countdown begins on the first answer (see listenResponses).
 function armReveal(q) {
-  const hasCorrect = q && q.type !== 'free_text' && q.type !== 'rating' &&
-                     q.correctAnswer !== undefined && q.correctAnswer !== null;
+  // hasCorrect: true only if the question is a choice type AND has a real correct answer set.
+  // Handles: 0 (valid), [0] (array), null/undefined/''/[] (no answer set).
+  const _ca = q ? q.correctAnswer : undefined;
+  const hasCorrect = q &&
+    q.type !== 'free_text' && q.type !== 'rating' &&
+    _ca !== undefined && _ca !== null && _ca !== '' &&
+    !(Array.isArray(_ca) && _ca.length === 0);
   revealed = false;
   revealArmed = false;
   if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
@@ -1531,7 +1536,8 @@ function renderRightPanel(q, responses) {
         <div class="bar-bg"><div class="bar-fill" style="width:${total>0?Math.round(cnt/total*100):0}%"></div></div>
       </div>`).join('')}`;
   } else {
-    const correct=Array.isArray(q.correctAnswer)?q.correctAnswer:[q.correctAnswer];
+    const _qca = q.correctAnswer; const _hasC = _qca !== undefined && _qca !== null && _qca !== '' && !(Array.isArray(_qca)&&_qca.length===0);
+    const correct = _hasC ? (Array.isArray(_qca)?_qca:[_qca]) : [];
     const counts=(q.options||[]).map((_,i)=>({i,count:0}));
     responses.forEach(r=>{try{const a=JSON.parse(r.answer);(Array.isArray(a)?a:[a]).forEach(v=>{if(counts[v])counts[v].count++;});}catch(e){}});
     const mode = q.displayMode || 'bars';
