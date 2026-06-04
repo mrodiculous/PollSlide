@@ -1024,6 +1024,11 @@ async function doResetAll() {
       jobs.push(db.ref(`sessions/${code}/responses`).remove());
     }
     await Promise.all(jobs);
+    // Reset every question's session-start timestamp so all cleared states are clean
+    for (const [pid, pres] of Object.entries(presentations)) {
+      const c = pres.sessionCode;
+      (pres.questions||[]).forEach((_, qi) => localStorage.setItem(`ql_liveStart_${c}_${qi}`, Date.now()));
+    }
     renderQList();
     toast('All tallies cleared across every presentation. Questions remain live.', 'success');
   } catch(e) { toast('Reset failed. Check connection.', 'danger'); }
@@ -1392,13 +1397,16 @@ function listenResponses(qIdx, qId, q) {
   const code = presentations[activePresId]?.sessionCode;
   const ref  = db.ref(`sessions/${code}/responses/${qId}`);
   const fn   = ref.on('value', snap => {
-    const responses = snap.exists() ? Object.values(snap.val()) : [];
+    const allResponses = snap.exists() ? Object.values(snap.val()) : [];
+    // ROBUST FIX: only ever use responses from the CURRENT live session.
+    // Stale responses left in Firebase from a previous run (same stable qId)
+    // are ignored entirely — never counted, displayed, or used for reveal.
+    // This is what makes the product "just work" — old data can't leak through.
+    const responses = allResponses.filter(r => (r.submittedAt || 0) >= liveStartedAt);
     const rc = document.getElementById('respCounter');
     if (rc) rc.textContent = `${responses.length} response${responses.length!==1?'s':''}`;
-    // Start the reveal countdown on the first NEW answer (submitted after this session started).
-    // Pre-existing responses from previous sessions should NOT trigger the countdown.
-    const newResponses = responses.filter(r => (r.submittedAt || 0) >= liveStartedAt);
-    if (newResponses.length > 0 && !revealArmed && !revealed) {
+    // Start the reveal countdown on the first answer of THIS session.
+    if (responses.length > 0 && !revealArmed && !revealed) {
       beginRevealCountdown();
     }
     renderRightPanel(q, responses);
@@ -1641,7 +1649,9 @@ async function resetQuestionTally(qIdx) {
     if (respListeners[qIdx]) { respListeners[qIdx](); delete respListeners[qIdx]; }
     // Step 2: Delete responses from Firebase (clears tally) — question STAYS live
     await db.ref(`sessions/${code}/responses/${stableQId}`).remove();
-    // Step 3: Clear UI and re-show the live view (still answerable)
+    // Step 3: Reset this question's session start so the cleared state is clean
+    localStorage.setItem(`ql_liveStart_${code}_${qIdx}`, Date.now());
+    // Step 4: Clear UI and re-show the live view (still answerable)
     clearRightPanel();
     toast(`Q${qIdx+1} cleared. Participants can answer again.`, 'success');
     showLiveOrEdit(qIdx);
@@ -1953,7 +1963,13 @@ function showLiveOrEdit(idx) {
   if (rb) rb.innerHTML = '';
   // Arm reveal immediately so opinion polls (no correct answer) are pre-set to revealed=true
   armReveal(questions[idx]);
-  liveStartedAt = Date.now(); // mark when this question session started
+  // liveStartedAt: the moment this question's CURRENT session began. Persist it
+  // per-question (in localStorage) so re-clicking the question doesn't drop
+  // responses already gathered this session. It only resets on Reset Tally.
+  const startKey = `ql_liveStart_${code}_${idx}`;
+  let savedStart = parseInt(localStorage.getItem(startKey) || '0', 10);
+  if (!savedStart) { savedStart = Date.now(); localStorage.setItem(startKey, savedStart); }
+  liveStartedAt = savedStart;
 
   // Live view: use the stable qId so it always matches participant responses
   const stableQId = `q${idx}_stable_${code}`;
@@ -1977,7 +1993,7 @@ async function publishLive(idx, qId) {
     ratingMax: q.ratingMax||null, ratingLabels: q.ratingLabels||null,
     image: q.image || null, videoOpts: q.videoOpts || null,
     revealDelay: q.revealDelay!==undefined ? q.revealDelay : 30,
-    status: 'active', launchedAt: Date.now()
+    status: 'active', launchedAt: liveStartedAt || Date.now()
   };
   localStorage.setItem('ql_liveQIdx_' + code, idx);
   localStorage.setItem('ql_liveQId_' + code, qId);

@@ -280,7 +280,9 @@ function watchLiveQuestion() {
     if (curQId !== q.id) {
       curQId = q.id;
       resetReveal(q);
-      liveStartedAt = Date.now();
+      // Use the presenter's authoritative launch time so "stale" means the same
+      // thing on both sides. Fall back to now if not present.
+      liveStartedAt = q.launchedAt || Date.now();
       watchResponses(q.id);
     }
     curQ = q;
@@ -293,10 +295,11 @@ function watchResponses(qId) {
   if (window._respRef) window._respRef.off();
   window._respRef = db.ref(`sessions/${sessionCode}/responses/${qId}`);
   window._respRef.on('value', snap => {
-    responses = snap.exists() ? Object.values(snap.val()) : [];
-    // Start countdown on first answer
-    const newResp = responses.filter(r => (r.submittedAt||0) >= liveStartedAt);
-    if (newResp.length > 0 && !revealArmed && !revealed) beginRevealCountdown();
+    const all = snap.exists() ? Object.values(snap.val()) : [];
+    // Only use responses from the current live session — ignore stale data
+    // left over in Firebase from a previous run of this same question.
+    responses = all.filter(r => (r.submittedAt||0) >= liveStartedAt);
+    if (responses.length > 0 && !revealArmed && !revealed) beginRevealCountdown();
     renderAll();
   });
 }
