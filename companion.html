@@ -436,30 +436,41 @@ function renderAll() {
   renderResults();
 }
 
-// Re-render on resize so the layout switches between side-by-side and stacked
+// Re-render on resize so the layout switches between side-by-side and stacked.
+// Guard: ignore resize events that our OWN fit-request caused, to avoid a
+// grow → resize → re-measure → grow feedback loop.
 let _resizeT = null;
+let _suppressResizeUntil = 0;
 window.addEventListener('resize', () => {
+  if (Date.now() < _suppressResizeUntil) return; // our own fit caused this
   clearTimeout(_resizeT);
-  _resizeT = setTimeout(() => { if (curQ) renderAll(); }, 150);
+  _resizeT = setTimeout(() => { if (curQ) renderAll(); }, 200);
 });
 
-// ── AUTO-FIT: report the content's natural size to the Mac app so the window
-// resizes to always show every response. The user can still drag to override;
-// we only request a fit when the content itself changes (new responses, mode).
+// ── AUTO-FIT: report the content's natural height to the Mac app once per
+// content change, so the window shows every response. Measures the inner
+// content (the .panes element), NOT scrollHeight of the scrolling body —
+// scrollHeight grows with the window and causes runaway growth.
+let _lastRequestedH = 0;
 function requestFitToContent() {
   try {
-    const body = document.getElementById('body');
-    if (!body) return;
-    // Natural height = content height + header/toggle bars
     const header = document.querySelector('.hd');
     const toggle = document.getElementById('toggleBar');
-    const headH = (header ? header.offsetHeight : 0) + (toggle && toggle.style.display !== 'none' ? toggle.offsetHeight : 0);
-    const contentH = body.scrollHeight;
-    const desiredH = Math.min(900, Math.max(260, headH + contentH + 24));
-    const desiredW = window.innerWidth; // keep current width; user controls width
-    // Send to the Mac app if the bridge exists
+    const panes  = document.querySelector('.panes');
+    if (!panes) return;
+    const headH = (header ? header.offsetHeight : 0)
+                + (toggle && toggle.style.display !== 'none' ? toggle.offsetHeight : 0);
+    // getBoundingClientRect height of the CONTENT, plus body padding (32 ~ 16*2)
+    const contentH = panes.getBoundingClientRect().height + 32;
+    let desiredH = Math.round(headH + contentH);
+    desiredH = Math.min(900, Math.max(260, desiredH));
+    // Only request if it changed meaningfully — prevents repeated nudges
+    if (Math.abs(desiredH - _lastRequestedH) < 10) return;
+    _lastRequestedH = desiredH;
+    // Suppress the resize echo our request will cause
+    _suppressResizeUntil = Date.now() + 600;
     if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.fit) {
-      window.webkit.messageHandlers.fit.postMessage({ height: Math.round(desiredH) });
+      window.webkit.messageHandlers.fit.postMessage({ height: desiredH });
     }
   } catch(e) {}
 }
