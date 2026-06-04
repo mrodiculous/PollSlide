@@ -176,23 +176,37 @@ const db = firebase.database();
 const letters = ['A','B','C','D','E','F'];
 const BASE_URL = "https://app.pollslide.com/answer";
 
-// ── Read the userId from the URL hash: companion#<userId> ──
-let userId = (location.hash || '').replace(/^#/, '').trim();
+// ── Parse the hash: companion#<userId>  OR  companion#<userId>/<sessionCode>/<qIndex> ──
+// The extended form is sent by the Mac app when it decodes a QR on the slide,
+// so the companion shows EXACTLY the question that QR points to.
+function parseHash() {
+  const raw = (location.hash || '').replace(/^#/, '').trim();
+  const parts = raw.split('/');
+  return {
+    userId: parts[0] || '',
+    targetSession: parts[1] || null,
+    targetQIndex: (parts.length > 2 && parts[2] !== '') ? parseInt(parts[2], 10) : null
+  };
+}
+
+let { userId, targetSession, targetQIndex } = parseHash();
 
 // ── State ──
 let sessionCode = null;
-let curQ = null;             // current question payload
-let responses = [];          // current responses array
-let viewMode = 'bars';       // user-chosen display
+let curQ = null;
+let responses = [];
+let viewMode = 'bars';
 let revealed = false;
 let revealArmed = false;
 let revealTimer = null;
 let revealRemaining = 0;
 let revealSeconds = 30;
 let curQId = null;
-let liveStartedAt = 0; // timestamp when current question went live
-let showQR = false;  // QR removed from companion
-let showMedia = true; // whether to show question image/video in companion — the OCR scanner must not read our own QR
+let liveStartedAt = 0;
+let showQR = false;
+let showMedia = true;
+let macLinkRef = null;
+let liveQRef = null;
 
 // View toggle
 function toggleMedia() {
@@ -247,15 +261,47 @@ function showWaiting(msg) {
 }
 
 // ── Boot ──
-if (!userId) {
-  showWaiting('No account linked. Re-pair the Mac app.');
-} else {
-  watchMacLink();
+function boot() {
+  if (!userId) { showWaiting('No account linked. Re-pair the Mac app.'); return; }
+  if (targetSession && targetQIndex !== null) {
+    // QR-driven mode: show exactly the question the scanned QR points to
+    showTargetedQuestion(targetSession, targetQIndex);
+  } else {
+    // Fallback: follow the account's active session via mac_link
+    watchMacLink();
+  }
+}
+boot();
+
+// Show a specific question directly from quiz_builder — guarantees it matches the QR.
+function showTargetedQuestion(session, qIdx) {
+  sessionCode = session;
+  // Detach any prior watchers
+  if (liveQRef) { liveQRef.off(); liveQRef = null; }
+  if (macLinkRef) { macLinkRef.off(); macLinkRef = null; }
+
+  db.ref(`quiz_builder/${session}/questions`).get().then(snap => {
+    const questions = snap.exists() ? snap.val() : [];
+    const q = Array.isArray(questions) ? questions[qIdx] : null;
+    if (!q || !q.text) { showWaiting('Question not found for this slide.'); return; }
+    // Build a question object consistent with what renderAll expects
+    const qId = q.id || `q${qIdx}_stable_${session}`;
+    const qObj = Object.assign({}, q, { id: qId, qIndex: qIdx });
+    if (curQId !== qId) {
+      curQId = qId;
+      resetReveal(qObj);
+      liveStartedAt = q.launchedAt || 0; // count all responses for this question
+      watchResponses(qId);
+    }
+    curQ = qObj;
+    renderAll();
+  }).catch(() => showWaiting('Could not load this question.'));
 }
 
 function watchMacLink() {
   showWaiting('Waiting for your presentation…');
-  db.ref(`mac_link/${userId}`).on('value', snap => {
+  macLinkRef = db.ref(`mac_link/${userId}`);
+  macLinkRef.on('value', snap => {
     const data = snap.val();
     if (!data || !data.sessionCode) {
       showWaiting('Open a presentation on pollslide.com to begin.');
@@ -269,19 +315,18 @@ function watchMacLink() {
 }
 
 function watchLiveQuestion() {
-  db.ref(`sessions/${sessionCode}/currentQuestion`).on('value', snap => {
+  if (liveQRef) { liveQRef.off(); liveQRef = null; }
+  liveQRef = db.ref(`sessions/${sessionCode}/currentQuestion`);
+  liveQRef.on('value', snap => {
     const q = snap.val();
     if (!q || !q.text) {
       curQ = null;
       showWaiting('Waiting for a question to go live…');
       return;
     }
-    // New question launched → reset reveal state
     if (curQId !== q.id) {
       curQId = q.id;
       resetReveal(q);
-      // Use the presenter's authoritative launch time so "stale" means the same
-      // thing on both sides. Fall back to now if not present.
       liveStartedAt = q.launchedAt || Date.now();
       watchResponses(q.id);
     }
@@ -496,10 +541,17 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 
-// Re-read userId if the hash changes (Mac app can update it)
+// React instantly when the Mac app updates the hash (new QR detected)
 window.addEventListener('hashchange', () => {
-  const newId = (location.hash||'').replace(/^#/, '').trim();
-  if (newId && newId !== userId) { userId = newId; location.reload(); }
+  const next = parseHash();
+  if (next.userId !== userId) { userId = next.userId; location.reload(); return; }
+  targetSession = next.targetSession;
+  targetQIndex = next.targetQIndex;
+  if (targetSession && targetQIndex !== null) {
+    showTargetedQuestion(targetSession, targetQIndex);
+  } else {
+    watchMacLink();
+  }
 });
 </script>
 </body>
