@@ -1485,18 +1485,63 @@ function beginRevealCountdown() {
   }, 1000);
 }
 
+// ── CONFETTI: celebratory burst on the live results when answer is revealed ──
+let _confettiCanvas = null, _confettiCtx = null, _confettiRAF = null;
+function fireConfetti() {
+  if (!_confettiCanvas) {
+    _confettiCanvas = document.createElement('canvas');
+    _confettiCanvas.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:99999;';
+    document.body.appendChild(_confettiCanvas);
+    _confettiCtx = _confettiCanvas.getContext('2d');
+  }
+  const W = _confettiCanvas.width = window.innerWidth;
+  const H = _confettiCanvas.height = window.innerHeight;
+  const colors = ['#6c63ff','#ff6584','#43e97b','#f7b731','#4facfe','#a78bfa','#ffffff'];
+  const parts = [];
+  const count = Math.min(180, Math.floor(W / 4));
+  for (let i = 0; i < count; i++) {
+    parts.push({
+      x: Math.random()*W, y: -20 - Math.random()*H*0.3,
+      vx: (Math.random()-0.5)*6, vy: 3 + Math.random()*5,
+      sz: 5 + Math.random()*7, rot: Math.random()*Math.PI*2,
+      vr: (Math.random()-0.5)*0.3, color: colors[Math.floor(Math.random()*colors.length)], life: 1
+    });
+  }
+  const start = performance.now(), dur = 2600;
+  cancelAnimationFrame(_confettiRAF);
+  const tick = (now) => {
+    const elapsed = now - start;
+    _confettiCtx.clearRect(0,0,W,H);
+    let alive = false;
+    for (const p of parts) {
+      p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.rot += p.vr;
+      if (elapsed > dur - 700) p.life = Math.max(0, (dur - elapsed)/700);
+      if (p.y < H + 30 && p.life > 0) alive = true;
+      _confettiCtx.save();
+      _confettiCtx.globalAlpha = p.life;
+      _confettiCtx.translate(p.x, p.y); _confettiCtx.rotate(p.rot);
+      _confettiCtx.fillStyle = p.color;
+      _confettiCtx.fillRect(-p.sz/2, -p.sz/2, p.sz, p.sz*0.6);
+      _confettiCtx.restore();
+    }
+    if (elapsed < dur && alive) _confettiRAF = requestAnimationFrame(tick);
+    else _confettiCtx.clearRect(0,0,W,H);
+  };
+  _confettiRAF = requestAnimationFrame(tick);
+}
+
 function doReveal() {
   revealed = true;
   if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
   renderRevealControl(false);
-  // Re-render the right pane with current data by nudging the listener:
-  // simplest is to re-trigger a read.
+  fireConfetti();
+  // Re-render the right pane immediately with the current live (filtered) responses.
   const code = presentations[activePresId]?.sessionCode;
-  if (code && liveQId) {
+  if (code && liveQId && liveQIdx !== null) {
     db.ref(`sessions/${code}/responses/${liveQId}`).get().then(snap => {
-      const responses = snap.exists() ? Object.values(snap.val()) : [];
-      if (liveQIdx !== null) renderRightPanel(questions[liveQIdx], responses);
-      // refresh respondent list too
+      const all = snap.exists() ? Object.values(snap.val()) : [];
+      const responses = all.filter(r => (r.submittedAt || 0) >= liveStartedAt);
+      renderRightPanel(questions[liveQIdx], responses);
       const pList = document.getElementById('pList');
       if (pList && responses.length) {
         pList.innerHTML = responses.map(r =>
