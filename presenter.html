@@ -573,6 +573,18 @@ let currentUser = null;
 let userId = null;
 let authMode = 'signin';
 
+// ─── PLANS & LIMITS (Stripe-ready) ───────────────────────────────────────────
+// When Stripe is added, the webhook simply writes users/{uid}/tier = 'pro'|'team'.
+// All enforcement below reads from this single config, so flipping a tier on is
+// the only change needed at that point.
+const TIERS = {
+  free: { name: 'Free',  maxPresentations: 3,        maxParticipants: 25 },
+  pro:  { name: 'Pro',   maxPresentations: Infinity, maxParticipants: Infinity },
+  team: { name: 'Team',  maxPresentations: Infinity, maxParticipants: Infinity },
+};
+let userTier = 'free';
+function tierLimits() { return TIERS[userTier] || TIERS.free; }
+
 auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
 auth.onAuthStateChanged(user => {
@@ -581,16 +593,47 @@ auth.onAuthStateChanged(user => {
     userId = user.uid;
     document.getElementById('authGate').style.display = 'none';
     document.getElementById('userBtn').style.display = '';
-    loadPresentations();
+    // Load the user's plan tier (defaults to free). Stripe webhook writes this later.
+    db.ref(`users/${userId}/tier`).once('value').then(snap => {
+      userTier = (snap.val() === 'pro' || snap.val() === 'team') ? snap.val() : 'free';
+      loadPresentations();
+    }).catch(() => { userTier = 'free'; loadPresentations(); });
   } else {
     currentUser = null;
     userId = null;
+    userTier = 'free';
     document.getElementById('authGate').style.display = 'flex';
     document.getElementById('userBtn').style.display = 'none';
   }
 });
 
 function authError(msg) { document.getElementById('authError').textContent = msg || ''; }
+
+// ─── UPGRADE PROMPT (shown when a free-tier limit is hit) ─────────────────────
+function showUpgradePrompt(headline, subtext) {
+  const old = document.getElementById('upgradeModal');
+  if (old) old.remove();
+  const m = document.createElement('div');
+  m.id = 'upgradeModal';
+  m.style.cssText = 'position:fixed;inset:0;z-index:200000;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:20px;';
+  m.onclick = e => { if (e.target === m) m.remove(); };
+  m.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:18px;padding:28px;max-width:420px;width:100%;text-align:center;">
+      <div style="font-size:34px;margin-bottom:8px;">✨</div>
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px;margin-bottom:8px;">${headline}</div>
+      <p style="color:var(--muted);font-size:14.5px;line-height:1.6;margin-bottom:20px;">${subtext}</p>
+      <div style="display:flex;gap:10px;justify-content:center;">
+        <button onclick="document.getElementById('upgradeModal').remove()" style="padding:11px 20px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:11px;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Maybe later</button>
+        <button onclick="goToUpgrade()" style="padding:11px 22px;background:var(--accent);border:none;color:#fff;border-radius:11px;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;">See plans</button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+}
+function goToUpgrade() {
+  // Placeholder until Stripe/pricing page is live. For now, point to pricing section.
+  const m = document.getElementById('upgradeModal'); if (m) m.remove();
+  window.open('https://pollslide.com/#pricing', '_blank');
+}
 
 function toggleAuthMode() {
   authMode = authMode === 'signin' ? 'signup' : 'signin';
@@ -644,16 +687,24 @@ function friendlyAuthError(code) {
 
 function showUserMenu() {
   const email = currentUser ? currentUser.email : '';
+  const lim = tierLimits();
+  const presCount = Object.keys(presentations).length;
+  const presLimitTxt = lim.maxPresentations === Infinity ? 'unlimited' : lim.maxPresentations;
+  const partLimitTxt = lim.maxParticipants === Infinity ? 'unlimited' : lim.maxParticipants;
   const choice = prompt(
-    'Signed in as ' + email + '\n\n' +
+    'Signed in as ' + email + '\n' +
+    'Plan: ' + lim.name + '  ·  ' + presCount + '/' + presLimitTxt + ' presentations  ·  ' + partLimitTxt + ' participants/poll\n\n' +
     'Type a number and press OK:\n' +
     '1 = Connect Mac App (get pairing code)\n' +
-    '2 = Sign out\n' +
+    '2 = See plans / upgrade\n' +
+    '3 = Sign out\n' +
     '(Cancel to close)'
   );
   if (choice === '1') {
     generatePairingCode();
   } else if (choice === '2') {
+    window.open('https://pollslide.com/#pricing', '_blank');
+  } else if (choice === '3') {
     auth.signOut(); location.reload();
   }
 }
@@ -834,6 +885,16 @@ async function saveCurrentPresentation() {
 
 // ─── CREATE PRESENTATION ──────────────────────────────────────────────────────
 async function createPresentation() {
+  // Free-tier limit: cap number of saved presentations
+  const limit = tierLimits().maxPresentations;
+  const current = Object.keys(presentations).length;
+  if (current >= limit) {
+    showUpgradePrompt(
+      `You've reached the ${tierLimits().name} plan limit of ${limit} presentations.`,
+      'Upgrade to Pro for unlimited presentations.'
+    );
+    return;
+  }
   const id   = 'pres_' + Date.now();
   const code = genCode();
   const name = 'New Presentation';
@@ -870,6 +931,11 @@ function selectPresentation(id) {
       sessionCode: pres.sessionCode,
       presentationName: pres.name || '',
       updatedAt: Date.now()
+    }).catch(()=>{});
+    // Publish the participant cap for this session so the answer page can enforce
+    // it. This is not sensitive — it's just a number ceiling.
+    db.ref(`sessions/${pres.sessionCode}/meta`).update({
+      maxParticipants: tierLimits().maxParticipants === Infinity ? 0 : tierLimits().maxParticipants
     }).catch(()=>{});
   }
 

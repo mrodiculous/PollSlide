@@ -461,6 +461,30 @@ async function submitToDb(answer) {
     }
   }
 
+  // ── Free-tier participant cap ──
+  // The presenter publishes a maxParticipants ceiling for the session (0 = unlimited).
+  // Count unique participants already in this session; if at the cap and this is a
+  // NEW participant, turn them away gracefully. Existing participants always get through.
+  try {
+    const metaSnap = await db.ref(`sessions/${SESSION}/meta/maxParticipants`).get();
+    const cap = metaSnap.exists() ? Number(metaSnap.val()) : 0;
+    if (cap > 0) {
+      const allSnap = await db.ref(`sessions/${SESSION}/responses`).get();
+      const ids = new Set();
+      if (allSnap.exists()) {
+        const byQ = allSnap.val();
+        Object.values(byQ).forEach(qResp => {
+          if (qResp && typeof qResp === 'object') Object.keys(qResp).forEach(pid => ids.add(pid));
+        });
+      }
+      const alreadyCounted = ids.has(participantId);
+      if (!alreadyCounted && ids.size >= cap) {
+        showSessionFull();
+        return;
+      }
+    }
+  } catch(e) { /* if the check fails, don't block the answer */ }
+
   // Store response directly in the question's bucket — no shared participants node
   await db.ref(`sessions/${SESSION}/responses/${STABLE_QID}/${participantId}`).set({
     participantId,
@@ -470,6 +494,18 @@ async function submitToDb(answer) {
     isCorrect,
     submittedAt: Date.now()
   });
+}
+
+function showSessionFull() {
+  render(`
+    <div class="logo"><span class="logo-dot"></span>PollSlide</div>
+    <div class="status-box" style="background:rgba(247,183,49,0.14);color:var(--accent4);border:1px solid rgba(247,183,49,0.3);">
+      This poll is full
+    </div>
+    <p class="center" style="color:var(--muted);font-size:13px;margin-top:8px;">
+      The presenter's plan has reached its participant limit for this session.
+    </p>
+  `);
 }
 
 // ─── SCREENS ─────────────────────────────────────────────────────────────────
