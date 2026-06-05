@@ -354,13 +354,15 @@ function watchResponses(qId) {
 function resetReveal(q) {
   revealed = false; revealArmed = false;
   if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
-  revealSeconds = (q.revealDelay !== undefined && q.revealDelay !== null) ? q.revealDelay : 30;
-  const hasCorrect = q.type !== 'free_text' && q.type !== 'rating' &&
-                     q.correctAnswer !== undefined && q.correctAnswer !== null;
-  if (!hasCorrect) revealed = true; // opinion polls always "revealed"
+  const d = q.revealDelay;
+  revealSeconds = (d === 'manual' || d === -1) ? -1 : ((d === undefined || d === null) ? 30 : +d);
+  // Quiz = choice type. These wait for reveal. Only free_text/rating show immediately.
+  const isQuiz = (q.type === 'multiple_choice' || q.type === 'multiple_choice_multi');
+  if (!isQuiz) revealed = true; // opinion polls always "revealed"
 }
 function beginRevealCountdown() {
   if (revealArmed || revealed) return;
+  if (revealSeconds === -1) { revealArmed = true; renderAll(); return; } // manual only
   revealArmed = true;
   revealRemaining = revealSeconds;
   renderAll();
@@ -385,13 +387,16 @@ function renderAll() {
 
   const media = (showMedia && curQ.image) ? mediaTag(curQ.image, curQ.videoOpts) : '';
   let revealBar = '';
-  const hasCorrect = curQ.type !== 'free_text' && curQ.type !== 'rating' &&
-                     curQ.correctAnswer !== undefined && curQ.correctAnswer !== null;
-  if (hasCorrect && !revealed) {
+  const isQuiz = (curQ.type === 'multiple_choice' || curQ.type === 'multiple_choice_multi');
+  if (isQuiz && !revealed) {
     revealBar = revealArmed
-      ? `<div class="reveal-bar"><span>Reveal in <strong class="reveal-strong" id="revealCount">${revealRemaining}s</strong></span></div>`
-      : `<div class="reveal-bar"><span>⏳ Reveal starts on first answer</span></div>`;
-  } else if (hasCorrect && revealed) {
+      ? (revealSeconds === -1
+          ? `<div class="reveal-bar"><span>Manual reveal</span></div>`
+          : `<div class="reveal-bar"><span>Reveal in <strong class="reveal-strong" id="revealCount">${revealRemaining}s</strong></span></div>`)
+      : (revealSeconds === -1
+          ? `<div class="reveal-bar"><span>Manual reveal</span></div>`
+          : `<div class="reveal-bar"><span>⏳ Reveal starts on first answer</span></div>`);
+  } else if (isQuiz && revealed) {
     revealBar = `<div class="reveal-bar"><span style="color:var(--accent3);font-weight:600;">✓ Answer revealed</span></div>`;
   }
 

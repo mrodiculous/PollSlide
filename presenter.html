@@ -1174,7 +1174,7 @@ async function launchQuestion(idx) {
   await db.ref(`sessions/${code}/currentQuestion`).set(payload);
   renderQList();
   // Set reveal delay and arm BEFORE listener fires so revealed state is correct
-  revealSeconds = (q.revealDelay !== undefined && q.revealDelay !== null) ? q.revealDelay : 30;
+  revealSeconds = normalizeRevealDelay(q.revealDelay);
   armReveal(q);
   liveStartedAt = Date.now(); // mark start of this live session
   renderLiveView(idx, qId, q);
@@ -1439,31 +1439,42 @@ function listenResponses(qIdx, qId, q) {
 // ─── ANSWER REVEAL ────────────────────────────────────────────────────────────
 // armReveal: called when a question launches. Sets up reveal state but does NOT
 // start the countdown — the countdown begins on the first answer (see listenResponses).
+function normalizeRevealDelay(d) {
+  if (d === 'manual' || d === -1) return -1;
+  if (d === undefined || d === null) return 30;
+  return +d;
+}
+
 function armReveal(q) {
-  // hasCorrect: true only if the question is a choice type AND has a real correct answer set.
-  // Handles: 0 (valid), [0] (array), null/undefined/''/[] (no answer set).
-  const _ca = q ? q.correctAnswer : undefined;
-  const hasCorrect = q &&
-    q.type !== 'free_text' && q.type !== 'rating' &&
-    _ca !== undefined && _ca !== null && _ca !== '' &&
-    !(Array.isArray(_ca) && _ca.length === 0);
   revealed = false;
   revealArmed = false;
   if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
 
-  if (!hasCorrect) {
-    // No correct answer to reveal — opinion polls show normally
-    revealed = true;
+  // A question is "revealable" (a quiz) if it's a choice type. These NEVER
+  // auto-reveal — they wait for the countdown or a manual reveal, regardless of
+  // whether the correct answer has been set yet. Only free_text and rating
+  // (genuine opinion polls) show results immediately with nothing to reveal.
+  const isQuiz = q && (q.type === 'multiple_choice' || q.type === 'multiple_choice_multi');
+
+  if (!isQuiz) {
+    revealed = true;        // opinion poll — nothing to hide
     renderRevealControl(false);
     return;
   }
-  // Waiting for the first answer to start the countdown
+
+  // Manual mode (revealDelay === -1 or 'manual'): no countdown, reveal only via button.
+  if (q.revealDelay === -1 || q.revealDelay === 'manual') {
+    revealSeconds = -1;     // signals manual-only
+  }
+  // Waiting for the first answer (or a manual reveal)
   renderRevealControl(true);
 }
 
 // beginRevealCountdown: starts the actual countdown. Called once, on first answer.
 function beginRevealCountdown() {
   if (revealArmed || revealed) return; // already counting or already revealed
+  // Manual-only mode: never auto-count; reveal happens only via the button.
+  if (revealSeconds === -1) { revealArmed = true; renderRevealControl(true); return; }
   revealArmed = true;
   revealRemaining = revealSeconds;
   renderRevealControl(true);
@@ -1506,15 +1517,16 @@ function renderRevealControl(showControl) {
     return;
   }
   if (!showControl) { bar.innerHTML = ''; return; }
-  if (!revealArmed) {
+  const btn = `<button onclick="doReveal()" style="background:var(--accent);border:none;border-radius:7px;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:11px;padding:5px 11px;cursor:pointer;">Reveal now</button>`;
+  if (revealSeconds === -1) {
+    // Manual-only mode
+    bar.innerHTML = `<span style="font-size:12px;color:var(--muted);">Manual reveal</span>${btn}`;
+  } else if (!revealArmed) {
     // Waiting for the first answer to start the countdown
-    bar.innerHTML = `
-      <span style="font-size:12px;color:var(--muted);">⏳ Reveal starts on first answer</span>
-      <button onclick="doReveal()" style="background:var(--surface3);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:'Syne',sans-serif;font-weight:700;font-size:11px;padding:5px 11px;cursor:pointer;">Reveal now</button>`;
+    bar.innerHTML = `<span style="font-size:12px;color:var(--muted);">⏳ Reveal starts on first answer</span>${btn}`;
   } else {
-    bar.innerHTML = `
-      <span style="font-size:12px;color:var(--muted);">Reveal in <strong id="revealCount" style="color:var(--accent4);">${revealRemaining}s</strong></span>
-      <button onclick="doReveal()" style="background:var(--accent);border:none;border-radius:7px;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:11px;padding:5px 11px;cursor:pointer;">Reveal now</button>`;
+    // Counting down — small live counter
+    bar.innerHTML = `<span style="font-size:12px;color:var(--muted);">Reveal in <strong id="revealCount" style="color:var(--accent4);">${revealRemaining}s</strong></span>${btn}`;
   }
 }
 
@@ -1961,7 +1973,8 @@ function showLiveOrEdit(idx) {
   if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
   const rb = document.getElementById('revealBar');
   if (rb) rb.innerHTML = '';
-  // Arm reveal immediately so opinion polls (no correct answer) are pre-set to revealed=true
+  // Arm reveal immediately; quiz questions wait, opinion polls show now
+  revealSeconds = normalizeRevealDelay(questions[idx].revealDelay);
   armReveal(questions[idx]);
   // liveStartedAt: the moment this question's CURRENT session began. Persist it
   // per-question (in localStorage) so re-clicking the question doesn't drop
@@ -2144,16 +2157,17 @@ function renderEditor(idx) {
         </div>
 
         <div class="form-row" style="margin:0">
-          <label>Reveal Correct Answer After <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(hides right/wrong until then; you can also Reveal Now during the poll)</span></label>
-          <select onchange="updateQ(${idx},'revealDelay',+this.value)" style="width:100%;">
-            <option value="10" ${q.revealDelay===10?'selected':''}>10 seconds</option>
-            <option value="15" ${q.revealDelay===15?'selected':''}>15 seconds</option>
-            <option value="20" ${q.revealDelay===20?'selected':''}>20 seconds</option>
-            <option value="30" ${(q.revealDelay===30||q.revealDelay===undefined||q.revealDelay===null)?'selected':''}>30 seconds (default)</option>
-            <option value="45" ${q.revealDelay===45?'selected':''}>45 seconds</option>
-            <option value="60" ${q.revealDelay===60?'selected':''}>60 seconds</option>
-            <option value="90" ${q.revealDelay===90?'selected':''}>90 seconds</option>
-            <option value="120" ${q.revealDelay===120?'selected':''}>2 minutes</option>
+          <label>Answer Reveal <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(right/wrong stays hidden until reveal; a counter starts after the first answer)</span></label>
+          <select onchange="updateQ(${idx},'revealDelay',this.value==='manual'?'manual':+this.value)" style="width:100%;">
+            <option value="manual" ${(q.revealDelay==='manual'||q.revealDelay===-1)?'selected':''}>Manual only — I'll click "Reveal now"</option>
+            <option value="10" ${q.revealDelay===10?'selected':''}>10 seconds after first answer</option>
+            <option value="15" ${q.revealDelay===15?'selected':''}>15 seconds after first answer</option>
+            <option value="20" ${q.revealDelay===20?'selected':''}>20 seconds after first answer</option>
+            <option value="30" ${(q.revealDelay===30||q.revealDelay===undefined||q.revealDelay===null)?'selected':''}>30 seconds after first answer (default)</option>
+            <option value="45" ${q.revealDelay===45?'selected':''}>45 seconds after first answer</option>
+            <option value="60" ${q.revealDelay===60?'selected':''}>60 seconds after first answer</option>
+            <option value="90" ${q.revealDelay===90?'selected':''}>90 seconds after first answer</option>
+            <option value="120" ${q.revealDelay===120?'selected':''}>2 minutes after first answer</option>
           </select>
         </div>
 
