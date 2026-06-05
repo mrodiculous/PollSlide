@@ -559,7 +559,7 @@ function renderResults() {
   }
 
   // Choice questions
-  const correct = Array.isArray(curQ.correctAnswer) ? curQ.correctAnswer : [curQ.correctAnswer];
+  const correct = (Array.isArray(curQ.correctAnswer) ? curQ.correctAnswer : [curQ.correctAnswer]).map(Number);
   const counts = (curQ.options||[]).map((_,i)=>({i,count:0}));
   responses.forEach(r=>{ try{const a=JSON.parse(r.answer);(Array.isArray(a)?a:[a]).forEach(v=>{if(counts[v])counts[v].count++;});}catch(e){} });
   const pct = c => total>0?Math.round(c/total*100):0;
@@ -613,8 +613,9 @@ function renderResults() {
     inner = counts.map(({i,count})=>{
       const opt=(curQ.options[i]||{});
       const showCorrect = revealed && correct.includes(i);
+      const badge = showCorrect ? ` <span style="font-size:10px;font-weight:700;color:var(--accent3);background:rgba(67,233,123,0.16);padding:1px 7px;border-radius:100px;">✓ Correct</span>` : '';
       return `<div class="bar-wrap">
-        <div class="bar-label"><span>${letters[i]}. ${escapeHtml(opt.text||'')}</span><span>${count} (${pct(count)}%)</span></div>
+        <div class="bar-label"><span>${letters[i]}. ${escapeHtml(opt.text||'')}${badge}</span><span>${count} (${pct(count)}%)</span></div>
         <div class="bar-bg"><div class="bar-fill ${showCorrect?'correct':''}" style="width:${pct(count)}%"></div></div>
       </div>`;
     }).join('');

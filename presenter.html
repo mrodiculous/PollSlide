@@ -1602,7 +1602,8 @@ function renderRightPanel(q, responses) {
       </div>`).join('')}`;
   } else {
     const _qca = q.correctAnswer; const _hasC = _qca !== undefined && _qca !== null && _qca !== '' && !(Array.isArray(_qca)&&_qca.length===0);
-    const correct = _hasC ? (Array.isArray(_qca)?_qca:[_qca]) : [];
+    // Coerce to numbers — correctAnswer can round-trip through Firebase as a string
+    const correct = _hasC ? (Array.isArray(_qca)?_qca:[_qca]).map(Number) : [];
     const counts=(q.options||[]).map((_,i)=>({i,count:0}));
     responses.forEach(r=>{try{const a=JSON.parse(r.answer);(Array.isArray(a)?a:[a]).forEach(v=>{if(counts[v])counts[v].count++;});}catch(e){}});
     const mode = q.displayMode || 'bars';
@@ -1672,8 +1673,9 @@ function renderRightPanel(q, responses) {
         const hasImg=opt.img&&opt.img.trim();
         // Only show the green "correct" highlight after reveal
         const showCorrect = revealed && correct.includes(i);
+        const correctBadge = showCorrect ? ` <span style="font-size:10px;font-weight:700;color:var(--accent3);background:rgba(67,233,123,0.16);padding:1px 7px;border-radius:100px;margin-left:4px;">✓ Correct</span>` : '';
         return `<div class="bar-wrap">
-        <div class="bar-label"><span class="bn">${hasImg?`<img src="${opt.img}" style="width:18px;height:18px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:5px;" onerror="this.style.display='none'">`:''}${letters[i]}. ${opt.text||''}</span><span class="bv">${count} (${pct(count)}%)</span></div>
+        <div class="bar-label"><span class="bn">${hasImg?`<img src="${opt.img}" style="width:18px;height:18px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:5px;" onerror="this.style.display='none'">`:''}${letters[i]}. ${opt.text||''}${correctBadge}</span><span class="bv">${count} (${pct(count)}%)</span></div>
         <div class="bar-bg"><div class="bar-fill ${showCorrect?'correct':''}" style="width:${pct(count)}%"></div></div>
       </div>`;}).join('');
     }
@@ -2174,31 +2176,15 @@ function renderEditor(idx) {
           ${q.image&&isVideoUrl(q.image)?renderVideoOpts(idx,'q')+'':''}
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-          <div class="form-row" style="margin:0">
-            <label>Countdown Timer</label>
-            <select onchange="updateQ(${idx},'timer',+this.value)" style="width:100%;">
-              <option value="0"  ${!q.timer?'selected':''}>No timer</option>
-              <option value="10" ${q.timer===10?'selected':''}>10 seconds</option>
-              <option value="15" ${q.timer===15?'selected':''}>15 seconds</option>
-              <option value="20" ${q.timer===20?'selected':''}>20 seconds</option>
-              <option value="30" ${q.timer===30?'selected':''}>30 seconds</option>
-              <option value="45" ${q.timer===45?'selected':''}>45 seconds</option>
-              <option value="60" ${q.timer===60?'selected':''}>60 seconds</option>
-              <option value="90" ${q.timer===90?'selected':''}>90 seconds</option>
-              <option value="120" ${q.timer===120?'selected':''}>2 minutes</option>
-            </select>
-          </div>
-          <div class="form-row" style="margin:0">
-            <label>Results Display</label>
-            <select onchange="updateQ(${idx},'displayMode',this.value)" style="width:100%;">
-              <option value="bars"        ${(q.displayMode||'bars')==='bars'?'selected':''}>Bar chart</option>
-              <option value="donut"       ${q.displayMode==='donut'?'selected':''}>Donut chart</option>
-              <option value="pie"         ${q.displayMode==='pie'?'selected':''}>Pie chart</option>
-              <option value="leaderboard" ${q.displayMode==='leaderboard'?'selected':''}>Leaderboard (names)</option>
-              <option value="number"      ${q.displayMode==='number'?'selected':''}>Big numbers</option>
-            </select>
-          </div>
+        <div class="form-row" style="margin:0 0 12px">
+          <label>Results Display</label>
+          <select onchange="updateQ(${idx},'displayMode',this.value)" style="width:100%;">
+            <option value="bars"        ${(q.displayMode||'bars')==='bars'?'selected':''}>Bar chart</option>
+            <option value="donut"       ${q.displayMode==='donut'?'selected':''}>Donut chart</option>
+            <option value="pie"         ${q.displayMode==='pie'?'selected':''}>Pie chart</option>
+            <option value="leaderboard" ${q.displayMode==='leaderboard'?'selected':''}>Leaderboard (names)</option>
+            <option value="number"      ${q.displayMode==='number'?'selected':''}>Big numbers</option>
+          </select>
         </div>
 
         <div class="form-row" style="margin:0">
