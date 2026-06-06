@@ -172,6 +172,7 @@ let participantId   = null;
 let participantName = null;
 let questionData    = null;
 let answered        = false;
+let submitting      = false; // prevent double-submit on slow connections
 let selectedOptions = new Set();
 let answerStartTime = null;
 
@@ -212,7 +213,7 @@ function showNameEntry() {
     <h1>Enter Your Name</h1>
     <p class="subtitle">You only need to do this once per session.</p>
     <label>Your Name</label>
-    <input type="text" id="nameInput" placeholder="Your name" maxlength="30" autofocus>
+    <input type="text" id="nameInput" maxlength="60" placeholder="Your name" maxlength="30" autofocus>
     <button class="btn btn-primary" onclick="joinSession()">Continue →</button>
     <p id="nameErr" style="color:var(--accent2);font-size:13px;margin-top:10px;text-align:center;"></p>
   `);
@@ -223,7 +224,7 @@ function joinSession() {
   const name = document.getElementById('nameInput').value.trim();
   if (!name) { document.getElementById('nameErr').textContent = 'Please enter your name.'; return; }
 
-  participantName = name;
+  participantName = name.slice(0, 60); // cap at 60 chars — prevents DB abuse
   // Generate a unique ID for this person in this session
   participantId = 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
 
@@ -444,6 +445,8 @@ function submitAnswer() {
 }
 
 async function submitToDb(answer) {
+  if (submitting) return; // prevent double-submit
+  submitting = true;
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
   const elapsed = Date.now() - (answerStartTime || Date.now());
   const q = questionData;
@@ -485,15 +488,20 @@ async function submitToDb(answer) {
     }
   } catch(e) { /* if the check fails, don't block the answer */ }
 
-  // Store response directly in the question's bucket — no shared participants node
-  await db.ref(`sessions/${SESSION}/responses/${STABLE_QID}/${participantId}`).set({
-    participantId,
-    name: participantName,
-    answer: answer === null || answer === undefined ? '__none__' : JSON.stringify(answer),
-    elapsed,
-    isCorrect,
-    submittedAt: Date.now()
-  });
+  // Store response (submitting flag prevents double-taps on slow connections)
+  try {
+    await db.ref(`sessions/${SESSION}/responses/${STABLE_QID}/${participantId}`).set({
+      participantId,
+      name: participantName,
+      answer: answer === null || answer === undefined ? '__none__' : JSON.stringify(answer),
+      elapsed,
+      isCorrect,
+      submittedAt: Date.now()
+    });
+  } catch(e) {
+    submitting = false;
+    toast('Could not submit — check your connection and try again.', 'danger');
+  }
 }
 
 function showSessionFull() {
