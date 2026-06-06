@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PollSlide Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<style>
+:root{--bg:#07070f;--bg2:#0d0d18;--surface:#13131f;--surface2:#1a1a2c;--border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.14);--accent:#6c63ff;--accent2:#ff6584;--accent3:#43e97b;--accent4:#f7b731;--text:#f4f4fc;--muted:#9090b8;--r:12px;}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;}
+.hidden{display:none!important;}
+a{color:inherit;text-decoration:none;}
+
+/* AUTH */
+#authGate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:1000;}
+.auth-box{background:var(--surface);border:1px solid var(--border2);border-radius:18px;padding:36px;width:360px;}
+.auth-box h1{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:4px;}
+.auth-box p{color:var(--muted);font-size:14px;margin-bottom:22px;}
+.field{margin-bottom:13px;}
+.field label{display:block;font-size:12px;font-weight:600;margin-bottom:5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+input[type=email],input[type=password],input[type=text],input[type=search],textarea,select{width:100%;padding:10px 13px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;}
+input:focus,textarea:focus,select:focus{border-color:var(--accent);}
+textarea{resize:vertical;min-height:80px;}
+
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 16px;border-radius:9px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;border:none;cursor:pointer;transition:opacity .15s,transform .1s;white-space:nowrap;}
+.btn:hover{opacity:.85;}
+.btn:active{transform:scale(.98);}
+.btn-primary{background:var(--accent);color:#fff;}
+.btn-full{width:100%;padding:13px;}
+.btn-sm{padding:6px 12px;font-size:12px;}
+.btn-ghost{background:var(--surface2);border:1px solid var(--border2);color:var(--text);}
+.btn-green{background:rgba(67,233,123,.15);border:1px solid rgba(67,233,123,.3);color:var(--accent3);}
+.btn-amber{background:rgba(247,183,49,.15);border:1px solid rgba(247,183,49,.3);color:var(--accent4);}
+.btn-red{background:rgba(255,101,132,.15);border:1px solid rgba(255,101,132,.3);color:var(--accent2);}
+.btn-purple{background:rgba(108,99,255,.15);border:1px solid rgba(108,99,255,.3);color:var(--accent);}
+.err{color:var(--accent2);font-size:13px;margin-top:8px;text-align:center;}
+
+/* LAYOUT */
+#app{display:flex;min-height:100vh;}
+.sidebar{width:210px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:14px 0;}
+.s-logo{display:flex;align-items:center;gap:9px;padding:6px 16px 18px;font-family:'Syne',sans-serif;font-weight:800;font-size:17px;}
+.s-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);}
+.a-badge{font-size:9px;font-weight:700;background:rgba(108,99,255,.2);color:var(--accent);padding:2px 6px;border-radius:100px;letter-spacing:.06em;}
+.nav-item{display:flex;align-items:center;gap:9px;padding:9px 16px;cursor:pointer;font-size:13.5px;font-weight:500;color:var(--muted);transition:background .1s,color .1s;position:relative;}
+.nav-item:hover{background:var(--surface2);color:var(--text);}
+.nav-item.active{background:rgba(108,99,255,.13);color:var(--accent);}
+.nav-item svg{width:17px;height:17px;flex-shrink:0;}
+.nav-badge{position:absolute;right:14px;background:var(--accent2);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:100px;min-width:18px;text-align:center;}
+.nav-sep{height:1px;background:var(--border);margin:7px 0;}
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:0 22px;height:58px;border-bottom:1px solid var(--border);flex-shrink:0;gap:14px;}
+.topbar-title{font-family:'Syne',sans-serif;font-weight:800;font-size:17px;}
+.topbar-right{display:flex;align-items:center;gap:10px;}
+#adminEmailDisplay{font-size:12px;color:var(--muted);}
+.content{flex:1;overflow-y:auto;padding:22px;}
+
+/* STATS */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:22px;}
+.stat{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);padding:16px 18px;}
+.stat-val{font-family:'Syne',sans-serif;font-weight:800;font-size:28px;line-height:1;}
+.stat-label{font-size:12px;color:var(--muted);margin-top:4px;}
+.stat-sub{font-size:11px;color:var(--accent3);margin-top:2px;}
+
+/* CARDS / TABLES */
+.card{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);overflow:hidden;margin-bottom:16px;}
+.card-hd{padding:13px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.card-hd h2{font-family:'Syne',sans-serif;font-weight:700;font-size:14px;}
+.card-hd-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.search-input{padding:7px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;outline:none;width:200px;}
+.search-input:focus{border-color:var(--accent);}
+table{width:100%;border-collapse:collapse;}
+th{padding:10px 16px;text-align:left;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);}
+td{padding:11px 16px;font-size:13.5px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tr:last-child td{border-bottom:none;}
+tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
+.pill{display:inline-flex;align-items:center;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700;}
+.pill-free{background:rgba(144,144,184,.15);color:var(--muted);}
+.pill-pro{background:rgba(108,99,255,.18);color:var(--accent);}
+.pill-team{background:rgba(67,233,123,.14);color:var(--accent3);}
+.pill-info{background:rgba(108,99,255,.18);color:var(--accent);}
+.pill-warn{background:rgba(247,183,49,.16);color:var(--accent4);}
+.pill-danger{background:rgba(255,101,132,.15);color:var(--accent2);}
+.pill-open{background:rgba(255,101,132,.15);color:var(--accent2);}
+.pill-resolved{background:rgba(67,233,123,.14);color:var(--accent3);}
+.link-action{color:var(--accent);cursor:pointer;font-size:13px;font-weight:600;}
+.link-action:hover{text-decoration:underline;}
+.empty{text-align:center;padding:48px 24px;color:var(--muted);font-size:14px;}
+.loader{text-align:center;padding:40px;color:var(--muted);}
+
+/* DETAIL PANEL */
+#detailPanel{position:fixed;top:0;right:0;width:420px;height:100vh;background:var(--surface);border-left:1px solid var(--border2);z-index:500;overflow-y:auto;transform:translateX(100%);transition:transform .25s ease;display:flex;flex-direction:column;}
+#detailPanel.open{transform:translateX(0);}
+.dp-header{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.dp-header h2{font-family:'Syne',sans-serif;font-weight:800;font-size:16px;}
+.close-x{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);font-size:15px;}
+.dp-body{padding:18px;overflow-y:auto;flex:1;}
+.dp-section{margin-bottom:20px;}
+.dp-section h3{font-family:'Syne',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:9px;}
+.dp-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);}
+.dp-row:last-child{border-bottom:none;}
+.dp-row .lbl{color:var(--muted);}
+.action-col{display:flex;flex-direction:column;gap:7px;}
+.tier-btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;}
+
+/* NOTES */
+.note-item{background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:8px;}
+.note-meta{font-size:11px;color:var(--muted);margin-top:4px;}
+.note-text{font-size:13px;line-height:1.5;}
+
+/* TICKET */
+.ticket-item{padding:14px 18px;border-bottom:1px solid var(--border);cursor:pointer;}
+.ticket-item:last-child{border-bottom:none;}
+.ticket-item:hover{background:rgba(255,255,255,.02);}
+.ticket-subj{font-size:14px;font-weight:500;}
+.ticket-meta{font-size:12px;color:var(--muted);margin-top:3px;}
+
+/* TOAST */
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(60px);background:var(--surface2);border:1px solid var(--border2);border-radius:11px;padding:11px 20px;font-size:14px;font-weight:500;transition:transform .25s;z-index:9999;white-space:nowrap;pointer-events:none;}
+#toast.show{transform:translateX(-50%) translateY(0);}
+#toast.success{border-color:rgba(67,233,123,.4);color:var(--accent3);}
+#toast.danger{border-color:rgba(255,101,132,.4);color:var(--accent2);}
+#toast.info{border-color:rgba(108,99,255,.4);color:var(--accent);}
+
+/* CONFIRM MODAL */
+#confirmModal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;}
+.confirm-box{background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:28px;max-width:380px;width:100%;}
+.confirm-box h3{font-family:'Syne',sans-serif;font-weight:800;font-size:18px;margin-bottom:8px;}
+.confirm-box p{color:var(--muted);font-size:14px;line-height:1.6;margin-bottom:22px;}
+.confirm-btns{display:flex;gap:10px;justify-content:flex-end;}
+
+/* TICKER BADGE */
+#ticketBadge{display:none;}
+</style>
+</head>
+<body>
+
+<div id="authGate">
+  <div class="auth-box">
+    <h1>Admin Panel</h1>
+    <p>PollSlide support — authorised access only.</p>
+    <div class="field"><label>Email</label><input type="email" id="adminEmail" placeholder="help@pollslide.com"></div>
+    <div class="field"><label>Password</label><input type="password" id="adminPass" placeholder="••••••••" onkeydown="if(event.key==='Enter')adminSignIn()"></div>
+    <button class="btn btn-primary btn-full" onclick="adminSignIn()">Sign in to admin</button>
+    <div class="err" id="authErr"></div>
+  </div>
+</div>
+
+<div id="app" class="hidden">
+  <nav class="sidebar">
+    <div class="s-logo"><span class="s-dot"></span>PollSlide <span class="a-badge">ADMIN</span></div>
+    <div class="nav-item active" onclick="showPage('dashboard')" id="nav-dashboard">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Dashboard
+    </div>
+    <div class="nav-item" onclick="showPage('users')" id="nav-users">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Users
+    </div>
+    <div class="nav-item" onclick="showPage('tickets')" id="nav-tickets">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Support tickets
+      <span class="nav-badge hidden" id="ticketBadge">0</span>
+    </div>
+    <div class="nav-item" onclick="showPage('messages')" id="nav-messages">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>Broadcast
+    </div>
+    <div class="nav-item" onclick="showPage('search')" id="nav-search">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Lookup
+    </div>
+    <div class="nav-sep"></div>
+    <div class="nav-item" onclick="adminSignOut()">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign out
+    </div>
+  </nav>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title" id="pageTitle">Dashboard</div>
+      <div class="topbar-right">
+        <span id="adminEmailDisplay"></span>
+        <button class="btn btn-sm btn-ghost" onclick="exportUsersCSV()">⬇ Export CSV</button>
+      </div>
+    </div>
+    <div class="content" id="content"></div>
+  </div>
+</div>
+
+<div id="detailPanel">
+  <div class="dp-header">
+    <h2 id="dpTitle">User detail</h2>
+    <div class="close-x" onclick="closeDetail()">✕</div>
+  </div>
+  <div class="dp-body" id="dpBody"></div>
+</div>
+
+<div id="confirmModal" class="hidden">
+  <div class="confirm-box">
+    <h3 id="confirmTitle">Are you sure?</h3>
+    <p id="confirmMsg"></p>
+    <div class="confirm-btns">
+      <button class="btn btn-ghost btn-sm" onclick="hideConfirm()">Cancel</button>
+      <button class="btn btn-sm btn-red" id="confirmOkBtn">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const FB = {
+  apiKey:"AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME",
+  authDomain:"echonest-live-survey.firebaseapp.com",
+  databaseURL:"https://echonest-live-survey-default-rtdb.firebaseio.com",
+  projectId:"echonest-live-survey",
+  storageBucket:"echonest-live-survey.firebasestorage.app",
+  messagingSenderId:"285529140046",
+  appId:"1:285529140046:web:983c1ee8000a2ca8f80c1f"
+};
+firebase.initializeApp(FB);
+const auth = firebase.auth();
+const db   = firebase.database();
+
+// ─── ADMIN EMAILS ─────────────────────────────────────────────────────────────
+// Only these emails can access the admin panel.
+// Add team members here when needed.
+const ADMIN_EMAILS = ['help@pollslide.com'];
+
+let allUsers = {};
+let currentAdminUid = null;
+let currentAdminEmail = '';
+let currentPage = 'dashboard';
+let openTicketCount = 0;
+
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
+auth.onAuthStateChanged(async user => {
+  if (user && ADMIN_EMAILS.includes(user.email)) {
+    currentAdminUid  = user.uid;
+    currentAdminEmail = user.email;
+    document.getElementById('authGate').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    document.getElementById('adminEmailDisplay').textContent = user.email;
+    await loadAllUsers();
+    watchOpenTickets();
+    showPage('dashboard');
+  } else if (user) {
+    auth.signOut();
+    document.getElementById('authErr').textContent = 'Not authorised as admin.';
+  }
+});
+
+function adminSignIn() {
+  const email = document.getElementById('adminEmail').value.trim();
+  const pass  = document.getElementById('adminPass').value;
+  document.getElementById('authErr').textContent = '';
+  if (!ADMIN_EMAILS.includes(email)) {
+    document.getElementById('authErr').textContent = 'Not authorised as admin.';
+    return;
+  }
+  auth.signInWithEmailAndPassword(email, pass)
+    .catch(e => { document.getElementById('authErr').textContent = e.message; });
+}
+
+function adminSignOut() {
+  auth.signOut().then(() => {
+    document.getElementById('authGate').classList.remove('hidden');
+    document.getElementById('app').classList.add('hidden');
+    allUsers = {};
+  });
+}
+
+// ─── LOAD USERS ───────────────────────────────────────────────────────────────
+async function loadAllUsers() {
+  try {
+    const snap = await db.ref('admin/users_index').get();
+    allUsers = snap.exists() ? snap.val() : {};
+    // Fall back to reading users directly (bootstrap)
+    if (!Object.keys(allUsers).length) {
+      const uSnap = await db.ref('users').get();
+      if (uSnap.exists()) {
+        allUsers = uSnap.val();
+        await db.ref('admin/users_index').set(allUsers);
+      }
+    }
+  } catch(e) { toast('Could not load users — check Firebase rules.','danger'); }
+}
+
+// ─── PAGES ────────────────────────────────────────────────────────────────────
+function showPage(page) {
+  currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  const nav = document.getElementById('nav-'+page);
+  if (nav) nav.classList.add('active');
+  const titles={dashboard:'Dashboard',users:'Users',tickets:'Support Tickets',messages:'Broadcast Message',search:'Lookup'};
+  document.getElementById('pageTitle').textContent = titles[page]||page;
+  closeDetail();
+  renderPage();
+}
+
+function renderPage() {
+  if (currentPage==='dashboard') renderDashboard();
+  else if (currentPage==='users')   renderUsers();
+  else if (currentPage==='tickets') renderTickets();
+  else if (currentPage==='messages') renderMessages();
+  else if (currentPage==='search')  renderSearch();
+}
+
+// ─── DASHBOARD ────────────────────────────────────────────────────────────────
+function renderDashboard() {
+  const users = Object.values(allUsers);
+  const total = users.length;
+  const week  = 7*24*60*60*1000;
+  const now   = Date.now();
+  const active7 = users.filter(u=>(u.lastSeen||0)>now-week).length;
+  const totalPres = users.reduce((n,u)=>n+Object.keys(u.presentations||{}).length,0);
+  const pro   = users.filter(u=>u.tier==='pro').length;
+  const team  = users.filter(u=>u.tier==='team').length;
+  const free  = total-pro-team;
+  const flagged = users.filter(u=>u.flagged).length;
+
+  document.getElementById('content').innerHTML = `
+  <div class="stat-grid">
+    <div class="stat"><div class="stat-val">${total}</div><div class="stat-label">Total users</div></div>
+    <div class="stat"><div class="stat-val">${active7}</div><div class="stat-label">Active this week</div><div class="stat-sub">${total?Math.round(active7/total*100):0}% retention</div></div>
+    <div class="stat"><div class="stat-val">${totalPres}</div><div class="stat-label">Presentations</div></div>
+    <div class="stat"><div class="stat-val">${pro+team}</div><div class="stat-label">Paid accounts</div></div>
+    <div class="stat"><div class="stat-val">${openTicketCount}</div><div class="stat-label">Open tickets</div></div>
+    <div class="stat"><div class="stat-val">${flagged}</div><div class="stat-label">Flagged accounts</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><h2>Plan breakdown</h2></div>
+    <table>
+      <thead><tr><th>Plan</th><th>Users</th><th>Share</th></tr></thead>
+      <tbody>
+        <tr><td><span class="pill pill-free">Free</span></td><td>${free}</td><td>${total?Math.round(free/total*100):0}%</td></tr>
+        <tr><td><span class="pill pill-pro">Pro</span></td><td>${pro}</td><td>${total?Math.round(pro/total*100):0}%</td></tr>
+        <tr><td><span class="pill pill-team">Team</span></td><td>${team}</td><td>${total?Math.round(team/total*100):0}%</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><h2>Recent sign-ups</h2>
+      <button class="btn btn-sm btn-ghost" onclick="showPage('users')">See all →</button>
+    </div>
+    <table>
+      <thead><tr><th>Email</th><th>Signed up</th><th>Plan</th><th></th></tr></thead>
+      <tbody>
+        ${Object.entries(allUsers)
+          .sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0)).slice(0,8)
+          .map(([uid,u])=>`<tr class="clickable" onclick="openDetail('${uid}')">
+            <td>${u.email||'—'}</td>
+            <td style="color:var(--muted);font-size:12px;">${u.createdAt?new Date(u.createdAt).toLocaleDateString():'—'}</td>
+            <td><span class="pill pill-${u.tier||'free'}">${u.tier||'free'}</span>${u.flagged?'<span class="pill pill-danger" style="margin-left:5px;">⚑ flagged</span>':''}</td>
+            <td><span class="link-action">View</span></td>
+          </tr>`).join('')||'<tr><td colspan="4" class="empty">No users yet</td></tr>'}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+// ─── USERS ────────────────────────────────────────────────────────────────────
+let userQ = '', userFilter = 'all';
+function renderUsers(q, f) {
+  if (q!==undefined) userQ=q;
+  if (f!==undefined) userFilter=f;
+  const entries = Object.entries(allUsers).filter(([uid,u])=>{
+    if (userQ && !(u.email||'').toLowerCase().includes(userQ.toLowerCase())) return false;
+    if (userFilter==='pro' && u.tier!=='pro') return false;
+    if (userFilter==='team' && u.tier!=='team') return false;
+    if (userFilter==='free' && u.tier && u.tier!=='free') return false;
+    if (userFilter==='flagged' && !u.flagged) return false;
+    return true;
+  }).sort((a,b)=>(b[1].lastSeen||b[1].createdAt||0)-(a[1].lastSeen||a[1].createdAt||0));
+
+  document.getElementById('content').innerHTML = `
+  <div class="card">
+    <div class="card-hd">
+      <h2>${entries.length} users</h2>
+      <div class="card-hd-actions">
+        <input class="search-input" placeholder="Search email…" value="${userQ}" oninput="renderUsers(this.value)">
+        <select style="width:120px;padding:7px 10px;font-size:12px;" onchange="renderUsers(undefined,this.value)">
+          <option value="all" ${userFilter==='all'?'selected':''}>All plans</option>
+          <option value="free" ${userFilter==='free'?'selected':''}>Free</option>
+          <option value="pro"  ${userFilter==='pro'?'selected':''}>Pro</option>
+          <option value="team" ${userFilter==='team'?'selected':''}>Team</option>
+          <option value="flagged" ${userFilter==='flagged'?'selected':''}>Flagged</option>
+        </select>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>Email</th><th>Plan</th><th>Presentations</th><th>Last seen</th><th>Signed up</th><th></th></tr></thead>
+      <tbody>
+        ${entries.length ? entries.map(([uid,u])=>`<tr class="clickable" onclick="openDetail('${uid}')">
+          <td>${u.email||'—'}${u.flagged?' <span class="pill pill-danger" style="margin-left:4px;">⚑</span>':''}</td>
+          <td><span class="pill pill-${u.tier||'free'}">${u.tier||'free'}</span></td>
+          <td>${Object.keys(u.presentations||{}).length}</td>
+          <td style="font-size:12px;color:var(--muted);">${u.lastSeen?timeAgo(u.lastSeen):'—'}</td>
+          <td style="font-size:12px;color:var(--muted);">${u.createdAt?new Date(u.createdAt).toLocaleDateString():'—'}</td>
+          <td><span class="link-action">View →</span></td>
+        </tr>`).join('') : '<tr><td colspan="6" class="empty">No users found</td></tr>'}
+      </tbody>
+    </table>
+  </div>`;
+}
+
+// ─── USER DETAIL ──────────────────────────────────────────────────────────────
+function openDetail(uid) {
+  const u = allUsers[uid]; if (!u) return;
+  document.getElementById('dpTitle').textContent = u.email || 'User';
+  renderDetailBody(uid);
+  document.getElementById('detailPanel').classList.add('open');
+}
+
+function renderDetailBody(uid) {
+  const u = allUsers[uid]; if (!u) return;
+  const pres = u.presentations || {};
+  const presCount = Object.keys(pres).length;
+  const tc = u.tier==='pro'?'pill-pro':u.tier==='team'?'pill-team':'pill-free';
+
+  document.getElementById('dpBody').innerHTML = `
+  <div class="dp-section">
+    <h3>Account info</h3>
+    <div class="dp-row"><span class="lbl">Email</span><span>${u.email||'—'}</span></div>
+    <div class="dp-row"><span class="lbl">UID</span><span style="font-size:10px;word-break:break-all;text-align:right;max-width:220px;">${uid}</span></div>
+    <div class="dp-row"><span class="lbl">Plan</span><span class="pill ${tc}">${u.tier||'free'}</span></div>
+    <div class="dp-row"><span class="lbl">Signed up</span><span>${u.createdAt?new Date(u.createdAt).toLocaleDateString():'—'}</span></div>
+    <div class="dp-row"><span class="lbl">Last seen</span><span>${u.lastSeen?new Date(u.lastSeen).toLocaleString():'—'}</span></div>
+    <div class="dp-row"><span class="lbl">Presentations</span><span>${presCount} / ${u.tier==='pro'||u.tier==='team'?'∞':'3'}</span></div>
+    ${u.flagged?`<div class="dp-row"><span class="lbl">Status</span><span class="pill pill-danger">⚑ Flagged</span></div>`:''}
+  </div>
+
+  <div class="dp-section">
+    <h3>Change plan</h3>
+    <div class="tier-btns">
+      <button class="btn btn-sm btn-ghost" onclick="setTier('${uid}','free')">Free</button>
+      <button class="btn btn-sm btn-ghost" style="border-color:var(--accent);color:var(--accent)" onclick="setTier('${uid}','pro')">Pro</button>
+      <button class="btn btn-sm btn-ghost" style="border-color:var(--accent3);color:var(--accent3)" onclick="setTier('${uid}','team')">Team</button>
+    </div>
+  </div>
+
+  <div class="dp-section">
+    <h3>Send message to user</h3>
+    <select id="msgTypeDP" style="margin-bottom:7px;">
+      <option value="info">Info</option>
+      <option value="warning">Warning</option>
+      <option value="success">Good news</option>
+    </select>
+    <textarea id="msgTextDP" placeholder="Write a message — shown as a notification when they next open PollSlide…"></textarea>
+    <button class="btn btn-sm btn-purple" style="margin-top:7px;width:100%;" onclick="sendMsgFromDetail('${uid}')">Send message</button>
+  </div>
+
+  <div class="dp-section">
+    <h3>Admin notes (internal)</h3>
+    <div id="notesArea"></div>
+    <textarea id="newNote" placeholder="Add an internal note…" style="margin-top:7px;"></textarea>
+    <button class="btn btn-sm btn-ghost" style="margin-top:7px;width:100%;" onclick="addNote('${uid}')">Save note</button>
+  </div>
+
+  <div class="dp-section">
+    <h3>Presentations</h3>
+    ${presCount===0?'<div style="color:var(--muted);font-size:13px;">No presentations</div>':
+      Object.entries(pres).map(([pid,p])=>`
+        <div class="dp-row">
+          <span>${p.name||'Untitled'}</span>
+          <span style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:11px;color:var(--muted);">${Object.keys(p.questions||{}).length||0} q</span>
+            ${p.sessionCode?`<span class="link-action" style="font-size:11px;" onclick="openSession('${p.sessionCode}')">Open →</span>`:''}
+          </span>
+        </div>`).join('')}
+  </div>
+
+  <div class="dp-section">
+    <h3>Account actions</h3>
+    <div class="action-col">
+      <button class="btn btn-sm btn-ghost" onclick="sendPasswordReset('${u.email||''}')">📧 Send password reset email</button>
+      <button class="btn btn-sm btn-amber" onclick="resetSessions('${uid}')">↺ Reset all response tallies</button>
+      <button class="btn btn-sm ${u.flagged?'btn-green':'btn-amber'}" onclick="toggleFlag('${uid}')">${u.flagged?'✓ Remove flag':'⚑ Flag account'}</button>
+      <button class="btn btn-sm btn-red" onclick="confirmDeleteAccount('${uid}')">⚠ Delete account</button>
+    </div>
+  </div>`;
+
+  loadNotes(uid);
+}
+
+function closeDetail() { document.getElementById('detailPanel').classList.remove('open'); }
+
+// ─── PLAN OVERRIDE ────────────────────────────────────────────────────────────
+async function setTier(uid, tier) {
+  try {
+    await db.ref(`users/${uid}/tier`).set(tier);
+    await db.ref(`admin/users_index/${uid}/tier`).set(tier);
+    allUsers[uid].tier = tier;
+    toast('Plan set to ' + tier, 'success');
+    renderDetailBody(uid); renderPage();
+  } catch(e) { toast('Failed: '+e.message,'danger'); }
+}
+
+// ─── PASSWORD RESET ───────────────────────────────────────────────────────────
+function sendPasswordReset(email) {
+  if (!email) { toast('No email on this account.','danger'); return; }
+  auth.sendPasswordResetEmail(email)
+    .then(()=>toast('Password reset email sent to '+email,'success'))
+    .catch(e=>toast('Error: '+e.message,'danger'));
+}
+
+// ─── SESSION RESET ────────────────────────────────────────────────────────────
+function resetSessions(uid) {
+  showConfirm('Reset all tallies?',
+    'This clears all response data for this user\'s presentations. Questions stay live.',
+    async ()=>{
+      const pres = allUsers[uid]?.presentations||{};
+      const jobs = Object.values(pres).filter(p=>p.sessionCode)
+        .map(p=>db.ref(`sessions/${p.sessionCode}/responses`).remove());
+      await Promise.all(jobs);
+      toast('Tallies reset.','success');
+    });
+}
+
+// ─── FLAG / UNFLAG ────────────────────────────────────────────────────────────
+async function toggleFlag(uid) {
+  const isFlagged = allUsers[uid]?.flagged;
+  try {
+    if (isFlagged) {
+      await db.ref(`admin/flags/${uid}`).remove();
+      await db.ref(`admin/users_index/${uid}/flagged`).remove();
+      delete allUsers[uid].flagged;
+      toast('Flag removed.','success');
+    } else {
+      const reason = prompt('Reason for flagging this account (logged internally):');
+      if (!reason) return;
+      await db.ref(`admin/flags/${uid}`).set({reason,flaggedAt:Date.now(),flaggedBy:currentAdminEmail});
+      await db.ref(`admin/users_index/${uid}/flagged`).set(true);
+      allUsers[uid].flagged = true;
+      toast('Account flagged.','success');
+    }
+    renderDetailBody(uid); renderPage();
+  } catch(e) { toast('Error: '+e.message,'danger'); }
+}
+
+// ─── DELETE ACCOUNT ───────────────────────────────────────────────────────────
+function confirmDeleteAccount(uid) {
+  const email = allUsers[uid]?.email||uid;
+  showConfirm('Delete account permanently?',
+    `This will delete all data for ${email} — presentations, responses, and their account record. This cannot be undone.`,
+    async ()=>{
+      try {
+        // Delete user data from Firebase (Auth deletion needs server-side; log it for manual follow-up)
+        await db.ref(`users/${uid}`).remove();
+        await db.ref(`admin/users_index/${uid}`).remove();
+        await db.ref(`admin/deleted_accounts/${uid}`).set({email,deletedAt:Date.now(),deletedBy:currentAdminEmail});
+        delete allUsers[uid];
+        closeDetail();
+        toast('Account data deleted. Firebase Auth deletion requires the Admin SDK — see admin/deleted_accounts.','info');
+        renderPage();
+      } catch(e) { toast('Error: '+e.message,'danger'); }
+    });
+}
+
+// ─── NOTES ───────────────────────────────────────────────────────────────────
+async function loadNotes(uid) {
+  const el = document.getElementById('notesArea'); if (!el) return;
+  try {
+    const snap = await db.ref(`admin/notes/${uid}`).get();
+    if (!snap.exists()) { el.innerHTML='<div style="color:var(--muted);font-size:12px;">No notes yet.</div>'; return; }
+    const notes = Object.entries(snap.val()).sort((a,b)=>b[1].at-a[1].at);
+    el.innerHTML = notes.map(([id,n])=>`
+      <div class="note-item">
+        <div class="note-text">${n.text}</div>
+        <div class="note-meta">${new Date(n.at).toLocaleString()} · ${n.by}</div>
+      </div>`).join('');
+  } catch(e) {}
+}
+async function addNote(uid) {
+  const text = document.getElementById('newNote')?.value?.trim();
+  if (!text) return;
+  await db.ref(`admin/notes/${uid}/${Date.now()}`).set({text,at:Date.now(),by:currentAdminEmail});
+  document.getElementById('newNote').value = '';
+  loadNotes(uid);
+  toast('Note saved.','success');
+}
+
+// ─── OPEN SESSION ─────────────────────────────────────────────────────────────
+function openSession(code) {
+  window.open(`https://app.pollslide.com/presenter`, '_blank');
+  toast('Session code: ' + code,'info');
+}
+
+// ─── SUPPORT TICKETS ──────────────────────────────────────────────────────────
+function watchOpenTickets() {
+  db.ref('admin/tickets').orderByChild('status').equalTo('open').on('value', snap=>{
+    openTicketCount = snap.exists() ? Object.keys(snap.val()).length : 0;
+    const badge = document.getElementById('ticketBadge');
+    if (badge) {
+      if (openTicketCount > 0) { badge.textContent=openTicketCount; badge.classList.remove('hidden'); }
+      else badge.classList.add('hidden');
+    }
+    if (currentPage==='tickets') renderTickets();
+    if (currentPage==='dashboard') renderDashboard();
+  });
+}
+
+async function renderTickets() {
+  document.getElementById('content').innerHTML = '<div class="loader">Loading tickets…</div>';
+  try {
+    const snap = await db.ref('admin/tickets').orderByChild('createdAt').limitToLast(100).get();
+    const tickets = snap.exists() ? Object.entries(snap.val()).reverse() : [];
+    const open = tickets.filter(([,t])=>t.status==='open');
+    const resolved = tickets.filter(([,t])=>t.status==='resolved'||!t.status||t.status==='closed');
+
+    document.getElementById('content').innerHTML = `
+    <div class="card">
+      <div class="card-hd"><h2>Open tickets (${open.length})</h2></div>
+      ${open.length?open.map(([id,t])=>`
+        <div class="ticket-item" onclick="openTicket('${id}')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div class="ticket-subj">${t.subject||'(no subject)'}</div>
+            <span class="pill pill-open">open</span>
+          </div>
+          <div class="ticket-meta">${(allUsers[t.uid]||{}).email||t.email||t.uid||'Unknown'} · ${t.createdAt?timeAgo(t.createdAt):'—'}</div>
+        </div>`).join(''):
+        '<div class="empty">No open tickets 🎉</div>'}
+    </div>
+    <div class="card">
+      <div class="card-hd"><h2>Resolved (${resolved.length})</h2></div>
+      ${resolved.length?resolved.slice(0,20).map(([id,t])=>`
+        <div class="ticket-item" onclick="openTicket('${id}')">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+            <div class="ticket-subj" style="color:var(--muted)">${t.subject||'(no subject)'}</div>
+            <span class="pill pill-resolved">resolved</span>
+          </div>
+          <div class="ticket-meta">${(allUsers[t.uid]||{}).email||t.email||'—'} · ${t.createdAt?timeAgo(t.createdAt):'—'}</div>
+        </div>`).join(''):
+        '<div class="empty">No resolved tickets yet.</div>'}
+    </div>`;
+  } catch(e) { document.getElementById('content').innerHTML='<div class="empty" style="color:var(--accent2);">Could not load tickets.</div>'; }
+}
+
+function openTicket(id) {
+  db.ref(`admin/tickets/${id}`).get().then(snap=>{
+    if (!snap.exists()) return;
+    const t = snap.val();
+    const userEmail = (allUsers[t.uid]||{}).email||t.email||t.uid||'Unknown';
+    document.getElementById('dpTitle').textContent = t.subject||'Ticket';
+    document.getElementById('dpBody').innerHTML = `
+      <div class="dp-section">
+        <h3>Ticket details</h3>
+        <div class="dp-row"><span class="lbl">From</span><span>${userEmail}</span></div>
+        <div class="dp-row"><span class="lbl">Submitted</span><span>${t.createdAt?new Date(t.createdAt).toLocaleString():'—'}</span></div>
+        <div class="dp-row"><span class="lbl">Status</span><span class="pill ${t.status==='resolved'?'pill-resolved':'pill-open'}">${t.status||'open'}</span></div>
+      </div>
+      <div class="dp-section">
+        <h3>Message</h3>
+        <div style="background:var(--surface2);border-radius:9px;padding:12px;font-size:13.5px;line-height:1.6;">${t.message||'(empty)'}</div>
+      </div>
+      <div class="dp-section">
+        <h3>Reply to user</h3>
+        <textarea id="ticketReply" placeholder="Your reply — sent as a notification in the app…"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn btn-sm btn-purple" style="flex:1;" onclick="replyTicket('${id}','${t.uid||''}')">Send reply</button>
+          <button class="btn btn-sm btn-green" onclick="resolveTicket('${id}')">Mark resolved</button>
+        </div>
+      </div>`;
+    document.getElementById('detailPanel').classList.add('open');
+  });
+}
+
+async function replyTicket(ticketId, uid) {
+  const text = document.getElementById('ticketReply')?.value?.trim();
+  if (!text) { toast('Write a reply first.','danger'); return; }
+  const msgId = 'msg_' + Date.now();
+  await db.ref(`admin/messages/${msgId}`).set({uid,text,type:'info',sentAt:Date.now(),sentBy:currentAdminEmail,ticketId});
+  if (uid) await db.ref(`users/${uid}/inbox/${msgId}`).set({text,type:'info',sentAt:Date.now(),read:false});
+  await db.ref(`admin/tickets/${ticketId}/replied`).set(true);
+  document.getElementById('ticketReply').value='';
+  toast('Reply sent.','success');
+}
+
+async function resolveTicket(id) {
+  await db.ref(`admin/tickets/${id}/status`).set('resolved');
+  closeDetail();
+  toast('Ticket resolved.','success');
+}
+
+// ─── BROADCAST ────────────────────────────────────────────────────────────────
+function renderMessages() {
+  const users = Object.entries(allUsers).sort((a,b)=>(a[1].email||'').localeCompare(b[1].email||''));
+  document.getElementById('content').innerHTML = `
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-hd"><h2>Send to a specific user</h2></div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:10px;">
+      <select id="singleUid"><option value="">— Select user —</option>${users.map(([uid,u])=>`<option value="${uid}">${u.email||uid}</option>`).join('')}</select>
+      <select id="singleType"><option value="info">Info</option><option value="warning">Warning</option><option value="success">Good news</option></select>
+      <textarea id="singleMsg" placeholder="Message text…"></textarea>
+      <button class="btn btn-primary" style="align-self:flex-start;padding:10px 22px;" onclick="sendSingle()">Send message</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-hd"><h2>Broadcast to a plan tier</h2></div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:10px;">
+      <select id="bulkTier"><option value="all">All users</option><option value="free">Free users only</option><option value="pro">Pro users only</option><option value="team">Team users only</option></select>
+      <select id="bulkType"><option value="info">Info</option><option value="warning">Warning</option><option value="success">Good news / announcement</option></select>
+      <textarea id="bulkMsg" placeholder="Broadcast message…"></textarea>
+      <button class="btn btn-amber" style="align-self:flex-start;padding:10px 22px;" onclick="sendBulk()">Broadcast message</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><h2>Recent sent messages</h2></div>
+    <div id="sentLog"><div class="loader">Loading…</div></div>
+  </div>`;
+  loadSentLog();
+}
+
+async function sendSingle() {
+  const uid  = document.getElementById('singleUid').value;
+  const text = document.getElementById('singleMsg').value.trim();
+  const type = document.getElementById('singleType').value;
+  if (!uid||!text) { toast('Select a user and write a message.','danger'); return; }
+  await doSendMsg(uid,text,type);
+  document.getElementById('singleMsg').value='';
+  loadSentLog();
+}
+
+async function sendBulk() {
+  const tier = document.getElementById('bulkTier').value;
+  const text = document.getElementById('bulkMsg').value.trim();
+  const type = document.getElementById('bulkType').value;
+  if (!text) { toast('Write a message first.','danger'); return; }
+  const targets = Object.entries(allUsers).filter(([,u])=>tier==='all'||(u.tier||'free')===tier);
+  if (!targets.length) { toast('No users in that tier.','danger'); return; }
+  showConfirm(`Send to ${targets.length} users?`,`This will send "${text.slice(0,60)}${text.length>60?'…':''}" to ${targets.length} ${tier==='all'?'users':tier+' users'}.`, async ()=>{
+    for (const [uid] of targets) { await doSendMsg(uid,text,type); }
+    document.getElementById('bulkMsg').value='';
+    loadSentLog();
+    toast(`Sent to ${targets.length} users.`,'success');
+  });
+}
+
+async function sendMsgFromDetail(uid) {
+  const text = document.getElementById('msgTextDP')?.value?.trim();
+  const type = document.getElementById('msgTypeDP')?.value||'info';
+  if (!text) { toast('Write a message first.','danger'); return; }
+  await doSendMsg(uid,text,type);
+  document.getElementById('msgTextDP').value='';
+}
+
+async function doSendMsg(uid,text,type) {
+  const msgId='msg_'+Date.now();
+  await db.ref(`admin/messages/${msgId}`).set({uid,text,type,sentAt:Date.now(),sentBy:currentAdminEmail});
+  await db.ref(`users/${uid}/inbox/${msgId}`).set({text,type,sentAt:Date.now(),read:false});
+  toast('Message sent.','success');
+}
+
+async function loadSentLog() {
+  const el = document.getElementById('sentLog'); if (!el) return;
+  const snap = await db.ref('admin/messages').orderByChild('sentAt').limitToLast(30).get();
+  if (!snap.exists()) { el.innerHTML='<div class="empty">No messages sent yet.</div>'; return; }
+  const msgs = Object.entries(snap.val()).reverse();
+  el.innerHTML=`<table><thead><tr><th>To</th><th>Message</th><th>Type</th><th>Sent</th></tr></thead><tbody>${
+    msgs.map(([,m])=>`<tr>
+      <td style="font-size:12px;">${(allUsers[m.uid]||{}).email||m.uid||'—'}</td>
+      <td style="font-size:13px;max-width:220px;">${m.text}</td>
+      <td><span class="pill pill-info">${m.type||'info'}</span></td>
+      <td style="font-size:11px;color:var(--muted);">${m.sentAt?timeAgo(m.sentAt):'—'}</td>
+    </tr>`).join('')
+  }</tbody></table>`;
+}
+
+// ─── LOOKUP (search by email or session code) ─────────────────────────────────
+function renderSearch() {
+  document.getElementById('content').innerHTML = `
+  <div class="card">
+    <div class="card-hd"><h2>Lookup user or session</h2></div>
+    <div style="padding:16px;display:flex;flex-direction:column;gap:10px;">
+      <input type="text" id="lookupQ" placeholder="Email address or session code…" oninput="runLookup(this.value)" style="font-size:15px;">
+    </div>
+    <div id="lookupResults" style="padding:0 16px 16px;"></div>
+  </div>`;
+}
+
+function runLookup(q) {
+  const el = document.getElementById('lookupResults'); if (!el) return;
+  if (!q||q.length<2) { el.innerHTML=''; return; }
+  const ql = q.toLowerCase();
+  // Search by email
+  const byEmail = Object.entries(allUsers).filter(([,u])=>(u.email||'').toLowerCase().includes(ql));
+  // Search by session code
+  const byCode = Object.entries(allUsers).filter(([,u])=>
+    Object.values(u.presentations||{}).some(p=>(p.sessionCode||'').toLowerCase().includes(ql))
+  );
+  const combined = [...new Map([...byEmail,...byCode]).entries()];
+  if (!combined.length) { el.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px 0;">No results.</div>'; return; }
+  el.innerHTML = `<table><thead><tr><th>Email</th><th>Plan</th><th>Presentations</th><th></th></tr></thead><tbody>${
+    combined.map(([uid,u])=>`<tr class="clickable" onclick="openDetail('${uid}')">
+      <td>${u.email||'—'}</td>
+      <td><span class="pill pill-${u.tier||'free'}">${u.tier||'free'}</span></td>
+      <td>${Object.keys(u.presentations||{}).length}</td>
+      <td><span class="link-action">View →</span></td>
+    </tr>`).join('')
+  }</tbody></table>`;
+}
+
+// ─── EXPORT CSV ──────────────────────────────────────────────────────────────
+function exportUsersCSV() {
+  const rows=[['UID','Email','Plan','Presentations','Signed up','Last seen','Flagged']];
+  Object.entries(allUsers).forEach(([uid,u])=>rows.push([
+    uid, u.email||'', u.tier||'free',
+    Object.keys(u.presentations||{}).length,
+    u.createdAt?new Date(u.createdAt).toLocaleDateString():'',
+    u.lastSeen?new Date(u.lastSeen).toLocaleDateString():'',
+    u.flagged?'yes':'no'
+  ]));
+  const csv = rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob = new Blob([csv],{type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'pollslide-users-'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+  toast('CSV downloaded.','success');
+}
+
+// ─── CONFIRM MODAL ────────────────────────────────────────────────────────────
+function showConfirm(title,msg,onOk) {
+  document.getElementById('confirmTitle').textContent=title;
+  document.getElementById('confirmMsg').textContent=msg;
+  document.getElementById('confirmModal').classList.remove('hidden');
+  document.getElementById('confirmOkBtn').onclick=async()=>{ hideConfirm(); await onOk(); };
+}
+function hideConfirm(){document.getElementById('confirmModal').classList.add('hidden');}
+
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+function timeAgo(ts){
+  const s=Math.floor((Date.now()-ts)/1000);
+  if(s<60)return'just now';
+  if(s<3600)return Math.floor(s/60)+'m ago';
+  if(s<86400)return Math.floor(s/3600)+'h ago';
+  if(s<86400*7)return Math.floor(s/86400)+'d ago';
+  return new Date(ts).toLocaleDateString();
+}
+
+let _tt;
+function toast(msg,type){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.className='show '+(type||'');
+  clearTimeout(_tt); _tt=setTimeout(()=>{el.className='';},3400);
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDetail();hideConfirm();}});
+</script>
+</body>
+</html>

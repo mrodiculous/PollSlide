@@ -593,11 +593,30 @@ auth.onAuthStateChanged(user => {
     userId = user.uid;
     document.getElementById('authGate').style.display = 'none';
     document.getElementById('userBtn').style.display = '';
-    // Load the user's plan tier (defaults to free). Stripe webhook writes this later.
+    // Load the user's plan tier
     db.ref(`users/${userId}/tier`).once('value').then(snap => {
       userTier = (snap.val() === 'pro' || snap.val() === 'team') ? snap.val() : 'free';
       loadPresentations();
     }).catch(() => { userTier = 'free'; loadPresentations(); });
+
+    // Register this user in the admin index (creates/updates metadata on each login)
+    db.ref(`admin/users_index/${userId}`).update({
+      email: user.email || '',
+      lastSeen: Date.now(),
+      createdAt: user.metadata?.creationTime ? new Date(user.metadata.creationTime).getTime() : Date.now(),
+      tier: userTier || 'free'
+    }).catch(()=>{});
+
+    // Check inbox for admin messages and show unread ones as toasts
+    db.ref(`users/${userId}/inbox`).orderByChild('read').equalTo(false).once('value').then(snap => {
+      if (!snap.exists()) return;
+      Object.entries(snap.val()).forEach(([msgId, msg]) => {
+        if (!msg.read) {
+          setTimeout(() => toast('📬 Message from PollSlide: ' + msg.text, msg.type || 'info'), 1200);
+          db.ref(`users/${userId}/inbox/${msgId}/read`).set(true);
+        }
+      });
+    }).catch(()=>{});
   } else {
     currentUser = null;
     userId = null;
@@ -629,6 +648,25 @@ function showUpgradePrompt(headline, subtext) {
     </div>`;
   document.body.appendChild(m);
 }
+// ─── SUPPORT TICKET ──────────────────────────────────────────────────────────
+function openSupportTicket() {
+  const subject = prompt('What can we help you with? (one-line summary)');
+  if (!subject) return;
+  const message = prompt('Describe the issue in more detail:');
+  if (!message) return;
+  const ticketId = 'ticket_' + Date.now();
+  db.ref('admin/tickets/' + ticketId).set({
+    uid: userId,
+    email: currentUser ? currentUser.email : '',
+    subject: subject.trim(),
+    message: message.trim(),
+    status: 'open',
+    createdAt: Date.now()
+  }).then(() => {
+    toast('Support ticket submitted. We\'ll get back to you via the app.', 'success');
+  }).catch(() => toast('Could not submit ticket. Email us at help@pollslide.com', 'danger'));
+}
+
 function goToUpgrade() {
   // Placeholder until Stripe/pricing page is live. For now, point to pricing section.
   const m = document.getElementById('upgradeModal'); if (m) m.remove();
@@ -697,7 +735,8 @@ function showUserMenu() {
     'Type a number and press OK:\n' +
     '1 = Connect Mac App (get pairing code)\n' +
     '2 = See plans / upgrade\n' +
-    '3 = Sign out\n' +
+    '3 = Contact support\n' +
+    '4 = Sign out\n' +
     '(Cancel to close)'
   );
   if (choice === '1') {
