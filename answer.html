@@ -127,6 +127,9 @@
   .timer-label { font-size:12px; color:var(--muted); }
   .expired-box { background:rgba(247,183,49,0.1); border:1px solid rgba(247,183,49,0.25); color:var(--accent4); border-radius:var(--radius-sm); padding:14px; text-align:center; font-weight:500; font-size:14px; margin-bottom:14px; }
 </style>
+<link rel="icon" type="image/svg+xml" href="https://pollslide.com/logo.svg">
+<link rel="icon" type="image/x-icon" href="https://pollslide.com/favicon.ico">
+<link rel="apple-touch-icon" sizes="192x192" href="https://pollslide.com/icon-192.png">
 </head>
 <body>
 <div id="app"></div>
@@ -187,7 +190,7 @@ function render(html) { document.getElementById('app').innerHTML = html; }
 function bootApp() {
   if (!SESSION || Q_INDEX < 0) {
     render(`
-      <div class="logo"><span class="logo-dot"></span>PollSlide</div>
+      <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</div>
       <div class="status-box error">Invalid link. Please scan the correct QR code.</div>
       <p class="center" style="color:var(--muted);font-size:13px;">Ask the presenter for the right QR code.</p>
     `);
@@ -209,7 +212,7 @@ function bootApp() {
 // ─── NAME ENTRY ───────────────────────────────────────────────────────────────
 function showNameEntry() {
   render(`
-    <div class="logo"><span class="logo-dot"></span>PollSlide</div>
+    <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</div>
     <h1>Enter Your Name</h1>
     <p class="subtitle">You only need to do this once per session.</p>
     <label>Your Name</label>
@@ -242,7 +245,7 @@ async function loadQuestion() {
   const qSnap = await db.ref(`quiz_builder/${SESSION}/questions/${Q_INDEX}`).get();
   if (!qSnap.exists()) {
     render(`
-      <div class="logo"><span class="logo-dot"></span>PollSlide</div>
+      <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</div>
       <div style="text-align:center;padding:10px 0 20px;">
         <div style="font-size:40px;margin-bottom:12px;animation:gentle 2s ease-in-out infinite;">⏳</div>
         <h1 style="margin-bottom:8px;">Waiting...</h1>
@@ -352,7 +355,7 @@ function showQuestion(q) {
        </div>` : '';
 
   render(`
-    <div class="logo"><span class="logo-dot"></span>PollSlide</div>
+    <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</div>
     <div class="q-badge">Question ${Q_INDEX+1}</div>
     ${timerHtml}
     ${qImage}
@@ -506,7 +509,7 @@ async function submitToDb(answer) {
 
 function showSessionFull() {
   render(`
-    <div class="logo"><span class="logo-dot"></span>PollSlide</div>
+    <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</div>
     <div class="status-box" style="background:rgba(247,183,49,0.14);color:var(--accent4);border:1px solid rgba(247,183,49,0.3);">
       This poll is full
     </div>
@@ -519,7 +522,7 @@ function showSessionFull() {
 // ─── SCREENS ─────────────────────────────────────────────────────────────────
 function showAlreadyAnswered() {
   render(`
-    <div class="logo"><span class="logo-dot"></span>PollSlide</div>
+    <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</div>
     <div class="status-box submitted">✓ You already answered this question!</div>
     <p class="center" style="color:var(--muted);font-size:13px;margin-top:8px;">
       Scan the next question's QR when the presenter moves on.

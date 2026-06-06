@@ -327,6 +327,9 @@
     .center-scroll { padding:10px; }
   }
 </style>
+<link rel="icon" type="image/svg+xml" href="https://pollslide.com/logo.svg">
+<link rel="icon" type="image/x-icon" href="https://pollslide.com/favicon.ico">
+<link rel="apple-touch-icon" sizes="192x192" href="https://pollslide.com/icon-192.png">
 </head>
 <body>
 
@@ -367,7 +370,7 @@
 
 <!-- ── TOP BAR ── -->
 <div class="topbar">
-  <div class="logo"><span class="logo-dot"></span>PollSlide</div>
+  <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</div>
   <div class="active-pres" id="activePres">Select a presentation</div>
   <div class="save-status">
     <span class="save-dot" id="saveDot"></span>
@@ -398,7 +401,28 @@
     </div>
     <button class="btn btn-ghost" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark">🌙</button>
     <button class="btn btn-ghost" id="addQBtn" onclick="addQuestion()" disabled>+ Question</button>
+    <button class="btn btn-ghost" id="reportBtn" onclick="openReport()" disabled title="View response report">📊 Report</button>
     <button class="btn btn-reset" id="resetBtn" onclick="confirmResetAll()" disabled>↺ Reset All Tallies</button>
+  </div>
+</div>
+
+<!-- RESPONSE REPORT MODAL -->
+<div id="reportOverlay" style="display:none;position:fixed;inset:0;z-index:100000;background:var(--bg);overflow-y:auto;">
+  <div style="max-width:900px;margin:0 auto;padding:24px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
+      <div>
+        <h1 style="font-family:'Syne',sans-serif;font-weight:800;font-size:24px;" id="reportTitle">Response Report</h1>
+        <div style="color:var(--muted);font-size:13px;" id="reportMeta"></div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-ghost" onclick="exportCSV()">⬇ CSV</button>
+        <button class="btn btn-ghost" onclick="printReport()">🖨 Print / PDF</button>
+        <button class="btn btn-ghost" onclick="closeReport()">✕ Close</button>
+      </div>
+    </div>
+    <div id="reportStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:24px;"></div>
+    <div id="reportQuestions"></div>
+    <div id="reportParticipants" style="margin-top:24px;"></div>
   </div>
 </div>
 
@@ -608,8 +632,16 @@ function tierLimits() { return TIERS[userTier] || TIERS.free; }
 
 auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
 
+// Safari ITP fix: track if we were signed in this session, and if auth state
+// fires null after being signed in, wait 3s and re-check before signing out.
+// Safari's Intelligent Tracking Prevention can briefly clear auth persistence.
+let _wasSignedIn = false;
+let _safariRetryTimer = null;
+
 auth.onAuthStateChanged(user => {
   if (user) {
+    _wasSignedIn = true;
+    if (_safariRetryTimer) { clearTimeout(_safariRetryTimer); _safariRetryTimer = null; }
     currentUser = user;
     userId = user.uid;
     document.getElementById('authGate').style.display = 'none';
@@ -622,9 +654,10 @@ auth.onAuthStateChanged(user => {
     if (menuEmailEl) menuEmailEl.textContent = user.email || '';
     const av = document.getElementById('userAvatar');
     if (av) av.textContent = (user.email||'?')[0].toUpperCase();
-    // Load the user's plan tier
+    // Load the user's plan tier (including white label)
     db.ref(`users/${userId}/tier`).once('value').then(snap => {
-      userTier = (snap.val() === 'pro' || snap.val() === 'team') ? snap.val() : 'free';
+      const t = snap.val();
+      userTier = (t === 'pro' || t === 'team' || t === 'white') ? t : 'free';
       loadPresentations();
     }).catch(() => { userTier = 'free'; loadPresentations(); });
 
@@ -647,12 +680,33 @@ auth.onAuthStateChanged(user => {
       });
     }).catch(()=>{});
   } else {
-    currentUser = null;
-    userId = null;
-    userTier = 'free';
-    document.getElementById('authGate').style.display = 'flex';
-    const chip2 = document.getElementById('userChip');
-    if (chip2) chip2.style.display = 'none';
+    // Safari ITP fix: if we were just signed in, wait 3s before signing out
+    // because Safari may briefly clear auth persistence then restore it.
+    if (_wasSignedIn && !_safariRetryTimer) {
+      _safariRetryTimer = setTimeout(() => {
+        _safariRetryTimer = null;
+        if (!auth.currentUser) {
+          // Truly signed out — proceed
+          currentUser = null;
+          userId = null;
+          userTier = 'free';
+          _wasSignedIn = false;
+          document.getElementById('authGate').style.display = 'flex';
+          const chip2 = document.getElementById('userChip');
+          if (chip2) chip2.style.display = 'none';
+        }
+      }, 3000);
+      return; // don't sign out yet — wait for the retry
+    }
+    if (!_wasSignedIn) {
+      // First load, never signed in — show auth gate immediately
+      currentUser = null;
+      userId = null;
+      userTier = 'free';
+      document.getElementById('authGate').style.display = 'flex';
+      const chip2 = document.getElementById('userChip');
+      if (chip2) chip2.style.display = 'none';
+    }
   }
 });
 
@@ -800,6 +854,21 @@ function toggleUserMenu() {
   const infoEl = document.getElementById('userMenuPlan');
   if (infoEl) infoEl.textContent =
     lim.name + ' plan · ' + presCount + '/' + presLimitTxt + ' presentations · ' + partLimitTxt + ' participants/poll';
+  // Populate menu action items
+  const itemsEl = document.getElementById('userMenuItems');
+  if (itemsEl) {
+    const menuItems = [
+      { icon:'🔗', label:'Connect Mac App',      fn:'generatePairingCode()' },
+      { icon:'✨', label:'See plans & upgrade',   fn:"window.open('https://pollslide.com/pricing','_blank')" },
+      { icon:'💬', label:'Contact support',       fn:'openSupportTicket()' },
+      { icon:'📖', label:'Setup guide',           fn:"window.open('https://pollslide.com/setup','_blank')" },
+      { icon:'⚠',  label:'Delete my account',     fn:'requestAccountDeletion()', danger:true },
+    ];
+    itemsEl.innerHTML = menuItems.map(m =>
+      '<button onclick="' + m.fn + ';closeUserMenu()" style="width:100%;padding:10px 14px;background:none;border:none;cursor:pointer;font-family:\'DM Sans\',sans-serif;font-size:13px;color:' + (m.danger ? 'var(--accent2)' : 'var(--text)') + ';text-align:left;display:flex;align-items:center;gap:8px;">' +
+        m.icon + ' ' + m.label + '</button>'
+    ).join('');
+  }
   dd.style.display = 'block';
 }
 function closeUserMenu() {
@@ -1062,6 +1131,7 @@ function selectPresentation(id) {
   document.getElementById('addQBtn').disabled  = false;
   document.getElementById('addQBtn2').disabled = false;
   document.getElementById('resetBtn').disabled = false;
+  document.getElementById('reportBtn').disabled = false;
 
   renderPresList();
   renderQList();
@@ -1096,6 +1166,7 @@ async function doDeletePres() {
     document.getElementById('addQBtn').disabled  = true;
     document.getElementById('addQBtn2').disabled = true;
     document.getElementById('resetBtn').disabled = true;
+    document.getElementById('reportBtn').disabled = true;
     showSetup();
     renderQList();
   }
@@ -2136,15 +2207,17 @@ function addQuestion() {
   if (!activePresId) return;
   questions.push({ text:'', type:'multiple_choice', options:[{text:'',img:''},{text:'',img:''},{text:'',img:''},{text:'',img:''}], correctAnswer:0, image:'', timer:0, displayMode:'bars', revealDelay:30 });
   presentations[activePresId].questions = questions;
-  renderQList();
   const newIdx = questions.length - 1;
-  selIdx = newIdx;
+  selIdx = newIdx;          // Set BEFORE renderQList so the new question is highlighted
+  renderQList();            // Now renders with the correct selIdx
   renderEditor(newIdx);
   scheduleSave();
-  // Focus the textarea so presenter can start typing immediately
+  // Focus + scroll to the new question in the sidebar
   setTimeout(() => {
     const ta = document.querySelector('#centerPanel textarea');
     if (ta) ta.focus();
+    const sidebar = document.getElementById('qList');
+    if (sidebar) sidebar.scrollTop = sidebar.scrollHeight;
   }, 80);
 }
 
@@ -2761,6 +2834,173 @@ function toast(msg,type='info'){
   );
   makeVertDragger('resizeVertical', '.pres-panel', STORAGE.presH);
 })();
+// ─── RESPONSE REPORTS ────────────────────────────────────────────────────────
+let _reportData = null; // cached for CSV export
+
+async function openReport() {
+  if (!activePresId) return;
+  const pres = presentations[activePresId];
+  const code = pres?.sessionCode;
+  const qs = pres?.questions || [];
+  if (!qs.length) { toast('No questions to report on.','info'); return; }
+
+  document.getElementById('reportTitle').textContent = (pres.name || 'Untitled') + ' — Response Report';
+  document.getElementById('reportMeta').textContent = 'Session: ' + code + ' · ' + qs.length + ' questions · Generated ' + new Date().toLocaleString();
+
+  // Fetch all responses for this presentation
+  let allData = {};
+  try {
+    const snap = await db.ref('sessions/' + code + '/responses').get();
+    allData = snap.exists() ? snap.val() : {};
+  } catch(e) { toast('Could not load responses.','danger'); return; }
+
+  // Aggregate per question
+  const report = qs.map((q, idx) => {
+    const qId = 'q' + idx + '_stable_' + code;
+    const raw = allData[qId] ? Object.values(allData[qId]) : [];
+    const totalResponses = raw.length;
+    const correctCount = raw.filter(r => r.isCorrect === true).length;
+    const incorrectCount = raw.filter(r => r.isCorrect === false).length;
+    const avgElapsed = totalResponses > 0 ? Math.round(raw.reduce((s,r) => s + (r.elapsed||0), 0) / totalResponses / 1000 * 10) / 10 : 0;
+
+    let optionCounts = [];
+    if (q.options && (q.type === 'multiple_choice' || q.type === 'multiple_choice_multi')) {
+      optionCounts = q.options.map((opt, i) => ({ idx: i, text: opt.text || '', count: 0 }));
+      raw.forEach(r => {
+        try { const a = JSON.parse(r.answer); (Array.isArray(a)?a:[a]).forEach(v => { if (optionCounts[v]) optionCounts[v].count++; }); } catch(e) {}
+      });
+    }
+
+    return { q, idx, qId, raw, totalResponses, correctCount, incorrectCount, avgElapsed, optionCounts };
+  });
+
+  // All unique participants
+  const participants = {};
+  report.forEach(r => {
+    r.raw.forEach(resp => {
+      const pid = resp.participantId || resp.name || 'anon';
+      if (!participants[pid]) participants[pid] = { name: resp.name || 'Anonymous', answers: [], correct: 0, total: 0 };
+      participants[pid].answers.push({ qIdx: r.idx, answer: resp.answer, isCorrect: resp.isCorrect, elapsed: resp.elapsed });
+      participants[pid].total++;
+      if (resp.isCorrect === true) participants[pid].correct++;
+    });
+  });
+  const totalParticipants = Object.keys(participants).length;
+  const totalResponses = report.reduce((s,r) => s + r.totalResponses, 0);
+  const totalCorrect = report.reduce((s,r) => s + r.correctCount, 0);
+  const hasQuiz = qs.some(q => q.correctAnswer !== undefined && q.correctAnswer !== null);
+
+  _reportData = { pres, report, participants, totalParticipants, totalResponses, totalCorrect };
+
+  // ── RENDER STATS ────────────────────────────────────────────────────────────
+  const statBox = (val, label) => '<div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:14px 16px;"><div style="font-family:\'Syne\',sans-serif;font-weight:800;font-size:26px;">' + val + '</div><div style="font-size:11px;color:var(--muted);margin-top:3px;">' + label + '</div></div>';
+  document.getElementById('reportStats').innerHTML =
+    statBox(totalParticipants, 'Participants') +
+    statBox(totalResponses, 'Total responses') +
+    statBox(qs.length, 'Questions') +
+    (hasQuiz ? statBox(Math.round(totalCorrect / Math.max(1,totalResponses) * 100) + '%', 'Accuracy') : '') +
+    statBox(report.reduce((s,r) => s + r.avgElapsed, 0) > 0 ? (report.reduce((s,r) => s + r.avgElapsed, 0) / report.filter(r=>r.avgElapsed>0).length).toFixed(1) + 's' : '—', 'Avg. response time');
+
+  // ── RENDER PER-QUESTION ─────────────────────────────────────────────────────
+  const letters = ['A','B','C','D','E','F','G','H'];
+  document.getElementById('reportQuestions').innerHTML = report.map(r => {
+    const q = r.q;
+    const total = Math.max(1, r.totalResponses);
+    const _ca = q.correctAnswer;
+    const hasC = _ca !== undefined && _ca !== null && _ca !== '' && !(Array.isArray(_ca) && _ca.length===0);
+    const correct = hasC ? (Array.isArray(_ca)?_ca:[_ca]).map(Number) : [];
+
+    let barsHtml = '';
+    if (r.optionCounts.length) {
+      barsHtml = r.optionCounts.map(oc => {
+        const pct = Math.round(oc.count / total * 100);
+        const isCorrect = correct.includes(oc.idx);
+        const badge = isCorrect ? ' <span style="font-size:10px;background:rgba(67,233,123,.18);color:var(--accent3);padding:1px 6px;border-radius:100px;">✓ correct</span>' : '';
+        return '<div style="margin-bottom:7px;">' +
+          '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;"><span>' + letters[oc.idx] + '. ' + escapeHtml(oc.text) + badge + '</span><span style="color:var(--muted);">' + oc.count + ' (' + pct + '%)</span></div>' +
+          '<div style="height:8px;background:var(--surface2);border-radius:100px;overflow:hidden;">' +
+          '<div style="height:100%;border-radius:100px;width:' + pct + '%;background:' + (isCorrect ? 'linear-gradient(90deg,var(--accent3),#6effb0)' : 'linear-gradient(90deg,var(--accent),#a78bfa)') + ';"></div></div></div>';
+      }).join('');
+    } else {
+      // Free text / rating: show responses as a list
+      barsHtml = r.raw.slice(0,20).map(resp => {
+        let ans = resp.answer;
+        try { ans = JSON.parse(ans); if (typeof ans !== 'string') ans = resp.answer; } catch(e) {}
+        return '<div style="font-size:12px;padding:5px 8px;background:var(--surface2);border-radius:6px;margin-bottom:4px;">' + escapeHtml(String(ans)) + ' <span style="color:var(--muted);">— ' + escapeHtml(resp.name||'?') + '</span></div>';
+      }).join('') + (r.raw.length > 20 ? '<div style="color:var(--muted);font-size:11px;">...and ' + (r.raw.length-20) + ' more</div>' : '');
+    }
+
+    return '<div style="background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:18px;margin-bottom:14px;">' +
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">' +
+      '<div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;">Q' + (r.idx+1) + ' · ' + (q.type||'').replace(/_/g,' ') + '</div>' +
+      '<div style="font-family:\'Syne\',sans-serif;font-weight:800;font-size:15px;">' + escapeHtml(q.text||'Untitled') + '</div></div>' +
+      '<div style="text-align:right;flex-shrink:0;"><div style="font-family:\'Syne\',sans-serif;font-weight:800;font-size:20px;">' + r.totalResponses + '</div>' +
+      '<div style="font-size:10px;color:var(--muted);">responses</div>' +
+      (r.correctCount > 0 ? '<div style="font-size:10px;color:var(--accent3);">' + r.correctCount + ' correct (' + Math.round(r.correctCount/total*100) + '%)</div>' : '') +
+      '</div></div>' +
+      barsHtml +
+      '</div>';
+  }).join('');
+
+  // ── RENDER PARTICIPANTS ──────────────────────────────────────────────────────
+  const sortedParts = Object.values(participants).sort((a,b) => b.correct - a.correct || b.total - a.total);
+  document.getElementById('reportParticipants').innerHTML =
+    '<div style="background:var(--surface);border:1px solid var(--border2);border-radius:14px;overflow:hidden;">' +
+    '<div style="padding:13px 16px;border-bottom:1px solid var(--border);font-family:\'Syne\',sans-serif;font-weight:700;font-size:13px;">Participants (' + sortedParts.length + ')</div>' +
+    '<table style="width:100%;border-collapse:collapse;">' +
+    '<thead><tr><th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);">Name</th>' +
+    '<th style="padding:9px 14px;text-align:center;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);">Answered</th>' +
+    (hasQuiz ? '<th style="padding:9px 14px;text-align:center;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);">Correct</th>' : '') +
+    '</tr></thead><tbody>' +
+    sortedParts.map(p =>
+      '<tr><td style="padding:8px 14px;font-size:13px;border-bottom:1px solid var(--border);">' + escapeHtml(p.name) + '</td>' +
+      '<td style="padding:8px 14px;text-align:center;font-size:13px;border-bottom:1px solid var(--border);">' + p.total + '/' + qs.length + '</td>' +
+      (hasQuiz ? '<td style="padding:8px 14px;text-align:center;font-size:13px;color:var(--accent3);font-weight:700;border-bottom:1px solid var(--border);">' + p.correct + '</td>' : '') + '</tr>'
+    ).join('') +
+    '</tbody></table></div>';
+
+  document.getElementById('reportOverlay').style.display = 'block';
+}
+
+function closeReport() {
+  document.getElementById('reportOverlay').style.display = 'none';
+}
+
+function exportCSV() {
+  if (!_reportData) { toast('No report data.','danger'); return; }
+  const { pres, report, participants } = _reportData;
+  const qs = pres.questions || [];
+  const rows = [['Participant', 'Question #', 'Question Text', 'Question Type', 'Answer', 'Correct?', 'Time (ms)']];
+
+  report.forEach(r => {
+    r.raw.forEach(resp => {
+      let ans = resp.answer;
+      try { const parsed = JSON.parse(ans); ans = Array.isArray(parsed) ? parsed.map(i => (r.q.options && r.q.options[i]?.text) || i).join('; ') : (r.q.options && r.q.options[parsed]?.text) || String(parsed); } catch(e) {}
+      rows.push([
+        resp.name || 'Anonymous',
+        'Q' + (r.idx + 1),
+        r.q.text || '',
+        r.q.type || '',
+        ans,
+        resp.isCorrect === true ? 'Yes' : resp.isCorrect === false ? 'No' : '',
+        resp.elapsed || ''
+      ]);
+    });
+  });
+
+  const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = (pres.name || 'pollslide-report').replace(/[^a-zA-Z0-9]/g, '-') + '-' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('CSV downloaded!', 'success');
+}
+
+function printReport() {
+  window.print();
+}
 
 </script>
 </body>
