@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PollSlide Admin</title>
+<title>PollSlide Admin — PollSlide Technologies LLC</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
@@ -13,137 +13,153 @@
 *{margin:0;padding:0;box-sizing:border-box;}
 body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;}
 .hidden{display:none!important;}
-a{color:inherit;text-decoration:none;}
+a{color:var(--accent);text-decoration:none;}
 
 /* AUTH */
 #authGate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:1000;}
-.auth-box{background:var(--surface);border:1px solid var(--border2);border-radius:18px;padding:36px;width:360px;}
-.auth-box h1{font-family:'Syne',sans-serif;font-size:22px;font-weight:800;margin-bottom:4px;}
-.auth-box p{color:var(--muted);font-size:14px;margin-bottom:22px;}
-.field{margin-bottom:13px;}
-.field label{display:block;font-size:12px;font-weight:600;margin-bottom:5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
-input[type=email],input[type=password],input[type=text],input[type=search],textarea,select{width:100%;padding:10px 13px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;}
-input:focus,textarea:focus,select:focus{border-color:var(--accent);}
-textarea{resize:vertical;min-height:80px;}
+.auth-box{background:var(--surface);border:1px solid var(--border2);border-radius:18px;padding:36px;width:360px;text-align:center;}
+.auth-logo{font-family:'Syne',sans-serif;font-weight:800;font-size:20px;margin-bottom:4px;display:flex;align-items:center;justify-content:center;gap:9px;}
+.auth-logo-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);}
+.auth-badge{font-size:10px;font-weight:700;background:rgba(108,99,255,.2);color:var(--accent);padding:2px 7px;border-radius:100px;}
+.auth-box p{color:var(--muted);font-size:13px;margin:6px 0 22px;}
+.field{margin-bottom:12px;text-align:left;}
+.field label{display:block;font-size:11px;font-weight:600;margin-bottom:4px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+.field input{width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;}
+.field input:focus{border-color:var(--accent);}
 
 /* BUTTONS */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 16px;border-radius:9px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;border:none;cursor:pointer;transition:opacity .15s,transform .1s;white-space:nowrap;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px 16px;border-radius:9px;font-family:'Syne',sans-serif;font-weight:700;font-size:12px;border:none;cursor:pointer;transition:opacity .15s;white-space:nowrap;}
 .btn:hover{opacity:.85;}
-.btn:active{transform:scale(.98);}
 .btn-primary{background:var(--accent);color:#fff;}
-.btn-full{width:100%;padding:13px;}
-.btn-sm{padding:6px 12px;font-size:12px;}
+.btn-full{width:100%;padding:12px;font-size:14px;}
+.btn-sm{padding:5px 11px;font-size:11px;}
+.btn-xs{padding:4px 9px;font-size:10px;border-radius:6px;}
 .btn-ghost{background:var(--surface2);border:1px solid var(--border2);color:var(--text);}
 .btn-green{background:rgba(67,233,123,.15);border:1px solid rgba(67,233,123,.3);color:var(--accent3);}
 .btn-amber{background:rgba(247,183,49,.15);border:1px solid rgba(247,183,49,.3);color:var(--accent4);}
 .btn-red{background:rgba(255,101,132,.15);border:1px solid rgba(255,101,132,.3);color:var(--accent2);}
 .btn-purple{background:rgba(108,99,255,.15);border:1px solid rgba(108,99,255,.3);color:var(--accent);}
-.err{color:var(--accent2);font-size:13px;margin-top:8px;text-align:center;}
+.err{color:var(--accent2);font-size:12px;margin-top:8px;}
 
 /* LAYOUT */
 #app{display:flex;min-height:100vh;}
-.sidebar{width:210px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:14px 0;}
-.s-logo{display:flex;align-items:center;gap:9px;padding:6px 16px 18px;font-family:'Syne',sans-serif;font-weight:800;font-size:17px;}
-.s-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);}
-.a-badge{font-size:9px;font-weight:700;background:rgba(108,99,255,.2);color:var(--accent);padding:2px 6px;border-radius:100px;letter-spacing:.06em;}
-.nav-item{display:flex;align-items:center;gap:9px;padding:9px 16px;cursor:pointer;font-size:13.5px;font-weight:500;color:var(--muted);transition:background .1s,color .1s;position:relative;}
+.sidebar{width:200px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:12px 0;}
+.s-logo{display:flex;align-items:center;gap:8px;padding:4px 14px 16px;font-family:'Syne',sans-serif;font-weight:800;font-size:16px;}
+.s-dot{width:9px;height:9px;border-radius:50%;background:var(--accent);}
+.s-badge{font-size:8px;font-weight:700;background:rgba(108,99,255,.2);color:var(--accent);padding:2px 5px;border-radius:100px;}
+.nav-item{display:flex;align-items:center;gap:8px;padding:8px 14px;cursor:pointer;font-size:12.5px;font-weight:500;color:var(--muted);transition:background .1s,color .1s;position:relative;}
 .nav-item:hover{background:var(--surface2);color:var(--text);}
-.nav-item.active{background:rgba(108,99,255,.13);color:var(--accent);}
-.nav-item svg{width:17px;height:17px;flex-shrink:0;}
-.nav-badge{position:absolute;right:14px;background:var(--accent2);color:#fff;font-size:10px;font-weight:700;padding:1px 6px;border-radius:100px;min-width:18px;text-align:center;}
-.nav-sep{height:1px;background:var(--border);margin:7px 0;}
+.nav-item.active{background:rgba(108,99,255,.12);color:var(--accent);}
+.nav-item svg{width:15px;height:15px;flex-shrink:0;}
+.nav-badge{position:absolute;right:12px;background:var(--accent2);color:#fff;font-size:9px;font-weight:700;padding:1px 5px;border-radius:100px;min-width:16px;text-align:center;}
+.nav-sep{height:1px;background:var(--border);margin:6px 0;}
+.nav-section{font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:8px 14px 4px;}
 .main{flex:1;display:flex;flex-direction:column;overflow:hidden;}
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:0 22px;height:58px;border-bottom:1px solid var(--border);flex-shrink:0;gap:14px;}
-.topbar-title{font-family:'Syne',sans-serif;font-weight:800;font-size:17px;}
-.topbar-right{display:flex;align-items:center;gap:10px;}
-#adminEmailDisplay{font-size:12px;color:var(--muted);}
-.content{flex:1;overflow-y:auto;padding:22px;}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:54px;border-bottom:1px solid var(--border);flex-shrink:0;gap:12px;}
+.topbar-title{font-family:'Syne',sans-serif;font-weight:800;font-size:16px;}
+.topbar-right{display:flex;align-items:center;gap:8px;}
+#adminEmailDisplay{font-size:11px;color:var(--muted);}
+.content{flex:1;overflow-y:auto;padding:18px;}
 
 /* STATS */
-.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px;margin-bottom:22px;}
-.stat{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);padding:16px 18px;}
-.stat-val{font-family:'Syne',sans-serif;font-weight:800;font-size:28px;line-height:1;}
-.stat-label{font-size:12px;color:var(--muted);margin-top:4px;}
-.stat-sub{font-size:11px;color:var(--accent3);margin-top:2px;}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px;}
+.stat{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);padding:14px 16px;}
+.stat-val{font-family:'Syne',sans-serif;font-weight:800;font-size:26px;line-height:1;}
+.stat-label{font-size:11px;color:var(--muted);margin-top:3px;}
+.stat-sub{font-size:10px;color:var(--accent3);margin-top:2px;}
 
-/* CARDS / TABLES */
-.card{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);overflow:hidden;margin-bottom:16px;}
-.card-hd{padding:13px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
-.card-hd h2{font-family:'Syne',sans-serif;font-weight:700;font-size:14px;}
-.card-hd-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-.search-input{padding:7px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:13px;outline:none;width:200px;}
-.search-input:focus{border-color:var(--accent);}
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);overflow:hidden;margin-bottom:14px;}
+.card-hd{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;}
+.card-hd h2{font-family:'Syne',sans-serif;font-weight:700;font-size:13px;}
+.card-hd-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap;}
+input[type=email],input[type=text],input[type=search],input[type=password],textarea,select{padding:8px 11px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:13px;outline:none;}
+input:focus,textarea:focus,select:focus{border-color:var(--accent);}
+textarea{resize:vertical;min-height:72px;width:100%;}
+select{width:100%;}
+.search-input{width:190px;}
 table{width:100%;border-collapse:collapse;}
-th{padding:10px 16px;text-align:left;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);}
-td{padding:11px 16px;font-size:13.5px;border-bottom:1px solid var(--border);vertical-align:middle;}
+th{padding:9px 14px;text-align:left;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);}
+td{padding:10px 14px;font-size:13px;border-bottom:1px solid var(--border);vertical-align:middle;}
 tr:last-child td{border-bottom:none;}
 tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
-.pill{display:inline-flex;align-items:center;padding:3px 9px;border-radius:100px;font-size:11px;font-weight:700;}
+.pill{display:inline-flex;padding:2px 8px;border-radius:100px;font-size:10px;font-weight:700;}
 .pill-free{background:rgba(144,144,184,.15);color:var(--muted);}
 .pill-pro{background:rgba(108,99,255,.18);color:var(--accent);}
 .pill-team{background:rgba(67,233,123,.14);color:var(--accent3);}
-.pill-info{background:rgba(108,99,255,.18);color:var(--accent);}
-.pill-warn{background:rgba(247,183,49,.16);color:var(--accent4);}
-.pill-danger{background:rgba(255,101,132,.15);color:var(--accent2);}
+.pill-white{background:rgba(247,183,49,.15);color:var(--accent4);}
 .pill-open{background:rgba(255,101,132,.15);color:var(--accent2);}
 .pill-resolved{background:rgba(67,233,123,.14);color:var(--accent3);}
-.link-action{color:var(--accent);cursor:pointer;font-size:13px;font-weight:600;}
+.pill-info{background:rgba(108,99,255,.15);color:var(--accent);}
+.pill-danger{background:rgba(255,101,132,.15);color:var(--accent2);}
+.pill-warn{background:rgba(247,183,49,.14);color:var(--accent4);}
+.link-action{color:var(--accent);cursor:pointer;font-size:12px;font-weight:600;}
 .link-action:hover{text-decoration:underline;}
-.empty{text-align:center;padding:48px 24px;color:var(--muted);font-size:14px;}
-.loader{text-align:center;padding:40px;color:var(--muted);}
+.empty{text-align:center;padding:40px 20px;color:var(--muted);font-size:13px;}
+.loader{text-align:center;padding:32px;color:var(--muted);font-size:13px;}
 
 /* DETAIL PANEL */
-#detailPanel{position:fixed;top:0;right:0;width:420px;height:100vh;background:var(--surface);border-left:1px solid var(--border2);z-index:500;overflow-y:auto;transform:translateX(100%);transition:transform .25s ease;display:flex;flex-direction:column;}
+#detailPanel{position:fixed;top:0;right:0;width:400px;height:100vh;background:var(--surface);border-left:1px solid var(--border2);z-index:500;overflow-y:auto;transform:translateX(100%);transition:transform .25s ease;display:flex;flex-direction:column;}
 #detailPanel.open{transform:translateX(0);}
-.dp-header{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
-.dp-header h2{font-family:'Syne',sans-serif;font-weight:800;font-size:16px;}
-.close-x{background:var(--surface2);border:1px solid var(--border2);border-radius:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);font-size:15px;}
-.dp-body{padding:18px;overflow-y:auto;flex:1;}
-.dp-section{margin-bottom:20px;}
-.dp-section h3{font-family:'Syne',sans-serif;font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:9px;}
-.dp-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:6px 0;border-bottom:1px solid var(--border);}
+.dp-hd{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.dp-hd h2{font-family:'Syne',sans-serif;font-weight:800;font-size:15px;}
+.close-x{background:var(--surface2);border:1px solid var(--border2);border-radius:7px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);font-size:14px;}
+.dp-body{padding:16px;overflow-y:auto;flex:1;}
+.dp-sec{margin-bottom:18px;}
+.dp-sec h3{font-family:'Syne',sans-serif;font-weight:700;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px;}
+.dp-row{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;padding:5px 0;border-bottom:1px solid var(--border);}
 .dp-row:last-child{border-bottom:none;}
 .dp-row .lbl{color:var(--muted);}
-.action-col{display:flex;flex-direction:column;gap:7px;}
-.tier-btns{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;}
+.tier-btns{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;}
+.action-col{display:flex;flex-direction:column;gap:6px;}
+.note-item{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:6px;}
+.note-text{font-size:12px;line-height:1.5;}
+.note-meta{font-size:10px;color:var(--muted);margin-top:3px;}
 
-/* NOTES */
-.note-item{background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:8px;}
-.note-meta{font-size:11px;color:var(--muted);margin-top:4px;}
-.note-text{font-size:13px;line-height:1.5;}
+/* CONFIRM MODAL */
+#confirmModal{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;}
+.confirm-box{background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:26px;max-width:360px;width:100%;}
+.confirm-box h3{font-family:'Syne',sans-serif;font-weight:800;font-size:17px;margin-bottom:7px;}
+.confirm-box p{color:var(--muted);font-size:13px;line-height:1.6;margin-bottom:20px;}
+.confirm-btns{display:flex;gap:9px;justify-content:flex-end;}
 
-/* TICKET */
-.ticket-item{padding:14px 18px;border-bottom:1px solid var(--border);cursor:pointer;}
-.ticket-item:last-child{border-bottom:none;}
-.ticket-item:hover{background:rgba(255,255,255,.02);}
-.ticket-subj{font-size:14px;font-weight:500;}
-.ticket-meta{font-size:12px;color:var(--muted);margin-top:3px;}
+/* QUICK ACTIONS (Legal promises) */
+.qa-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:9px;padding:14px;}
+.qa-btn{background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:12px;cursor:pointer;transition:border-color .15s,background .15s;text-align:left;}
+.qa-btn:hover{border-color:var(--accent);background:rgba(108,99,255,.08);}
+.qa-btn-icon{font-size:18px;margin-bottom:6px;}
+.qa-btn-title{font-family:'Syne',sans-serif;font-weight:700;font-size:12px;margin-bottom:2px;line-height:1.3;}
+.qa-btn-desc{font-size:11px;color:var(--muted);line-height:1.4;}
+
+/* FLOW BUILDER */
+.flow-list{padding:14px;display:flex;flex-direction:column;gap:10px;}
+.flow-item{background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:13px 15px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.flow-info h4{font-family:'Syne',sans-serif;font-weight:700;font-size:13px;margin-bottom:3px;}
+.flow-info p{font-size:12px;color:var(--muted);}
+.flow-actions{display:flex;gap:7px;flex-shrink:0;}
+.flow-trigger{font-size:10px;font-weight:600;color:var(--accent4);background:rgba(247,183,49,.12);padding:2px 7px;border-radius:100px;margin-top:4px;display:inline-block;}
+
+/* AI QUOTA */
+.quota-bar-wrap{margin:5px 0 14px;}
+.quota-label{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;}
+.quota-bar{height:7px;background:var(--surface2);border-radius:100px;overflow:hidden;}
+.quota-fill{height:100%;border-radius:100px;transition:width .4s;}
 
 /* TOAST */
-#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(60px);background:var(--surface2);border:1px solid var(--border2);border-radius:11px;padding:11px 20px;font-size:14px;font-weight:500;transition:transform .25s;z-index:9999;white-space:nowrap;pointer-events:none;}
+#toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(60px);background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:10px 18px;font-size:13px;font-weight:500;transition:transform .25s;z-index:9999;white-space:nowrap;pointer-events:none;}
 #toast.show{transform:translateX(-50%) translateY(0);}
 #toast.success{border-color:rgba(67,233,123,.4);color:var(--accent3);}
 #toast.danger{border-color:rgba(255,101,132,.4);color:var(--accent2);}
 #toast.info{border-color:rgba(108,99,255,.4);color:var(--accent);}
-
-/* CONFIRM MODAL */
-#confirmModal{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;display:flex;align-items:center;justify-content:center;padding:20px;}
-.confirm-box{background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:28px;max-width:380px;width:100%;}
-.confirm-box h3{font-family:'Syne',sans-serif;font-weight:800;font-size:18px;margin-bottom:8px;}
-.confirm-box p{color:var(--muted);font-size:14px;line-height:1.6;margin-bottom:22px;}
-.confirm-btns{display:flex;gap:10px;justify-content:flex-end;}
-
-/* TICKER BADGE */
-#ticketBadge{display:none;}
 </style>
 </head>
 <body>
 
 <div id="authGate">
   <div class="auth-box">
-    <h1>Admin Panel</h1>
-    <p>PollSlide support — authorised access only.</p>
-    <div class="field"><label>Email</label><input type="email" id="adminEmail" placeholder="help@pollslide.com"></div>
+    <div class="auth-logo"><span class="auth-logo-dot"></span>PollSlide <span class="auth-badge">ADMIN</span></div>
+    <p>PollSlide Technologies LLC · Admin access only</p>
+    <div class="field"><label>Email</label><input type="email" id="adminEmail" placeholder="help@pollslide.com" value="help@pollslide.com"></div>
     <div class="field"><label>Password</label><input type="password" id="adminPass" placeholder="••••••••" onkeydown="if(event.key==='Enter')adminSignIn()"></div>
     <button class="btn btn-primary btn-full" onclick="adminSignIn()">Sign in to admin</button>
     <div class="err" id="authErr"></div>
@@ -152,7 +168,9 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
 
 <div id="app" class="hidden">
   <nav class="sidebar">
-    <div class="s-logo"><span class="s-dot"></span>PollSlide <span class="a-badge">ADMIN</span></div>
+    <div class="s-logo"><span class="s-dot"></span>PollSlide <span class="s-badge">ADMIN</span></div>
+
+    <div class="nav-section">Overview</div>
     <div class="nav-item active" onclick="showPage('dashboard')" id="nav-dashboard">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Dashboard
     </div>
@@ -160,15 +178,32 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Users
     </div>
     <div class="nav-item" onclick="showPage('tickets')" id="nav-tickets">
-      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Support tickets
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Tickets
       <span class="nav-badge hidden" id="ticketBadge">0</span>
     </div>
-    <div class="nav-item" onclick="showPage('messages')" id="nav-messages">
-      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>Broadcast
+
+    <div class="nav-section">Communication</div>
+    <div class="nav-item" onclick="showPage('comms')" id="nav-comms">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>Send message
+    </div>
+    <div class="nav-item" onclick="showPage('flows')" id="nav-flows">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Message flows
+    </div>
+    <div class="nav-item" onclick="showPage('legal')" id="nav-legal">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Legal actions
+    </div>
+
+    <div class="nav-section">Product</div>
+    <div class="nav-item" onclick="showPage('ai')" id="nav-ai">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>AI / Polly
+    </div>
+    <div class="nav-item" onclick="showPage('tiers')" id="nav-tiers">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Plans & tiers
     </div>
     <div class="nav-item" onclick="showPage('search')" id="nav-search">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Lookup
     </div>
+
     <div class="nav-sep"></div>
     <div class="nav-item" onclick="adminSignOut()">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Sign out
@@ -180,7 +215,8 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
       <div class="topbar-title" id="pageTitle">Dashboard</div>
       <div class="topbar-right">
         <span id="adminEmailDisplay"></span>
-        <button class="btn btn-sm btn-ghost" onclick="exportUsersCSV()">⬇ Export CSV</button>
+        <button class="btn btn-sm btn-ghost" onclick="exportUsersCSV()">⬇ CSV</button>
+        <button class="btn btn-sm btn-ghost" onclick="loadAllUsers().then(renderPage)">↺ Refresh</button>
       </div>
     </div>
     <div class="content" id="content"></div>
@@ -188,7 +224,7 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
 </div>
 
 <div id="detailPanel">
-  <div class="dp-header">
+  <div class="dp-hd">
     <h2 id="dpTitle">User detail</h2>
     <div class="close-x" onclick="closeDetail()">✕</div>
   </div>
@@ -209,592 +245,735 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
 <div id="toast"></div>
 
 <script>
-const FB = {
-  apiKey:"AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME",
-  authDomain:"echonest-live-survey.firebaseapp.com",
-  databaseURL:"https://echonest-live-survey-default-rtdb.firebaseio.com",
-  projectId:"echonest-live-survey",
-  storageBucket:"echonest-live-survey.firebasestorage.app",
-  messagingSenderId:"285529140046",
-  appId:"1:285529140046:web:983c1ee8000a2ca8f80c1f"
-};
+const FB={apiKey:"AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME",authDomain:"echonest-live-survey.firebaseapp.com",databaseURL:"https://echonest-live-survey-default-rtdb.firebaseio.com",projectId:"echonest-live-survey",storageBucket:"echonest-live-survey.firebasestorage.app",messagingSenderId:"285529140046",appId:"1:285529140046:web:983c1ee8000a2ca8f80c1f"};
 firebase.initializeApp(FB);
-const auth = firebase.auth();
-const db   = firebase.database();
+const auth=firebase.auth(), db=firebase.database();
 
-// ─── ADMIN EMAILS ─────────────────────────────────────────────────────────────
-// Only these emails can access the admin panel.
-// Add team members here when needed.
-const ADMIN_EMAILS = ['help@pollslide.com'];
+const ADMIN_EMAILS=['help@pollslide.com'];
 
-let allUsers = {};
-let currentAdminUid = null;
-let currentAdminEmail = '';
-let currentPage = 'dashboard';
-let openTicketCount = 0;
+// ─── TIER CONFIG (single source of truth — mirrors presenter.html) ────────────
+const TIER_CONFIG = {
+  free:  { name:'Free',       maxPres:3,  maxPart:25,  aiMonthly:0,   price:0  },
+  pro:   { name:'Pro',        maxPres:-1, maxPart:-1,  aiMonthly:20,  price:12 },
+  team:  { name:'Team',       maxPres:-1, maxPart:-1,  aiMonthly:100, price:39 },
+  white: { name:'White Label',maxPres:-1, maxPart:-1,  aiMonthly:-1,  price:0  },
+};
+
+let allUsers={}, currentAdminUid='', currentAdminEmail='', currentPage='dashboard', openTicketCount=0;
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
-auth.onAuthStateChanged(async user => {
-  if (user && ADMIN_EMAILS.includes(user.email)) {
-    currentAdminUid  = user.uid;
-    currentAdminEmail = user.email;
+auth.onAuthStateChanged(async user=>{
+  if(user&&ADMIN_EMAILS.includes(user.email)){
+    currentAdminUid=user.uid; currentAdminEmail=user.email;
     document.getElementById('authGate').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
-    document.getElementById('adminEmailDisplay').textContent = user.email;
-    await loadAllUsers();
-    watchOpenTickets();
-    showPage('dashboard');
-  } else if (user) {
-    auth.signOut();
-    document.getElementById('authErr').textContent = 'Not authorised as admin.';
-  }
+    document.getElementById('adminEmailDisplay').textContent=user.email;
+    await loadAllUsers(); watchOpenTickets(); showPage('dashboard');
+  }else if(user){auth.signOut();document.getElementById('authErr').textContent='Not authorised.';}
 });
 
-function adminSignIn() {
-  const email = document.getElementById('adminEmail').value.trim();
-  const pass  = document.getElementById('adminPass').value;
-  document.getElementById('authErr').textContent = '';
-  if (!ADMIN_EMAILS.includes(email)) {
-    document.getElementById('authErr').textContent = 'Not authorised as admin.';
-    return;
-  }
-  auth.signInWithEmailAndPassword(email, pass)
-    .catch(e => { document.getElementById('authErr').textContent = e.message; });
+function adminSignIn(){
+  const email=document.getElementById('adminEmail').value.trim();
+  const pass=document.getElementById('adminPass').value;
+  document.getElementById('authErr').textContent='';
+  if(!ADMIN_EMAILS.includes(email)){document.getElementById('authErr').textContent='Not authorised.';return;}
+  auth.signInWithEmailAndPassword(email,pass).catch(e=>{document.getElementById('authErr').textContent=e.message;});
 }
-
-function adminSignOut() {
-  auth.signOut().then(() => {
-    document.getElementById('authGate').classList.remove('hidden');
-    document.getElementById('app').classList.add('hidden');
-    allUsers = {};
-  });
-}
+function adminSignOut(){auth.signOut().then(()=>{document.getElementById('authGate').classList.remove('hidden');document.getElementById('app').classList.add('hidden');allUsers={};})}
 
 // ─── LOAD USERS ───────────────────────────────────────────────────────────────
-async function loadAllUsers() {
-  try {
-    const snap = await db.ref('admin/users_index').get();
-    allUsers = snap.exists() ? snap.val() : {};
-    // Fall back to reading users directly (bootstrap)
-    if (!Object.keys(allUsers).length) {
-      const uSnap = await db.ref('users').get();
-      if (uSnap.exists()) {
-        allUsers = uSnap.val();
-        await db.ref('admin/users_index').set(allUsers);
-      }
-    }
-  } catch(e) { toast('Could not load users — check Firebase rules.','danger'); }
+async function loadAllUsers(){
+  try{
+    const snap=await db.ref('admin/users_index').get();
+    allUsers=snap.exists()?snap.val():{};
+    if(!Object.keys(allUsers).length){const u=await db.ref('users').get();if(u.exists()){allUsers=u.val();await db.ref('admin/users_index').set(allUsers);}}
+  }catch(e){toast('Could not load users — check Firebase rules.','danger');}
 }
 
-// ─── PAGES ────────────────────────────────────────────────────────────────────
-function showPage(page) {
-  currentPage = page;
-  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
-  const nav = document.getElementById('nav-'+page);
-  if (nav) nav.classList.add('active');
-  const titles={dashboard:'Dashboard',users:'Users',tickets:'Support Tickets',messages:'Broadcast Message',search:'Lookup'};
-  document.getElementById('pageTitle').textContent = titles[page]||page;
-  closeDetail();
-  renderPage();
+// ─── ROUTING ──────────────────────────────────────────────────────────────────
+function showPage(page){
+  currentPage=page;
+  document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
+  const nav=document.getElementById('nav-'+page);if(nav)nav.classList.add('active');
+  const titles={dashboard:'Dashboard',users:'Users',tickets:'Support Tickets',comms:'Send Message',flows:'Message Flows',legal:'Legal Quick Actions',ai:'AI / Polly Management',tiers:'Plans & Tiers',search:'Lookup'};
+  document.getElementById('pageTitle').textContent=titles[page]||page;
+  closeDetail();renderPage();
 }
-
-function renderPage() {
-  if (currentPage==='dashboard') renderDashboard();
-  else if (currentPage==='users')   renderUsers();
-  else if (currentPage==='tickets') renderTickets();
-  else if (currentPage==='messages') renderMessages();
-  else if (currentPage==='search')  renderSearch();
+function renderPage(){
+  const map={dashboard:renderDashboard,users:renderUsers,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,ai:renderAI,tiers:renderTiers,search:renderSearch};
+  if(map[currentPage])map[currentPage]();
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function renderDashboard() {
-  const users = Object.values(allUsers);
-  const total = users.length;
-  const week  = 7*24*60*60*1000;
-  const now   = Date.now();
-  const active7 = users.filter(u=>(u.lastSeen||0)>now-week).length;
-  const totalPres = users.reduce((n,u)=>n+Object.keys(u.presentations||{}).length,0);
-  const pro   = users.filter(u=>u.tier==='pro').length;
-  const team  = users.filter(u=>u.tier==='team').length;
-  const free  = total-pro-team;
-  const flagged = users.filter(u=>u.flagged).length;
-
-  document.getElementById('content').innerHTML = `
+function renderDashboard(){
+  const users=Object.values(allUsers), total=users.length, now=Date.now(), week=7*24*60*60*1000;
+  const active7=users.filter(u=>(u.lastSeen||0)>now-week).length;
+  const totalPres=users.reduce((n,u)=>n+Object.keys(u.presentations||{}).length,0);
+  const pro=users.filter(u=>u.tier==='pro').length;
+  const team=users.filter(u=>u.tier==='team').length;
+  const white=users.filter(u=>u.tier==='white').length;
+  const flagged=users.filter(u=>u.flagged).length;
+  const mrr=(pro*12)+(team*39);
+  document.getElementById('content').innerHTML=`
   <div class="stat-grid">
     <div class="stat"><div class="stat-val">${total}</div><div class="stat-label">Total users</div></div>
     <div class="stat"><div class="stat-val">${active7}</div><div class="stat-label">Active this week</div><div class="stat-sub">${total?Math.round(active7/total*100):0}% retention</div></div>
     <div class="stat"><div class="stat-val">${totalPres}</div><div class="stat-label">Presentations</div></div>
-    <div class="stat"><div class="stat-val">${pro+team}</div><div class="stat-label">Paid accounts</div></div>
+    <div class="stat"><div class="stat-val">${pro+team+white}</div><div class="stat-label">Paid accounts</div></div>
+    <div class="stat"><div class="stat-val">$${mrr}</div><div class="stat-label">MRR (est.)</div><div class="stat-sub">${white} white label</div></div>
     <div class="stat"><div class="stat-val">${openTicketCount}</div><div class="stat-label">Open tickets</div></div>
-    <div class="stat"><div class="stat-val">${flagged}</div><div class="stat-label">Flagged accounts</div></div>
   </div>
-
   <div class="card">
-    <div class="card-hd"><h2>Plan breakdown</h2></div>
-    <table>
-      <thead><tr><th>Plan</th><th>Users</th><th>Share</th></tr></thead>
-      <tbody>
-        <tr><td><span class="pill pill-free">Free</span></td><td>${free}</td><td>${total?Math.round(free/total*100):0}%</td></tr>
-        <tr><td><span class="pill pill-pro">Pro</span></td><td>${pro}</td><td>${total?Math.round(pro/total*100):0}%</td></tr>
-        <tr><td><span class="pill pill-team">Team</span></td><td>${team}</td><td>${total?Math.round(team/total*100):0}%</td></tr>
-      </tbody>
-    </table>
+    <div class="card-hd"><h2>Plan breakdown</h2><button class="btn btn-sm btn-ghost" onclick="showPage('tiers')">Manage tiers →</button></div>
+    <table><thead><tr><th>Plan</th><th>Users</th><th>Est. MRR</th></tr></thead><tbody>
+      <tr><td><span class="pill pill-free">Free</span></td><td>${total-pro-team-white}</td><td>—</td></tr>
+      <tr><td><span class="pill pill-pro">Pro</span></td><td>${pro}</td><td>$${pro*12}/mo</td></tr>
+      <tr><td><span class="pill pill-team">Team</span></td><td>${team}</td><td>$${team*39}/mo</td></tr>
+      <tr><td><span class="pill pill-white">White Label</span></td><td>${white}</td><td>Custom</td></tr>
+    </tbody></table>
   </div>
-
   <div class="card">
-    <div class="card-hd"><h2>Recent sign-ups</h2>
-      <button class="btn btn-sm btn-ghost" onclick="showPage('users')">See all →</button>
-    </div>
-    <table>
-      <thead><tr><th>Email</th><th>Signed up</th><th>Plan</th><th></th></tr></thead>
-      <tbody>
-        ${Object.entries(allUsers)
-          .sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0)).slice(0,8)
-          .map(([uid,u])=>`<tr class="clickable" onclick="openDetail('${uid}')">
-            <td>${u.email||'—'}</td>
-            <td style="color:var(--muted);font-size:12px;">${u.createdAt?new Date(u.createdAt).toLocaleDateString():'—'}</td>
-            <td><span class="pill pill-${u.tier||'free'}">${u.tier||'free'}</span>${u.flagged?'<span class="pill pill-danger" style="margin-left:5px;">⚑ flagged</span>':''}</td>
-            <td><span class="link-action">View</span></td>
-          </tr>`).join('')||'<tr><td colspan="4" class="empty">No users yet</td></tr>'}
-      </tbody>
-    </table>
+    <div class="card-hd"><h2>Recent sign-ups</h2><button class="btn btn-sm btn-ghost" onclick="showPage('users')">See all →</button></div>
+    <table><thead><tr><th>Email</th><th>Plan</th><th>Joined</th><th></th></tr></thead><tbody>
+      ${Object.entries(allUsers).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0)).slice(0,7).map(([uid,u])=>`
+      <tr class="clickable" onclick="openDetail('${uid}')">
+        <td>${u.email||'—'}${u.flagged?'<span class="pill pill-danger" style="margin-left:5px;">⚑</span>':''}</td>
+        <td><span class="pill pill-${u.tier||'free'}">${u.tier||'free'}</span></td>
+        <td style="font-size:11px;color:var(--muted);">${u.createdAt?new Date(u.createdAt).toLocaleDateString():'—'}</td>
+        <td><span class="link-action">View</span></td>
+      </tr>`).join('')||'<tr><td colspan="4" class="empty">No users yet</td></tr>'}
+    </tbody></table>
   </div>`;
 }
 
 // ─── USERS ────────────────────────────────────────────────────────────────────
-let userQ = '', userFilter = 'all';
-function renderUsers(q, f) {
-  if (q!==undefined) userQ=q;
-  if (f!==undefined) userFilter=f;
-  const entries = Object.entries(allUsers).filter(([uid,u])=>{
-    if (userQ && !(u.email||'').toLowerCase().includes(userQ.toLowerCase())) return false;
-    if (userFilter==='pro' && u.tier!=='pro') return false;
-    if (userFilter==='team' && u.tier!=='team') return false;
-    if (userFilter==='free' && u.tier && u.tier!=='free') return false;
-    if (userFilter==='flagged' && !u.flagged) return false;
+let userQ='', userFilter='all';
+function renderUsers(q,f){
+  if(q!==undefined)userQ=q; if(f!==undefined)userFilter=f;
+  const entries=Object.entries(allUsers).filter(([uid,u])=>{
+    if(userQ&&!(u.email||'').toLowerCase().includes(userQ.toLowerCase()))return false;
+    if(userFilter==='flagged'&&!u.flagged)return false;
+    if(userFilter!=='all'&&userFilter!=='flagged'&&(u.tier||'free')!==userFilter)return false;
     return true;
   }).sort((a,b)=>(b[1].lastSeen||b[1].createdAt||0)-(a[1].lastSeen||a[1].createdAt||0));
-
-  document.getElementById('content').innerHTML = `
+  document.getElementById('content').innerHTML=`
   <div class="card">
-    <div class="card-hd">
-      <h2>${entries.length} users</h2>
+    <div class="card-hd"><h2>${entries.length} users</h2>
       <div class="card-hd-actions">
-        <input class="search-input" placeholder="Search email…" value="${userQ}" oninput="renderUsers(this.value)">
-        <select style="width:120px;padding:7px 10px;font-size:12px;" onchange="renderUsers(undefined,this.value)">
-          <option value="all" ${userFilter==='all'?'selected':''}>All plans</option>
+        <input class="search-input" placeholder="Search email…" value="${userQ}" oninput="renderUsers(this.value)" style="width:180px;">
+        <select style="width:110px;padding:7px 9px;" onchange="renderUsers(undefined,this.value)">
+          <option value="all" ${userFilter==='all'?'selected':''}>All</option>
           <option value="free" ${userFilter==='free'?'selected':''}>Free</option>
-          <option value="pro"  ${userFilter==='pro'?'selected':''}>Pro</option>
+          <option value="pro" ${userFilter==='pro'?'selected':''}>Pro</option>
           <option value="team" ${userFilter==='team'?'selected':''}>Team</option>
+          <option value="white" ${userFilter==='white'?'selected':''}>White Label</option>
           <option value="flagged" ${userFilter==='flagged'?'selected':''}>Flagged</option>
         </select>
       </div>
     </div>
-    <table>
-      <thead><tr><th>Email</th><th>Plan</th><th>Presentations</th><th>Last seen</th><th>Signed up</th><th></th></tr></thead>
-      <tbody>
-        ${entries.length ? entries.map(([uid,u])=>`<tr class="clickable" onclick="openDetail('${uid}')">
-          <td>${u.email||'—'}${u.flagged?' <span class="pill pill-danger" style="margin-left:4px;">⚑</span>':''}</td>
-          <td><span class="pill pill-${u.tier||'free'}">${u.tier||'free'}</span></td>
-          <td>${Object.keys(u.presentations||{}).length}</td>
-          <td style="font-size:12px;color:var(--muted);">${u.lastSeen?timeAgo(u.lastSeen):'—'}</td>
-          <td style="font-size:12px;color:var(--muted);">${u.createdAt?new Date(u.createdAt).toLocaleDateString():'—'}</td>
-          <td><span class="link-action">View →</span></td>
-        </tr>`).join('') : '<tr><td colspan="6" class="empty">No users found</td></tr>'}
-      </tbody>
-    </table>
+    <table><thead><tr><th>Email</th><th>Plan</th><th>Pres.</th><th>Last seen</th><th>Joined</th><th></th></tr></thead><tbody>
+      ${entries.length?entries.map(([uid,u])=>`<tr class="clickable" onclick="openDetail('${uid}')">
+        <td>${u.email||'—'}${u.flagged?'<span class="pill pill-danger" style="margin-left:4px;">⚑</span>':''}</td>
+        <td><span class="pill pill-${u.tier||'free'}">${u.tier||'free'}</span></td>
+        <td>${Object.keys(u.presentations||{}).length}</td>
+        <td style="font-size:11px;color:var(--muted);">${u.lastSeen?timeAgo(u.lastSeen):'—'}</td>
+        <td style="font-size:11px;color:var(--muted);">${u.createdAt?new Date(u.createdAt).toLocaleDateString():'—'}</td>
+        <td><span class="link-action">View →</span></td>
+      </tr>`).join(''):'<tr><td colspan="6" class="empty">No users found</td></tr>'}
+    </tbody></table>
   </div>`;
 }
 
 // ─── USER DETAIL ──────────────────────────────────────────────────────────────
-function openDetail(uid) {
-  const u = allUsers[uid]; if (!u) return;
-  document.getElementById('dpTitle').textContent = u.email || 'User';
+function openDetail(uid){
+  const u=allUsers[uid];if(!u)return;
+  document.getElementById('dpTitle').textContent=u.email||'User';
   renderDetailBody(uid);
   document.getElementById('detailPanel').classList.add('open');
 }
-
-function renderDetailBody(uid) {
-  const u = allUsers[uid]; if (!u) return;
-  const pres = u.presentations || {};
-  const presCount = Object.keys(pres).length;
-  const tc = u.tier==='pro'?'pill-pro':u.tier==='team'?'pill-team':'pill-free';
-
-  document.getElementById('dpBody').innerHTML = `
-  <div class="dp-section">
-    <h3>Account info</h3>
+function renderDetailBody(uid){
+  const u=allUsers[uid];if(!u)return;
+  const pres=u.presentations||{},presCount=Object.keys(pres).length;
+  const tc=u.tier==='pro'?'pill-pro':u.tier==='team'?'pill-team':u.tier==='white'?'pill-white':'pill-free';
+  const tier=TIER_CONFIG[u.tier||'free']||TIER_CONFIG.free;
+  const aiUsed=u.aiUsedThisMonth||0;
+  const aiPct=tier.aiMonthly>0?Math.min(100,Math.round(aiUsed/tier.aiMonthly*100)):0;
+  document.getElementById('dpBody').innerHTML=`
+  <div class="dp-sec">
+    <h3>Account</h3>
     <div class="dp-row"><span class="lbl">Email</span><span>${u.email||'—'}</span></div>
-    <div class="dp-row"><span class="lbl">UID</span><span style="font-size:10px;word-break:break-all;text-align:right;max-width:220px;">${uid}</span></div>
     <div class="dp-row"><span class="lbl">Plan</span><span class="pill ${tc}">${u.tier||'free'}</span></div>
-    <div class="dp-row"><span class="lbl">Signed up</span><span>${u.createdAt?new Date(u.createdAt).toLocaleDateString():'—'}</span></div>
+    <div class="dp-row"><span class="lbl">Joined</span><span>${u.createdAt?new Date(u.createdAt).toLocaleDateString():'—'}</span></div>
     <div class="dp-row"><span class="lbl">Last seen</span><span>${u.lastSeen?new Date(u.lastSeen).toLocaleString():'—'}</span></div>
-    <div class="dp-row"><span class="lbl">Presentations</span><span>${presCount} / ${u.tier==='pro'||u.tier==='team'?'∞':'3'}</span></div>
+    <div class="dp-row"><span class="lbl">Presentations</span><span>${presCount} / ${tier.maxPres>0?tier.maxPres:'∞'}</span></div>
+    ${tier.aiMonthly>=0?`<div class="dp-row"><span class="lbl">AI uses this month</span><span>${aiUsed} / ${tier.aiMonthly>0?tier.aiMonthly:'∞'}</span></div>`:''}
     ${u.flagged?`<div class="dp-row"><span class="lbl">Status</span><span class="pill pill-danger">⚑ Flagged</span></div>`:''}
   </div>
-
-  <div class="dp-section">
+  <div class="dp-sec">
     <h3>Change plan</h3>
     <div class="tier-btns">
-      <button class="btn btn-sm btn-ghost" onclick="setTier('${uid}','free')">Free</button>
-      <button class="btn btn-sm btn-ghost" style="border-color:var(--accent);color:var(--accent)" onclick="setTier('${uid}','pro')">Pro</button>
-      <button class="btn btn-sm btn-ghost" style="border-color:var(--accent3);color:var(--accent3)" onclick="setTier('${uid}','team')">Team</button>
+      <button class="btn btn-xs btn-ghost" onclick="setTier('${uid}','free')">Free</button>
+      <button class="btn btn-xs btn-ghost" style="border-color:var(--accent);color:var(--accent)" onclick="setTier('${uid}','pro')">Pro</button>
+      <button class="btn btn-xs btn-ghost" style="border-color:var(--accent3);color:var(--accent3)" onclick="setTier('${uid}','team')">Team</button>
+      <button class="btn btn-xs btn-ghost" style="border-color:var(--accent4);color:var(--accent4)" onclick="setTier('${uid}','white')">White</button>
     </div>
   </div>
-
-  <div class="dp-section">
-    <h3>Send message to user</h3>
-    <select id="msgTypeDP" style="margin-bottom:7px;">
-      <option value="info">Info</option>
-      <option value="warning">Warning</option>
-      <option value="success">Good news</option>
-    </select>
-    <textarea id="msgTextDP" placeholder="Write a message — shown as a notification when they next open PollSlide…"></textarea>
-    <button class="btn btn-sm btn-purple" style="margin-top:7px;width:100%;" onclick="sendMsgFromDetail('${uid}')">Send message</button>
+  <div class="dp-sec">
+    <h3>Send message</h3>
+    <select id="msgTypeDP" style="margin-bottom:6px;"><option value="info">Info</option><option value="warning">Warning</option><option value="success">Good news</option></select>
+    <textarea id="msgTextDP" placeholder="Message shown as notification in the app…"></textarea>
+    <button class="btn btn-sm btn-purple" style="margin-top:6px;width:100%;" onclick="sendMsgFromDetail('${uid}')">Send message</button>
   </div>
-
-  <div class="dp-section">
-    <h3>Admin notes (internal)</h3>
+  <div class="dp-sec">
+    <h3>Internal notes</h3>
     <div id="notesArea"></div>
-    <textarea id="newNote" placeholder="Add an internal note…" style="margin-top:7px;"></textarea>
-    <button class="btn btn-sm btn-ghost" style="margin-top:7px;width:100%;" onclick="addNote('${uid}')">Save note</button>
+    <textarea id="newNote" placeholder="Add a private admin note…" style="margin-top:6px;"></textarea>
+    <button class="btn btn-sm btn-ghost" style="margin-top:6px;width:100%;" onclick="addNote('${uid}')">Save note</button>
   </div>
-
-  <div class="dp-section">
+  <div class="dp-sec">
     <h3>Presentations</h3>
-    ${presCount===0?'<div style="color:var(--muted);font-size:13px;">No presentations</div>':
-      Object.entries(pres).map(([pid,p])=>`
-        <div class="dp-row">
-          <span>${p.name||'Untitled'}</span>
-          <span style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:11px;color:var(--muted);">${Object.keys(p.questions||{}).length||0} q</span>
-            ${p.sessionCode?`<span class="link-action" style="font-size:11px;" onclick="openSession('${p.sessionCode}')">Open →</span>`:''}
-          </span>
-        </div>`).join('')}
+    ${presCount===0?'<div style="color:var(--muted);font-size:12px;">None</div>':
+      Object.entries(pres).map(([pid,p])=>`<div class="dp-row"><span>${p.name||'Untitled'}</span><span style="font-size:11px;color:var(--muted);">${Object.keys(p.questions||{}).length||0} q</span></div>`).join('')}
   </div>
-
-  <div class="dp-section">
-    <h3>Account actions</h3>
+  <div class="dp-sec">
+    <h3>Actions</h3>
     <div class="action-col">
-      <button class="btn btn-sm btn-ghost" onclick="sendPasswordReset('${u.email||''}')">📧 Send password reset email</button>
+      <button class="btn btn-sm btn-ghost" onclick="sendPasswordReset('${u.email||''}')">📧 Send password reset</button>
+      <button class="btn btn-sm btn-amber" onclick="resetAIQuota('${uid}')">↺ Reset AI quota this month</button>
       <button class="btn btn-sm btn-amber" onclick="resetSessions('${uid}')">↺ Reset all response tallies</button>
       <button class="btn btn-sm ${u.flagged?'btn-green':'btn-amber'}" onclick="toggleFlag('${uid}')">${u.flagged?'✓ Remove flag':'⚑ Flag account'}</button>
       <button class="btn btn-sm btn-red" onclick="confirmDeleteAccount('${uid}')">⚠ Delete account</button>
     </div>
   </div>`;
-
   loadNotes(uid);
 }
+function closeDetail(){document.getElementById('detailPanel').classList.remove('open');}
 
-function closeDetail() { document.getElementById('detailPanel').classList.remove('open'); }
-
-// ─── PLAN OVERRIDE ────────────────────────────────────────────────────────────
-async function setTier(uid, tier) {
-  try {
+// ─── TIER OVERRIDE ────────────────────────────────────────────────────────────
+async function setTier(uid,tier){
+  try{
     await db.ref(`users/${uid}/tier`).set(tier);
     await db.ref(`admin/users_index/${uid}/tier`).set(tier);
-    allUsers[uid].tier = tier;
-    toast('Plan set to ' + tier, 'success');
-    renderDetailBody(uid); renderPage();
-  } catch(e) { toast('Failed: '+e.message,'danger'); }
+    allUsers[uid].tier=tier;
+    toast('Plan set to '+tier,'success');renderDetailBody(uid);renderPage();
+  }catch(e){toast('Failed: '+e.message,'danger');}
 }
 
 // ─── PASSWORD RESET ───────────────────────────────────────────────────────────
-function sendPasswordReset(email) {
-  if (!email) { toast('No email on this account.','danger'); return; }
-  auth.sendPasswordResetEmail(email)
-    .then(()=>toast('Password reset email sent to '+email,'success'))
-    .catch(e=>toast('Error: '+e.message,'danger'));
+function sendPasswordReset(email){
+  if(!email){toast('No email on this account.','danger');return;}
+  auth.sendPasswordResetEmail(email).then(()=>toast('Password reset sent to '+email,'success')).catch(e=>toast(e.message,'danger'));
 }
 
 // ─── SESSION RESET ────────────────────────────────────────────────────────────
-function resetSessions(uid) {
-  showConfirm('Reset all tallies?',
-    'This clears all response data for this user\'s presentations. Questions stay live.',
-    async ()=>{
-      const pres = allUsers[uid]?.presentations||{};
-      const jobs = Object.values(pres).filter(p=>p.sessionCode)
-        .map(p=>db.ref(`sessions/${p.sessionCode}/responses`).remove());
-      await Promise.all(jobs);
-      toast('Tallies reset.','success');
-    });
+function resetSessions(uid){
+  showConfirm('Reset all tallies?','This clears all response data for this user. Questions stay live.',async()=>{
+    const pres=allUsers[uid]?.presentations||{};
+    await Promise.all(Object.values(pres).filter(p=>p.sessionCode).map(p=>db.ref(`sessions/${p.sessionCode}/responses`).remove()));
+    toast('Tallies reset.','success');
+  });
 }
 
-// ─── FLAG / UNFLAG ────────────────────────────────────────────────────────────
-async function toggleFlag(uid) {
-  const isFlagged = allUsers[uid]?.flagged;
-  try {
-    if (isFlagged) {
-      await db.ref(`admin/flags/${uid}`).remove();
-      await db.ref(`admin/users_index/${uid}/flagged`).remove();
-      delete allUsers[uid].flagged;
-      toast('Flag removed.','success');
-    } else {
-      const reason = prompt('Reason for flagging this account (logged internally):');
-      if (!reason) return;
-      await db.ref(`admin/flags/${uid}`).set({reason,flaggedAt:Date.now(),flaggedBy:currentAdminEmail});
-      await db.ref(`admin/users_index/${uid}/flagged`).set(true);
-      allUsers[uid].flagged = true;
-      toast('Account flagged.','success');
-    }
-    renderDetailBody(uid); renderPage();
-  } catch(e) { toast('Error: '+e.message,'danger'); }
+// ─── AI QUOTA RESET ───────────────────────────────────────────────────────────
+async function resetAIQuota(uid){
+  await db.ref(`users/${uid}/aiUsedThisMonth`).set(0);
+  await db.ref(`admin/users_index/${uid}/aiUsedThisMonth`).set(0);
+  allUsers[uid].aiUsedThisMonth=0;
+  toast('AI quota reset.','success');renderDetailBody(uid);
+}
+
+// ─── FLAG ─────────────────────────────────────────────────────────────────────
+async function toggleFlag(uid){
+  const isFlagged=allUsers[uid]?.flagged;
+  if(isFlagged){
+    await db.ref(`admin/flags/${uid}`).remove();
+    await db.ref(`admin/users_index/${uid}/flagged`).remove();
+    delete allUsers[uid].flagged;toast('Flag removed.','success');
+  }else{
+    const reason=prompt('Reason for flagging (logged internally):');if(!reason)return;
+    await db.ref(`admin/flags/${uid}`).set({reason,flaggedAt:Date.now(),flaggedBy:currentAdminEmail});
+    await db.ref(`admin/users_index/${uid}/flagged`).set(true);
+    allUsers[uid].flagged=true;toast('Account flagged.','success');
+  }
+  renderDetailBody(uid);renderPage();
 }
 
 // ─── DELETE ACCOUNT ───────────────────────────────────────────────────────────
-function confirmDeleteAccount(uid) {
-  const email = allUsers[uid]?.email||uid;
-  showConfirm('Delete account permanently?',
-    `This will delete all data for ${email} — presentations, responses, and their account record. This cannot be undone.`,
-    async ()=>{
-      try {
-        // Delete user data from Firebase (Auth deletion needs server-side; log it for manual follow-up)
-        await db.ref(`users/${uid}`).remove();
-        await db.ref(`admin/users_index/${uid}`).remove();
-        await db.ref(`admin/deleted_accounts/${uid}`).set({email,deletedAt:Date.now(),deletedBy:currentAdminEmail});
-        delete allUsers[uid];
-        closeDetail();
-        toast('Account data deleted. Firebase Auth deletion requires the Admin SDK — see admin/deleted_accounts.','info');
-        renderPage();
-      } catch(e) { toast('Error: '+e.message,'danger'); }
-    });
-}
-
-// ─── NOTES ───────────────────────────────────────────────────────────────────
-async function loadNotes(uid) {
-  const el = document.getElementById('notesArea'); if (!el) return;
-  try {
-    const snap = await db.ref(`admin/notes/${uid}`).get();
-    if (!snap.exists()) { el.innerHTML='<div style="color:var(--muted);font-size:12px;">No notes yet.</div>'; return; }
-    const notes = Object.entries(snap.val()).sort((a,b)=>b[1].at-a[1].at);
-    el.innerHTML = notes.map(([id,n])=>`
-      <div class="note-item">
-        <div class="note-text">${n.text}</div>
-        <div class="note-meta">${new Date(n.at).toLocaleString()} · ${n.by}</div>
-      </div>`).join('');
-  } catch(e) {}
-}
-async function addNote(uid) {
-  const text = document.getElementById('newNote')?.value?.trim();
-  if (!text) return;
-  await db.ref(`admin/notes/${uid}/${Date.now()}`).set({text,at:Date.now(),by:currentAdminEmail});
-  document.getElementById('newNote').value = '';
-  loadNotes(uid);
-  toast('Note saved.','success');
-}
-
-// ─── OPEN SESSION ─────────────────────────────────────────────────────────────
-function openSession(code) {
-  window.open(`https://app.pollslide.com/presenter`, '_blank');
-  toast('Session code: ' + code,'info');
-}
-
-// ─── SUPPORT TICKETS ──────────────────────────────────────────────────────────
-function watchOpenTickets() {
-  db.ref('admin/tickets').orderByChild('status').equalTo('open').on('value', snap=>{
-    openTicketCount = snap.exists() ? Object.keys(snap.val()).length : 0;
-    const badge = document.getElementById('ticketBadge');
-    if (badge) {
-      if (openTicketCount > 0) { badge.textContent=openTicketCount; badge.classList.remove('hidden'); }
-      else badge.classList.add('hidden');
-    }
-    if (currentPage==='tickets') renderTickets();
-    if (currentPage==='dashboard') renderDashboard();
+function confirmDeleteAccount(uid){
+  const email=allUsers[uid]?.email||uid;
+  showConfirm('Delete account permanently?',`Deletes all data for ${email}. Cannot be undone.`,async()=>{
+    await db.ref(`users/${uid}`).remove();
+    await db.ref(`admin/users_index/${uid}`).remove();
+    await db.ref(`admin/deleted_accounts/${uid}`).set({email,deletedAt:Date.now(),deletedBy:currentAdminEmail});
+    delete allUsers[uid];closeDetail();
+    toast('Account deleted. Remove from Firebase Auth console too.','info');renderPage();
   });
 }
 
-async function renderTickets() {
-  document.getElementById('content').innerHTML = '<div class="loader">Loading tickets…</div>';
-  try {
-    const snap = await db.ref('admin/tickets').orderByChild('createdAt').limitToLast(100).get();
-    const tickets = snap.exists() ? Object.entries(snap.val()).reverse() : [];
-    const open = tickets.filter(([,t])=>t.status==='open');
-    const resolved = tickets.filter(([,t])=>t.status==='resolved'||!t.status||t.status==='closed');
-
-    document.getElementById('content').innerHTML = `
-    <div class="card">
-      <div class="card-hd"><h2>Open tickets (${open.length})</h2></div>
-      ${open.length?open.map(([id,t])=>`
-        <div class="ticket-item" onclick="openTicket('${id}')">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-            <div class="ticket-subj">${t.subject||'(no subject)'}</div>
-            <span class="pill pill-open">open</span>
-          </div>
-          <div class="ticket-meta">${(allUsers[t.uid]||{}).email||t.email||t.uid||'Unknown'} · ${t.createdAt?timeAgo(t.createdAt):'—'}</div>
-        </div>`).join(''):
-        '<div class="empty">No open tickets 🎉</div>'}
-    </div>
-    <div class="card">
-      <div class="card-hd"><h2>Resolved (${resolved.length})</h2></div>
-      ${resolved.length?resolved.slice(0,20).map(([id,t])=>`
-        <div class="ticket-item" onclick="openTicket('${id}')">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-            <div class="ticket-subj" style="color:var(--muted)">${t.subject||'(no subject)'}</div>
-            <span class="pill pill-resolved">resolved</span>
-          </div>
-          <div class="ticket-meta">${(allUsers[t.uid]||{}).email||t.email||'—'} · ${t.createdAt?timeAgo(t.createdAt):'—'}</div>
-        </div>`).join(''):
-        '<div class="empty">No resolved tickets yet.</div>'}
-    </div>`;
-  } catch(e) { document.getElementById('content').innerHTML='<div class="empty" style="color:var(--accent2);">Could not load tickets.</div>'; }
+// ─── NOTES ────────────────────────────────────────────────────────────────────
+async function loadNotes(uid){
+  const el=document.getElementById('notesArea');if(!el)return;
+  try{
+    const snap=await db.ref(`admin/notes/${uid}`).get();
+    if(!snap.exists()){el.innerHTML='<div style="color:var(--muted);font-size:11px;">No notes.</div>';return;}
+    el.innerHTML=Object.entries(snap.val()).sort((a,b)=>b[1].at-a[1].at).map(([,n])=>`<div class="note-item"><div class="note-text">${n.text}</div><div class="note-meta">${new Date(n.at).toLocaleString()} · ${n.by}</div></div>`).join('');
+  }catch(e){}
+}
+async function addNote(uid){
+  const text=document.getElementById('newNote')?.value?.trim();if(!text)return;
+  await db.ref(`admin/notes/${uid}/${Date.now()}`).set({text,at:Date.now(),by:currentAdminEmail});
+  document.getElementById('newNote').value='';loadNotes(uid);toast('Note saved.','success');
 }
 
-function openTicket(id) {
+// ─── TICKETS ──────────────────────────────────────────────────────────────────
+function watchOpenTickets(){
+  db.ref('admin/tickets').orderByChild('status').equalTo('open').on('value',snap=>{
+    openTicketCount=snap.exists()?Object.keys(snap.val()).length:0;
+    const badge=document.getElementById('ticketBadge');
+    if(badge){if(openTicketCount>0){badge.textContent=openTicketCount;badge.classList.remove('hidden');}else badge.classList.add('hidden');}
+    if(currentPage==='tickets'||currentPage==='dashboard')renderPage();
+  });
+}
+async function renderTickets(){
+  document.getElementById('content').innerHTML='<div class="loader">Loading…</div>';
+  try{
+    const snap=await db.ref('admin/tickets').orderByChild('createdAt').limitToLast(100).get();
+    const tickets=snap.exists()?Object.entries(snap.val()).reverse():[];
+    const open=tickets.filter(([,t])=>t.status==='open');
+    const done=tickets.filter(([,t])=>t.status!=='open');
+    document.getElementById('content').innerHTML=`
+    <div class="card">
+      <div class="card-hd"><h2>Open (${open.length})</h2></div>
+      ${open.length?open.map(([id,t])=>`<div style="padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="openTicket('${id}')">
+        <div style="display:flex;justify-content:space-between;"><span style="font-weight:500;font-size:13px;">${t.subject||'(no subject)'}</span><span class="pill pill-open">open</span></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">${(allUsers[t.uid]||{}).email||t.email||'Unknown'} · ${t.createdAt?timeAgo(t.createdAt):'—'}</div>
+      </div>`).join(''):'<div class="empty">No open tickets 🎉</div>'}
+    </div>
+    <div class="card">
+      <div class="card-hd"><h2>Resolved (${done.length})</h2></div>
+      ${done.length?done.slice(0,20).map(([id,t])=>`<div style="padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="openTicket('${id}')">
+        <div style="display:flex;justify-content:space-between;"><span style="font-weight:500;font-size:13px;color:var(--muted);">${t.subject||'(no subject)'}</span><span class="pill pill-resolved">resolved</span></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">${(allUsers[t.uid]||{}).email||'—'}</div>
+      </div>`).join(''):'<div class="empty">None resolved yet.</div>'}
+    </div>`;
+  }catch(e){document.getElementById('content').innerHTML='<div class="empty" style="color:var(--accent2);">Could not load tickets.</div>';}
+}
+function openTicket(id){
   db.ref(`admin/tickets/${id}`).get().then(snap=>{
-    if (!snap.exists()) return;
-    const t = snap.val();
-    const userEmail = (allUsers[t.uid]||{}).email||t.email||t.uid||'Unknown';
-    document.getElementById('dpTitle').textContent = t.subject||'Ticket';
-    document.getElementById('dpBody').innerHTML = `
-      <div class="dp-section">
-        <h3>Ticket details</h3>
-        <div class="dp-row"><span class="lbl">From</span><span>${userEmail}</span></div>
-        <div class="dp-row"><span class="lbl">Submitted</span><span>${t.createdAt?new Date(t.createdAt).toLocaleString():'—'}</span></div>
-        <div class="dp-row"><span class="lbl">Status</span><span class="pill ${t.status==='resolved'?'pill-resolved':'pill-open'}">${t.status||'open'}</span></div>
+    if(!snap.exists())return;const t=snap.val();
+    const userEmail=(allUsers[t.uid]||{}).email||t.email||t.uid||'Unknown';
+    document.getElementById('dpTitle').textContent=t.subject||'Ticket';
+    document.getElementById('dpBody').innerHTML=`
+    <div class="dp-sec"><h3>Details</h3>
+      <div class="dp-row"><span class="lbl">From</span><span>${userEmail}</span></div>
+      <div class="dp-row"><span class="lbl">Status</span><span class="pill ${t.status==='resolved'?'pill-resolved':'pill-open'}">${t.status||'open'}</span></div>
+      <div class="dp-row"><span class="lbl">Submitted</span><span>${t.createdAt?new Date(t.createdAt).toLocaleString():'—'}</span></div>
+    </div>
+    <div class="dp-sec"><h3>Message</h3><div style="background:var(--surface2);border-radius:8px;padding:10px;font-size:13px;line-height:1.6;">${t.message||'(empty)'}</div></div>
+    <div class="dp-sec"><h3>Reply</h3>
+      <textarea id="ticketReply" placeholder="Reply sent as in-app notification…"></textarea>
+      <div style="display:flex;gap:7px;margin-top:7px;">
+        <button class="btn btn-sm btn-purple" style="flex:1;" onclick="replyTicket('${id}','${t.uid||''}')">Send reply</button>
+        <button class="btn btn-sm btn-green" onclick="resolveTicket('${id}')">✓ Resolve</button>
       </div>
-      <div class="dp-section">
-        <h3>Message</h3>
-        <div style="background:var(--surface2);border-radius:9px;padding:12px;font-size:13.5px;line-height:1.6;">${t.message||'(empty)'}</div>
-      </div>
-      <div class="dp-section">
-        <h3>Reply to user</h3>
-        <textarea id="ticketReply" placeholder="Your reply — sent as a notification in the app…"></textarea>
-        <div style="display:flex;gap:8px;margin-top:8px;">
-          <button class="btn btn-sm btn-purple" style="flex:1;" onclick="replyTicket('${id}','${t.uid||''}')">Send reply</button>
-          <button class="btn btn-sm btn-green" onclick="resolveTicket('${id}')">Mark resolved</button>
-        </div>
-      </div>`;
+    </div>`;
     document.getElementById('detailPanel').classList.add('open');
   });
 }
-
-async function replyTicket(ticketId, uid) {
-  const text = document.getElementById('ticketReply')?.value?.trim();
-  if (!text) { toast('Write a reply first.','danger'); return; }
-  const msgId = 'msg_' + Date.now();
+async function replyTicket(ticketId,uid){
+  const text=document.getElementById('ticketReply')?.value?.trim();if(!text){toast('Write a reply first.','danger');return;}
+  const msgId='msg_'+Date.now();
   await db.ref(`admin/messages/${msgId}`).set({uid,text,type:'info',sentAt:Date.now(),sentBy:currentAdminEmail,ticketId});
-  if (uid) await db.ref(`users/${uid}/inbox/${msgId}`).set({text,type:'info',sentAt:Date.now(),read:false});
+  if(uid)await db.ref(`users/${uid}/inbox/${msgId}`).set({text,type:'info',sentAt:Date.now(),read:false});
   await db.ref(`admin/tickets/${ticketId}/replied`).set(true);
-  document.getElementById('ticketReply').value='';
-  toast('Reply sent.','success');
+  document.getElementById('ticketReply').value='';toast('Reply sent.','success');
 }
+async function resolveTicket(id){await db.ref(`admin/tickets/${id}/status`).set('resolved');closeDetail();toast('Resolved.','success');}
 
-async function resolveTicket(id) {
-  await db.ref(`admin/tickets/${id}/status`).set('resolved');
-  closeDetail();
-  toast('Ticket resolved.','success');
-}
-
-// ─── BROADCAST ────────────────────────────────────────────────────────────────
-function renderMessages() {
-  const users = Object.entries(allUsers).sort((a,b)=>(a[1].email||'').localeCompare(b[1].email||''));
-  document.getElementById('content').innerHTML = `
-  <div class="card" style="margin-bottom:16px;">
+// ─── COMMUNICATION ────────────────────────────────────────────────────────────
+function renderComms(){
+  const users=Object.entries(allUsers).sort((a,b)=>(a[1].email||'').localeCompare(b[1].email||''));
+  document.getElementById('content').innerHTML=`
+  <div class="card" style="margin-bottom:14px;">
     <div class="card-hd"><h2>Send to a specific user</h2></div>
-    <div style="padding:16px;display:flex;flex-direction:column;gap:10px;">
+    <div style="padding:14px;display:flex;flex-direction:column;gap:9px;">
       <select id="singleUid"><option value="">— Select user —</option>${users.map(([uid,u])=>`<option value="${uid}">${u.email||uid}</option>`).join('')}</select>
-      <select id="singleType"><option value="info">Info</option><option value="warning">Warning</option><option value="success">Good news</option></select>
-      <textarea id="singleMsg" placeholder="Message text…"></textarea>
-      <button class="btn btn-primary" style="align-self:flex-start;padding:10px 22px;" onclick="sendSingle()">Send message</button>
+      <select id="singleType"><option value="info">ℹ Info</option><option value="success">✅ Good news</option><option value="warning">⚠ Warning</option></select>
+      <textarea id="singleMsg" placeholder="Message shown as a notification when they open PollSlide…"></textarea>
+      <button class="btn btn-primary" style="align-self:flex-start;padding:10px 20px;" onclick="sendSingle()">Send message</button>
     </div>
   </div>
-
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-hd"><h2>Broadcast to a plan tier</h2></div>
-    <div style="padding:16px;display:flex;flex-direction:column;gap:10px;">
-      <select id="bulkTier"><option value="all">All users</option><option value="free">Free users only</option><option value="pro">Pro users only</option><option value="team">Team users only</option></select>
-      <select id="bulkType"><option value="info">Info</option><option value="warning">Warning</option><option value="success">Good news / announcement</option></select>
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hd"><h2>Broadcast to a tier</h2></div>
+    <div style="padding:14px;display:flex;flex-direction:column;gap:9px;">
+      <select id="bulkTier"><option value="all">All users</option><option value="free">Free users</option><option value="pro">Pro users</option><option value="team">Team users</option><option value="white">White Label</option></select>
+      <select id="bulkType"><option value="info">ℹ Info</option><option value="success">✅ Announcement</option><option value="warning">⚠ Warning</option></select>
       <textarea id="bulkMsg" placeholder="Broadcast message…"></textarea>
-      <button class="btn btn-amber" style="align-self:flex-start;padding:10px 22px;" onclick="sendBulk()">Broadcast message</button>
+      <button class="btn btn-amber" style="align-self:flex-start;padding:10px 20px;" onclick="sendBulk()">Broadcast</button>
     </div>
   </div>
-
   <div class="card">
     <div class="card-hd"><h2>Recent sent messages</h2></div>
     <div id="sentLog"><div class="loader">Loading…</div></div>
   </div>`;
   loadSentLog();
 }
-
-async function sendSingle() {
-  const uid  = document.getElementById('singleUid').value;
-  const text = document.getElementById('singleMsg').value.trim();
-  const type = document.getElementById('singleType').value;
-  if (!uid||!text) { toast('Select a user and write a message.','danger'); return; }
-  await doSendMsg(uid,text,type);
-  document.getElementById('singleMsg').value='';
-  loadSentLog();
+async function sendSingle(){
+  const uid=document.getElementById('singleUid').value;const text=document.getElementById('singleMsg').value.trim();const type=document.getElementById('singleType').value;
+  if(!uid||!text){toast('Select a user and write a message.','danger');return;}
+  await doSendMsg(uid,text,type);document.getElementById('singleMsg').value='';loadSentLog();
 }
-
-async function sendBulk() {
-  const tier = document.getElementById('bulkTier').value;
-  const text = document.getElementById('bulkMsg').value.trim();
-  const type = document.getElementById('bulkType').value;
-  if (!text) { toast('Write a message first.','danger'); return; }
-  const targets = Object.entries(allUsers).filter(([,u])=>tier==='all'||(u.tier||'free')===tier);
-  if (!targets.length) { toast('No users in that tier.','danger'); return; }
-  showConfirm(`Send to ${targets.length} users?`,`This will send "${text.slice(0,60)}${text.length>60?'…':''}" to ${targets.length} ${tier==='all'?'users':tier+' users'}.`, async ()=>{
-    for (const [uid] of targets) { await doSendMsg(uid,text,type); }
-    document.getElementById('bulkMsg').value='';
-    loadSentLog();
-    toast(`Sent to ${targets.length} users.`,'success');
+async function sendBulk(){
+  const tier=document.getElementById('bulkTier').value;const text=document.getElementById('bulkMsg').value.trim();const type=document.getElementById('bulkType').value;
+  if(!text){toast('Write a message.','danger');return;}
+  const targets=Object.entries(allUsers).filter(([,u])=>tier==='all'||(u.tier||'free')===tier);
+  if(!targets.length){toast('No users in that tier.','danger');return;}
+  showConfirm(`Send to ${targets.length} users?`,`"${text.slice(0,60)}${text.length>60?'…':''}" → ${targets.length} ${tier==='all'?'users':tier+' users'}.`,async()=>{
+    for(const[uid]of targets)await doSendMsg(uid,text,type);
+    document.getElementById('bulkMsg').value='';loadSentLog();toast(`Sent to ${targets.length} users.`,'success');
   });
 }
-
-async function sendMsgFromDetail(uid) {
-  const text = document.getElementById('msgTextDP')?.value?.trim();
-  const type = document.getElementById('msgTypeDP')?.value||'info';
-  if (!text) { toast('Write a message first.','danger'); return; }
-  await doSendMsg(uid,text,type);
-  document.getElementById('msgTextDP').value='';
+async function sendMsgFromDetail(uid){
+  const text=document.getElementById('msgTextDP')?.value?.trim();const type=document.getElementById('msgTypeDP')?.value||'info';
+  if(!text){toast('Write a message.','danger');return;}
+  await doSendMsg(uid,text,type);document.getElementById('msgTextDP').value='';
 }
-
-async function doSendMsg(uid,text,type) {
+async function doSendMsg(uid,text,type){
   const msgId='msg_'+Date.now();
   await db.ref(`admin/messages/${msgId}`).set({uid,text,type,sentAt:Date.now(),sentBy:currentAdminEmail});
   await db.ref(`users/${uid}/inbox/${msgId}`).set({text,type,sentAt:Date.now(),read:false});
   toast('Message sent.','success');
 }
-
-async function loadSentLog() {
-  const el = document.getElementById('sentLog'); if (!el) return;
-  const snap = await db.ref('admin/messages').orderByChild('sentAt').limitToLast(30).get();
-  if (!snap.exists()) { el.innerHTML='<div class="empty">No messages sent yet.</div>'; return; }
-  const msgs = Object.entries(snap.val()).reverse();
+async function loadSentLog(){
+  const el=document.getElementById('sentLog');if(!el)return;
+  const snap=await db.ref('admin/messages').orderByChild('sentAt').limitToLast(30).get();
+  if(!snap.exists()){el.innerHTML='<div class="empty">No messages sent.</div>';return;}
   el.innerHTML=`<table><thead><tr><th>To</th><th>Message</th><th>Type</th><th>Sent</th></tr></thead><tbody>${
-    msgs.map(([,m])=>`<tr>
-      <td style="font-size:12px;">${(allUsers[m.uid]||{}).email||m.uid||'—'}</td>
-      <td style="font-size:13px;max-width:220px;">${m.text}</td>
+    Object.entries(snap.val()).reverse().map(([,m])=>`<tr>
+      <td style="font-size:11px;">${(allUsers[m.uid]||{}).email||m.uid||'—'}</td>
+      <td style="font-size:12px;max-width:200px;">${m.text}</td>
       <td><span class="pill pill-info">${m.type||'info'}</span></td>
       <td style="font-size:11px;color:var(--muted);">${m.sentAt?timeAgo(m.sentAt):'—'}</td>
     </tr>`).join('')
   }</tbody></table>`;
 }
 
-// ─── LOOKUP (search by email or session code) ─────────────────────────────────
-function renderSearch() {
-  document.getElementById('content').innerHTML = `
-  <div class="card">
-    <div class="card-hd"><h2>Lookup user or session</h2></div>
-    <div style="padding:16px;display:flex;flex-direction:column;gap:10px;">
-      <input type="text" id="lookupQ" placeholder="Email address or session code…" oninput="runLookup(this.value)" style="font-size:15px;">
+// ─── MESSAGE FLOWS ────────────────────────────────────────────────────────────
+const FLOW_TEMPLATES = [
+  { id:'welcome',       icon:'👋', title:'Welcome email',          trigger:'On sign-up',         desc:'Sent immediately after a user creates their free account.',         type:'welcome',    message:'Welcome to PollSlide! Your first poll is just minutes away. Need help? Reply to this message or visit pollslide.com/setup.' },
+  { id:'upgrade_pro',   icon:'⭐', title:'Upgrade to Pro',          trigger:'Manual / limit hit',  desc:'Sent when a free user hits a plan limit (participants or presentations).', type:'info', message:'You\'ve reached the Free plan limit. Upgrade to Pro for unlimited participants, unlimited presentations, and AI question generation.' },
+  { id:'trial_expiry',  icon:'⏰', title:'Trial reminder',          trigger:'3 days before expiry', desc:'Sent 3 days before a free trial or promotional period ends.',       type:'warning',    message:'Your Pro trial ends in 3 days. Upgrade now to keep unlimited access — your presentations and data stay intact.' },
+  { id:'payment_fail',  icon:'💳', title:'Payment failed',          trigger:'On Stripe webhook',    desc:'Sent when a subscription payment fails.',                           type:'warning',    message:'Your last payment failed. Please update your payment method to keep your Pro features. Your account will downgrade to Free in 7 days.' },
+  { id:'downgrade',     icon:'📉', title:'Downgraded to Free',      trigger:'After payment grace',  desc:'Sent when an account is downgraded after a failed payment.',        type:'warning',    message:'Your account has been moved to the Free plan. Your presentations are safe. Upgrade any time to restore Pro access.' },
+  { id:'gdpr_confirm',  icon:'🔒', title:'Data deletion confirmed', trigger:'On account delete',    desc:'Sent to confirm a user\'s data has been erased (GDPR Art. 17).',    type:'success',    message:'Your PollSlide account and all associated data have been permanently deleted as requested. Thank you for using PollSlide.' },
+  { id:'security_alert',icon:'🚨', title:'Security alert',          trigger:'Manual',               desc:'Sent if we detect suspicious activity on an account.',              type:'warning',    message:'We noticed unusual activity on your PollSlide account. If this wasn\'t you, please reset your password immediately.' },
+  { id:'new_feature',   icon:'✨', title:'Feature announcement',    trigger:'Manual broadcast',     desc:'Broadcast to announce a new feature or update.',                    type:'success',    message:'Exciting news! [Feature name] is now available. [One line description]. Try it now at app.pollslide.com.' },
+];
+
+function renderFlows(){
+  document.getElementById('content').innerHTML=`
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hd"><h2>Message flows</h2><span style="font-size:11px;color:var(--muted);">Click Send to fire a flow to a user, or Edit to customise the message</span></div>
+    <div class="flow-list">
+      ${FLOW_TEMPLATES.map(f=>`
+      <div class="flow-item">
+        <div style="font-size:22px;flex-shrink:0;">${f.icon}</div>
+        <div class="flow-info" style="flex:1;">
+          <h4>${f.title}</h4>
+          <p>${f.desc}</p>
+          <span class="flow-trigger">${f.trigger}</span>
+        </div>
+        <div class="flow-actions">
+          <button class="btn btn-xs btn-ghost" onclick="editFlowMsg('${f.id}')">Edit</button>
+          <button class="btn btn-xs btn-purple" onclick="sendFlowToUser('${f.id}')">Send</button>
+        </div>
+      </div>`).join('')}
     </div>
-    <div id="lookupResults" style="padding:0 16px 16px;"></div>
   </div>`;
 }
 
-function runLookup(q) {
-  const el = document.getElementById('lookupResults'); if (!el) return;
-  if (!q||q.length<2) { el.innerHTML=''; return; }
-  const ql = q.toLowerCase();
-  // Search by email
-  const byEmail = Object.entries(allUsers).filter(([,u])=>(u.email||'').toLowerCase().includes(ql));
-  // Search by session code
-  const byCode = Object.entries(allUsers).filter(([,u])=>
-    Object.values(u.presentations||{}).some(p=>(p.sessionCode||'').toLowerCase().includes(ql))
-  );
-  const combined = [...new Map([...byEmail,...byCode]).entries()];
-  if (!combined.length) { el.innerHTML='<div style="color:var(--muted);font-size:13px;padding:8px 0;">No results.</div>'; return; }
-  el.innerHTML = `<table><thead><tr><th>Email</th><th>Plan</th><th>Presentations</th><th></th></tr></thead><tbody>${
+function editFlowMsg(flowId){
+  const f=FLOW_TEMPLATES.find(f=>f.id===flowId);if(!f)return;
+  const saved=localStorage.getItem('ps_flow_'+flowId)||f.message;
+  document.getElementById('dpTitle').textContent='Edit: '+f.title;
+  document.getElementById('dpBody').innerHTML=`
+  <div class="dp-sec">
+    <h3>Message template</h3>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:8px;">This is the default message for "${f.title}". Edit and save for future sends.</p>
+    <textarea id="flowMsgEdit" style="min-height:100px;">${saved}</textarea>
+    <button class="btn btn-sm btn-primary" style="margin-top:8px;width:100%;" onclick="saveFlowMsg('${flowId}')">Save template</button>
+  </div>
+  <div class="dp-sec"><h3>Trigger</h3><div class="dp-row"><span class="lbl">When</span><span>${f.trigger}</span></div><div class="dp-row"><span class="lbl">Type</span><span class="pill pill-info">${f.type}</span></div></div>`;
+  document.getElementById('detailPanel').classList.add('open');
+}
+function saveFlowMsg(flowId){
+  const text=document.getElementById('flowMsgEdit')?.value?.trim();if(!text)return;
+  localStorage.setItem('ps_flow_'+flowId,text);toast('Template saved.','success');
+}
+function sendFlowToUser(flowId){
+  const f=FLOW_TEMPLATES.find(f=>f.id===flowId);if(!f)return;
+  const msg=localStorage.getItem('ps_flow_'+flowId)||f.message;
+  const users=Object.entries(allUsers).sort((a,b)=>(a[1].email||'').localeCompare(b[1].email||''));
+  document.getElementById('dpTitle').textContent='Send: '+f.title;
+  document.getElementById('dpBody').innerHTML=`
+  <div class="dp-sec">
+    <h3>Recipient</h3>
+    <select id="flowRecip"><option value="__all__">All users (broadcast)</option><option value="__free__">Free users only</option><option value="__pro__">Pro users only</option><option value="__team__">Team users only</option>${users.map(([uid,u])=>`<option value="${uid}">${u.email||uid}</option>`).join('')}</select>
+  </div>
+  <div class="dp-sec">
+    <h3>Message preview</h3>
+    <div style="background:var(--surface2);border-radius:8px;padding:10px;font-size:13px;line-height:1.6;">${msg}</div>
+  </div>
+  <div style="margin-top:12px;">
+    <button class="btn btn-primary btn-full" onclick="fireFlow('${flowId}')">Send flow</button>
+  </div>`;
+  document.getElementById('detailPanel').classList.add('open');
+}
+async function fireFlow(flowId){
+  const f=FLOW_TEMPLATES.find(f=>f.id===flowId);if(!f)return;
+  const msg=localStorage.getItem('ps_flow_'+flowId)||f.message;
+  const recip=document.getElementById('flowRecip')?.value;if(!recip)return;
+  let targets=[];
+  if(recip==='__all__')targets=Object.keys(allUsers);
+  else if(recip==='__free__')targets=Object.entries(allUsers).filter(([,u])=>!u.tier||u.tier==='free').map(([uid])=>uid);
+  else if(recip==='__pro__')targets=Object.entries(allUsers).filter(([,u])=>u.tier==='pro').map(([uid])=>uid);
+  else if(recip==='__team__')targets=Object.entries(allUsers).filter(([,u])=>u.tier==='team').map(([uid])=>uid);
+  else targets=[recip];
+  showConfirm(`Send "${f.title}" to ${targets.length} user${targets.length!==1?'s':''}?`,'This will send a notification in the app.',async()=>{
+    for(const uid of targets)await doSendMsg(uid,msg,f.type||'info');
+    closeDetail();toast(`Sent to ${targets.length} user${targets.length!==1?'s':''}.`,'success');
+  });
+}
+
+// ─── LEGAL QUICK ACTIONS ──────────────────────────────────────────────────────
+const LEGAL_ACTIONS=[
+  { icon:'🔒', title:'Privacy request',    desc:'User requests their data under GDPR/CCPA',     action:()=>doLegalAction('privacy_request') },
+  { icon:'🗑️', title:'Data deletion',      desc:'Process right-to-erasure (GDPR Art. 17)',       action:()=>doLegalAction('data_deletion') },
+  { icon:'📋', title:'Data export',        desc:'Export all data for a user (GDPR Art. 20)',     action:()=>doLegalAction('data_export') },
+  { icon:'✏️', title:'Data correction',    desc:'Correct inaccurate data (GDPR Art. 16)',        action:()=>doLegalAction('data_correction') },
+  { icon:'⏸️', title:'Restrict processing',desc:'Pause data processing for a user',              action:()=>doLegalAction('restrict_processing') },
+  { icon:'🚫', title:'Object to processing',desc:'User objects to legitimate interests basis',   action:()=>doLegalAction('object_processing') },
+  { icon:'💳', title:'Refund request',     desc:'Process 14-day money-back guarantee',           action:()=>doLegalAction('refund_request') },
+  { icon:'📧', title:'Consent withdrawal', desc:'User withdraws marketing consent',              action:()=>doLegalAction('consent_withdrawal') },
+  { icon:'👨‍👧', title:'Minor account',     desc:'Under-16 account reported — review & act',    action:()=>doLegalAction('minor_account') },
+  { icon:'🔐', title:'Security breach',    desc:'Log a security incident, notify users',         action:()=>doLegalAction('security_breach') },
+  { icon:'📜', title:'DPA request',        desc:'B2B customer requests Data Processing Agreement', action:()=>doLegalAction('dpa_request') },
+  { icon:'⚖️', title:'Legal hold',         desc:'Preserve user data for legal proceedings',      action:()=>doLegalAction('legal_hold') },
+];
+
+function renderLegal(){
+  document.getElementById('content').innerHTML=`
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hd"><h2>Legal quick actions</h2><span style="font-size:11px;color:var(--muted);">One-click fulfilment of legal promises from Terms of Service & Privacy Policy</span></div>
+    <div class="qa-grid">
+      ${LEGAL_ACTIONS.map((a,i)=>`<div class="qa-btn" onclick="legalActions[${i}].action()"><div class="qa-btn-icon">${a.icon}</div><div class="qa-btn-title">${a.title}</div><div class="qa-btn-desc">${a.desc}</div></div>`).join('')}
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-hd"><h2>Legal request log</h2></div>
+    <div id="legalLog"><div class="loader">Loading…</div></div>
+  </div>`;
+  loadLegalLog();
+}
+const legalActions=LEGAL_ACTIONS;
+
+function doLegalAction(type){
+  const users=Object.entries(allUsers).sort((a,b)=>(a[1].email||'').localeCompare(b[1].email||''));
+  const labels={privacy_request:'Privacy data request',data_deletion:'Data deletion (Art.17)',data_export:'Data export (Art.20)',data_correction:'Data correction (Art.16)',restrict_processing:'Restrict processing (Art.18)',object_processing:'Object to processing (Art.21)',refund_request:'Refund request',consent_withdrawal:'Consent withdrawal',minor_account:'Minor account',security_breach:'Security breach',dpa_request:'DPA request',legal_hold:'Legal hold'};
+  document.getElementById('dpTitle').textContent=labels[type]||type;
+  document.getElementById('dpBody').innerHTML=`
+  <div class="dp-sec">
+    <h3>User / subject</h3>
+    <select id="legalUid"><option value="">— Select user (if applicable) —</option>${users.map(([uid,u])=>`<option value="${uid}">${u.email||uid}</option>`).join('')}</select>
+  </div>
+  <div class="dp-sec">
+    <h3>Notes / details</h3>
+    <textarea id="legalNotes" placeholder="Reference number, details, steps taken…"></textarea>
+  </div>
+  <div class="dp-sec">
+    <h3>Actions for: ${labels[type]}</h3>
+    ${getLegalSteps(type)}
+  </div>
+  <div style="margin-top:10px;">
+    <button class="btn btn-primary btn-full" onclick="logLegalAction('${type}')">Log this action</button>
+  </div>`;
+  document.getElementById('detailPanel').classList.add('open');
+}
+
+function getLegalSteps(type){
+  const steps={
+    data_deletion: '<ul style="font-size:12px;line-height:1.8;padding-left:16px;color:var(--muted);"><li>Select the user above</li><li>Click "Log" — this records the request</li><li>Go to Users → View user → Delete account button</li><li>Manually delete from Firebase Auth console</li><li>Send GDPR deletion confirmation flow</li></ul>',
+    data_export: '<ul style="font-size:12px;line-height:1.8;padding-left:16px;color:var(--muted);"><li>Select the user above</li><li>Use ⬇ CSV export from the toolbar for user list</li><li>For full data: Firebase Console → Export user\'s data</li><li>Send to verified email address only</li></ul>',
+    refund_request: '<ul style="font-size:12px;line-height:1.8;padding-left:16px;color:var(--muted);"><li>Verify within 14-day guarantee window</li><li>Process refund in Stripe Dashboard</li><li>Downgrade user to Free tier</li><li>Send confirmation message via Send Message</li></ul>',
+    security_breach: '<ul style="font-size:12px;line-height:1.8;padding-left:16px;color:var(--muted);"><li>Document the breach scope and timeline</li><li>Under GDPR: notify supervisory authority within 72 hours if user rights affected</li><li>Notify affected users if high risk (use Security Alert flow)</li><li>Log all steps taken here</li></ul>',
+    dpa_request: '<ul style="font-size:12px;line-height:1.8;padding-left:16px;color:var(--muted);"><li>Email DPA template to help@pollslide.com</li><li>Review with legal counsel</li><li>Counter-sign and return within 5 business days</li></ul>',
+  };
+  return steps[type]||'<p style="font-size:12px;color:var(--muted);">Log this request and follow your standard procedure. Reference our Privacy Policy and Terms of Service for obligations.</p>';
+}
+
+async function logLegalAction(type){
+  const uid=document.getElementById('legalUid')?.value||'';
+  const notes=document.getElementById('legalNotes')?.value?.trim()||'';
+  await db.ref(`admin/legal_log/${Date.now()}`).set({type,uid,email:(allUsers[uid]||{}).email||'',notes,loggedAt:Date.now(),loggedBy:currentAdminEmail,status:'logged'});
+  closeDetail();toast('Legal action logged.','success');loadLegalLog();
+}
+
+async function loadLegalLog(){
+  const el=document.getElementById('legalLog');if(!el)return;
+  const snap=await db.ref('admin/legal_log').orderByChild('loggedAt').limitToLast(30).get();
+  if(!snap.exists()){el.innerHTML='<div class="empty">No legal actions logged yet.</div>';return;}
+  const labels={privacy_request:'Privacy request',data_deletion:'Data deletion',data_export:'Data export',data_correction:'Data correction',restrict_processing:'Restrict processing',object_processing:'Object to processing',refund_request:'Refund',consent_withdrawal:'Consent withdrawal',minor_account:'Minor account',security_breach:'Security breach',dpa_request:'DPA request',legal_hold:'Legal hold'};
+  el.innerHTML=`<table><thead><tr><th>Action</th><th>User</th><th>Notes</th><th>Logged</th></tr></thead><tbody>${
+    Object.entries(snap.val()).reverse().map(([,l])=>`<tr>
+      <td><span class="pill pill-warn">${labels[l.type]||l.type}</span></td>
+      <td style="font-size:11px;">${l.email||l.uid||'—'}</td>
+      <td style="font-size:11px;color:var(--muted);max-width:140px;">${(l.notes||'—').slice(0,60)}</td>
+      <td style="font-size:11px;color:var(--muted);">${timeAgo(l.loggedAt)}</td>
+    </tr>`).join('')
+  }</tbody></table>`;
+}
+
+// ─── AI / POLLY MANAGEMENT ────────────────────────────────────────────────────
+function renderAI(){
+  const users=Object.values(allUsers);
+  const totalAIUsed=users.reduce((n,u)=>n+(u.aiUsedThisMonth||0),0);
+  const proUsers=users.filter(u=>u.tier==='pro');
+  const teamUsers=users.filter(u=>u.tier==='team');
+  const proUsed=proUsers.reduce((n,u)=>n+(u.aiUsedThisMonth||0),0);
+  const teamUsed=teamUsers.reduce((n,u)=>n+(u.aiUsedThisMonth||0),0);
+  const proMax=proUsers.length*20, teamMax=teamUsers.length*100;
+  document.getElementById('content').innerHTML=`
+  <div class="stat-grid" style="margin-bottom:16px;">
+    <div class="stat"><div class="stat-val">${totalAIUsed}</div><div class="stat-label">AI uses this month</div></div>
+    <div class="stat"><div class="stat-val">${proUsed}</div><div class="stat-label">Pro AI uses</div><div class="stat-sub">${proMax?Math.round(proUsed/proMax*100):0}% of quota</div></div>
+    <div class="stat"><div class="stat-val">${teamUsed}</div><div class="stat-label">Team AI uses</div><div class="stat-sub">${teamMax?Math.round(teamUsed/teamMax*100):0}% of quota</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hd"><h2>Polly AI — Tier quotas</h2></div>
+    <div style="padding:14px;">
+      ${Object.entries(TIER_CONFIG).map(([key,t])=>`
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
+        <div><span class="pill pill-${key}" style="margin-right:8px;">${t.name}</span><span style="font-size:12px;color:var(--muted);">${t.aiMonthly<0?'Unlimited':t.aiMonthly===0?'No access':t.aiMonthly+' / month'}</span></div>
+        <button class="btn btn-xs btn-ghost" onclick="editAIQuota('${key}','${t.aiMonthly}')">Edit</button>
+      </div>`).join('')}
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hd"><h2>Self-hosting AI — decision log</h2></div>
+    <div style="padding:14px;font-size:13px;line-height:1.7;color:var(--muted);">
+      <p style="margin-bottom:10px;"><strong style="color:var(--text);">Current approach:</strong> Anthropic API (Claude) with per-tier monthly quotas. API cost per generation: ~$0.01–0.03.</p>
+      <p style="margin-bottom:10px;"><strong style="color:var(--text);">Self-hosting break-even:</strong> GPU server (A10G 24GB): ~$350–600/month. Break-even: ~1,500–2,000 Pro subscribers at current prices.</p>
+      <p style="margin-bottom:10px;"><strong style="color:var(--text);">Recommendation:</strong> API until ~1,500 paying users, then evaluate. Quotas below keep costs predictable now.</p>
+      <p><strong style="color:var(--accent3);">Estimated API cost this month:</strong> ~$${(totalAIUsed * 0.02).toFixed(2)} (at $0.02 avg/call)</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><h2>High AI usage users</h2></div>
+    <table><thead><tr><th>Email</th><th>Plan</th><th>AI uses</th><th>Quota</th><th></th></tr></thead><tbody>
+      ${users.filter(u=>(u.aiUsedThisMonth||0)>0).sort((a,b)=>(b.aiUsedThisMonth||0)-(a.aiUsedThisMonth||0)).slice(0,15).map(u=>{
+        const t=TIER_CONFIG[u.tier||'free']||TIER_CONFIG.free;
+        const pct=t.aiMonthly>0?Math.min(100,Math.round((u.aiUsedThisMonth||0)/t.aiMonthly*100)):0;
+        return `<tr><td style="font-size:12px;">${u.email||'—'}</td><td><span class="pill pill-${u.tier||'free'}">${u.tier||'free'}</span></td>
+        <td>${u.aiUsedThisMonth||0}</td>
+        <td><div class="quota-bar" style="width:80px;"><div class="quota-fill" style="width:${pct}%;background:${pct>90?'var(--accent2)':pct>70?'var(--accent4)':'var(--accent3)'}"></div></div></td>
+        <td><button class="btn btn-xs btn-ghost" onclick="resetAIQuotaForEmail('${u.email}')">Reset</button></td></tr>`;
+      }).join('')||'<tr><td colspan="5" class="empty">No AI usage yet</td></tr>'}
+    </tbody></table>
+  </div>`;
+}
+
+function editAIQuota(tier,current){
+  const val=prompt(`Monthly AI generations for ${TIER_CONFIG[tier]?.name||tier} plan:\n(-1 = unlimited, 0 = no access)`,current);
+  if(val===null)return;const n=parseInt(val);
+  if(isNaN(n)){toast('Invalid number','danger');return;}
+  TIER_CONFIG[tier].aiMonthly=n;
+  toast('AI quota for ' + tier + ' updated to ' + (n<0?'unlimited':n) + '. Persist change: update TIERS in presenter.html too.', 'info');
+  renderAI();
+}
+async function resetAIQuotaForEmail(email){
+  const uid=Object.entries(allUsers).find(([,u])=>u.email===email)?.[0];
+  if(!uid)return;
+  await resetAIQuota(uid);
+}
+
+// ─── PLANS & TIERS ────────────────────────────────────────────────────────────
+function renderTiers(){
+  const users=Object.values(allUsers);
+  document.getElementById('content').innerHTML=`
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hd"><h2>Plan overview</h2></div>
+    <table><thead><tr><th>Plan</th><th>Max pres.</th><th>Max parts.</th><th>AI / mo</th><th>Price</th><th>Users</th></tr></thead><tbody>
+      ${Object.entries(TIER_CONFIG).map(([key,t])=>`<tr>
+        <td><span class="pill pill-${key}">${t.name}</span></td>
+        <td>${t.maxPres<0?'∞':t.maxPres}</td>
+        <td>${t.maxPart<0?'∞':t.maxPart}</td>
+        <td>${t.aiMonthly<0?'∞':t.aiMonthly===0?'—':t.aiMonthly}</td>
+        <td>${t.price?'$'+t.price+'/mo':'Custom'}</td>
+        <td>${users.filter(u=>(u.tier||'free')===key).length}</td>
+      </tr>`).join('')}
+    </tbody></table>
+  </div>
+
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hd"><h2>White Label enquiries</h2></div>
+    <div id="whiteEnquiries"><div class="loader">Loading…</div></div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><h2>Manually assign a tier</h2></div>
+    <div style="padding:14px;display:flex;flex-direction:column;gap:9px;">
+      <select id="tierUid"><option value="">— Select user —</option>${Object.entries(allUsers).sort((a,b)=>(a[1].email||'').localeCompare(b[1].email||'')).map(([uid,u])=>`<option value="${uid}">${u.email||uid} (${u.tier||'free'})</option>`).join('')}</select>
+      <select id="tierNew"><option value="free">Free</option><option value="pro">Pro</option><option value="team">Team</option><option value="white">White Label</option></select>
+      <input type="text" id="tierNote" placeholder="Note (e.g. 'Comped 3 months', 'White label contract #123')">
+      <button class="btn btn-primary" style="align-self:flex-start;" onclick="assignTierManual()">Assign tier</button>
+    </div>
+  </div>`;
+  loadWhiteEnquiries();
+}
+
+async function assignTierManual(){
+  const uid=document.getElementById('tierUid').value;const tier=document.getElementById('tierNew').value;const note=document.getElementById('tierNote').value;
+  if(!uid){toast('Select a user.','danger');return;}
+  await setTier(uid,tier);
+  if(note)await db.ref(`admin/notes/${uid}/${Date.now()}`).set({text:`Tier set to ${tier}: ${note}`,at:Date.now(),by:currentAdminEmail});
+  toast(`${allUsers[uid]?.email} set to ${tier}.`,'success');renderTiers();
+}
+
+async function loadWhiteEnquiries(){
+  const el=document.getElementById('whiteEnquiries');if(!el)return;
+  const whites=Object.entries(allUsers).filter(([,u])=>u.tier==='white');
+  if(!whites.length){el.innerHTML='<div class="empty">No white label accounts yet. Enquiries come via help@pollslide.com</div>';return;}
+  el.innerHTML=`<table><thead><tr><th>Email</th><th>Since</th><th>Notes</th><th></th></tr></thead><tbody>${
+    whites.map(([uid,u])=>`<tr class="clickable" onclick="openDetail('${uid}')">
+      <td>${u.email||'—'}</td>
+      <td style="font-size:11px;color:var(--muted);">${u.createdAt?new Date(u.createdAt).toLocaleDateString():'—'}</td>
+      <td style="font-size:11px;color:var(--muted);">—</td>
+      <td><span class="link-action">Manage</span></td>
+    </tr>`).join('')
+  }</tbody></table>`;
+}
+
+// ─── LOOKUP ───────────────────────────────────────────────────────────────────
+function renderSearch(){
+  document.getElementById('content').innerHTML=`
+  <div class="card">
+    <div class="card-hd"><h2>Lookup by email or session code</h2></div>
+    <div style="padding:14px;"><input type="text" id="lookupQ" placeholder="Email address or session code…" oninput="runLookup(this.value)" style="width:100%;font-size:14px;"></div>
+    <div id="lookupResults" style="padding:0 14px 14px;"></div>
+  </div>`;
+}
+function runLookup(q){
+  const el=document.getElementById('lookupResults');if(!el)return;
+  if(!q||q.length<2){el.innerHTML='';return;}
+  const ql=q.toLowerCase();
+  const byEmail=Object.entries(allUsers).filter(([,u])=>(u.email||'').toLowerCase().includes(ql));
+  const byCode=Object.entries(allUsers).filter(([,u])=>Object.values(u.presentations||{}).some(p=>(p.sessionCode||'').toLowerCase().includes(ql)));
+  const combined=[...new Map([...byEmail,...byCode]).entries()];
+  if(!combined.length){el.innerHTML='<div style="color:var(--muted);font-size:13px;">No results.</div>';return;}
+  el.innerHTML=`<table><thead><tr><th>Email</th><th>Plan</th><th>Pres.</th><th></th></tr></thead><tbody>${
     combined.map(([uid,u])=>`<tr class="clickable" onclick="openDetail('${uid}')">
       <td>${u.email||'—'}</td>
       <td><span class="pill pill-${u.tier||'free'}">${u.tier||'free'}</span></td>
@@ -804,52 +983,30 @@ function runLookup(q) {
   }</tbody></table>`;
 }
 
-// ─── EXPORT CSV ──────────────────────────────────────────────────────────────
-function exportUsersCSV() {
-  const rows=[['UID','Email','Plan','Presentations','Signed up','Last seen','Flagged']];
-  Object.entries(allUsers).forEach(([uid,u])=>rows.push([
-    uid, u.email||'', u.tier||'free',
-    Object.keys(u.presentations||{}).length,
-    u.createdAt?new Date(u.createdAt).toLocaleDateString():'',
-    u.lastSeen?new Date(u.lastSeen).toLocaleDateString():'',
-    u.flagged?'yes':'no'
-  ]));
-  const csv = rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
-  const blob = new Blob([csv],{type:'text/csv'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'pollslide-users-'+new Date().toISOString().slice(0,10)+'.csv';
-  a.click(); URL.revokeObjectURL(a.href);
+// ─── EXPORT CSV ───────────────────────────────────────────────────────────────
+function exportUsersCSV(){
+  const rows=[['UID','Email','Plan','Presentations','AI Used This Month','Joined','Last Seen','Flagged']];
+  Object.entries(allUsers).forEach(([uid,u])=>rows.push([uid,u.email||'',u.tier||'free',Object.keys(u.presentations||{}).length,u.aiUsedThisMonth||0,u.createdAt?new Date(u.createdAt).toLocaleDateString():'',u.lastSeen?new Date(u.lastSeen).toLocaleDateString():'',u.flagged?'yes':'no']));
+  const csv=rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='pollslide-users-'+new Date().toISOString().slice(0,10)+'.csv';a.click();URL.revokeObjectURL(a.href);
   toast('CSV downloaded.','success');
 }
 
 // ─── CONFIRM MODAL ────────────────────────────────────────────────────────────
-function showConfirm(title,msg,onOk) {
-  document.getElementById('confirmTitle').textContent=title;
-  document.getElementById('confirmMsg').textContent=msg;
+function showConfirm(title,msg,onOk){
+  document.getElementById('confirmTitle').textContent=title;document.getElementById('confirmMsg').textContent=msg;
   document.getElementById('confirmModal').classList.remove('hidden');
-  document.getElementById('confirmOkBtn').onclick=async()=>{ hideConfirm(); await onOk(); };
+  document.getElementById('confirmOkBtn').onclick=async()=>{hideConfirm();await onOk();};
 }
 function hideConfirm(){document.getElementById('confirmModal').classList.add('hidden');}
 
-// ─── HELPERS ─────────────────────────────────────────────────────────────────
-function timeAgo(ts){
-  const s=Math.floor((Date.now()-ts)/1000);
-  if(s<60)return'just now';
-  if(s<3600)return Math.floor(s/60)+'m ago';
-  if(s<86400)return Math.floor(s/3600)+'h ago';
-  if(s<86400*7)return Math.floor(s/86400)+'d ago';
-  return new Date(ts).toLocaleDateString();
-}
-
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+function timeAgo(ts){const s=Math.floor((Date.now()-ts)/1000);if(s<60)return'just now';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';if(s<604800)return Math.floor(s/86400)+'d ago';return new Date(ts).toLocaleDateString();}
 let _tt;
-function toast(msg,type){
-  const el=document.getElementById('toast');
-  el.textContent=msg; el.className='show '+(type||'');
-  clearTimeout(_tt); _tt=setTimeout(()=>{el.className='';},3400);
-}
-
+function toast(msg,type){const el=document.getElementById('toast');el.textContent=msg;el.className='show '+(type||'');clearTimeout(_tt);_tt=setTimeout(()=>{el.className='';},3400);}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDetail();hideConfirm();}});
+
+async function loadWhiteEnquiriesAlways(){const el=document.getElementById('whiteEnquiries');if(el)await loadWhiteEnquiries();}
 </script>
 </body>
 </html>
