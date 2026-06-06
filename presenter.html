@@ -374,7 +374,28 @@
     <span id="saveText">Saved</span>
   </div>
   <div class="topbar-right">
-    <button class="btn btn-ghost" id="userBtn" onclick="showUserMenu()" title="Account" style="display:none;">👤</button>
+    <!-- User chip — shows email, opens a proper dropdown menu -->
+    <div id="userChip" style="display:none;position:relative;">
+      <button id="userBtn" onclick="toggleUserMenu()" title="Account"
+        style="display:flex;align-items:center;gap:7px;padding:6px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer;max-width:220px;overflow:hidden;">
+        <span style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;" id="userAvatar">?</span>
+        <span id="userEmailDisplay" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+        <span style="color:var(--muted);font-size:10px;flex-shrink:0;">▾</span>
+      </button>
+      <!-- Dropdown menu -->
+      <div id="userDropdown" style="display:none;position:absolute;top:calc(100% + 6px);right:0;background:var(--surface);border:1px solid var(--border2);border-radius:12px;min-width:230px;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,0.4);overflow:hidden;">
+        <div style="padding:12px 14px;border-bottom:1px solid var(--border);">
+          <div id="userMenuEmail" style="font-size:13px;font-weight:600;margin-bottom:2px;word-break:break-all;"></div>
+          <div id="userMenuPlan" style="font-size:11px;color:var(--muted);"></div>
+        </div>
+        <div id="userMenuItems"></div>
+        <div style="border-top:1px solid var(--border);">
+          <button onclick="auth.signOut();location.reload();" style="width:100%;padding:11px 14px;background:none;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;color:var(--accent2);text-align:left;display:flex;align-items:center;gap:8px;">
+            <span>→</span> Sign out
+          </button>
+        </div>
+      </div>
+    </div>
     <button class="btn btn-ghost" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark">🌙</button>
     <button class="btn btn-ghost" id="addQBtn" onclick="addQuestion()" disabled>+ Question</button>
     <button class="btn btn-reset" id="resetBtn" onclick="confirmResetAll()" disabled>↺ Reset All Tallies</button>
@@ -592,7 +613,15 @@ auth.onAuthStateChanged(user => {
     currentUser = user;
     userId = user.uid;
     document.getElementById('authGate').style.display = 'none';
-    document.getElementById('userBtn').style.display = '';
+    // Show the user chip with email and avatar initial
+    const chip = document.getElementById('userChip');
+    if (chip) chip.style.display = '';
+    const emailEl = document.getElementById('userEmailDisplay');
+    if (emailEl) emailEl.textContent = user.email || '';
+    const menuEmailEl = document.getElementById('userMenuEmail');
+    if (menuEmailEl) menuEmailEl.textContent = user.email || '';
+    const av = document.getElementById('userAvatar');
+    if (av) av.textContent = (user.email||'?')[0].toUpperCase();
     // Load the user's plan tier
     db.ref(`users/${userId}/tier`).once('value').then(snap => {
       userTier = (snap.val() === 'pro' || snap.val() === 'team') ? snap.val() : 'free';
@@ -622,7 +651,8 @@ auth.onAuthStateChanged(user => {
     userId = null;
     userTier = 'free';
     document.getElementById('authGate').style.display = 'flex';
-    document.getElementById('userBtn').style.display = 'none';
+    const chip2 = document.getElementById('userChip');
+    if (chip2) chip2.style.display = 'none';
   }
 });
 
@@ -649,6 +679,39 @@ function showUpgradePrompt(headline, subtext) {
   document.body.appendChild(m);
 }
 // ─── SUPPORT TICKET ──────────────────────────────────────────────────────────
+// ─── ACCOUNT DELETION (GDPR Art. 17 — right to erasure) ──────────────────────
+function requestAccountDeletion() {
+  const conf = confirm(
+    'Delete your PollSlide account?\n\n' +
+    'This will permanently delete all your presentations, questions, and response data.\n' +
+    'This cannot be undone.\n\n' +
+    'Click OK to confirm deletion.'
+  );
+  if (!conf) return;
+  // Log the deletion request in the admin system, then wipe user data
+  const uid = userId; const email = currentUser?.email || '';
+  db.ref('admin/deletion_requests/' + uid).set({
+    email, requestedAt: Date.now(), status: 'pending'
+  }).then(() => {
+    // Delete all user presentations and session data
+    const pres = presentations;
+    const jobs = Object.values(pres).filter(p=>p.sessionCode).map(p=>
+      db.ref('sessions/' + p.sessionCode + '/responses').remove()
+    );
+    return Promise.all([
+      ...jobs,
+      db.ref('users/' + uid).remove(),
+      db.ref('admin/users_index/' + uid).remove(),
+      db.ref('mac_link/' + uid).remove()
+    ]);
+  }).then(() => {
+    toast('Your data has been deleted. Signing you out.', 'success');
+    setTimeout(() => { auth.signOut(); location.reload(); }, 2000);
+  }).catch(e => {
+    toast('Deletion failed — please email help@pollslide.com', 'danger');
+  });
+}
+
 function openSupportTicket() {
   const subject = prompt('What can we help you with? (one-line summary)');
   if (!subject) return;
@@ -723,30 +786,33 @@ function friendlyAuthError(code) {
   return map[code] || 'Something went wrong. Please try again.';
 }
 
-function showUserMenu() {
-  const email = currentUser ? currentUser.email : '';
+// ─── USER DROPDOWN MENU ──────────────────────────────────────────────────────
+function toggleUserMenu() {
+  const dd = document.getElementById('userDropdown');
+  if (!dd) return;
+  const isOpen = dd.style.display !== 'none';
+  if (isOpen) { dd.style.display = 'none'; return; }
+  // Populate info line
   const lim = tierLimits();
   const presCount = Object.keys(presentations).length;
-  const presLimitTxt = lim.maxPresentations === Infinity ? 'unlimited' : lim.maxPresentations;
-  const partLimitTxt = lim.maxParticipants === Infinity ? 'unlimited' : lim.maxParticipants;
-  const choice = prompt(
-    'Signed in as ' + email + '\n' +
-    'Plan: ' + lim.name + '  ·  ' + presCount + '/' + presLimitTxt + ' presentations  ·  ' + partLimitTxt + ' participants/poll\n\n' +
-    'Type a number and press OK:\n' +
-    '1 = Connect Mac App (get pairing code)\n' +
-    '2 = See plans / upgrade\n' +
-    '3 = Contact support\n' +
-    '4 = Sign out\n' +
-    '(Cancel to close)'
-  );
-  if (choice === '1') {
-    generatePairingCode();
-  } else if (choice === '2') {
-    window.open('https://pollslide.com/pricing', '_blank');
-  } else if (choice === '3') {
-    auth.signOut(); location.reload();
-  }
+  const presLimitTxt = lim.maxPresentations === Infinity ? '∞' : lim.maxPresentations;
+  const partLimitTxt = lim.maxParticipants === Infinity ? '∞' : lim.maxParticipants;
+  const infoEl = document.getElementById('userMenuPlan');
+  if (infoEl) infoEl.textContent =
+    lim.name + ' plan · ' + presCount + '/' + presLimitTxt + ' presentations · ' + partLimitTxt + ' participants/poll';
+  dd.style.display = 'block';
 }
+function closeUserMenu() {
+  const dd = document.getElementById('userDropdown');
+  if (dd) dd.style.display = 'none';
+}
+document.addEventListener('click', function(e) {
+  const chip = document.getElementById('userChip');
+  if (chip && !chip.contains(e.target)) closeUserMenu();
+});
+
+// Legacy alias — some older references may call showUserMenu()
+function showUserMenu() { toggleUserMenu(); }
 
 // ─── MAC APP PAIRING CODE GENERATOR ───────────────────────────────────────────
 async function generatePairingCode() {
