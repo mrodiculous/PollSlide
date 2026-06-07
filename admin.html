@@ -586,18 +586,26 @@ async function addNote(uid){
 
 // ─── TICKETS ──────────────────────────────────────────────────────────────────
 function watchOpenTickets(){
-  db.ref('admin/tickets').orderByChild('status').equalTo('open').on('value',snap=>{
-    openTicketCount=snap.exists()?Object.keys(snap.val()).length:0;
-    const badge=document.getElementById('ticketBadge');
-    if(badge){if(openTicketCount>0){badge.textContent=openTicketCount;badge.classList.remove('hidden');}else badge.classList.add('hidden');}
-    if(currentPage==='tickets'||currentPage==='dashboard')renderPage();
+  // Read all tickets and filter client-side to avoid indexOn requirements
+  db.ref('admin/tickets').on('value', snap => {
+    openTicketCount = 0;
+    if (snap.exists()) {
+      Object.values(snap.val()).forEach(t => { if (t.status === 'open' || !t.status) openTicketCount++; });
+    }
+    const badge = document.getElementById('ticketBadge');
+    if (badge) {
+      if (openTicketCount > 0) { badge.textContent = openTicketCount; badge.classList.remove('hidden'); }
+      else badge.classList.add('hidden');
+    }
+    if (currentPage === 'tickets' || currentPage === 'dashboard') renderPage();
   });
 }
 async function renderTickets(){
-  document.getElementById('content').innerHTML='<div class="loader">Loading…</div>';
+  document.getElementById('content').innerHTML='<div class="loader">Loading tickets…</div>';
   try{
-    const snap=await db.ref('admin/tickets').orderByChild('createdAt').limitToLast(100).get();
-    const tickets=snap.exists()?Object.entries(snap.val()).reverse():[];
+    // Simple get — filter and sort client-side to avoid Firebase index requirements
+    const snap=await db.ref('admin/tickets').get();
+    const tickets=snap.exists()?Object.entries(snap.val()).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0)):[];
     const open=tickets.filter(([,t])=>t.status==='open');
     const done=tickets.filter(([,t])=>t.status!=='open');
     document.getElementById('content').innerHTML=`

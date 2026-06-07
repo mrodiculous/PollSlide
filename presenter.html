@@ -691,13 +691,15 @@ auth.onAuthStateChanged(user => {
       loadPresentations();
     }).catch(() => { userTier = 'free'; loadPresentations(); });
 
-    // Register this user in the admin index (creates/updates metadata on each login)
-    db.ref(`admin/users_index/${userId}`).update({
+    // Write email + metadata to users/{uid} directly (needed for admin panel reads)
+    // Also write to admin/users_index for fast admin queries
+    const loginMeta = {
       email: user.email || '',
       lastSeen: Date.now(),
       createdAt: user.metadata?.creationTime ? new Date(user.metadata.creationTime).getTime() : Date.now(),
-      tier: userTier || 'free'
-    }).catch(()=>{});
+    };
+    db.ref(`users/${userId}`).update(loginMeta).catch(()=>{});
+    db.ref(`admin/users_index/${userId}`).update(Object.assign({}, loginMeta, { tier: userTier || 'free' })).catch(()=>{});
 
     // Check inbox for admin messages and show unread ones as toasts
     db.ref(`users/${userId}/inbox`).orderByChild('read').equalTo(false).once('value').then(snap => {
@@ -783,60 +785,83 @@ function showUpgradePrompt(headline, subtext) {
     </div>`;
   document.body.appendChild(m);
 }
-// ─── SUPPORT TICKET ──────────────────────────────────────────────────────────
-// ─── ACCOUNT DELETION (GDPR Art. 17 — right to erasure) ──────────────────────
-// Uses the server-side delete-account API which can delete Firebase Auth users.
-// The client sends an ID token; the server verifies it before deleting anything.
-async function requestAccountDeletion() {
-  const confirmed = confirm(
-    'Delete your PollSlide account?\n\n' +
-    'This permanently deletes all your presentations, questions, and response data.\n' +
-    'This cannot be undone.\n\n' +
-    'Click OK to confirm.'
-  );
-  if (!confirmed || !currentUser) return;
+// ─── SUPPORT TICKET MODAL ────────────────────────────────────────────────────
+function openSupportTicket() {
+  const old = document.getElementById('supportModal');
+  if (old) old.remove();
+  const m = document.createElement('div');
+  m.id = 'supportModal';
+  m.style.cssText = 'position:fixed;inset:0;z-index:200000;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:20px;';
+  m.onclick = e => { if(e.target===m) m.remove(); };
+  m.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:18px;padding:28px;max-width:460px;width:100%;display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;">Contact Support</div>
+        <button onclick="document.getElementById('supportModal').remove()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0 4px;">✕</button>
+      </div>
+      <p style="color:var(--muted);font-size:13px;line-height:1.5;">We typically respond within 1 business day. Your email: <strong style="color:var(--text);">${escapeHtml(currentUser?.email||'')}</strong></p>
+      <div>
+        <label style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;">Category</label>
+        <select id="ticketCat" style="width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;">
+          <option value="technical">🔧 Technical issue</option>
+          <option value="billing">💳 Billing question</option>
+          <option value="account">👤 Account issue</option>
+          <option value="feature">💡 Feature request</option>
+          <option value="general">💬 General question</option>
+        </select>
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;">Subject</label>
+        <input id="ticketSubj" type="text" placeholder="Brief summary of your issue…" maxlength="120"
+          style="width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;">
+      </div>
+      <div>
+        <label style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;">Details</label>
+        <textarea id="ticketMsg" placeholder="Describe the issue — include what you were doing, what you expected, and what happened instead." maxlength="2000"
+          style="width:100%;min-height:110px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;resize:vertical;"></textarea>
+      </div>
+      <div id="ticketErr" style="color:var(--accent2);font-size:12px;display:none;"></div>
+      <div style="display:flex;gap:10px;">
+        <button onclick="document.getElementById('supportModal').remove()" style="flex:1;padding:11px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;">Cancel</button>
+        <button id="ticketSubmitBtn" onclick="submitSupportTicket()" style="flex:2;padding:11px;background:var(--accent);border:none;color:#fff;border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;">Submit ticket</button>
+      </div>
+    </div>`;
+  document.body.appendChild(m);
+  setTimeout(() => document.getElementById('ticketSubj')?.focus(), 80);
+}
 
-  // Show progress feedback immediately
-  toast('Deleting your account…', 'info');
+async function submitSupportTicket() {
+  const subj = document.getElementById('ticketSubj')?.value?.trim();
+  const msg  = document.getElementById('ticketMsg')?.value?.trim();
+  const cat  = document.getElementById('ticketCat')?.value || 'general';
+  const errEl = document.getElementById('ticketErr');
+  const btn   = document.getElementById('ticketSubmitBtn');
+
+  if (!subj) { errEl.textContent = 'Please enter a subject.'; errEl.style.display='block'; return; }
+  if (!msg || msg.length < 20) { errEl.textContent = 'Please describe the issue (at least 20 characters).'; errEl.style.display='block'; return; }
+
+  if (btn) { btn.textContent = 'Submitting…'; btn.disabled = true; }
+  if (errEl) errEl.style.display = 'none';
 
   try {
-    // Get a fresh ID token to send to the server for verification
-    const idToken = await currentUser.getIdToken(true);
-
-    const response = await fetch('/api/delete-account', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + idToken,
-      },
-      body: JSON.stringify({ uid: currentUser.uid }),
+    const ticketId = 'ticket_' + Date.now();
+    await db.ref('admin/tickets/' + ticketId).set({
+      uid:       userId || '',
+      email:     currentUser?.email || '',
+      subject:   subj,
+      message:   msg,
+      category:  cat,
+      status:    'open',
+      createdAt: Date.now(),
     });
-
-    const result = await response.json();
-
-    if (result.success) {
-      toast('Account deleted. Signing you out…', 'success');
-      setTimeout(() => { auth.signOut(); location.reload(); }, 2000);
-    } else {
-      const errorDetail = result.errors ? result.errors.join(', ') : 'Unknown error';
-      console.error('Deletion errors:', result);
-      // Partial success — auth deleted but some DB cleanup failed (non-critical)
-      if (result.results && result.results.auth) {
-        toast('Account deleted (some data cleanup pending). Signing out…', 'success');
-        setTimeout(() => { auth.signOut(); location.reload(); }, 2500);
-      } else {
-        toast('Deletion failed: ' + errorDetail + '. Email help@pollslide.com', 'danger');
-      }
-    }
-  } catch (e) {
-    console.error('Delete account error:', e);
-    if (e.message && e.message.includes('Failed to fetch')) {
-      toast('Delete-account API not deployed yet. Go to GitHub → commit api/delete-account.js first.', 'danger');
-    } else {
-      toast('Error: ' + e.message + '. Email help@pollslide.com', 'danger');
-    }
+    document.getElementById('supportModal')?.remove();
+    toast('Ticket submitted 2713 Reply coming via app + email.', 'success');
+  } catch(e) {
+    if (btn) { btn.textContent = 'Submit ticket'; btn.disabled = false; }
+    if (errEl) { errEl.textContent = 'Could not submit. Email help@pollslide.com directly.'; errEl.style.display='block'; }
   }
 }
+
 
 function openSupportTicket() {
   const subject = prompt('What can we help you with? (one-line summary)');
@@ -1032,7 +1057,7 @@ function toggleUserMenu() {
   if (itemsEl) {
     const menuItems = [
       { icon:'🔗', label:'Connect Mac App',      fn:'generatePairingCode()' },
-      { icon:'✨', label:'See plans & upgrade',   fn:"window.open('https://pollslide.com/pricing','_blank')" },
+      { icon:'✨', label:'See plans & upgrade',   fn:'openPlanPicker()' },
       { icon:'💬', label:'Contact support',       fn:'openSupportTicket()' },
       { icon:'📖', label:'Setup guide',           fn:"window.open('https://pollslide.com/setup','_blank')" },
       { icon:'⚠',  label:'Delete my account',     fn:'requestAccountDeletion()', danger:true },
