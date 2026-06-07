@@ -370,7 +370,7 @@
 
 <!-- ── TOP BAR ── -->
 <div class="topbar">
-  <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</div>
+  <a href="https://pollslide.com" class="logo" target="_blank" style="text-decoration:none;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</div>
   <div class="active-pres" id="activePres">Select a presentation</div>
   <div class="save-status">
     <span class="save-dot" id="saveDot"></span>
@@ -630,7 +630,13 @@ const TIERS = {
 let userTier = 'free';
 function tierLimits() { return TIERS[userTier] || TIERS.free; }
 
-auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+// Safari ITP (Intelligent Tracking Prevention) aggressively clears indexedDB and
+// localStorage, which Firebase LOCAL persistence uses. This causes random sign-outs.
+// Fix: detect Safari and use SESSION persistence (sessionStorage), which ITP doesn't touch.
+// SESSION means the user stays signed in for the browser session (until all tabs close),
+// which is much better than being randomly logged out mid-presentation.
+const _isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+auth.setPersistence(_isSafari ? firebase.auth.Auth.Persistence.SESSION : firebase.auth.Auth.Persistence.LOCAL);
 
 // Safari ITP fix: track if we were signed in this session, and if auth state
 // fires null after being signed in, wait 3s and re-check before signing out.
@@ -654,6 +660,7 @@ auth.onAuthStateChanged(user => {
     if (menuEmailEl) menuEmailEl.textContent = user.email || '';
     const av = document.getElementById('userAvatar');
     if (av) av.textContent = (user.email||'?')[0].toUpperCase();
+    startTokenHeartbeat();
     // Load the user's plan tier (including white label)
     db.ref(`users/${userId}/tier`).once('value').then(snap => {
       const t = snap.val();
@@ -691,6 +698,7 @@ auth.onAuthStateChanged(user => {
           userId = null;
           userTier = 'free';
           _wasSignedIn = false;
+          stopTokenHeartbeat();
           document.getElementById('authGate').style.display = 'flex';
           const chip2 = document.getElementById('userChip');
           if (chip2) chip2.style.display = 'none';
@@ -709,6 +717,26 @@ auth.onAuthStateChanged(user => {
     }
   }
 });
+
+// ─── TOKEN REFRESH HEARTBEAT (Safari ITP workaround) ──────────────────────────
+// Firebase tokens expire after ~1 hour. On Safari, ITP can also clear them.
+// This heartbeat refreshes the token every 10 minutes to keep the session alive.
+let _heartbeatTimer = null;
+function startTokenHeartbeat() {
+  if (_heartbeatTimer) clearInterval(_heartbeatTimer);
+  _heartbeatTimer = setInterval(function() {
+    var user = auth.currentUser;
+    if (user) {
+      user.getIdToken(true).catch(function() {
+        // Token refresh failed — session may be expired
+        // Don't force sign-out; let the auth state handler decide
+      });
+    }
+  }, 10 * 60 * 1000); // every 10 minutes
+}
+function stopTokenHeartbeat() {
+  if (_heartbeatTimer) { clearInterval(_heartbeatTimer); _heartbeatTimer = null; }
+}
 
 function authError(msg) { document.getElementById('authError').textContent = msg || ''; }
 
@@ -808,7 +836,14 @@ async function submitAuth() {
   if (!email || !pass) { authError('Please enter your email and password.'); return; }
   if (pass.length < 6) { authError('Password must be at least 6 characters.'); return; }
   try {
-    if (authMode === 'signup') await auth.createUserWithEmailAndPassword(email, pass);
+    if (authMode === 'signup') {
+      await auth.createUserWithEmailAndPassword(email, pass);
+      // Fire welcome email for new accounts (non-blocking)
+      fetch('/api/send-email', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ type: 'welcome', to: email, data: {} })
+      }).catch(function() {}); // silent fail — email is nice-to-have, not critical
+    }
     else await auth.signInWithEmailAndPassword(email, pass);
   } catch(e) { authError(friendlyAuthError(e.code)); }
 }
