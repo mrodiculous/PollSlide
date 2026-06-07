@@ -99,7 +99,7 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'Stripe credentials not configured' });
   }
 
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-11-20' });
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2026-05-27.dahlia' });
 
   // Verify webhook signature — prevents spoofed events
   let event;
