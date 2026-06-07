@@ -370,7 +370,7 @@
 
 <!-- ── TOP BAR ── -->
 <div class="topbar">
-  <a href="https://pollslide.com" class="logo" target="_blank" style="text-decoration:none;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</div>
+  <a href="https://pollslide.com" class="logo" target="_blank" style="text-decoration:none;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</a>
   <div class="active-pres" id="activePres">Select a presentation</div>
   <div class="save-status">
     <span class="save-dot" id="saveDot"></span>
@@ -636,6 +636,29 @@ function tierLimits() { return TIERS[userTier] || TIERS.free; }
 // SESSION means the user stays signed in for the browser session (until all tabs close),
 // which is much better than being randomly logged out mid-presentation.
 const _isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+// Handle Stripe redirect back to the app
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const upgrade = params.get('upgrade');
+  const plan = params.get('plan');
+  if (upgrade === 'success' && plan) {
+    // Show success message after the page loads
+    window.addEventListener('DOMContentLoaded', function() {
+      setTimeout(function() {
+        toast('🎉 Welcome to ' + plan.charAt(0).toUpperCase() + plan.slice(1) + '! Your plan is now active.', 'success');
+        // Clean up URL
+        window.history.replaceState({}, '', window.location.pathname);
+      }, 1500);
+    });
+  } else if (upgrade === 'cancelled') {
+    window.addEventListener('DOMContentLoaded', function() {
+      setTimeout(function() {
+        window.history.replaceState({}, '', window.location.pathname);
+      }, 100);
+    });
+  }
+})();
+
 auth.setPersistence(_isSafari ? firebase.auth.Auth.Persistence.SESSION : firebase.auth.Auth.Persistence.LOCAL);
 
 // Safari ITP fix: track if we were signed in this session, and if auth state
@@ -813,9 +836,96 @@ function openSupportTicket() {
 }
 
 function goToUpgrade() {
-  // Placeholder until Stripe/pricing page is live. For now, point to pricing section.
   const m = document.getElementById('upgradeModal'); if (m) m.remove();
-  window.open('https://pollslide.com/pricing', '_blank');
+  // Open plan picker then redirect to Stripe checkout
+  openPlanPicker();
+}
+
+function openPlanPicker() {
+  const old = document.getElementById('planPickerModal');
+  if (old) old.remove();
+  const mod = document.createElement('div');
+  mod.id = 'planPickerModal';
+  mod.style.cssText = 'position:fixed;inset:0;z-index:200000;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:20px;';
+  mod.onclick = e => { if(e.target===mod) mod.remove(); };
+  mod.innerHTML = `
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:18px;padding:28px;max-width:480px;width:100%;">
+      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px;margin-bottom:6px;">Choose a plan</div>
+      <div style="color:var(--muted);font-size:14px;margin-bottom:20px;">Upgrade to unlock unlimited participants, presentations, and AI-powered question design.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px;">
+        <div id="ppPro" onclick="selectPlanOption('pro')" style="padding:14px;background:var(--surface2);border:1.5px solid var(--border2);border-radius:12px;cursor:pointer;transition:border-color .15s;">
+          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;margin-bottom:4px;">Pro</div>
+          <div style="font-size:22px;font-weight:700;color:var(--accent);">$12<span style="font-size:13px;color:var(--muted);">/mo</span></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">Unlimited everything</div>
+        </div>
+        <div id="ppTeam" onclick="selectPlanOption('team')" style="padding:14px;background:var(--surface2);border:1.5px solid var(--border2);border-radius:12px;cursor:pointer;transition:border-color .15s;">
+          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;margin-bottom:4px;">Team</div>
+          <div style="font-size:22px;font-weight:700;color:var(--accent3);">$39<span style="font-size:13px;color:var(--muted);">/mo</span></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">Up to 10 members</div>
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
+        <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
+          <input type="checkbox" id="ppAnnual" style="width:16px;height:16px;cursor:pointer;" onchange="if(_selectedPlan)selectPlanOption(_selectedPlan)">
+          Pay annually <span style="font-size:11px;color:var(--accent3);">save 20%</span>
+        </label>
+      </div>
+      <div id="ppSelectedInfo" style="display:none;background:rgba(108,99,255,.1);border:1px solid var(--accent);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:14px;"></div>
+      <button id="ppCheckoutBtn" onclick="startCheckout()" style="width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:11px;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;cursor:pointer;display:none;">Continue to checkout →</button>
+      <button onclick="document.getElementById('planPickerModal').remove()" style="width:100%;margin-top:8px;padding:10px;background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;">Cancel</button>
+    </div>`;
+  document.body.appendChild(mod);
+}
+
+let _selectedPlan = null;
+function selectPlanOption(plan) {
+  _selectedPlan = plan;
+  const proPill = document.getElementById('ppPro');
+  const teamPill = document.getElementById('ppTeam');
+  if (proPill) proPill.style.borderColor = plan === 'pro' ? 'var(--accent)' : 'var(--border2)';
+  if (teamPill) teamPill.style.borderColor = plan === 'team' ? 'var(--accent3)' : 'var(--border2)';
+  const annual = document.getElementById('ppAnnual')?.checked;
+  const prices = { pro: { m: 12, a: 10 }, team: { m: 39, a: 32 } };
+  const p = prices[plan];
+  const price = annual ? p.a : p.m;
+  const period = annual ? '/mo (billed annually)' : '/mo';
+  const info = document.getElementById('ppSelectedInfo');
+  const btn = document.getElementById('ppCheckoutBtn');
+  if (info) {
+    const planName = plan.charAt(0).toUpperCase() + plan.slice(1);
+    info.style.display = 'block';
+    info.innerHTML = '<strong>' + planName + ':</strong> $' + price + period + (annual ? ' · Save $' + ((p.m - p.a) * 12) + '/year' : '');
+  }
+  if (btn) btn.style.display = 'block';
+}
+
+async function startCheckout() {
+  if (!_selectedPlan || !currentUser) return;
+  const btn = document.getElementById('ppCheckoutBtn');
+  if (btn) { btn.textContent = 'Redirecting to Stripe…'; btn.disabled = true; }
+  const annual = document.getElementById('ppAnnual')?.checked;
+  try {
+    const r = await fetch('/api/create-checkout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: currentUser.email,
+        uid: currentUser.uid,
+        plan: _selectedPlan,
+        billing: annual ? 'annual' : 'monthly',
+      }),
+    });
+    const data = await r.json();
+    if (data.url) {
+      window.location.href = data.url; // redirect to Stripe hosted checkout
+    } else {
+      toast('Could not start checkout: ' + (data.error || 'Unknown error'), 'danger');
+      if (btn) { btn.textContent = 'Continue to checkout →'; btn.disabled = false; }
+    }
+  } catch(e) {
+    toast('Could not connect to checkout. Try again.', 'danger');
+    if (btn) { btn.textContent = 'Continue to checkout →'; btn.disabled = false; }
+  }
 }
 
 function toggleAuthMode() {
