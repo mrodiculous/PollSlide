@@ -219,6 +219,7 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
         <span id="adminEmailDisplay"></span>
         <button class="btn btn-sm btn-ghost" onclick="exportUsersCSV()">⬇ CSV</button>
         <button class="btn btn-sm btn-ghost" onclick="loadAllUsers().then(renderPage)">↺ Refresh</button>
+        <button class="btn btn-sm btn-amber" onclick="syncAllUsers()" title="Scan Firebase for users not yet in the admin index">⚡ Sync users</button>
       </div>
     </div>
     <div class="content" id="content"></div>
@@ -284,12 +285,48 @@ function adminSignIn(){
 function adminSignOut(){auth.signOut().then(()=>{document.getElementById('authGate').classList.remove('hidden');document.getElementById('app').classList.add('hidden');allUsers={};})}
 
 // ─── LOAD USERS ───────────────────────────────────────────────────────────────
+// Reads from BOTH admin/users_index AND users node and merges them.
+// This ensures pre-existing accounts (created before index was deployed) still show.
+// Also re-indexes any missing users on every load.
 async function loadAllUsers(){
-  try{
-    const snap=await db.ref('admin/users_index').get();
-    allUsers=snap.exists()?snap.val():{};
-    if(!Object.keys(allUsers).length){const u=await db.ref('users').get();if(u.exists()){allUsers=u.val();await db.ref('admin/users_index').set(allUsers);}}
-  }catch(e){toast('Could not load users — check Firebase rules.','danger');}
+  allUsers = {};
+  try {
+    // Read index (fast, admin-only)
+    const idxSnap = await db.ref('admin/users_index').get();
+    if (idxSnap.exists()) allUsers = idxSnap.val() || {};
+  } catch(e) { console.warn('Index read failed:', e.message); }
+
+  try {
+    // Also read users node directly (catches accounts created before index existed)
+    const usersSnap = await db.ref('users').get();
+    if (usersSnap.exists()) {
+      const usersData = usersSnap.val();
+      const missing = [];
+      Object.entries(usersData).forEach(([uid, u]) => {
+        if (!allUsers[uid]) {
+          // User exists in DB but not in index — add them
+          allUsers[uid] = u;
+          missing.push(uid);
+        } else {
+          // Merge any fields that index might not have (e.g. presentations)
+          allUsers[uid] = Object.assign({}, u, allUsers[uid]);
+        }
+      });
+
+      // Back-fill the index for any missing users (fire-and-forget)
+      if (missing.length > 0) {
+        const updates = {};
+        missing.forEach(uid => { updates['admin/users_index/' + uid] = allUsers[uid]; });
+        db.ref('/').update(updates).catch(() => {});
+        console.log('Back-filled ' + missing.length + ' user(s) into admin index:', missing);
+      }
+    }
+  } catch(e) {
+    console.warn('Users node read failed:', e.message);
+    if (!Object.keys(allUsers).length) {
+      toast('Could not load users — check Firebase rules.', 'danger');
+    }
+  }
 }
 
 // ─── ROUTING ──────────────────────────────────────────────────────────────────
@@ -503,12 +540,32 @@ async function toggleFlag(uid){
 // ─── DELETE ACCOUNT ───────────────────────────────────────────────────────────
 function confirmDeleteAccount(uid){
   const email=allUsers[uid]?.email||uid;
-  showConfirm('Delete account permanently?',`Deletes all data for ${email}. Cannot be undone.`,async()=>{
-    await db.ref(`users/${uid}`).remove();
-    await db.ref(`admin/users_index/${uid}`).remove();
-    await db.ref(`admin/deleted_accounts/${uid}`).set({email,deletedAt:Date.now(),deletedBy:currentAdminEmail});
-    delete allUsers[uid];closeDetail();
-    toast('Account deleted. Remove from Firebase Auth console too.','info');renderPage();
+  showConfirm('Delete account permanently?','Permanently deletes all data for '+email+'. This uses the server-side API to also remove the Firebase Auth user — no manual console step needed.',async()=>{
+    toast('Deleting account…','info');
+    try {
+      // Admin signs in as themselves — get their ID token for API auth
+      const adminToken = await auth.currentUser.getIdToken(true);
+      const r = await fetch('/api/delete-account', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminToken },
+        body: JSON.stringify({ uid }),
+      });
+      const result = await r.json();
+      if (result.success || (result.results && result.results.auth)) {
+        delete allUsers[uid]; closeDetail();
+        toast('Account fully deleted (Auth + database). ✓','success'); renderPage();
+      } else {
+        const detail = result.errors ? result.errors.join(', ') : JSON.stringify(result);
+        toast('Delete failed: ' + detail,'danger');
+      }
+    } catch(e) {
+      // Fallback: delete from database only (Auth entry stays — flag for manual cleanup)
+      await db.ref('users/' + uid).remove().catch(()=>{});
+      await db.ref('admin/users_index/' + uid).remove().catch(()=>{});
+      await db.ref('admin/deleted_accounts/' + uid).set({email,deletedAt:Date.now(),deletedBy:currentAdminEmail,authNotDeleted:true}).catch(()=>{});
+      delete allUsers[uid]; closeDetail();
+      toast('DB deleted. API unavailable — remove Auth user manually in Firebase console.','info'); renderPage();
+    }
   });
 }
 
@@ -1001,6 +1058,29 @@ function showConfirm(title,msg,onOk){
   document.getElementById('confirmOkBtn').onclick=async()=>{hideConfirm();await onOk();};
 }
 function hideConfirm(){document.getElementById('confirmModal').classList.add('hidden');}
+
+// ─── SYNC USERS (admin utility) ──────────────────────────────────────────────
+// Force a full scan of the users node and re-populate the admin index.
+// Use this whenever a new account doesn't show up in the admin panel.
+async function syncAllUsers() {
+  toast('Scanning all Firebase users…', 'info');
+  try {
+    const snap = await db.ref('users').get();
+    if (!snap.exists()) { toast('No users found in database.', 'danger'); return; }
+    const updates = {};
+    let count = 0;
+    Object.entries(snap.val()).forEach(([uid, u]) => {
+      updates['admin/users_index/' + uid] = u;
+      allUsers[uid] = u;
+      count++;
+    });
+    await db.ref('/').update(updates);
+    toast('Synced ' + count + ' user(s) to admin index. ✓', 'success');
+    renderPage();
+  } catch(e) {
+    toast('Sync failed: ' + e.message, 'danger');
+  }
+}
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 function timeAgo(ts){const s=Math.floor((Date.now()-ts)/1000);if(s<60)return'just now';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';if(s<604800)return Math.floor(s/86400)+'d ago';return new Date(ts).toLocaleDateString();}

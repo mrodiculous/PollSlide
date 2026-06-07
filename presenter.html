@@ -785,36 +785,57 @@ function showUpgradePrompt(headline, subtext) {
 }
 // ─── SUPPORT TICKET ──────────────────────────────────────────────────────────
 // ─── ACCOUNT DELETION (GDPR Art. 17 — right to erasure) ──────────────────────
-function requestAccountDeletion() {
-  const conf = confirm(
+// Uses the server-side delete-account API which can delete Firebase Auth users.
+// The client sends an ID token; the server verifies it before deleting anything.
+async function requestAccountDeletion() {
+  const confirmed = confirm(
     'Delete your PollSlide account?\n\n' +
-    'This will permanently delete all your presentations, questions, and response data.\n' +
+    'This permanently deletes all your presentations, questions, and response data.\n' +
     'This cannot be undone.\n\n' +
-    'Click OK to confirm deletion.'
+    'Click OK to confirm.'
   );
-  if (!conf) return;
-  // Log the deletion request in the admin system, then wipe user data
-  const uid = userId; const email = currentUser?.email || '';
-  db.ref('admin/deletion_requests/' + uid).set({
-    email, requestedAt: Date.now(), status: 'pending'
-  }).then(() => {
-    // Delete all user presentations and session data
-    const pres = presentations;
-    const jobs = Object.values(pres).filter(p=>p.sessionCode).map(p=>
-      db.ref('sessions/' + p.sessionCode + '/responses').remove()
-    );
-    return Promise.all([
-      ...jobs,
-      db.ref('users/' + uid).remove(),
-      db.ref('admin/users_index/' + uid).remove(),
-      db.ref('mac_link/' + uid).remove()
-    ]);
-  }).then(() => {
-    toast('Your data has been deleted. Signing you out.', 'success');
-    setTimeout(() => { auth.signOut(); location.reload(); }, 2000);
-  }).catch(e => {
-    toast('Deletion failed — please email help@pollslide.com', 'danger');
-  });
+  if (!confirmed || !currentUser) return;
+
+  // Show progress feedback immediately
+  toast('Deleting your account…', 'info');
+
+  try {
+    // Get a fresh ID token to send to the server for verification
+    const idToken = await currentUser.getIdToken(true);
+
+    const response = await fetch('/api/delete-account', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + idToken,
+      },
+      body: JSON.stringify({ uid: currentUser.uid }),
+    });
+
+    const result = await response.json();
+
+    if (result.success) {
+      toast('Account deleted. Signing you out…', 'success');
+      setTimeout(() => { auth.signOut(); location.reload(); }, 2000);
+    } else {
+      const errorDetail = result.errors ? result.errors.join(', ') : 'Unknown error';
+      console.error('Deletion errors:', result);
+      // Partial success — auth deleted but some DB cleanup failed (non-critical)
+      if (result.results && result.results.auth) {
+        toast('Account deleted (some data cleanup pending). Signing out…', 'success');
+        setTimeout(() => { auth.signOut(); location.reload(); }, 2500);
+      } else {
+        toast('Deletion failed: ' + errorDetail + '. Email help@pollslide.com', 'danger');
+      }
+    }
+  } catch (e) {
+    console.error('Delete account error:', e);
+    if (e.message && e.message.includes('Failed to fetch')) {
+      toast('Delete-account API not deployed yet. Go to GitHub → commit api/delete-account.js first.', 'danger');
+    } else {
+      toast('Error: ' + e.message + '. Email help@pollslide.com', 'danger');
+    }
+  }
 }
 
 function openSupportTicket() {
@@ -923,7 +944,14 @@ async function startCheckout() {
       if (btn) { btn.textContent = 'Continue to checkout →'; btn.disabled = false; }
     }
   } catch(e) {
-    toast('Could not connect to checkout. Try again.', 'danger');
+    console.error('Checkout error:', e);
+    let msg = 'Could not connect to checkout.';
+    if (e.message && e.message.includes('Failed to fetch')) {
+      msg = 'Checkout API not deployed yet. Commit api/create-checkout.js to GitHub first.';
+    } else if (e.message && e.message.includes('SyntaxError')) {
+      msg = 'Checkout API not found (404). Commit api/create-checkout.js to GitHub + redeploy Vercel.';
+    }
+    toast(msg, 'danger');
     if (btn) { btn.textContent = 'Continue to checkout →'; btn.disabled = false; }
   }
 }
