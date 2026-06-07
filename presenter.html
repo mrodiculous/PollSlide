@@ -637,26 +637,19 @@ function tierLimits() { return TIERS[userTier] || TIERS.free; }
 // which is much better than being randomly logged out mid-presentation.
 const _isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
 // Handle Stripe redirect back to the app
+// Uses sessionStorage so the toast shows AFTER Firebase auth resolves
 (function() {
-  const params = new URLSearchParams(window.location.search);
-  const upgrade = params.get('upgrade');
-  const plan = params.get('plan');
-  if (upgrade === 'success' && plan) {
-    // Show success message after the page loads
-    window.addEventListener('DOMContentLoaded', function() {
-      setTimeout(function() {
-        toast('🎉 Welcome to ' + plan.charAt(0).toUpperCase() + plan.slice(1) + '! Your plan is now active.', 'success');
-        // Clean up URL
-        window.history.replaceState({}, '', window.location.pathname);
-      }, 1500);
-    });
-  } else if (upgrade === 'cancelled') {
-    window.addEventListener('DOMContentLoaded', function() {
-      setTimeout(function() {
-        window.history.replaceState({}, '', window.location.pathname);
-      }, 100);
-    });
-  }
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const upgrade = params.get('upgrade');
+    const plan = params.get('plan');
+    if (upgrade === 'success' && plan) {
+      sessionStorage.setItem('ps_upgrade_success', plan);
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (upgrade === 'cancelled') {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  } catch(e) {}
 })();
 
 auth.setPersistence(_isSafari ? firebase.auth.Auth.Persistence.SESSION : firebase.auth.Auth.Persistence.LOCAL);
@@ -684,6 +677,17 @@ auth.onAuthStateChanged(user => {
     const av = document.getElementById('userAvatar');
     if (av) av.textContent = (user.email||'?')[0].toUpperCase();
     startTokenHeartbeat();
+    // Show post-Stripe upgrade toast if redirected back from checkout
+    try {
+      const upgradedPlan = sessionStorage.getItem('ps_upgrade_success');
+      if (upgradedPlan) {
+        sessionStorage.removeItem('ps_upgrade_success');
+        setTimeout(function() {
+          const planName = upgradedPlan.charAt(0).toUpperCase() + upgradedPlan.slice(1);
+          toast('🎉 Welcome to ' + planName + '! Your plan is now active.', 'success');
+        }, 1800);
+      }
+    } catch(e) {}
     // Load the user's plan tier (including white label)
     db.ref(`users/${userId}/tier`).once('value').then(snap => {
       const t = snap.val();
@@ -888,39 +892,129 @@ function goToUpgrade() {
 }
 
 function openPlanPicker() {
-  const old = document.getElementById('planPickerModal');
-  if (old) old.remove();
-  const mod = document.createElement('div');
-  mod.id = 'planPickerModal';
-  mod.style.cssText = 'position:fixed;inset:0;z-index:200000;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:20px;';
-  mod.onclick = e => { if(e.target===mod) mod.remove(); };
-  mod.innerHTML = `
-    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:18px;padding:28px;max-width:480px;width:100%;">
-      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px;margin-bottom:6px;">Choose a plan</div>
-      <div style="color:var(--muted);font-size:14px;margin-bottom:20px;">Upgrade to unlock unlimited participants, presentations, and AI-powered question design.</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px;">
-        <div id="ppPro" onclick="selectPlanOption('pro')" style="padding:14px;background:var(--surface2);border:1.5px solid var(--border2);border-radius:12px;cursor:pointer;transition:border-color .15s;">
-          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;margin-bottom:4px;">Pro</div>
-          <div style="font-size:22px;font-weight:700;color:var(--accent);">$12<span style="font-size:13px;color:var(--muted);">/mo</span></div>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px;">Unlimited everything</div>
+  const existing = document.getElementById('planPickerModal');
+  if (existing) existing.remove();
+
+  const lim = tierLimits();
+  const currentTier = userTier || 'free';
+  let pickerBilling = 'monthly';
+
+  const plans = [
+    { key:'free',  name:'Free',        mo:0,    yr:0,    color:'var(--muted)',
+      features:['25 participants per poll','3 presentations','All question types','Live results','Keynote app'],
+      missing:['Unlimited participants','Unlimited presentations','AI question designer','Reports & export'] },
+    { key:'pro',   name:'Pro',         mo:12,   yr:10,   color:'var(--accent)', popular:true,
+      features:['Unlimited participants','Unlimited presentations','All question types','Live results','Keynote app','PowerPoint & Slides (soon)','Response reports & CSV','Polly AI (20/month)'],
+      missing:['Team workspace'] },
+    { key:'team',  name:'Team',        mo:39,   yr:32,   color:'var(--accent3)',
+      features:['Everything in Pro','Up to 10 members','Shared library','Team billing','Polly AI (100/month)','Priority support','Admin controls','Usage analytics'] },
+    { key:'white', name:'White Label', mo:null, yr:null, color:'var(--accent4)',
+      features:['Everything in Team','Custom domain','Remove branding','Dedicated AI','Custom SLA','Reseller options','Custom integrations','Volume pricing'] },
+  ];
+
+  const overlay = document.createElement('div');
+  overlay.id = 'planPickerModal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:200000;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;backdrop-filter:blur(8px);';
+  overlay.onclick = e => { if(e.target===overlay) overlay.remove(); };
+  document.body.appendChild(overlay);
+
+  function render() {
+    const box = document.createElement('div');
+    box.style.cssText = 'background:var(--bg2);border:1px solid var(--border2);border-radius:20px;padding:0;max-width:900px;width:100%;overflow:hidden;';
+
+    // Header
+    box.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:22px 26px 18px;border-bottom:1px solid var(--border);">
+        <div>
+          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px;">Upgrade PollSlide</div>
+          <div style="font-size:13px;color:var(--muted);margin-top:3px;">You're on <strong style="color:var(--text);">${lim.name}</strong>. Compare plans and upgrade anytime.</div>
         </div>
-        <div id="ppTeam" onclick="selectPlanOption('team')" style="padding:14px;background:var(--surface2);border:1.5px solid var(--border2);border-radius:12px;cursor:pointer;transition:border-color .15s;">
-          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:16px;margin-bottom:4px;">Team</div>
-          <div style="font-size:22px;font-weight:700;color:var(--accent3);">$39<span style="font-size:13px;color:var(--muted);">/mo</span></div>
-          <div style="font-size:11px;color:var(--muted);margin-top:4px;">Up to 10 members</div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="display:inline-flex;background:var(--surface2);border:1px solid var(--border2);border-radius:100px;padding:3px;">
+            <div id="ppM" onclick="pickerSetBilling('monthly')" style="padding:6px 16px;border-radius:100px;font-size:12px;font-weight:600;cursor:pointer;${pickerBilling==='monthly'?'background:var(--accent);color:#fff;':'color:var(--muted);'}">Monthly</div>
+            <div id="ppA" onclick="pickerSetBilling('annual')" style="padding:6px 16px;border-radius:100px;font-size:12px;font-weight:600;cursor:pointer;${pickerBilling==='annual'?'background:var(--accent);color:#fff;':'color:var(--muted);'}">Annual <span style="font-size:10px;color:var(--accent3);">−20%</span></div>
+          </div>
+          <button onclick="document.getElementById('planPickerModal').remove()" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);font-size:16px;">✕</button>
         </div>
       </div>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;">
-        <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;">
-          <input type="checkbox" id="ppAnnual" style="width:16px;height:16px;cursor:pointer;" onchange="if(_selectedPlan)selectPlanOption(_selectedPlan)">
-          Pay annually <span style="font-size:11px;color:var(--accent3);">save 20%</span>
-        </label>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding:0;" id="ppCards"></div>
+      <div style="padding:14px 26px;border-top:1px solid var(--border);text-align:center;">
+        <a href="https://pollslide.com/pricing" target="_blank" style="font-size:12px;color:var(--muted);">See full comparison at pollslide.com/pricing →</a>
       </div>
-      <div id="ppSelectedInfo" style="display:none;background:rgba(108,99,255,.1);border:1px solid var(--accent);border-radius:10px;padding:10px 14px;font-size:13px;margin-bottom:14px;"></div>
-      <button id="ppCheckoutBtn" onclick="startCheckout()" style="width:100%;padding:13px;background:var(--accent);color:#fff;border:none;border-radius:11px;font-family:'Syne',sans-serif;font-weight:700;font-size:15px;cursor:pointer;display:none;">Continue to checkout →</button>
-      <button onclick="document.getElementById('planPickerModal').remove()" style="width:100%;margin-top:8px;padding:10px;background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;">Cancel</button>
-    </div>`;
-  document.body.appendChild(mod);
+    `;
+
+    const cardsEl = box.querySelector('#ppCards');
+    plans.forEach((p, i) => {
+      const isCurrent = p.key === currentTier;
+      const isLast = i === plans.length - 1;
+      const price = p.mo === null ? null : (pickerBilling === 'annual' ? p.yr : p.mo);
+      const priceStr = price === null ? 'Custom' : (price === 0 ? 'Free' : '$' + price);
+      const periodStr = (price !== null && price > 0) ? '/mo' : '';
+      const card = document.createElement('div');
+      card.style.cssText = 'padding:22px 18px;border-right:' + (isLast?'none':'1px solid var(--border)') + ';display:flex;flex-direction:column;gap:0;position:relative;' + (p.popular?'background:rgba(108,99,255,0.05);':'') + (isCurrent?'background:rgba(255,255,255,0.03);':'');
+
+      const feats = p.features.map(f => '<div style="font-size:12px;display:flex;gap:7px;margin-bottom:6px;"><span style="color:var(--accent3);flex-shrink:0;">✓</span><span>' + f + '</span></div>').join('');
+      const miss = (p.missing||[]).map(f => '<div style="font-size:12px;display:flex;gap:7px;margin-bottom:6px;opacity:.4;"><span style="flex-shrink:0;">—</span><span>' + f + '</span></div>').join('');
+
+      const ctaStyle = isCurrent
+        ? 'background:var(--surface2);border:1px solid var(--border2);color:var(--muted);cursor:default;'
+        : p.key === 'white'
+        ? 'background:transparent;border:1.5px solid var(--accent4);color:var(--accent4);cursor:pointer;'
+        : 'background:' + (p.popular ? 'var(--accent)' : 'transparent') + ';border:1.5px solid ' + (p.popular ? 'var(--accent)' : 'var(--border2)') + ';color:' + (p.popular ? '#fff' : 'var(--text)') + ';cursor:pointer;';
+      const ctaText = isCurrent ? 'Current plan' : p.key === 'white' ? 'Contact us' : 'Upgrade to ' + p.name;
+      const ctaOnclick = isCurrent ? '' : p.key === 'white' ? "window.open('mailto:help@pollslide.com?subject=White Label enquiry')" : "pickerCheckout('" + p.key + "')";
+
+      card.innerHTML =
+        (p.popular ? '<div style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:0 0 8px 8px;">★ Most popular</div>' : '') +
+        (isCurrent ? '<div style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border2);color:var(--muted);font-size:10px;font-weight:600;padding:3px 10px;border-radius:0 0 8px 8px;">Your plan</div>' : '') +
+        '<div style="font-family:Syne,sans-serif;font-weight:800;font-size:16px;margin-bottom:4px;color:' + p.color + ';">' + p.name + '</div>' +
+        '<div style="display:flex;align-items:baseline;gap:3px;margin-bottom:4px;">' +
+          '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:' + (price===null?'20px':(price===0?'24px':'32px')) + ';line-height:1;">' + priceStr + '</span>' +
+          (periodStr ? '<span style="font-size:12px;color:var(--muted);">' + periodStr + '</span>' : '') +
+        '</div>' +
+        (pickerBilling==='annual' && p.mo && p.yr && p.mo>0
+          ? '<div style="font-size:10px;color:var(--accent3);margin-bottom:12px;">Save $' + ((p.mo-p.yr)*12) + '/yr</div>'
+          : '<div style="font-size:10px;height:16px;margin-bottom:12px;"></div>') +
+        '<button onclick="' + ctaOnclick + '" style="width:100%;padding:10px;border-radius:10px;font-family:Syne,sans-serif;font-weight:700;font-size:12px;margin-bottom:14px;' + ctaStyle + '">' + ctaText + '</button>' +
+        '<div style="height:1px;background:var(--border);margin-bottom:12px;"></div>' +
+        feats + miss;
+      cardsEl.appendChild(card);
+    });
+
+    const existing = overlay.querySelector('[data-pp-box]');
+    if (existing) existing.replaceWith(box);
+    else { box.dataset.ppBox = '1'; overlay.appendChild(box); }
+  }
+
+  window.pickerSetBilling = function(b) { pickerBilling = b; render(); };
+  window.pickerCheckout = async function(plan) {
+    if (!currentUser) return;
+    const btn = event.target;
+    const origText = btn.textContent;
+    btn.textContent = 'Redirecting…'; btn.disabled = true;
+    try {
+      const r = await fetch('/api/create-checkout', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ email:currentUser.email, uid:currentUser.uid, plan, billing:pickerBilling })
+      });
+      const data = await r.json();
+      if (data.url) { window.location.href = data.url; }
+      else {
+        btn.textContent = origText; btn.disabled = false;
+        const msg = data.error || 'Unknown error';
+        if (msg.includes('commit') || msg.includes('404') || msg.includes('not found')) {
+          toast('API not deployed yet — commit api/create-checkout.js to GitHub first.','danger');
+        } else {
+          toast('Checkout error: ' + msg,'danger');
+        }
+      }
+    } catch(e) {
+      btn.textContent = origText; btn.disabled = false;
+      toast('Could not connect to checkout. Check api/create-checkout.js is deployed.','danger');
+    }
+  };
+
+  render();
 }
 
 let _selectedPlan = null;
