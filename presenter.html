@@ -780,110 +780,188 @@ function showUpgradePrompt(headline, subtext) {
   m.innerHTML = `
     <div style="background:var(--surface);border:1px solid var(--border2);border-radius:18px;padding:28px;max-width:420px;width:100%;text-align:center;">
       <div style="font-size:34px;margin-bottom:8px;">✨</div>
-      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px;margin-bottom:8px;">${headline}</div>
+      <div style="font-family:Syne,sans-serif;font-weight:800;font-size:20px;margin-bottom:8px;">${headline}</div>
       <p style="color:var(--muted);font-size:14.5px;line-height:1.6;margin-bottom:20px;">${subtext}</p>
       <div style="display:flex;gap:10px;justify-content:center;">
-        <button onclick="document.getElementById('upgradeModal').remove()" style="padding:11px 20px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:11px;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Maybe later</button>
-        <button onclick="goToUpgrade()" style="padding:11px 22px;background:var(--accent);border:none;color:#fff;border-radius:11px;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;">See plans</button>
+        <button onclick="document.getElementById('upgradeModal').remove()" style="padding:11px 20px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:11px;font-family:Syne,sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Maybe later</button>
+        <button onclick="goToUpgrade()" style="padding:11px 22px;background:var(--accent);border:none;color:#fff;border-radius:11px;font-family:Syne,sans-serif;font-weight:700;font-size:14px;cursor:pointer;">See plans</button>
       </div>
     </div>`;
   document.body.appendChild(m);
 }
-// ─── SUPPORT TICKET MODAL ────────────────────────────────────────────────────
-function openSupportTicket() {
-  const old = document.getElementById('supportModal');
+// ─── SUPPORT CHAT ─────────────────────────────────────────────────────────────
+// Architecture: uses DOM createElement (not innerHTML strings) to avoid
+// all quote-escaping issues. Template is in <div id="supportChatTmpl"> in HTML.
+
+let _chatView = 'list';
+let _chatTicketId = null;
+
+function openSupportChat() {
+  var old = document.getElementById('supportChatModal');
   if (old) old.remove();
-  const m = document.createElement('div');
-  m.id = 'supportModal';
-  m.style.cssText = 'position:fixed;inset:0;z-index:200000;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:20px;';
-  m.onclick = e => { if(e.target===m) m.remove(); };
-  m.innerHTML = `
-    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:18px;padding:28px;max-width:460px;width:100%;display:flex;flex-direction:column;gap:12px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:18px;">Contact Support</div>
-        <button onclick="document.getElementById('supportModal').remove()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;padding:0 4px;">✕</button>
-      </div>
-      <p style="color:var(--muted);font-size:13px;line-height:1.5;">We typically respond within 1 business day. Your email: <strong style="color:var(--text);">${escapeHtml(currentUser?.email||'')}</strong></p>
-      <div>
-        <label style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;">Category</label>
-        <select id="ticketCat" style="width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;">
-          <option value="technical">🔧 Technical issue</option>
-          <option value="billing">💳 Billing question</option>
-          <option value="account">👤 Account issue</option>
-          <option value="feature">💡 Feature request</option>
-          <option value="general">💬 General question</option>
-        </select>
-      </div>
-      <div>
-        <label style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;">Subject</label>
-        <input id="ticketSubj" type="text" placeholder="Brief summary of your issue…" maxlength="120"
-          style="width:100%;padding:10px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;">
-      </div>
-      <div>
-        <label style="display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;">Details</label>
-        <textarea id="ticketMsg" placeholder="Describe the issue — include what you were doing, what you expected, and what happened instead." maxlength="2000"
-          style="width:100%;min-height:110px;padding:10px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:14px;outline:none;resize:vertical;"></textarea>
-      </div>
-      <div id="ticketErr" style="color:var(--accent2);font-size:12px;display:none;"></div>
-      <div style="display:flex;gap:10px;">
-        <button onclick="document.getElementById('supportModal').remove()" style="flex:1;padding:11px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;">Cancel</button>
-        <button id="ticketSubmitBtn" onclick="submitSupportTicket()" style="flex:2;padding:11px;background:var(--accent);border:none;color:#fff;border-radius:10px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;">Submit ticket</button>
-      </div>
-    </div>`;
-  document.body.appendChild(m);
-  setTimeout(() => document.getElementById('ticketSubj')?.focus(), 80);
+  _chatView = 'list';
+  var overlay = document.createElement('div');
+  overlay.id = 'supportChatModal';
+  Object.assign(overlay.style, {
+    position:'fixed', inset:'0', zIndex:'200000',
+    background:'rgba(0,0,0,.72)', display:'flex',
+    alignItems:'flex-end', justifyContent:'flex-end',
+    padding:'72px 20px 20px', backdropFilter:'blur(4px)'
+  });
+  overlay.addEventListener('click', function(e){ if(e.target===overlay) overlay.remove(); });
+
+  // Clone the HTML template
+  var tmpl = document.getElementById('supportChatTmpl');
+  if (!tmpl) { toast('Support Chat template missing.', 'danger'); return; }
+  var panel = tmpl.cloneNode(true);
+  panel.id = 'chatPanel';
+  panel.removeAttribute('hidden');
+  Object.assign(panel.style, { display:'flex', flexDirection:'column' });
+
+  // Wire static buttons that don't need data
+  panel.querySelector('[data-action="close"]').onclick = function(){ overlay.remove(); };
+  panel.querySelector('[data-action="new-req"]').onclick = function(){ _chatView='new'; renderChatPanel(); };
+  panel.querySelector('[data-action="back-list-1"]').onclick = function(){ _chatView='list'; renderChatPanel(); };
+  panel.querySelector('[data-action="back-list-2"]').onclick = function(){ _chatView='list'; renderChatPanel(); };
+  panel.querySelector('[data-action="cancel-new"]').onclick = function(){ _chatView='list'; renderChatPanel(); };
+  panel.querySelector('[data-action="submit"]').onclick = submitChatTicket;
+
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+  renderChatPanel();
+}
+function openSupportTicket(){ openSupportChat(); } // legacy alias
+
+function renderChatPanel() {
+  var panel = document.getElementById('chatPanel');
+  if (!panel) return;
+  // Show the right view
+  panel.querySelectorAll('[data-view]').forEach(function(el){
+    el.style.display = el.getAttribute('data-view') === _chatView ? 'flex' : 'none';
+  });
+  // Title
+  var titles = { list:'Support Chat', new:'New request', thread:'Request detail' };
+  var titleEl = panel.querySelector('[data-slot="title"]');
+  if (titleEl) titleEl.textContent = titles[_chatView] || 'Support Chat';
+
+  if (_chatView === 'list') loadChatList();
+  else if (_chatView === 'new') { panel.querySelector('[data-slot="user-email"]').textContent = currentUser?.email||''; }
+  else if (_chatView === 'thread') loadChatThread();
 }
 
-async function submitSupportTicket() {
-  const subj = document.getElementById('ticketSubj')?.value?.trim();
-  const msg  = document.getElementById('ticketMsg')?.value?.trim();
-  const cat  = document.getElementById('ticketCat')?.value || 'general';
-  const errEl = document.getElementById('ticketErr');
-  const btn   = document.getElementById('ticketSubmitBtn');
-
-  if (!subj) { errEl.textContent = 'Please enter a subject.'; errEl.style.display='block'; return; }
-  if (!msg || msg.length < 20) { errEl.textContent = 'Please describe the issue (at least 20 characters).'; errEl.style.display='block'; return; }
-
-  if (btn) { btn.textContent = 'Submitting…'; btn.disabled = true; }
-  if (errEl) errEl.style.display = 'none';
+async function loadChatList() {
+  var panel = document.getElementById('chatPanel');
+  var listEl = panel && panel.querySelector('[data-slot="list-items"]');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  var loading = document.createElement('div');
+  loading.style.cssText = 'text-align:center;color:var(--muted);font-size:12px;padding:20px;';
+  loading.textContent = 'Loading…';
+  listEl.appendChild(loading);
 
   try {
-    const ticketId = 'ticket_' + Date.now();
-    await db.ref('admin/tickets/' + ticketId).set({
-      uid:       userId || '',
-      email:     currentUser?.email || '',
-      subject:   subj,
-      message:   msg,
-      category:  cat,
-      status:    'open',
-      createdAt: Date.now(),
+    var snap = await db.ref('users/'+userId+'/tickets').get();
+    listEl.innerHTML = '';
+    if (!snap.exists()) {
+      var empty = document.createElement('div');
+      empty.style.cssText = 'text-align:center;color:var(--muted);font-size:12px;padding:28px 12px;line-height:1.7;';
+      empty.innerHTML = 'No requests yet.<br>Typical reply time: 1 business day.';
+      listEl.appendChild(empty);
+      return;
+    }
+    var catColors = {technical:'var(--accent)',billing:'var(--accent2)',account:'var(--accent4)',feature:'var(--accent3)',general:'var(--muted)'};
+    var tickets = Object.entries(snap.val()).sort(function(a,b){return (b[1].createdAt||0)-(a[1].createdAt||0);});
+    tickets.forEach(function(entry){
+      var id=entry[0]; var t=entry[1];
+      var resolved = t.status==='resolved';
+      var replies = Object.keys(t.replies||{}).length;
+      var item = document.createElement('div');
+      item.style.cssText = 'padding:10px 11px;border:1px solid var(--border2);border-radius:9px;margin-bottom:7px;cursor:pointer;';
+      item.addEventListener('mouseover', function(){this.style.borderColor='var(--accent)';});
+      item.addEventListener('mouseout',  function(){this.style.borderColor='var(--border2)';});
+      item.innerHTML =
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:6px;margin-bottom:5px;">' +
+          '<span style="font-size:12.5px;font-weight:600;line-height:1.3;flex:1;">' + escapeHtml(t.subject||'Request') + '</span>' +
+          '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:100px;flex-shrink:0;background:' + (resolved?'rgba(67,233,123,.14)':'rgba(255,101,132,.12)') + ';color:' + (resolved?'var(--accent3)':'var(--accent2)') + ';">' + (resolved?'Resolved':'Open') + '</span>' +
+        '</div>' +
+        '<div style="display:flex;align-items:center;gap:6px;">' +
+          '<span style="font-size:9px;font-weight:600;padding:1px 5px;border-radius:100px;background:rgba(108,99,255,.1);color:' + (catColors[t.category]||'var(--accent)') + ';">' + (t.category||'general') + '</span>' +
+          '<span style="font-size:10px;color:var(--muted);">' + (t.createdAt?timeAgo(t.createdAt):'') + '</span>' +
+          (replies?'<span style="font-size:10px;color:var(--accent3);margin-left:auto;">💬 '+replies+'</span>':'') +
+        '</div>';
+      item.addEventListener('click', function(){ _chatTicketId=id; _chatView='thread'; renderChatPanel(); });
+      listEl.appendChild(item);
     });
-    document.getElementById('supportModal')?.remove();
-    toast('Ticket submitted 2713 Reply coming via app + email.', 'success');
   } catch(e) {
-    if (btn) { btn.textContent = 'Submit ticket'; btn.disabled = false; }
-    if (errEl) { errEl.textContent = 'Could not submit. Email help@pollslide.com directly.'; errEl.style.display='block'; }
+    listEl.innerHTML = '<div style="color:var(--accent2);font-size:12px;padding:14px;">Could not load. Check connection.</div>';
   }
 }
 
-
-function openSupportTicket() {
-  const subject = prompt('What can we help you with? (one-line summary)');
-  if (!subject) return;
-  const message = prompt('Describe the issue in more detail:');
-  if (!message) return;
-  const ticketId = 'ticket_' + Date.now();
-  db.ref('admin/tickets/' + ticketId).set({
-    uid: userId,
-    email: currentUser ? currentUser.email : '',
-    subject: subject.trim(),
-    message: message.trim(),
-    status: 'open',
-    createdAt: Date.now()
-  }).then(() => {
-    toast('Support ticket submitted. We\'ll get back to you via the app.', 'success');
-  }).catch(() => toast('Could not submit ticket. Email us at help@pollslide.com', 'danger'));
+async function submitChatTicket() {
+  var panel = document.getElementById('chatPanel');
+  var subjEl = panel && panel.querySelector('[data-slot="subj"]');
+  var msgEl  = panel && panel.querySelector('[data-slot="msg"]');
+  var catEl  = panel && panel.querySelector('[data-slot="cat"]');
+  var errEl  = panel && panel.querySelector('[data-slot="err"]');
+  var btn    = panel && panel.querySelector('[data-action="submit"]');
+  var subj = (subjEl&&subjEl.value||'').trim();
+  var msg  = (msgEl&&msgEl.value||'').trim();
+  var cat  = catEl&&catEl.value || 'general';
+  if (!subj) { if(errEl){errEl.textContent='Please enter a subject.';errEl.style.display='block';} return; }
+  if (!msg||msg.length<10) { if(errEl){errEl.textContent='Please describe the issue.';errEl.style.display='block';} return; }
+  if (btn){btn.textContent='Submitting…';btn.disabled=true;}
+  if (errEl) errEl.style.display='none';
+  var ticketId='ticket_'+Date.now();
+  var data={uid:userId||'',email:currentUser?.email||'',subject:subj,message:msg,category:cat,status:'open',createdAt:Date.now(),replies:{}};
+  try {
+    await db.ref('admin/tickets/'+ticketId).set(data);
+    await db.ref('users/'+userId+'/tickets/'+ticketId).set(data);
+    _chatView='list'; renderChatPanel();
+    toast('Request submitted \u2713', 'success');
+  } catch(e) {
+    if(btn){btn.textContent='Submit request';btn.disabled=false;}
+    if(errEl){errEl.textContent='Failed. Email help@pollslide.com';errEl.style.display='block';}
+  }
 }
+
+async function loadChatThread() {
+  var panel = document.getElementById('chatPanel');
+  var threadEl = panel && panel.querySelector('[data-slot="thread-items"]');
+  if (!threadEl || !_chatTicketId) { _chatView='list'; renderChatPanel(); return; }
+  threadEl.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px;">Loading…</div>';
+  try {
+    var snap = await db.ref('users/'+userId+'/tickets/'+_chatTicketId).get();
+    if (!snap.exists()) { _chatView='list'; renderChatPanel(); return; }
+    var t = snap.val();
+    var resolved = t.status==='resolved';
+    var subjEl = panel.querySelector('[data-slot="thread-subj"]');
+    var statusEl = panel.querySelector('[data-slot="thread-status"]');
+    if (subjEl) subjEl.textContent = t.subject||'Request';
+    if (statusEl) {
+      statusEl.textContent = resolved?'Resolved':'Open';
+      statusEl.style.background = resolved?'rgba(67,233,123,.14)':'rgba(255,101,132,.12)';
+      statusEl.style.color = resolved?'var(--accent3)':'var(--accent2)';
+    }
+    var bub = function(txt,ts,mine) {
+      return '<div style="display:flex;flex-direction:column;align-items:'+(mine?'flex-end':'flex-start')+';margin-bottom:10px;">' +
+        '<div style="background:'+(mine?'var(--accent)':'var(--surface2)')+';color:'+(mine?'#fff':'var(--text)')+';padding:8px 11px;border-radius:'+(mine?'12px 12px 3px 12px':'12px 12px 12px 3px')+';font-size:12.5px;max-width:88%;line-height:1.5;'+(mine?'':'border:1px solid var(--border2);')+'">' + escapeHtml(txt) + '</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:3px;">'+(ts?timeAgo(ts):'')+(mine?' · You':' · PollSlide Support')+'</div></div>';
+    };
+    var html = bub(t.message, t.createdAt, true);
+    var replies = Object.values(t.replies||{}).sort(function(a,b){return (a.at||0)-(b.at||0);});
+    replies.forEach(function(r){ html+=bub(r.text,r.at,false); });
+    if(resolved) html+='<div style="text-align:center;font-size:10px;color:var(--accent3);padding:6px;">✓ Resolved</div>';
+    threadEl.innerHTML = html;
+    threadEl.scrollTop = threadEl.scrollHeight;
+    db.ref('users/'+userId+'/inbox').once('value').then(function(is){
+      if(!is.exists()) return;
+      var upd={};
+      Object.entries(is.val()).forEach(function(e){ if(!e[1].read&&e[1].ticketId===_chatTicketId) upd['users/'+userId+'/inbox/'+e[0]+'/read']=true; });
+      if(Object.keys(upd).length) db.ref('/').update(upd).catch(function(){});
+    });
+  } catch(e){ _chatView='list'; renderChatPanel(); }
+}
+
 
 function goToUpgrade() {
   const m = document.getElementById('upgradeModal'); if (m) m.remove();
@@ -919,14 +997,21 @@ function openPlanPicker() {
   document.body.appendChild(overlay);
 
   function render() {
+    // Always dark — modal overlay looks sharp regardless of light/dark page theme
+    const D = {
+      bg:'#07070f', box:'#0d0d18', surface:'#13131f', surface2:'#1a1a2c',
+      border:'rgba(255,255,255,0.08)', border2:'rgba(255,255,255,0.15)',
+      text:'#f4f4fc', muted:'#9090b8', accent:'#6c63ff',
+      accent3:'#43e97b', accent4:'#f7b731', accent2:'#ff6584'
+    };
     const box = document.createElement('div');
-    box.style.cssText = 'background:var(--bg2);border:1px solid var(--border2);border-radius:20px;padding:0;max-width:900px;width:100%;overflow:hidden;';
+    box.style.cssText = 'background:'+D.box+';border:1px solid '+D.border2+';border-radius:20px;padding:0;max-width:920px;width:100%;overflow:hidden;';
 
     // Header
     box.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:22px 26px 18px;border-bottom:1px solid var(--border);">
         <div>
-          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:20px;">Upgrade PollSlide</div>
+          <div style="font-family:Syne,sans-serif;font-weight:800;font-size:20px;">Upgrade PollSlide</div>
           <div style="font-size:13px;color:var(--muted);margin-top:3px;">You're on <strong style="color:var(--text);">${lim.name}</strong>. Compare plans and upgrade anytime.</div>
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
@@ -939,7 +1024,7 @@ function openPlanPicker() {
       </div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding:0;" id="ppCards"></div>
       <div style="padding:14px 26px;border-top:1px solid var(--border);text-align:center;">
-        <a href="https://pollslide.com/pricing" target="_blank" style="font-size:12px;color:var(--muted);">See full comparison at pollslide.com/pricing →</a>
+        <a href="https://pollslide.com/pricing" target="_blank" style="font-size:12px;color:'+D.muted+';">'See full comparison at pollslide.com/pricing →</a>
       </div>
     `;
 
@@ -951,32 +1036,39 @@ function openPlanPicker() {
       const priceStr = price === null ? 'Custom' : (price === 0 ? 'Free' : '$' + price);
       const periodStr = (price !== null && price > 0) ? '/mo' : '';
       const card = document.createElement('div');
-      card.style.cssText = 'padding:22px 18px;border-right:' + (isLast?'none':'1px solid var(--border)') + ';display:flex;flex-direction:column;gap:0;position:relative;' + (p.popular?'background:rgba(108,99,255,0.05);':'') + (isCurrent?'background:rgba(255,255,255,0.03);':'');
+      card.style.cssText = 'padding:22px 18px;border-right:' + (isLast?'none':'1px solid '+D.border) + ';display:flex;flex-direction:column;gap:0;position:relative;' + (p.popular?'background:rgba(108,99,255,0.12);':'') + (isCurrent?'background:rgba(255,255,255,0.06);':'');
 
-      const feats = p.features.map(f => '<div style="font-size:12px;display:flex;gap:7px;margin-bottom:6px;"><span style="color:var(--accent3);flex-shrink:0;">✓</span><span>' + f + '</span></div>').join('');
-      const miss = (p.missing||[]).map(f => '<div style="font-size:12px;display:flex;gap:7px;margin-bottom:6px;opacity:.4;"><span style="flex-shrink:0;">—</span><span>' + f + '</span></div>').join('');
+      const feats = p.features.map(f => '<div style="font-size:12px;display:flex;gap:7px;margin-bottom:6px;color:'+D.text+'"><span style="color:'+D.accent3+';flex-shrink:0;">✓</span><span>' + f + '</span></div>').join('');
+      const miss = (p.missing||[]).map(f => '<div style="font-size:12px;display:flex;gap:7px;margin-bottom:6px;color:'+D.muted+'"><span style="flex-shrink:0;">—</span><span>' + f + '</span></div>').join('');
 
       const ctaStyle = isCurrent
-        ? 'background:var(--surface2);border:1px solid var(--border2);color:var(--muted);cursor:default;'
+        ? 'background:'+D.surface2+';border:1px solid '+D.border2+';color:'+D.muted+';cursor:default;'
         : p.key === 'white'
-        ? 'background:transparent;border:1.5px solid var(--accent4);color:var(--accent4);cursor:pointer;'
-        : 'background:' + (p.popular ? 'var(--accent)' : 'transparent') + ';border:1.5px solid ' + (p.popular ? 'var(--accent)' : 'var(--border2)') + ';color:' + (p.popular ? '#fff' : 'var(--text)') + ';cursor:pointer;';
-      const ctaText = isCurrent ? 'Current plan' : p.key === 'white' ? 'Contact us' : 'Upgrade to ' + p.name;
-      const ctaOnclick = isCurrent ? '' : p.key === 'white' ? "window.open('mailto:help@pollslide.com?subject=White Label enquiry')" : "pickerCheckout('" + p.key + "')";
+        ? 'background:transparent;border:1.5px solid '+D.accent4+';color:'+D.accent4+';cursor:pointer;'
+        : 'background:' + (p.popular ? D.accent : 'transparent') + ';border:1.5px solid ' + (p.popular ? D.accent : D.border2) + ';color:' + (p.popular ? '#fff' : D.text) + ';cursor:pointer;';
+      const isPaidUser = currentTier === 'pro' || currentTier === 'team';
+      const ctaText = isCurrent 
+        ? (isPaidUser ? 'Manage billing' : 'Current plan') 
+        : p.key === 'white' ? 'Contact us' 
+        : 'Upgrade to ' + p.name;
+      const ctaOnclick_billing = isCurrent && isPaidUser ? "openBillingPortal()" : null;
+      const ctaOnclick = ctaOnclick_billing || (isCurrent ? '' : p.key === 'white' ? "window.open('mailto:help@pollslide.com?subject=White Label enquiry')" : "pickerCheckout('" + p.key + "')");
 
       card.innerHTML =
-        (p.popular ? '<div style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:0 0 8px 8px;">★ Most popular</div>' : '') +
-        (isCurrent ? '<div style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border2);color:var(--muted);font-size:10px;font-weight:600;padding:3px 10px;border-radius:0 0 8px 8px;">Your plan</div>' : '') +
-        '<div style="font-family:Syne,sans-serif;font-weight:800;font-size:16px;margin-bottom:4px;color:' + p.color + ';">' + p.name + '</div>' +
+        (p.popular ? '<div style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:'+D.accent+';color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:0 0 8px 8px;">★ Most popular</div>' : '') +
+        (isCurrent ? '<div style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:'+D.surface2+';border:1px solid '+D.border2+';color:'+D.muted+';font-size:10px;font-weight:600;padding:3px 10px;border-radius:0 0 8px 8px;">Your plan</div>' : '') +
+        '<div style="font-family:Syne,sans-serif;font-weight:800;font-size:16px;margin-bottom:4px;color:' + 
+          (p.color==='var(--muted)'?D.muted:p.color==='var(--accent)'?D.accent:p.color==='var(--accent3)'?D.accent3:p.color==='var(--accent4)'?D.accent4:p.color) + 
+          ';">' + p.name + '</div>' +
         '<div style="display:flex;align-items:baseline;gap:3px;margin-bottom:4px;">' +
-          '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:' + (price===null?'20px':(price===0?'24px':'32px')) + ';line-height:1;">' + priceStr + '</span>' +
-          (periodStr ? '<span style="font-size:12px;color:var(--muted);">' + periodStr + '</span>' : '') +
+          '<span style="font-family:Syne,sans-serif;font-weight:800;font-size:' + (price===null?'20px':(price===0?'24px':'32px')) + ';line-height:1;color:'+D.text+'">' + priceStr + '</span>' +
+          (periodStr ? '<span style="font-size:12px;color:'+D.muted+';">' + periodStr + '</span>' : '') +
         '</div>' +
         (pickerBilling==='annual' && p.mo && p.yr && p.mo>0
-          ? '<div style="font-size:10px;color:var(--accent3);margin-bottom:12px;">Save $' + ((p.mo-p.yr)*12) + '/yr</div>'
+          ? '<div style="font-size:10px;color:'+D.accent3+';margin-bottom:12px;">Save $' + ((p.mo-p.yr)*12) + '/yr</div>'
           : '<div style="font-size:10px;height:16px;margin-bottom:12px;"></div>') +
         '<button onclick="' + ctaOnclick + '" style="width:100%;padding:10px;border-radius:10px;font-family:Syne,sans-serif;font-weight:700;font-size:12px;margin-bottom:14px;' + ctaStyle + '">' + ctaText + '</button>' +
-        '<div style="height:1px;background:var(--border);margin-bottom:12px;"></div>' +
+        '<div style="height:1px;background:'+D.border+';margin-bottom:12px;"></div>' +
         feats + miss;
       cardsEl.appendChild(card);
     });
@@ -1152,14 +1244,15 @@ function toggleUserMenu() {
     const menuItems = [
       { icon:'🔗', label:'Connect Mac App',      fn:'generatePairingCode()' },
       { icon:'✨', label:'See plans & upgrade',   fn:'openPlanPicker()' },
-      { icon:'💬', label:'Contact support',       fn:'openSupportTicket()' },
+      
       { icon:'📖', label:'Setup guide',           fn:"window.open('https://pollslide.com/setup','_blank')" },
       { icon:'⚠',  label:'Delete my account',     fn:'requestAccountDeletion()', danger:true },
     ];
     itemsEl.innerHTML = menuItems.map(m =>
-      '<button onclick="' + m.fn + ';closeUserMenu()" style="width:100%;padding:10px 14px;background:none;border:none;cursor:pointer;font-family:\'DM Sans\',sans-serif;font-size:13px;color:' + (m.danger ? 'var(--accent2)' : 'var(--text)') + ';text-align:left;display:flex;align-items:center;gap:8px;">' +
+      '<button onclick="' + m.fn + ';closeUserMenu()" style="width:100%;padding:10px 14px;background:none;border:none;cursor:pointer;font-family:DM Sans,sans-serif;font-size:13px;color:' + (m.danger ? 'var(--accent2)' : 'var(--text)') + ';text-align:left;display:flex;align-items:center;gap:8px;">' +
         m.icon + ' ' + m.label + '</button>'
-    ).join('');
+    ) +
+    '<button onclick="openSupportChat();closeUserMenu()" style="width:100%;padding:10px 14px;background:none;border:none;cursor:pointer;font-family:DM Sans,sans-serif;font-size:13px;color:var(--text);text-align:left;display:flex;align-items:center;justify-content:space-between;">' +'<span style="display:flex;align-items:center;gap:8px;">💬 Support Chat</span>' +'<span id="supportChatDot" style="display:none;width:8px;height:8px;border-radius:50%;background:#43e97b;"></span></button>';
   }
   dd.style.display = 'block';
 }
@@ -1213,15 +1306,15 @@ function showPairingCodeModal(code) {
 
   overlay.innerHTML = `
     <div style="background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:30px;max-width:380px;width:100%;text-align:center;">
-      <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;margin-bottom:8px;">Connect Mac App</div>
+      <div style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;margin-bottom:8px;">Connect Mac App</div>
       <p style="color:var(--muted);font-size:13px;margin-bottom:20px;">Enter this code in the PollSlide Companion app on your Mac.</p>
       <div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:8px;">
-        <div id="pairCodeText" style="font-family:'Syne',sans-serif;font-size:34px;font-weight:800;letter-spacing:0.15em;color:var(--accent);background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:14px 22px;">${code}</div>
+        <div id="pairCodeText" style="font-family:Syne,sans-serif;font-size:34px;font-weight:800;letter-spacing:0.15em;color:var(--accent);background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:14px 22px;">${code}</div>
         <button onclick="copyPairCode('${code}')" id="copyPairBtn" title="Copy code" style="background:var(--accent);border:none;border-radius:10px;width:48px;height:48px;cursor:pointer;color:#fff;font-size:18px;">📋</button>
       </div>
       <p id="pairCopiedMsg" style="color:var(--accent3);font-size:12px;height:16px;margin-bottom:16px;">✓ Copied to clipboard</p>
       <p style="color:var(--muted);font-size:12px;margin-bottom:18px;">Expires in 10 minutes · single use</p>
-      <button onclick="document.getElementById('pairCodeModal').remove()" style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Done</button>
+      <button onclick="document.getElementById('pairCodeModal').remove()" style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-family:Syne,sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Done</button>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -1759,7 +1852,7 @@ function renderLiveView(idx, qId, q) {
     optPreview = `<div style="display:flex;flex-direction:column;gap:6px;margin-top:10px;">
       ${(q.options||[]).map((o,i) => `
         <div style="display:flex;align-items:center;gap:8px;font-size:13px;">
-          <div style="width:22px;height:22px;border-radius:5px;background:var(--surface2);color:var(--muted);font-family:'Syne',sans-serif;font-weight:700;font-size:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${letters[i]}</div>
+          <div style="width:22px;height:22px;border-radius:5px;background:var(--surface2);color:var(--muted);font-family:Syne,sans-serif;font-weight:700;font-size:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${letters[i]}</div>
           <span>${o.text}</span>
         </div>`).join('')}
     </div>`;
@@ -1780,7 +1873,7 @@ function renderLiveView(idx, qId, q) {
         <button class="btn btn-ghost btn-sm" onclick="copyQuestionSlide(${idx})" title="Copy this question as a clean slide to paste into your presentation">📋 Copy as slide</button>
       </div>
       <div class="card-body">
-        <div style="font-family:'Syne',sans-serif;font-size:18px;font-weight:800;line-height:1.35;margin-bottom:12px;">${escapeHtml(q.text)}</div>
+        <div style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;line-height:1.35;margin-bottom:12px;">${escapeHtml(q.text)}</div>
         ${renderQuestionMedia(q, idx)}
         ${optPreview}
       </div>
@@ -1912,12 +2005,12 @@ function showImageCopyModal(src, label) {
   overlay.onclick = e => { if(e.target===overlay) overlay.remove(); };
   overlay.innerHTML = `
     <div style="background:var(--surface);border-radius:16px;padding:24px;max-width:560px;width:100%;text-align:center;">
-      <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:17px;margin-bottom:6px;">Copy ${label}</div>
+      <div style="font-family:Syne,sans-serif;font-weight:800;font-size:17px;margin-bottom:6px;">Copy ${label}</div>
       <p style="color:var(--muted);font-size:13px;margin-bottom:14px;">Right-click the image → <strong>Copy Image</strong>, then paste into your presentation.</p>
       <img src="${src}" style="max-width:100%;border-radius:10px;border:1px solid var(--border);cursor:context-menu;" title="Right-click → Copy Image">
       <div style="margin-top:14px;display:flex;gap:10px;justify-content:center;">
-        <a href="${src}" download style="padding:9px 18px;background:var(--accent);color:#fff;border-radius:9px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;text-decoration:none;">⬇ Download instead</a>
-        <button onclick="document.getElementById('imgCopyModal').remove()" style="padding:9px 18px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:9px;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer;">Close</button>
+        <a href="${src}" download style="padding:9px 18px;background:var(--accent);color:#fff;border-radius:9px;font-family:Syne,sans-serif;font-weight:700;font-size:13px;text-decoration:none;">⬇ Download instead</a>
+        <button onclick="document.getElementById('imgCopyModal').remove()" style="padding:9px 18px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:9px;font-family:Syne,sans-serif;font-weight:700;font-size:13px;cursor:pointer;">Close</button>
       </div>
     </div>`;
   document.body.appendChild(overlay);
@@ -2099,7 +2192,7 @@ function renderRevealControl(showControl) {
     return;
   }
   if (!showControl) { bar.innerHTML = ''; return; }
-  const btn = `<button onclick="doReveal()" style="background:var(--accent);border:none;border-radius:7px;color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:11px;padding:5px 11px;cursor:pointer;">Reveal now</button>`;
+  const btn = `<button onclick="doReveal()" style="background:var(--accent);border:none;border-radius:7px;color:#fff;font-family:Syne,sans-serif;font-weight:700;font-size:11px;padding:5px 11px;cursor:pointer;">Reveal now</button>`;
   if (revealSeconds === -1) {
     // Manual-only mode
     bar.innerHTML = `<span style="font-size:12px;color:var(--muted);">Manual reveal</span>${btn}`;
@@ -2171,7 +2264,7 @@ function renderRightPanel(q, responses) {
     } else if (mode === 'number') {
       inner = counts.map(({i,count})=>`
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-          <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:30px;color:${(revealed&&correct.includes(i))?'var(--accent3)':'var(--accent)'};min-width:60px;">${count}</div>
+          <div style="font-family:Syne,sans-serif;font-weight:800;font-size:30px;color:${(revealed&&correct.includes(i))?'var(--accent3)':'var(--accent)'};min-width:60px;">${count}</div>
           <div><div style="font-size:14px;font-weight:600;">${letters[i]}. ${(q.options[i]||{}).text||''}</div>
           <div style="font-size:12px;color:var(--muted);">${pct(count)}% of votes</div></div>
         </div>`).join('');
@@ -2198,7 +2291,7 @@ function renderRightPanel(q, responses) {
         <div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;">
           <span style="width:12px;height:12px;border-radius:3px;background:${palette[i%palette.length]};flex-shrink:0;"></span>
           <span style="flex:1;">${letters[i]}. ${(q.options[i]||{}).text||''}</span>
-          <span style="font-family:'Syne',sans-serif;font-weight:700;">${pct(count)}%</span>
+          <span style="font-family:Syne,sans-serif;font-weight:700;">${pct(count)}%</span>
         </div>`).join('');
       inner = `<div style="display:flex;justify-content:center;margin-bottom:14px;">
         <svg viewBox="0 0 42 42" style="width:150px;height:150px;">${segs||'<circle cx="21" cy="21" r="'+r0+'" fill="none" stroke="var(--surface2)" stroke-width="7"/>'}</svg>
@@ -2342,7 +2435,7 @@ async function showPresTally(presId) {
       <td style="padding:9px 10px;font-weight:600;font-size:13px;">${person.name}</td>
       ${qCells}
       ${hasCorrect
-        ? `<td style="text-align:center;padding:9px 10px;font-family:'Syne',sans-serif;font-weight:700;color:var(--accent3);">${person.correctCount}/${qs.filter(q=>q.correctAnswer!==undefined&&q.correctAnswer!==null).length}</td>`
+        ? `<td style="text-align:center;padding:9px 10px;font-family:Syne,sans-serif;font-weight:700;color:var(--accent3);">${person.correctCount}/${qs.filter(q=>q.correctAnswer!==undefined&&q.correctAnswer!==null).length}</td>`
         : ''}
       <td style="text-align:center;padding:9px 10px;color:var(--muted);font-size:12px;">${person.answeredCount}/${qs.length}</td>
     </tr>`;
@@ -2357,7 +2450,7 @@ async function showPresTally(presId) {
   document.getElementById('presTallyContent').innerHTML = `
     <div style="background:linear-gradient(135deg,rgba(255,200,0,0.1),rgba(255,200,0,0.03));border:1px solid rgba(255,200,0,0.2);border-radius:12px;padding:16px;text-align:center;margin-bottom:18px;">
       <div style="font-size:28px;margin-bottom:6px;">🏆</div>
-      <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:var(--accent4);">${winner.name}</div>
+      <div style="font-family:Syne,sans-serif;font-size:20px;font-weight:800;color:var(--accent4);">${winner.name}</div>
       <div style="font-size:13px;color:var(--muted);margin-top:3px;">
         ${hasCorrect ? `${winner.correctCount} correct answer${winner.correctCount!==1?'s':''} · ` : ''}
         ${winner.answeredCount} of ${qs.length} question${qs.length!==1?'s':''} answered
@@ -2425,7 +2518,7 @@ async function showQuestionTally(qIdx) {
     const total = responses.length;
     summaryHtml = `
       <div style="margin-bottom:16px;">
-        <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:10px;">Answer Breakdown (${total} responses)</div>
+        <div style="font-family:Syne,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:10px;">Answer Breakdown (${total} responses)</div>
         ${counts.map(({i,count}) => `
           <div style="margin-bottom:9px;">
             <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px;">
@@ -2440,7 +2533,7 @@ async function showQuestionTally(qIdx) {
   } else if (q.type === 'free_text') {
     summaryHtml = `
       <div style="margin-bottom:16px;">
-        <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:10px;">Text Responses (${responses.length})</div>
+        <div style="font-family:Syne,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:10px;">Text Responses (${responses.length})</div>
         ${responses.map(r=>`<div style="background:var(--surface2);border-left:2px solid var(--accent);border-radius:8px;padding:8px 12px;margin-bottom:7px;font-size:13px;">
           ${r.answer==='__none__'?'<em style="color:var(--muted)">No answer</em>':safeJ(r.answer)}
           <div style="font-size:10px;color:var(--muted);margin-top:3px;">— ${r.name}</div>
@@ -2483,7 +2576,7 @@ async function showQuestionTally(qIdx) {
 
   document.getElementById('tallyContent').innerHTML = `
     ${summaryHtml}
-    <div style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:10px;">Per-Participant</div>
+    <div style="font-family:Syne,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:10px;">Per-Participant</div>
     <div style="overflow-x:auto;">
       <table class="tally-table">
         <thead><tr><th>#</th><th>Name</th><th>Answer</th><th style="text-align:center;">Result</th></tr></thead>
@@ -2619,7 +2712,7 @@ function showSetup() {
     <div class="setup">
       <div class="setup-icon">🎯</div>
       <div>
-        <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:8px;">Ready to Go</h2>
+        <h2 style="font-family:Syne,sans-serif;font-size:20px;font-weight:800;margin-bottom:8px;">Ready to Go</h2>
         <p style="color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:18px;">Add a question, fill in the details,<br>then click <strong style="color:var(--accent3);">▶ Save &amp; Go Live</strong> when ready.<br><br>Use <strong style="color:var(--accent2);">↺ Reset Tally</strong> before your presentation.</p>
         <button class="btn btn-primary" style="font-size:13px;padding:10px 22px;justify-content:center;" onclick="addQuestion()">+ Add First Question</button>
       </div>
@@ -2627,19 +2720,19 @@ function showSetup() {
     <div class="setup">
       <div class="setup-icon">🎯</div>
       <div>
-        <h2 style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;margin-bottom:8px;">Welcome to PollSlide</h2>
+        <h2 style="font-family:Syne,sans-serif;font-size:20px;font-weight:800;margin-bottom:8px;">Welcome to PollSlide</h2>
         <p style="color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:16px;">Live polls that float over your Keynote. Three steps to get started:</p>
         <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:18px;">
           <div style="display:flex;align-items:flex-start;gap:10px;padding:11px 13px;background:var(--surface2);border-radius:10px;border:1px solid var(--border2);">
-            <div style="width:24px;height:24px;border-radius:7px;background:rgba(108,99,255,.2);color:var(--accent);font-family:'Syne',sans-serif;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
+            <div style="width:24px;height:24px;border-radius:7px;background:rgba(108,99,255,.2);color:var(--accent);font-family:Syne,sans-serif;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
             <div><div style="font-weight:600;font-size:13px;margin-bottom:1px;">Create a presentation</div><div style="color:var(--muted);font-size:12px;line-height:1.4;">Click <strong style="color:var(--text);">+ New Presentation</strong> below to begin.</div></div>
           </div>
           <div style="display:flex;align-items:flex-start;gap:10px;padding:11px 13px;background:var(--surface2);border-radius:10px;border:1px solid var(--border2);">
-            <div style="width:24px;height:24px;border-radius:7px;background:rgba(108,99,255,.2);color:var(--accent);font-family:'Syne',sans-serif;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
+            <div style="width:24px;height:24px;border-radius:7px;background:rgba(108,99,255,.2);color:var(--accent);font-family:Syne,sans-serif;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
             <div><div style="font-weight:600;font-size:13px;margin-bottom:1px;">Build your questions</div><div style="color:var(--muted);font-size:12px;line-height:1.4;">Multiple choice, free text, rating. Questions stay live once saved.</div></div>
           </div>
           <div style="display:flex;align-items:flex-start;gap:10px;padding:11px 13px;background:var(--surface2);border-radius:10px;border:1px solid var(--border2);">
-            <div style="width:24px;height:24px;border-radius:7px;background:rgba(108,99,255,.2);color:var(--accent);font-family:'Syne',sans-serif;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">3</div>
+            <div style="width:24px;height:24px;border-radius:7px;background:rgba(108,99,255,.2);color:var(--accent);font-family:Syne,sans-serif;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">3</div>
             <div><div style="font-weight:600;font-size:13px;margin-bottom:1px;">Put the QR on your slide</div><div style="color:var(--muted);font-size:12px;line-height:1.4;">Use <strong style="color:var(--text);">📋 Copy QR box</strong> — paste onto your Keynote slide.</div></div>
           </div>
         </div>
@@ -2698,7 +2791,7 @@ function renderEditor(idx) {
 
   document.getElementById('centerPanel').innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;">
-      <span style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Question ${idx+1}</span>
+      <span style="font-family:Syne,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Question ${idx+1}</span>
       <div style="display:flex;gap:7px;">
         <button class="btn btn-ghost btn-sm" style="color:var(--accent2);" onclick="deleteQ(${idx})">Delete</button>
         <button class="btn btn-reset btn-sm" onclick="resetQuestionTally(${idx})">↺ Reset</button>
@@ -3126,6 +3219,29 @@ function toast(msg,type='info'){
   );
   makeVertDragger('resizeVertical', '.pres-panel', STORAGE.presH);
 })();
+// ─── BILLING PORTAL (for paid users to manage subscription) ──────────────────
+async function openBillingPortal() {
+  document.getElementById('planPickerModal')?.remove();
+  toast('Opening billing portal…', 'info');
+  try {
+    const r = await fetch('/api/billing-portal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: currentUser?.email })
+    });
+    const data = await r.json();
+    if (data.url) {
+      window.location.href = data.url;
+    } else if (data.hint) {
+      toast('No subscription found. Try upgrading first.', 'danger');
+    } else {
+      toast('Could not open billing portal. Email help@pollslide.com', 'danger');
+    }
+  } catch(e) {
+    toast('Billing portal API not deployed yet — commit api/billing-portal.js first.', 'danger');
+  }
+}
+
 // ─── RESPONSE REPORTS ────────────────────────────────────────────────────────
 let _reportData = null; // cached for CSV export
 
@@ -3185,7 +3301,7 @@ async function openReport() {
   _reportData = { pres, report, participants, totalParticipants, totalResponses, totalCorrect };
 
   // ── RENDER STATS ────────────────────────────────────────────────────────────
-  const statBox = (val, label) => '<div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:14px 16px;"><div style="font-family:\'Syne\',sans-serif;font-weight:800;font-size:26px;">' + val + '</div><div style="font-size:11px;color:var(--muted);margin-top:3px;">' + label + '</div></div>';
+  const statBox = (val, label) => '<div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:14px 16px;"><div style="font-family:Syne,sans-serif;font-weight:800;font-size:26px;">' + val + '</div><div style="font-size:11px;color:var(--muted);margin-top:3px;">' + label + '</div></div>';
   document.getElementById('reportStats').innerHTML =
     statBox(totalParticipants, 'Participants') +
     statBox(totalResponses, 'Total responses') +
@@ -3225,8 +3341,8 @@ async function openReport() {
     return '<div style="background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:18px;margin-bottom:14px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">' +
       '<div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;">Q' + (r.idx+1) + ' · ' + (q.type||'').replace(/_/g,' ') + '</div>' +
-      '<div style="font-family:\'Syne\',sans-serif;font-weight:800;font-size:15px;">' + escapeHtml(q.text||'Untitled') + '</div></div>' +
-      '<div style="text-align:right;flex-shrink:0;"><div style="font-family:\'Syne\',sans-serif;font-weight:800;font-size:20px;">' + r.totalResponses + '</div>' +
+      '<div style="font-family:Syne,sans-serif;font-weight:800;font-size:15px;">' + escapeHtml(q.text||'Untitled') + '</div></div>' +
+      '<div style="text-align:right;flex-shrink:0;"><div style="font-family:Syne,sans-serif;font-weight:800;font-size:20px;">' + r.totalResponses + '</div>' +
       '<div style="font-size:10px;color:var(--muted);">responses</div>' +
       (r.correctCount > 0 ? '<div style="font-size:10px;color:var(--accent3);">' + r.correctCount + ' correct (' + Math.round(r.correctCount/total*100) + '%)</div>' : '') +
       '</div></div>' +
@@ -3238,7 +3354,7 @@ async function openReport() {
   const sortedParts = Object.values(participants).sort((a,b) => b.correct - a.correct || b.total - a.total);
   document.getElementById('reportParticipants').innerHTML =
     '<div style="background:var(--surface);border:1px solid var(--border2);border-radius:14px;overflow:hidden;">' +
-    '<div style="padding:13px 16px;border-bottom:1px solid var(--border);font-family:\'Syne\',sans-serif;font-weight:700;font-size:13px;">Participants (' + sortedParts.length + ')</div>' +
+    '<div style="padding:13px 16px;border-bottom:1px solid var(--border);font-family:Syne,sans-serif;font-weight:700;font-size:13px;">Participants (' + sortedParts.length + ')</div>' +
     '<table style="width:100%;border-collapse:collapse;">' +
     '<thead><tr><th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);">Name</th>' +
     '<th style="padding:9px 14px;text-align:center;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);">Answered</th>' +

@@ -650,8 +650,16 @@ function openTicket(id){
 async function replyTicket(ticketId,uid){
   const text=document.getElementById('ticketReply')?.value?.trim();if(!text){toast('Write a reply first.','danger');return;}
   const msgId='msg_'+Date.now();
-  await db.ref(`admin/messages/${msgId}`).set({uid,text,type:'info',sentAt:Date.now(),sentBy:currentAdminEmail,ticketId});
-  if(uid)await db.ref(`users/${uid}/inbox/${msgId}`).set({text,type:'info',sentAt:Date.now(),read:false});
+  const replyTs = Date.now();
+  // 1. Log in admin messages
+  await db.ref(`admin/messages/${msgId}`).set({uid,text,type:'info',sentAt:replyTs,sentBy:currentAdminEmail,ticketId});
+  // 2. Write to user inbox (shows as notification)
+  if(uid) await db.ref(`users/${uid}/inbox/${msgId}`).set({text,type:'info',sentAt:replyTs,read:false,ticketId});
+  // 3. Write reply to both admin ticket AND user ticket (so Support Chat thread shows it)
+  const replyData = {text, at:replyTs, from:'admin', by:currentAdminEmail};
+  await db.ref(`admin/tickets/${ticketId}/replies/${replyTs}`).set(replyData);
+  if(uid) await db.ref(`users/${uid}/tickets/${ticketId}/replies/${replyTs}`).set(replyData);
+  // 4. Mark ticket as replied
   await db.ref(`admin/tickets/${ticketId}/replied`).set(true);
   document.getElementById('ticketReply').value='';toast('Reply sent.','success');
 }
