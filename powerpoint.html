@@ -512,25 +512,33 @@ function insertQR(idx) {
       const dataUrl = canvas.toDataURL('image/png');
       document.body.removeChild(tmp);
 
-      // Insert into the current PowerPoint slide
-      PowerPoint.run(async context => {
-        const slide = context.presentation.getSelectedSlides().getItemAt(0);
-        // Add image to the slide (width/height in points; 1 inch = 72 points)
-        const img = slide.shapes.addImage(dataUrl.split(',')[1]);
-        img.left = 50; img.top = 50; img.width = 200; img.height = 200;
-        await context.sync();
-        toast('QR inserted into slide!', 'success');
-      }).catch(e => {
-        // Fallback: copy to clipboard so user can paste manually
-        canvas.toBlob(async blob => {
-          try {
-            await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
-            toast('QR copied — paste it onto your slide (Ctrl+V)', 'success');
-          } catch(_) {
-            toast('Could not insert — copy the QR from the Polls tab.', 'danger');
+      // Insert into the current PowerPoint slide.
+      // NOTE: PowerPoint's JS API has no shapes.addImage() — setSelectedDataAsync
+      // with Image coercion is the supported, cross-platform way (Windows/Mac/web).
+      // Matches the ImageCoercion 1.1 requirement declared in manifest.xml.
+      const base64 = dataUrl.split(',')[1];
+      Office.context.document.setSelectedDataAsync(
+        base64,
+        {
+          coercionType: Office.CoercionType.Image,
+          imageWidth: 200   // points; height auto-scales to keep aspect ratio
+        },
+        function (result) {
+          if (result.status === Office.AsyncResultStatus.Succeeded) {
+            toast('QR inserted into slide!', 'success');
+          } else {
+            // Fallback: copy to clipboard so user can paste manually
+            canvas.toBlob(async blob => {
+              try {
+                await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+                toast('QR copied — paste it onto your slide (Ctrl+V)', 'success');
+              } catch(_) {
+                toast('Could not insert — copy the QR from the Polls tab.', 'danger');
+              }
+            }, 'image/png');
           }
-        }, 'image/png');
-      });
+        }
+      );
     };
 
     if (qrImg && !qrImg.complete) { qrImg.onload = buildAndInsert; }
