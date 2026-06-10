@@ -3722,9 +3722,7 @@ function buildWordCloud(q, counts, responses) {
 }
 
 // ─── GIF PICKER MODAL ────────────────────────────────────────────────────────
-// Uses Tenor v1 (demo key "LIVEJOHN"). Register a free production key at
-// https://tenor.com/developer/keyregistration and replace the value below.
-const TENOR_KEY = 'LIVEJOHN';
+const GIPHY_KEY = '45s8aUZ5MTLF5zMjtbJTu0Kqk4jfbUTe';
 let _gifPickerCallback = null;
 let _gifDebounceTimer = null;
 
@@ -3762,18 +3760,17 @@ function runGifSearch(query) {
   if (!grid) return;
   grid.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px;text-align:center;width:100%;">Searching…</div>';
   if (status) status.textContent = '';
-  fetch(`https://api.tenor.com/v1/search?key=${TENOR_KEY}&q=${encodeURIComponent(query)}&limit=24&media_filter=minimal&contentfilter=medium`)
+  fetch(`https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_KEY}&q=${encodeURIComponent(query)}&limit=24&rating=g&lang=en`)
     .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(data => {
-      if (!data.results || !data.results.length) {
+      if (!data.data || !data.data.length) {
         grid.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px;text-align:center;width:100%;">No GIFs found — try different keywords</div>';
         return;
       }
-      if (status) status.textContent = `${data.results.length} results for "${query}"`;
-      grid.innerHTML = data.results.map(g => {
-        const media = g.media?.[0] || {};
-        const thumb = media.tinygif?.url || media.gif?.url || '';
-        const full  = media.gif?.url || thumb;
+      if (status) status.textContent = `${data.data.length} results for "${query}"`;
+      grid.innerHTML = data.data.map(g => {
+        const thumb = g.images?.fixed_height_small?.url || g.images?.preview_gif?.url || '';
+        const full  = g.images?.original?.url || g.images?.downsized?.url || thumb;
         const title = (g.title || '').replace(/"/g, '&quot;');
         return `<div class="gif-thumb" data-url="${full.replace(/"/g,'&quot;')}" title="${title}"
           style="width:calc(25% - 5px);aspect-ratio:4/3;border-radius:8px;overflow:hidden;cursor:pointer;border:2px solid transparent;transition:border-color 0.15s,transform 0.12s;flex-shrink:0;"
@@ -4035,8 +4032,8 @@ function renderPresentSlide(idx) {
     </div>`;
 
   container.innerHTML = `
-    <!-- ── TOP STATUS BAR (full width) ── -->
-    <div style="display:flex;justify-content:space-between;align-items:center;width:100%;margin-bottom:12px;flex-shrink:0;padding:0 2px;">
+    <!-- ── TOP STATUS BAR ── -->
+    <div style="display:flex;justify-content:space-between;align-items:center;width:100%;margin-bottom:8px;flex-shrink:0;padding:0 2px;">
       <div style="font-family:Syne,sans-serif;font-size:11px;font-weight:700;color:rgba(255,255,255,0.38);letter-spacing:0.12em;text-transform:uppercase;">Question ${idx+1} of ${questions.length}</div>
       <div style="display:flex;align-items:center;gap:8px;">
         <span style="font-family:Syne,sans-serif;font-size:16px;font-weight:800;color:rgba(255,255,255,0.9);">${total}</span>
@@ -4045,34 +4042,60 @@ function renderPresentSlide(idx) {
       </div>
     </div>
 
-    <!-- ── 9-COLUMN BODY (flex, flex: 1) ── -->
-    <div style="display:flex;gap:16px;width:100%;flex:1;min-height:0;">
+    <!-- ── 8-ROW × 3-COL GRID BODY ── -->
+    <div style="
+      display:grid;
+      grid-template-rows:repeat(8,1fr);
+      grid-template-columns:2fr 5fr 2fr;
+      gap:10px;
+      flex:1;
+      min-height:0;
+      width:100%;
+    ">
+      ${hasMedia ? `
+      <!-- LEFT: image rows 2-4 -->
+      <div style="grid-column:1;grid-row:2/5;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:10px;">
+        ${isVideoUrl(q.image)
+          ? `<video src="${q.image}" style="width:100%;max-height:100%;object-fit:contain;background:#000;border-radius:10px;" autoplay loop muted playsinline></video>`
+          : `<img src="${q.image}" style="width:100%;max-height:100%;object-fit:contain;border-radius:10px;" onerror="this.style.display='none'">`}
+      </div>
+      <!-- LEFT: QR rows 5-9 -->
+      <div style="grid-column:1;grid-row:5/9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;">
+        <div style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.55);text-align:center;letter-spacing:0.04em;line-height:1.4;max-width:130px;">Scan with Phone Camera to Answer</div>
+        <div id="${qrId}" style="background:#fff;border-radius:10px;padding:8px;width:140px;height:140px;flex-shrink:0;"></div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:rgba(255,255,255,0.2);text-align:center;word-break:break-all;max-width:130px;line-height:1.5;">${qUrl}</div>
+      </div>
+      ` : `
+      <!-- LEFT: no media — QR full height rows 1-9 -->
+      <div style="grid-column:1;grid-row:1/9;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;">
+        <div style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.55);text-align:center;letter-spacing:0.04em;line-height:1.4;max-width:130px;">Scan with Phone Camera to Answer</div>
+        <div id="${qrId}" style="background:#fff;border-radius:10px;padding:8px;width:140px;height:140px;flex-shrink:0;"></div>
+        <div style="font-family:'DM Mono',monospace;font-size:9px;color:rgba(255,255,255,0.2);text-align:center;word-break:break-all;max-width:130px;line-height:1.5;">${qUrl}</div>
+      </div>
+      `}
 
-      <!-- LEFT 2/9: media (if any) + QR code — space-between when media, centered when not -->
-      <div style="flex:2;display:flex;flex-direction:column;align-items:center;justify-content:${hasMedia?'space-between':'center'};min-width:0;padding:4px;">
-        ${mediaHtml}
-        ${qrBlockHtml}
+      <!-- CENTER: question rows 1-4 -->
+      <div style="grid-column:2;grid-row:1/5;display:flex;align-items:center;justify-content:center;padding:8px 0;">
+        <div style="font-family:Syne,sans-serif;font-size:clamp(17px,2.6vw,34px);font-weight:900;color:#fff;line-height:1.3;text-shadow:0 2px 14px rgba(0,0,0,0.5);text-align:center;">${escapeHtml(q.text||'')}</div>
       </div>
 
-      <!-- CENTER 5/9: question text + answer blocks — vertically centered -->
-      <div style="flex:5;display:flex;flex-direction:column;justify-content:center;gap:14px;min-width:0;overflow-y:auto;">
-        <div style="font-family:Syne,sans-serif;font-size:clamp(17px,2.6vw,32px);font-weight:900;color:#fff;line-height:1.3;text-shadow:0 2px 14px rgba(0,0,0,0.5);">${escapeHtml(q.text||'')}</div>
-        ${optBlocksHtml}
+      <!-- CENTER: answers rows 5-9 -->
+      <div style="grid-column:2;grid-row:5/9;display:flex;align-items:center;justify-content:center;padding:8px 0;">
+        <div style="width:100%;">${optBlocksHtml}</div>
       </div>
 
-      <!-- RIGHT 2/9: live results panel — chart centered in remaining space -->
-      <div style="flex:2;display:flex;flex-direction:column;gap:10px;min-width:0;background:rgba(255,255,255,0.04);border-radius:14px;border:1px solid rgba(255,255,255,0.08);padding:14px;overflow:hidden;">
+      <!-- RIGHT: results rows 2-8 -->
+      <div style="grid-column:3;grid-row:2/8;display:flex;flex-direction:column;gap:10px;background:rgba(255,255,255,0.04);border-radius:14px;border:1px solid rgba(255,255,255,0.08);padding:14px;overflow:hidden;min-height:0;">
         <div style="flex-shrink:0;">
           <span style="font-family:Syne,sans-serif;font-size:10px;font-weight:700;color:rgba(255,255,255,0.3);letter-spacing:0.1em;text-transform:uppercase;display:block;margin-bottom:6px;">Live Results</span>
           <div id="presentRevealBadge" style="min-height:32px;display:flex;align-items:center;">${buildRevealBadgeHtml(q)}</div>
         </div>
         <div style="flex:1;overflow-y:auto;min-height:0;display:flex;flex-direction:column;justify-content:center;">${buildPresentChart(q, responses)}</div>
       </div>
-
     </div>
 
-    <!-- ── BOTTOM NAV BAR (full width) ── -->
-    <div style="display:flex;align-items:center;gap:8px;width:100%;margin-top:12px;flex-shrink:0;padding:0 2px;">
+    <!-- ── BOTTOM NAV BAR ── -->
+    <div style="display:flex;align-items:center;gap:8px;width:100%;margin-top:8px;flex-shrink:0;padding:0 2px;">
       <button onclick="presentNav(-1)" ${idx===0?'disabled':''} style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;font-family:Syne,sans-serif;font-weight:700;padding:7px 16px;cursor:pointer;${idx===0?'opacity:0.28;cursor:not-allowed;':''}">← Prev</button>
       <button onclick="presentNav(1)"  ${idx===questions.length-1?'disabled':''} style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;font-family:Syne,sans-serif;font-weight:700;padding:7px 16px;cursor:pointer;${idx===questions.length-1?'opacity:0.28;cursor:not-allowed;':''}">Next →</button>
       ${isChoice&&!revealed?`<button onclick="doReveal();renderPresentSlide(_presentIdx);" style="background:linear-gradient(135deg,#6c63ff,#a78bfa);border:none;border-radius:8px;color:#fff;font-size:13px;font-family:Syne,sans-serif;font-weight:700;padding:7px 18px;cursor:pointer;box-shadow:0 2px 12px rgba(108,99,255,0.4);">🎯 Reveal Answer</button>`:''}
@@ -4092,7 +4115,7 @@ function renderPresentSlide(idx) {
   const qrEl = document.getElementById(qrId);
   if (qrEl && typeof QRCode !== 'undefined') {
     qrEl.innerHTML = '';
-    new QRCode(qrEl, { text: qUrl, width: 100, height: 100, colorDark:'#0d0d18', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    new QRCode(qrEl, { text: qUrl, width: 124, height: 124, colorDark:'#0d0d18', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.M });
   }
 }
 
@@ -4129,7 +4152,7 @@ function renderPresentSlide(idx) {
     </div>
     <!-- Footer -->
     <div style="padding:8px 16px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
-      <span style="font-size:10px;color:var(--muted);">Powered by <strong>Tenor</strong> · Click any GIF to insert it</span>
+      <span style="font-size:10px;color:var(--muted);">Powered by <strong>Giphy</strong> · Click any GIF to insert it</span>
       <span style="font-size:10px;color:var(--muted);">Tip: results update as you type</span>
     </div>
   </div>
