@@ -1947,36 +1947,71 @@ const MEDIA_SIZES = {
 function renderQuestionMedia(q, idx) {
   if (!q.image || !q.image.trim()) return '';
   const code = presentations[activePresId]?.sessionCode || '';
-  const savedSize = localStorage.getItem(`ql_qmedia_size_${code}_${idx}`) || 'md';
-  const sz = MEDIA_SIZES[savedSize] || MEDIA_SIZES.md;
+  const savedH = localStorage.getItem(`ql_qmedia_h_${code}_${idx}`);
+  const boxStyle = savedH
+    ? `height:${savedH};max-height:65vh;overflow:hidden;`
+    : `height:auto;max-height:65vh;overflow:hidden;`;
   const inner = isVideoUrl(q.image)
-    ? `<video src="${q.image}" style="width:100%;height:100%;object-fit:contain;border-radius:10px;background:#000;" ${q.videoOpts?.loop?'loop':''} ${q.videoOpts?.autoplay?'autoplay':''} ${(q.videoOpts?.muted||q.videoOpts?.autoplay)?'muted':''} ${q.videoOpts?.controls?'controls':''} playsinline></video>`
-    : `<img src="${q.image}" style="width:100%;height:100%;object-fit:contain;border-radius:10px;" onerror="this.parentElement.style.display='none'">`;
-  const sizeBtns = Object.entries(MEDIA_SIZES).map(([key, s]) =>
-    `<button onclick="setQMediaSize(${idx},'${key}')" title="${s.desc}"
-      style="padding:2px 7px;font-size:10px;font-family:Syne,sans-serif;font-weight:700;border-radius:5px;border:1px solid ${savedSize===key?'var(--accent)':'var(--border2)'};background:${savedSize===key?'var(--accent)':'var(--surface2)'};color:${savedSize===key?'#fff':'var(--muted)'};cursor:pointer;">${s.label}</button>`
+    ? `<video src="${q.image}" style="width:100%;${savedH?'height:100%;':''}object-fit:contain;border-radius:10px;background:#000;" ${q.videoOpts?.loop?'loop':''} ${q.videoOpts?.autoplay?'autoplay':''} ${(q.videoOpts?.muted||q.videoOpts?.autoplay)?'muted':''} ${q.videoOpts?.controls?'controls':''} playsinline></video>`
+    : `<img src="${q.image}" style="width:100%;${savedH?'height:100%;':''}object-fit:contain;border-radius:10px;" onerror="this.parentElement.style.display='none'">`;
+  const sizeBtns = [['S','140px'],['M','220px'],['L','340px'],['⛶','62vh']].map(([label, h]) =>
+    `<button onclick="setQMediaSize(${idx},'${h}')" title="${label==='⛶'?'Full':'Size '+label}"
+      style="padding:2px 7px;font-size:10px;font-family:Syne,sans-serif;font-weight:700;border-radius:5px;border:1px solid ${savedH===h?'var(--accent)':'var(--border2)'};background:${savedH===h?'var(--accent)':'var(--surface2)'};color:${savedH===h?'#fff':'var(--muted)'};cursor:pointer;">${label}</button>`
   ).join('');
+  const resetBtn = savedH
+    ? `<button onclick="setQMediaSize(${idx},'auto')" title="Auto-fit" style="padding:2px 7px;font-size:10px;border-radius:5px;border:1px solid var(--border2);background:var(--surface2);color:var(--muted);cursor:pointer;">↺</button>`
+    : '';
   return `
-    <div style="margin-bottom:14px;">
+    <div id="qMediaWrap_${idx}" style="margin-bottom:4px;">
       <div style="display:flex;align-items:center;gap:5px;margin-bottom:5px;">
         <span style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:0.06em;text-transform:uppercase;flex:1;">Media</span>
-        ${sizeBtns}
+        ${resetBtn}${sizeBtns}
       </div>
-      <div id="qMediaBox_${idx}" style="width:100%;height:${sz.h};max-height:65vh;overflow:hidden;border-radius:12px;border:1px solid var(--border2);background:var(--surface2);transition:height 0.2s ease;">
+      <div id="qMediaBox_${idx}" style="width:100%;${boxStyle}border-radius:12px;border:1px solid var(--border2);background:var(--surface2);transition:height 0.15s ease;">
         ${inner}
+      </div>
+      <div style="height:7px;background:var(--border);border-radius:0 0 8px 8px;cursor:ns-resize;display:flex;align-items:center;justify-content:center;margin-bottom:14px;"
+           onmousedown="startMediaDrag(event,${idx})" title="Drag to resize">
+        <span style="font-size:9px;color:var(--muted);pointer-events:none;">⋯</span>
       </div>
     </div>`;
 }
 
-function setQMediaSize(idx, sizeKey) {
+function setQMediaSize(idx, h) {
   const code = presentations[activePresId]?.sessionCode || '';
-  localStorage.setItem(`ql_qmedia_size_${code}_${idx}`, sizeKey);
   const box = document.getElementById(`qMediaBox_${idx}`);
-  const sz = MEDIA_SIZES[sizeKey] || MEDIA_SIZES.md;
-  if (box) box.style.height = sz.h;
-  // Re-render only the media container so buttons update active state
-  const wrap = box?.parentElement;
+  if (h === 'auto') {
+    localStorage.removeItem(`ql_qmedia_h_${code}_${idx}`);
+    if (box) { box.style.height = 'auto'; box.style.overflow = 'hidden'; }
+  } else {
+    localStorage.setItem(`ql_qmedia_h_${code}_${idx}`, h);
+    if (box) { box.style.height = h; box.style.overflow = 'hidden'; }
+  }
+  const wrap = document.getElementById(`qMediaWrap_${idx}`);
   if (wrap) wrap.outerHTML = renderQuestionMedia(questions[idx], idx);
+}
+
+function startMediaDrag(e, idx) {
+  e.preventDefault();
+  const box = document.getElementById(`qMediaBox_${idx}`);
+  if (!box) return;
+  const startY = e.clientY;
+  const startH = box.getBoundingClientRect().height;
+  const onMove = (ev) => {
+    const newH = Math.max(80, Math.min(window.innerHeight * 0.65, startH + ev.clientY - startY));
+    box.style.height = newH + 'px';
+    box.style.overflow = 'hidden';
+  };
+  const onUp = () => {
+    const code = presentations[activePresId]?.sessionCode || '';
+    localStorage.setItem(`ql_qmedia_h_${code}_${idx}`, box.style.height);
+    const wrap = document.getElementById(`qMediaWrap_${idx}`);
+    if (wrap) wrap.outerHTML = renderQuestionMedia(questions[idx], idx);
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  };
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
 }
 
 function renderLiveView(idx, qId, q) {
@@ -2005,6 +2040,7 @@ function renderLiveView(idx, qId, q) {
       <button class="btn btn-ghost btn-sm" onclick="showQuestionTally(${idx})">📊 Tally</button>
       <button class="btn btn-reset btn-sm" onclick="resetQuestionTally(${idx})">↺ Reset Q</button>
       <button class="btn btn-ghost btn-sm" onclick="editQuestion(${idx})">✏️ Edit</button>
+      <button class="btn btn-ghost btn-sm" onclick="openPresentMode()" title="Present full-screen" style="background:var(--accent);color:#fff;border-color:var(--accent);">⛶ Present</button>
     </div>
 
     <div class="card">
@@ -2228,7 +2264,8 @@ function armReveal(q) {
 
   if (!isQuiz) {
     revealed = true;        // opinion poll — nothing to hide
-    renderRevealControl(false);
+    const _bar = document.getElementById('revealBar');
+    if (_bar) _bar.innerHTML = '';  // nothing to reveal — keep bar empty
     return;
   }
 
@@ -2389,9 +2426,13 @@ function renderRightPanel(q, responses) {
   const letters = ['A','B','C','D','E','F'];
 
   if (q.type === 'free_text') {
-    rs.innerHTML = `<div class="resp-big">${total} <span>responses</span></div>
-      ${total===0?'<div style="color:var(--muted);font-size:13px;">Waiting...</div>':
-        responses.map(r=>`<div class="txt-resp">${r.answer==='__none__'?'<em style="color:var(--muted)">No answer</em>':safeJ(r.answer)}<div class="from">— ${r.name}</div></div>`).join('')}`;
+    if (q.displayMode === 'word_cloud') {
+      rs.innerHTML = `<div class="resp-big" id="liveRespCount">${total} <span>responses</span></div>${buildWordCloud(q, [], responses)}`;
+    } else {
+      rs.innerHTML = `<div class="resp-big" id="liveRespCount">${total} <span>responses</span></div>
+        ${total===0?'<div style="color:var(--muted);font-size:13px;">Waiting...</div>':
+          responses.map(r=>`<div class="txt-resp">${r.answer==='__none__'?'<em style="color:var(--muted)">No answer</em>':safeJ(r.answer)}<div class="from">— ${r.name}</div></div>`).join('')}`;
+    }
   } else if (q.type === 'rating') {
     const max=q.ratingMax||5; const counts={};
     for(let i=1;i<=max;i++) counts[i]=0;
@@ -2518,26 +2559,34 @@ function renderRightPanel(q, responses) {
       inner = `<div style="display:flex;justify-content:center;margin-bottom:12px;">
         <svg viewBox="0 0 42 42" width="140" height="140" style="overflow:visible;">${segs}</svg>
       </div>${legend}`;
+    } else if (mode === 'word_cloud') {
+      inner = buildWordCloud(q, counts, responses);
     } else {
-      // Default: bars
+      // Default: bars — Kahoot-style colored bars per option
       inner = counts.map(({i,count})=>{
         const opt=(q.options[i]||{});
         const hasImg=opt.img&&opt.img.trim();
-        // Only show the green "correct" highlight after reveal
         const showCorrect = revealed && correct.includes(i);
-        const correctBadge = showCorrect ? ` <span style="font-size:10px;font-weight:700;color:var(--accent3);background:rgba(67,233,123,0.16);padding:1px 7px;border-radius:100px;margin-left:4px;">✓ Correct</span>` : '';
+        const color = showCorrect ? '#43e97b' : palette[i % palette.length];
+        const correctBadge = showCorrect ? ` <span style="font-size:10px;font-weight:700;color:#43e97b;background:rgba(67,233,123,0.16);padding:1px 7px;border-radius:100px;margin-left:4px;">✓</span>` : '';
         const imgRow = hasImg ? `<div style="margin-bottom:5px;">${isVideoUrl(opt.img)
           ? `<video src="${opt.img}" style="width:100%;max-height:80px;border-radius:7px;object-fit:cover;background:#000;" autoplay loop muted playsinline></video>`
           : `<img src="${opt.img}" style="width:100%;max-height:80px;border-radius:7px;object-fit:cover;display:block;" onerror="this.parentElement.style.display='none'">`
         }</div>` : '';
-        return `<div class="bar-wrap">
+        return `<div class="bar-wrap" style="border-left:3px solid ${color}20;padding-left:4px;">
         ${imgRow}
-        <div class="bar-label"><span class="bn">${letters[i]}. ${opt.text||''}${correctBadge}</span><span class="bv">${count} (${pct(count)}%)</span></div>
-        <div class="bar-bg"><div class="bar-fill ${showCorrect?'correct':''}" style="width:${pct(count)}%"></div></div>
+        <div class="bar-label">
+          <span class="bn" style="display:flex;align-items:center;gap:6px;">
+            <span style="display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;background:${color};color:#fff;font-size:10px;font-weight:800;flex-shrink:0;">${letters[i]}</span>
+            <span>${opt.text||''}${correctBadge}</span>
+          </span>
+          <span class="bv" style="color:${color};font-size:13px;">${count}</span>
+        </div>
+        <div class="bar-bg"><div class="bar-fill" style="width:${pct(count)}%;background:${color};opacity:0.85;"></div></div>
       </div>`;}).join('');
     }
 
-    rs.innerHTML=`<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>${inner}`;
+    rs.innerHTML=`<div class="resp-big" id="liveRespCount">${total} <span>response${total!==1?'s':''}</span></div>${inner}`;
   }
 }
 
@@ -2995,9 +3044,17 @@ function renderEditor(idx) {
             <div style="display:flex;gap:8px;align-items:center;">
               <input class="opt-input" type="text" placeholder="Paste URL or upload →" value="${(opt.img||'').replace(/"/g,'&quot;')}" oninput="updateOptImg(${idx},${i},this.value)" style="font-size:12px;">
               <button class="btn btn-ghost btn-sm" onclick="uploadOptImg(${idx},${i})" title="Upload image, GIF or video" style="flex-shrink:0;padding:6px 10px;">⬆</button>
+              <button class="btn btn-ghost btn-sm" onclick="toggleGifSearch('opt_${idx}_${i}')" title="Search GIFs" style="flex-shrink:0;padding:6px 10px;">🔍</button>
               ${hasImg?(isVideoUrl(opt.img)?`<video src="${opt.img}" style="width:34px;height:34px;border-radius:6px;object-fit:cover;flex-shrink:0;" muted></video>`:`<img src="${opt.img}" style="width:34px;height:34px;border-radius:6px;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">`):''}
             </div>
             ${hasImg&&isVideoUrl(opt.img)?renderVideoOpts(idx,i):''}
+            <div id="gifPanel_opt_${idx}_${i}" style="display:none;margin-top:6px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px;">
+              <div style="display:flex;gap:5px;margin-bottom:6px;">
+                <input id="gifSearch_opt_${idx}_${i}" type="text" placeholder="Search GIFs…" style="font-size:12px;flex:1;" onkeydown="if(event.key==='Enter')searchGifs('opt_${idx}_${i}',${idx},'opt',${i})">
+                <button class="btn btn-sm" onclick="searchGifs('opt_${idx}_${i}',${idx},'opt',${i})" style="font-size:12px;padding:5px 10px;">Go</button>
+              </div>
+              <div id="gifGrid_opt_${idx}_${i}" style="display:flex;flex-wrap:wrap;gap:4px;max-height:130px;overflow-y:auto;"></div>
+            </div>
           </div>
         </div>`;
       }).join('')}
@@ -3047,9 +3104,18 @@ function renderEditor(idx) {
           <div style="display:flex;gap:8px;align-items:center;">
             <input type="text" placeholder="Paste URL or upload →" value="${(q.image||'').replace(/"/g,'&quot;')}" oninput="updateQ(${idx},'image',this.value)" style="font-size:13px;">
             <button class="btn btn-ghost btn-sm" onclick="uploadQImg(${idx})" title="Upload image, GIF or video" style="flex-shrink:0;padding:7px 12px;">⬆ Upload</button>
+            <button class="btn btn-ghost btn-sm" onclick="toggleGifSearch('q_${idx}')" title="Search GIFs" style="flex-shrink:0;padding:7px 12px;">🔍 GIF</button>
             ${q.image&&q.image.trim()?(isVideoUrl(q.image)?`<video src="${q.image}" style="width:40px;height:40px;border-radius:7px;object-fit:cover;flex-shrink:0;" muted></video>`:`<img src="${q.image}" style="width:40px;height:40px;border-radius:7px;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">`):''}
           </div>
           ${q.image&&isVideoUrl(q.image)?renderVideoOpts(idx,'q')+'':''}
+          <div id="gifPanel_q_${idx}" style="display:none;margin-top:8px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:10px;">
+            <div style="display:flex;gap:6px;margin-bottom:8px;">
+              <input id="gifSearch_q_${idx}" type="text" placeholder="Search GIFs (e.g. funny cat, celebration)…" style="font-size:12px;flex:1;" onkeydown="if(event.key==='Enter')searchGifs('q_${idx}',${idx},'q')">
+              <button class="btn btn-sm" onclick="searchGifs('q_${idx}',${idx},'q')" style="flex-shrink:0;font-size:12px;padding:6px 11px;">Search</button>
+            </div>
+            <div id="gifGrid_q_${idx}" style="display:flex;flex-wrap:wrap;gap:5px;max-height:160px;overflow-y:auto;"></div>
+            <div style="font-size:10px;color:var(--muted);margin-top:6px;">Powered by Giphy</div>
+          </div>
         </div>
 
         <div class="form-row" style="margin:0 0 12px">
@@ -3061,6 +3127,7 @@ function renderEditor(idx) {
             <option value="pie"         ${q.displayMode==='pie'?'selected':''}>Pie chart</option>
             <option value="leaderboard" ${q.displayMode==='leaderboard'?'selected':''}>Leaderboard (names)</option>
             <option value="number"      ${q.displayMode==='number'?'selected':''}>Big numbers</option>
+            <option value="word_cloud"  ${q.displayMode==='word_cloud'?'selected':''}>Word cloud</option>
           </select>
         </div>
 
@@ -3638,6 +3705,244 @@ function printReport() {
   window.print();
 }
 
+// ─── WORD CLOUD ───────────────────────────────────────────────────────────────
+const STOP_WORDS = new Set(['the','a','an','and','or','but','in','on','at','to','for','of','with','is','are','was','were','be','been','have','has','had','it','i','you','we','they','he','she','that','this','what','how','why','when','do','did','not','no','yes','my','your','their','our','its','as','by','from','up','so','if','me','him','her','us','them','about','into','out','than','then','now']);
+
+function buildWordCloud(q, counts, responses) {
+  const palette = ['#6c63ff','#ff6584','#43e97b','#f7b731','#4facfe','#a78bfa','#f093fb','#43cfcf'];
+  let words = [];
+  if (q.type === 'free_text') {
+    const freq = {};
+    responses.forEach(r => {
+      if (!r.answer || r.answer === '__none__') return;
+      r.answer.split(/\s+/).forEach(w => {
+        const clean = w.toLowerCase().replace(/[^a-z0-9']/g,'');
+        if (clean.length > 2 && !STOP_WORDS.has(clean)) freq[clean] = (freq[clean]||0)+1;
+      });
+    });
+    words = Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,40).map(([t,c])=>({text:t,weight:c}));
+  } else {
+    words = counts.filter(c=>c.count>0).map(({i,count})=>({text:(q.options[i]||{}).text||'Option '+i, weight:count}));
+  }
+  if (!words.length) return `<div style="color:var(--muted);font-size:13px;text-align:center;padding:20px;">No responses yet…</div>`;
+  const maxW = Math.max(...words.map(w=>w.weight), 1);
+  const shuffled = [...words].sort(()=>Math.random()-0.5);
+  const html = shuffled.map((w,i)=>{
+    const size = 12 + Math.round((w.weight/maxW)*28);
+    const color = palette[i % palette.length];
+    const rot = (Math.random()*16-8).toFixed(1);
+    return `<span style="font-family:Syne,sans-serif;font-weight:800;font-size:${size}px;color:${color};display:inline-block;transform:rotate(${rot}deg);padding:3px 4px;cursor:default;opacity:${0.55+0.45*(w.weight/maxW)};transition:opacity 0.3s;" title="${w.weight} response${w.weight!==1?'s':''}">${safeJ(w.text)}</span>`;
+  }).join('');
+  return `<div style="display:flex;flex-wrap:wrap;gap:4px 8px;justify-content:center;align-items:center;padding:10px 4px;line-height:1.6;">${html}</div>`;
+}
+
+// ─── GIF SEARCH ───────────────────────────────────────────────────────────────
+const GIPHY_KEY = 'dc6zaTOxFJmzC'; // public beta key — replace with your own Giphy API key
+
+function toggleGifSearch(panelId) {
+  const panel = document.getElementById(`gifPanel_${panelId}`);
+  if (!panel) return;
+  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+function searchGifs(panelId, idx, scope, optIdx) {
+  const input = document.getElementById(`gifSearch_${panelId}`);
+  const grid = document.getElementById(`gifGrid_${panelId}`);
+  if (!input || !grid) return;
+  const q = encodeURIComponent(input.value.trim() || 'funny');
+  grid.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:6px;">Searching…</div>';
+  fetch(`https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_KEY}&q=${q}&limit=16&rating=g`)
+    .then(r=>r.json())
+    .then(data=>{
+      if (!data.data || !data.data.length) { grid.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:6px;">No results.</div>'; return; }
+      grid.innerHTML = data.data.map(g=>{
+        const thumb = g.images?.fixed_height_small?.url || g.images?.downsized?.url || '';
+        const full = g.images?.original?.url || thumb;
+        const panIdEsc = panelId.replace(/'/g,"\\'");
+        const fullEsc = full.replace(/'/g,"\\'");
+        return `<img src="${thumb}" style="width:74px;height:56px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid transparent;transition:border-color 0.15s;"
+          onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='transparent'"
+          onclick="selectGif('${panIdEsc}',${idx},'${scope}','${fullEsc}',${optIdx!==undefined?optIdx:'undefined'})" title="${(g.title||'').replace(/"/g,'&quot;')}">`;
+      }).join('');
+    })
+    .catch(()=>{ grid.innerHTML = '<div style="color:var(--accent2);font-size:12px;padding:6px;">Search failed — check network.</div>'; });
+}
+
+function selectGif(panelId, idx, scope, url, optIdx) {
+  if (scope === 'q') {
+    updateQ(idx, 'image', url);
+    const inp = document.getElementById(`gifSearch_q_${idx}`);
+    if (inp) inp.closest('[id^="gifPanel_"]')?.style && (document.getElementById(`gifPanel_${panelId}`).style.display='none');
+    renderEditor(idx);
+  } else if (scope === 'opt') {
+    updateOptImg(idx, optIdx, url);
+    renderEditor(idx);
+  }
+}
+
+// ─── PRESENT MODE ─────────────────────────────────────────────────────────────
+let _presentIdx = null;
+let _presentKbHandler = null;
+let _presentFirebaseUnsub = null;
+
+function openPresentMode() {
+  const idx = liveQIdx !== null ? liveQIdx : 0;
+  if (!questions || !questions[idx]) return;
+  _presentIdx = idx;
+  const overlay = document.getElementById('presentOverlay');
+  if (!overlay) return;
+  overlay.style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+  renderPresentSlide(_presentIdx);
+  // Keyboard navigation
+  if (_presentKbHandler) document.removeEventListener('keydown', _presentKbHandler);
+  _presentKbHandler = (e) => {
+    if (e.key === 'Escape') { closePresentMode(); return; }
+    if (e.key === 'ArrowRight' || e.key === ' ') { presentNav(1); e.preventDefault(); }
+    if (e.key === 'ArrowLeft') { presentNav(-1); e.preventDefault(); }
+    if (e.key === 'r' || e.key === 'R') { doReveal(); renderPresentSlide(_presentIdx); }
+  };
+  document.addEventListener('keydown', _presentKbHandler);
+  // Subscribe to live response updates
+  const code = presentations[activePresId]?.sessionCode;
+  if (code) {
+    const qId = liveQId;
+    if (qId) {
+      if (_presentFirebaseUnsub) _presentFirebaseUnsub();
+      const ref = db.ref(`sessions/${code}/responses/${qId}`);
+      ref.on('value', snap => {
+        if (document.getElementById('presentOverlay')?.style.display !== 'flex') return;
+        const all = snap.exists() ? Object.values(snap.val()) : [];
+        const filtered = all.filter(r=>(r.submittedAt||0) >= liveStartedAt);
+        _lastPresResponses = filtered;
+        renderPresentSlide(_presentIdx);
+      });
+      _presentFirebaseUnsub = () => ref.off('value');
+    }
+  }
+}
+
+let _lastPresResponses = [];
+
+function closePresentMode() {
+  const overlay = document.getElementById('presentOverlay');
+  if (overlay) overlay.style.display = 'none';
+  document.body.style.overflow = '';
+  if (_presentKbHandler) { document.removeEventListener('keydown', _presentKbHandler); _presentKbHandler = null; }
+  if (_presentFirebaseUnsub) { _presentFirebaseUnsub(); _presentFirebaseUnsub = null; }
+}
+
+function presentNav(dir) {
+  if (!questions) return;
+  const newIdx = _presentIdx + dir;
+  if (newIdx < 0 || newIdx >= questions.length) return;
+  // Switch the live question too
+  selectQ(newIdx);
+  _presentIdx = newIdx;
+  _lastPresResponses = [];
+  renderPresentSlide(_presentIdx);
+}
+
+function renderPresentSlide(idx) {
+  const container = document.getElementById('presentContent');
+  if (!container || !questions[idx]) return;
+  const q = questions[idx];
+  const letters = ['A','B','C','D','E','F'];
+  const palette = ['#6c63ff','#ff6584','#43e97b','#f7b731','#4facfe','#a78bfa'];
+  const kahootColors = ['#e21b3c','#1368ce','#d89e00','#26890c'];
+  const responses = _lastPresResponses.length ? _lastPresResponses : (_lastResponses || []);
+  const total = responses.length;
+  const isChoice = q.type === 'multiple_choice' || q.type === 'multiple_choice_multi';
+  const _qca = q.correctAnswer;
+  const _hasC = _qca !== undefined && _qca !== null && _qca !== '' && !(Array.isArray(_qca)&&_qca.length===0);
+  const correct = _hasC ? (Array.isArray(_qca)?_qca:[_qca]).map(Number) : [];
+
+  let countsMap = {};
+  if (isChoice) {
+    (q.options||[]).forEach((_,i) => countsMap[i] = 0);
+    responses.forEach(r => { try { const a=JSON.parse(r.answer); (Array.isArray(a)?a:[a]).forEach(v=>{ countsMap[v]=(countsMap[v]||0)+1; }); } catch(e){} });
+  }
+  const pct = (c) => total>0?Math.round(c/total*100):0;
+
+  const optionsHtml = isChoice ? `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;max-width:820px;margin:0 auto;">
+      ${(q.options||[]).map((opt,i)=>{
+        const cnt = countsMap[i]||0;
+        const bg = kahootColors[i % kahootColors.length];
+        const showCorrect = revealed && correct.includes(i);
+        const border = showCorrect ? '3px solid #fff' : '3px solid transparent';
+        const glow = showCorrect ? 'box-shadow:0 0 0 4px #43e97b,0 8px 32px rgba(0,0,0,0.5);' : 'box-shadow:0 4px 20px rgba(0,0,0,0.4);';
+        const imgHtml = opt.img ? `<img src="${opt.img}" style="height:40px;width:auto;border-radius:6px;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">` : '';
+        return `<div style="background:${bg};border-radius:12px;border:${border};${glow}padding:14px 18px;min-height:66px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;transition:box-shadow 0.3s;">
+          <span style="font-family:Syne,sans-serif;font-size:18px;font-weight:900;color:rgba(255,255,255,0.85);flex-shrink:0;">${letters[i]}</span>
+          ${imgHtml}
+          <span style="font-family:Syne,sans-serif;font-size:15px;font-weight:700;color:#fff;flex:1;line-height:1.3;">${escapeHtml(opt.text||'')}</span>
+          ${total>0?`<span style="font-family:Syne,sans-serif;font-size:22px;font-weight:900;color:#fff;flex-shrink:0;min-width:42px;text-align:right;">${cnt}</span>`:''}
+          ${total>0?`<div style="position:absolute;bottom:0;left:0;height:4px;background:rgba(255,255,255,0.4);width:${pct(cnt)}%;transition:width 0.5s ease;border-radius:0 0 0 12px;"></div>`:''}
+          ${showCorrect?`<span style="position:absolute;top:8px;right:8px;font-size:18px;">✓</span>`:''}
+        </div>`;
+      }).join('')}
+    </div>` : (q.type === 'rating' ? `
+    <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:10px;">
+      ${Array.from({length:q.ratingMax||5},(_,i)=>{
+        const star=i+1;
+        const cnt=responses.filter(r=>{try{return JSON.parse(r.answer)===star;}catch(e){}return false;}).length;
+        return `<div style="text-align:center;">
+          <div style="font-size:32px;">⭐</div>
+          <div style="font-family:Syne,sans-serif;font-size:22px;font-weight:800;color:#f7b731;">${star}</div>
+          <div style="font-size:14px;color:rgba(255,255,255,0.7);">${cnt} resp.</div>
+        </div>`;
+      }).join('')}
+    </div>` : `
+    <div style="max-width:600px;margin:0 auto;max-height:40vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
+      ${responses.slice(-6).map(r=>`<div style="background:rgba(255,255,255,0.08);border-radius:8px;padding:10px 14px;font-size:14px;color:rgba(255,255,255,0.9);"><em style="color:rgba(255,255,255,0.5);font-size:12px;">${r.name||'Anonymous'}:</em> ${safeJ(r.answer==='__none__'?'No answer':r.answer)}</div>`).join('') || '<div style="color:rgba(255,255,255,0.4);font-size:14px;">Waiting for responses…</div>'}
+    </div>`);
+
+  const qUrl = `https://app.pollslide.com/answer#${presentations[activePresId]?.sessionCode||''}/${idx}`;
+  const qrId = 'presentQR_' + idx;
+
+  container.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;width:100%;max-width:860px;margin-bottom:18px;">
+      <div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:rgba(255,255,255,0.45);letter-spacing:0.1em;text-transform:uppercase;">Q${idx+1} of ${questions.length}</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;color:rgba(255,255,255,0.85);">${total}</span>
+        <span style="font-size:12px;color:rgba(255,255,255,0.45);">response${total!==1?'s':''}</span>
+        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#43e97b;box-shadow:0 0 8px #43e97b;margin-left:4px;" title="Live"></span>
+      </div>
+    </div>
+
+    <div style="font-family:Syne,sans-serif;font-size:clamp(22px,4vw,38px);font-weight:900;color:#fff;text-align:center;line-height:1.25;margin-bottom:24px;max-width:820px;text-shadow:0 2px 12px rgba(0,0,0,0.4);">${escapeHtml(q.text||'')}</div>
+
+    ${q.image&&q.image.trim()?`<div style="margin-bottom:18px;">${isVideoUrl(q.image)?`<video src="${q.image}" style="max-height:160px;border-radius:12px;object-fit:contain;" autoplay loop muted playsinline></video>`:`<img src="${q.image}" style="max-height:160px;border-radius:12px;object-fit:contain;" onerror="this.style.display='none'">`}</div>`:''}
+
+    ${optionsHtml}
+
+    <div style="display:flex;align-items:center;justify-content:space-between;width:100%;max-width:820px;margin-top:22px;">
+      <div style="display:flex;gap:8px;">
+        <button onclick="presentNav(-1)" ${idx===0?'disabled':''} style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:8px;color:#fff;font-size:14px;font-family:Syne,sans-serif;font-weight:700;padding:8px 18px;cursor:pointer;${idx===0?'opacity:0.3;cursor:not-allowed;':''}">← Prev</button>
+        <button onclick="presentNav(1)"  ${idx===questions.length-1?'disabled':''} style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:8px;color:#fff;font-size:14px;font-family:Syne,sans-serif;font-weight:700;padding:8px 18px;cursor:pointer;${idx===questions.length-1?'opacity:0.3;cursor:not-allowed;':''}">Next →</button>
+        ${isChoice&&!revealed?`<button onclick="doReveal();renderPresentSlide(_presentIdx);" style="background:#6c63ff;border:none;border-radius:8px;color:#fff;font-size:14px;font-family:Syne,sans-serif;font-weight:700;padding:8px 18px;cursor:pointer;">🎯 Reveal</button>`:''}
+        ${revealed?`<span style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#43e97b;padding:8px 14px;">✓ Revealed</span>`:''}
+      </div>
+      <div id="${qrId}" style="background:#fff;border-radius:8px;padding:6px;width:72px;height:72px;flex-shrink:0;"></div>
+    </div>`;
+
+  // Render QR code
+  const qrEl = document.getElementById(qrId);
+  if (qrEl && typeof QRCode !== 'undefined') {
+    qrEl.innerHTML = '';
+    new QRCode(qrEl, { text: qUrl, width: 60, height: 60, colorDark:'#0d0d18', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  }
+}
+
+
 </script>
+
+<!-- ── PRESENT MODE OVERLAY ───────────────────────────────────────────────── -->
+<div id="presentOverlay" style="display:none;position:fixed;inset:0;z-index:99990;background:radial-gradient(ellipse at 30% 20%,#1a1040 0%,#0d0d18 60%);flex-direction:column;align-items:center;justify-content:center;padding:24px;">
+  <button onclick="closePresentMode()" style="position:absolute;top:18px;right:22px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:rgba(255,255,255,0.7);font-size:13px;font-family:'DM Sans',sans-serif;padding:6px 14px;cursor:pointer;z-index:1;">✕ Exit  <kbd style="font-size:10px;opacity:0.6;">ESC</kbd></button>
+  <div id="presentContent" style="display:flex;flex-direction:column;align-items:center;width:100%;max-width:860px;"></div>
+</div>
+
 </body>
 </html>
