@@ -3044,17 +3044,10 @@ function renderEditor(idx) {
             <div style="display:flex;gap:8px;align-items:center;">
               <input class="opt-input" type="text" placeholder="Paste URL or upload →" value="${(opt.img||'').replace(/"/g,'&quot;')}" oninput="updateOptImg(${idx},${i},this.value)" style="font-size:12px;">
               <button class="btn btn-ghost btn-sm" onclick="uploadOptImg(${idx},${i})" title="Upload image, GIF or video" style="flex-shrink:0;padding:6px 10px;">⬆</button>
-              <button class="btn btn-ghost btn-sm" onclick="toggleGifSearch('opt_${idx}_${i}')" title="Search GIFs" style="flex-shrink:0;padding:6px 10px;">🔍</button>
+              <button class="btn btn-ghost btn-sm" onclick="openGifPicker(function(url){updateOptImg(${idx},${i},url);renderEditor(${idx});})" title="Search GIFs" style="flex-shrink:0;padding:6px 10px;">🔍</button>
               ${hasImg?(isVideoUrl(opt.img)?`<video src="${opt.img}" style="width:34px;height:34px;border-radius:6px;object-fit:cover;flex-shrink:0;" muted></video>`:`<img src="${opt.img}" style="width:34px;height:34px;border-radius:6px;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">`):''}
             </div>
             ${hasImg&&isVideoUrl(opt.img)?renderVideoOpts(idx,i):''}
-            <div id="gifPanel_opt_${idx}_${i}" style="display:none;margin-top:6px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:8px;">
-              <div style="display:flex;gap:5px;margin-bottom:6px;">
-                <input id="gifSearch_opt_${idx}_${i}" type="text" placeholder="Search GIFs…" style="font-size:12px;flex:1;" onkeydown="if(event.key==='Enter')searchGifs('opt_${idx}_${i}',${idx},'opt',${i})">
-                <button class="btn btn-sm" onclick="searchGifs('opt_${idx}_${i}',${idx},'opt',${i})" style="font-size:12px;padding:5px 10px;">Go</button>
-              </div>
-              <div id="gifGrid_opt_${idx}_${i}" style="display:flex;flex-wrap:wrap;gap:4px;max-height:130px;overflow-y:auto;"></div>
-            </div>
           </div>
         </div>`;
       }).join('')}
@@ -3104,18 +3097,10 @@ function renderEditor(idx) {
           <div style="display:flex;gap:8px;align-items:center;">
             <input type="text" placeholder="Paste URL or upload →" value="${(q.image||'').replace(/"/g,'&quot;')}" oninput="updateQ(${idx},'image',this.value)" style="font-size:13px;">
             <button class="btn btn-ghost btn-sm" onclick="uploadQImg(${idx})" title="Upload image, GIF or video" style="flex-shrink:0;padding:7px 12px;">⬆ Upload</button>
-            <button class="btn btn-ghost btn-sm" onclick="toggleGifSearch('q_${idx}')" title="Search GIFs" style="flex-shrink:0;padding:7px 12px;">🔍 GIF</button>
+            <button class="btn btn-ghost btn-sm" onclick="openGifPicker(function(url){updateQ(${idx},'image',url);renderEditor(${idx});})" title="Search GIFs" style="flex-shrink:0;padding:7px 12px;">🔍 GIF</button>
             ${q.image&&q.image.trim()?(isVideoUrl(q.image)?`<video src="${q.image}" style="width:40px;height:40px;border-radius:7px;object-fit:cover;flex-shrink:0;" muted></video>`:`<img src="${q.image}" style="width:40px;height:40px;border-radius:7px;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">`):''}
           </div>
           ${q.image&&isVideoUrl(q.image)?renderVideoOpts(idx,'q')+'':''}
-          <div id="gifPanel_q_${idx}" style="display:none;margin-top:8px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:10px;">
-            <div style="display:flex;gap:6px;margin-bottom:8px;">
-              <input id="gifSearch_q_${idx}" type="text" placeholder="Search GIFs (e.g. funny cat, celebration)…" style="font-size:12px;flex:1;" onkeydown="if(event.key==='Enter')searchGifs('q_${idx}',${idx},'q')">
-              <button class="btn btn-sm" onclick="searchGifs('q_${idx}',${idx},'q')" style="flex-shrink:0;font-size:12px;padding:6px 11px;">Search</button>
-            </div>
-            <div id="gifGrid_q_${idx}" style="display:flex;flex-wrap:wrap;gap:5px;max-height:160px;overflow-y:auto;"></div>
-            <div style="font-size:10px;color:var(--muted);margin-top:6px;">Powered by Giphy</div>
-          </div>
         </div>
 
         <div class="form-row" style="margin:0 0 12px">
@@ -3737,47 +3722,77 @@ function buildWordCloud(q, counts, responses) {
 }
 
 // ─── GIF SEARCH ───────────────────────────────────────────────────────────────
-const GIPHY_KEY = 'dc6zaTOxFJmzC'; // public beta key — replace with your own Giphy API key
+// ─── GIF PICKER MODAL ────────────────────────────────────────────────────────
+// Replace GIPHY_KEY with your own free key from https://developers.giphy.com
+const GIPHY_KEY = 'dc6zaTOxFJmzC';
+let _gifPickerCallback = null;
+let _gifDebounceTimer = null;
 
-function toggleGifSearch(panelId) {
-  const panel = document.getElementById(`gifPanel_${panelId}`);
-  if (!panel) return;
-  panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+function openGifPicker(onSelectFn) {
+  _gifPickerCallback = onSelectFn;
+  const modal = document.getElementById('gifPickerModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  const inp = document.getElementById('gifPickerInput');
+  if (inp) { inp.value = ''; inp.focus(); }
+  document.getElementById('gifPickerGrid').innerHTML =
+    '<div style="color:var(--muted);font-size:13px;padding:20px;text-align:center;width:100%;">Type a keyword above to search GIFs</div>';
+  document.getElementById('gifPickerStatus').textContent = '';
 }
 
-function searchGifs(panelId, idx, scope, optIdx) {
-  const input = document.getElementById(`gifSearch_${panelId}`);
-  const grid = document.getElementById(`gifGrid_${panelId}`);
-  if (!input || !grid) return;
-  const q = encodeURIComponent(input.value.trim() || 'funny');
-  grid.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:6px;">Searching…</div>';
-  fetch(`https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_KEY}&q=${q}&limit=16&rating=g`)
-    .then(r=>r.json())
-    .then(data=>{
-      if (!data.data || !data.data.length) { grid.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:6px;">No results.</div>'; return; }
-      grid.innerHTML = data.data.map(g=>{
-        const thumb = g.images?.fixed_height_small?.url || g.images?.downsized?.url || '';
-        const full = g.images?.original?.url || thumb;
-        const panIdEsc = panelId.replace(/'/g,"\\'");
-        const fullEsc = full.replace(/'/g,"\\'");
-        return `<img src="${thumb}" style="width:74px;height:56px;object-fit:cover;border-radius:6px;cursor:pointer;border:2px solid transparent;transition:border-color 0.15s;"
-          onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='transparent'"
-          onclick="selectGif('${panIdEsc}',${idx},'${scope}','${fullEsc}',${optIdx!==undefined?optIdx:'undefined'})" title="${(g.title||'').replace(/"/g,'&quot;')}">`;
+function closeGifPicker() {
+  const modal = document.getElementById('gifPickerModal');
+  if (modal) modal.style.display = 'none';
+  _gifPickerCallback = null;
+  if (_gifDebounceTimer) { clearTimeout(_gifDebounceTimer); _gifDebounceTimer = null; }
+}
+
+function gifPickerKeyup(e) {
+  if (e.key === 'Escape') { closeGifPicker(); return; }
+  if (_gifDebounceTimer) clearTimeout(_gifDebounceTimer);
+  const val = document.getElementById('gifPickerInput')?.value.trim() || '';
+  if (!val) return;
+  _gifDebounceTimer = setTimeout(() => runGifSearch(val), 420);
+}
+
+function runGifSearch(query) {
+  if (!query) return;
+  const grid = document.getElementById('gifPickerGrid');
+  const status = document.getElementById('gifPickerStatus');
+  if (!grid) return;
+  grid.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px;text-align:center;width:100%;">Searching…</div>';
+  if (status) status.textContent = '';
+  fetch(`https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_KEY}&q=${encodeURIComponent(query)}&limit=24&rating=g&lang=en`)
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(data => {
+      if (!data.data || !data.data.length) {
+        grid.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px;text-align:center;width:100%;">No GIFs found — try different keywords</div>';
+        return;
+      }
+      if (status) status.textContent = `${data.data.length} results for "${query}"`;
+      grid.innerHTML = data.data.map(g => {
+        const thumb = g.images?.fixed_height_small?.url || g.images?.preview_gif?.url || g.images?.downsized?.url || '';
+        const full  = g.images?.original?.url || g.images?.downsized?.url || thumb;
+        const title = (g.title || '').replace(/"/g, '&quot;');
+        // Store full URL as data attribute to avoid escaping issues in onclick
+        return `<div class="gif-thumb" data-url="${full.replace(/"/g,'&quot;')}" title="${title}"
+          style="width:calc(25% - 5px);aspect-ratio:4/3;border-radius:8px;overflow:hidden;cursor:pointer;border:2px solid transparent;transition:border-color 0.15s,transform 0.12s;flex-shrink:0;"
+          onmouseover="this.style.borderColor='var(--accent)';this.style.transform='scale(1.04)'"
+          onmouseout="this.style.borderColor='transparent';this.style.transform='scale(1)'"
+          onclick="gifPickerSelect(this.dataset.url)">
+          <img src="${thumb}" style="width:100%;height:100%;object-fit:cover;display:block;" loading="lazy">
+        </div>`;
       }).join('');
     })
-    .catch(()=>{ grid.innerHTML = '<div style="color:var(--accent2);font-size:12px;padding:6px;">Search failed — check network.</div>'; });
+    .catch(err => {
+      grid.innerHTML = '<div style="color:var(--accent2);font-size:13px;padding:20px;text-align:center;width:100%;">Search failed — check your network or API key</div>';
+      if (status) status.textContent = String(err);
+    });
 }
 
-function selectGif(panelId, idx, scope, url, optIdx) {
-  if (scope === 'q') {
-    updateQ(idx, 'image', url);
-    const inp = document.getElementById(`gifSearch_q_${idx}`);
-    if (inp) inp.closest('[id^="gifPanel_"]')?.style && (document.getElementById(`gifPanel_${panelId}`).style.display='none');
-    renderEditor(idx);
-  } else if (scope === 'opt') {
-    updateOptImg(idx, optIdx, url);
-    renderEditor(idx);
-  }
+function gifPickerSelect(url) {
+  if (_gifPickerCallback && url) _gifPickerCallback(url);
+  closeGifPicker();
 }
 
 // ─── PRESENT MODE ─────────────────────────────────────────────────────────────
@@ -3942,90 +3957,129 @@ function renderPresentSlide(idx) {
   const _hasC = _qca !== undefined && _qca !== null && _qca !== '' && !(Array.isArray(_qca)&&_qca.length===0);
   const correct = _hasC ? (Array.isArray(_qca)?_qca:[_qca]).map(Number) : [];
   const pct = (c) => total>0?Math.round(c/total*100):0;
+  const hasMedia = q.image && q.image.trim();
+
   let countsMap = {};
   if (isChoice) {
     (q.options||[]).forEach((_,i) => countsMap[i] = 0);
     responses.forEach(r => { try { const a=JSON.parse(r.answer); (Array.isArray(a)?a:[a]).forEach(v=>{ countsMap[v]=(countsMap[v]||0)+1; }); } catch(e){} });
   }
 
+  // ── Center 5/9: answer option blocks ─────────────────────────────────────
   const optBlocksHtml = isChoice
-    ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;">
+    ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;">
         ${(q.options||[]).map((opt,i)=>{
           const cnt = countsMap[i]||0;
           const bg = kahootColors[i % kahootColors.length];
           const showCorrect = revealed && correct.includes(i);
-          const glow = showCorrect ? 'box-shadow:0 0 0 3px #43e97b,0 4px 16px rgba(0,0,0,0.5);' : 'box-shadow:0 2px 10px rgba(0,0,0,0.35);';
-          const imgHtml = opt.img ? `<img src="${opt.img}" style="height:32px;width:auto;border-radius:5px;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">` : '';
-          return `<div style="background:${bg};border-radius:10px;border:2px solid ${showCorrect?'#43e97b':'transparent'};${glow}padding:10px 14px;min-height:52px;display:flex;align-items:center;gap:8px;position:relative;overflow:hidden;">
-            <span style="font-family:Syne,sans-serif;font-size:15px;font-weight:900;color:rgba(255,255,255,0.8);flex-shrink:0;">${letters[i]}</span>
+          const glow = showCorrect
+            ? 'box-shadow:0 0 0 3px #43e97b,0 6px 24px rgba(0,0,0,0.6);'
+            : 'box-shadow:0 3px 14px rgba(0,0,0,0.4);';
+          const imgHtml = opt.img
+            ? `<img src="${opt.img}" style="height:36px;width:auto;border-radius:6px;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">`
+            : '';
+          return `<div style="background:${bg};border-radius:12px;border:2px solid ${showCorrect?'#43e97b':'transparent'};${glow}padding:12px 16px;min-height:58px;display:flex;align-items:center;gap:10px;position:relative;overflow:hidden;">
+            <span style="font-family:Syne,sans-serif;font-size:16px;font-weight:900;color:rgba(255,255,255,0.8);flex-shrink:0;">${letters[i]}</span>
             ${imgHtml}
-            <span style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#fff;flex:1;line-height:1.3;">${escapeHtml(opt.text||'')}</span>
-            ${total>0?`<span style="font-family:Syne,sans-serif;font-size:17px;font-weight:900;color:#fff;flex-shrink:0;">${cnt}</span>`:''}
-            ${total>0?`<div style="position:absolute;bottom:0;left:0;height:3px;background:rgba(255,255,255,0.35);width:${pct(cnt)}%;transition:width 0.5s;"></div>`:''}
-            ${showCorrect?`<span style="position:absolute;top:5px;right:7px;font-size:14px;">✓</span>`:''}
+            <span style="font-family:Syne,sans-serif;font-size:clamp(12px,1.4vw,15px);font-weight:700;color:#fff;flex:1;line-height:1.3;">${escapeHtml(opt.text||'')}</span>
+            ${total>0?`<span style="font-family:Syne,sans-serif;font-size:20px;font-weight:900;color:#fff;flex-shrink:0;min-width:32px;text-align:right;">${cnt}</span>`:''}
+            ${total>0?`<div style="position:absolute;bottom:0;left:0;height:4px;background:rgba(255,255,255,0.3);width:${pct(cnt)}%;transition:width 0.6s ease;"></div>`:''}
+            ${showCorrect?`<span style="position:absolute;top:6px;right:8px;font-size:16px;">✓</span>`:''}
           </div>`;
         }).join('')}
       </div>`
-    : '';
+    : (q.type==='free_text'
+        ? `<div style="background:rgba(255,255,255,0.06);border-radius:12px;border:1px dashed rgba(255,255,255,0.2);padding:20px 24px;text-align:center;">
+            <div style="font-size:28px;margin-bottom:8px;">💬</div>
+            <div style="font-family:Syne,sans-serif;font-size:14px;color:rgba(255,255,255,0.5);">Open response — type your answer on your device</div>
+           </div>`
+        : q.type==='rating'
+          ? `<div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+              ${Array.from({length:q.ratingMax||5},(_,i)=>`<div style="background:rgba(247,183,49,0.15);border:1px solid rgba(247,183,49,0.3);border-radius:10px;padding:10px 16px;text-align:center;">
+                <div style="font-size:22px;">⭐</div>
+                <div style="font-family:Syne,sans-serif;font-size:16px;font-weight:800;color:#f7b731;">${i+1}</div>
+              </div>`).join('')}
+            </div>`
+          : '');
 
   const qUrl = `https://app.pollslide.com/answer#${presentations[activePresId]?.sessionCode||''}/${idx}`;
   const qrId = 'presentQR_' + idx;
 
-  container.innerHTML = `
-    <!-- TOP BAR -->
-    <div style="display:flex;justify-content:space-between;align-items:center;width:100%;margin-bottom:14px;flex-shrink:0;">
-      <div style="font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:rgba(255,255,255,0.4);letter-spacing:0.1em;text-transform:uppercase;">Q${idx+1} / ${questions.length}</div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-family:Syne,sans-serif;font-size:17px;font-weight:800;color:rgba(255,255,255,0.9);">${total}</span>
-        <span style="font-size:12px;color:rgba(255,255,255,0.4);">response${total!==1?'s':''}</span>
-        <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#43e97b;box-shadow:0 0 7px #43e97b;" title="Live"></span>
-      </div>
-    </div>
+  // ── Left 2/9 column inner HTML ────────────────────────────────────────────
+  const mediaHtml = hasMedia
+    ? `<div style="flex-shrink:0;width:100%;border-radius:10px;overflow:hidden;margin-bottom:10px;max-height:28vh;">
+        ${isVideoUrl(q.image)
+          ? `<video src="${q.image}" style="width:100%;max-height:28vh;object-fit:contain;background:#000;border-radius:10px;" autoplay loop muted playsinline></video>`
+          : `<img src="${q.image}" style="width:100%;max-height:28vh;object-fit:contain;border-radius:10px;" onerror="this.style.display='none'">`}
+       </div>`
+    : '';
 
-    <!-- MAIN TWO-COLUMN BODY -->
-    <div style="display:flex;gap:24px;width:100%;flex:1;min-height:0;overflow:hidden;">
-
-      <!-- LEFT: question + options + QR -->
-      <div style="flex:1.1;display:flex;flex-direction:column;gap:14px;min-width:0;overflow:hidden;">
-        <div style="font-family:Syne,sans-serif;font-size:clamp(18px,2.8vw,30px);font-weight:900;color:#fff;line-height:1.3;text-shadow:0 2px 10px rgba(0,0,0,0.4);">${escapeHtml(q.text||'')}</div>
-        ${q.image&&q.image.trim()?`<div>${isVideoUrl(q.image)?`<video src="${q.image}" style="max-height:110px;border-radius:10px;object-fit:contain;" autoplay loop muted playsinline></video>`:`<img src="${q.image}" style="max-height:110px;border-radius:10px;object-fit:contain;" onerror="this.style.display='none'">`}</div>`:''}
-        ${optBlocksHtml}
-        <div style="flex:1;"></div>
-        <!-- QR block -->
-        <div style="display:flex;align-items:flex-end;gap:12px;flex-shrink:0;">
-          <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
-            <div id="${qrId}" style="background:#fff;border-radius:8px;padding:6px;width:80px;height:80px;flex-shrink:0;"></div>
-            <div style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.5);text-align:center;letter-spacing:0.03em;max-width:90px;line-height:1.3;">Scan with Phone Camera to Answer</div>
-          </div>
-          <div style="flex:1;font-family:'DM Mono',monospace;font-size:11px;color:rgba(255,255,255,0.3);word-break:break-all;line-height:1.6;">${qUrl}</div>
-        </div>
-      </div>
-
-      <!-- RIGHT: reveal badge + live chart -->
-      <div style="flex:1;display:flex;flex-direction:column;gap:12px;min-width:0;background:rgba(255,255,255,0.04);border-radius:16px;border:1px solid rgba(255,255,255,0.08);padding:18px;overflow-y:auto;">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
-          <span style="font-family:Syne,sans-serif;font-size:11px;font-weight:700;color:rgba(255,255,255,0.35);letter-spacing:0.1em;text-transform:uppercase;">Live Results</span>
-          <div id="presentRevealBadge">${buildRevealBadgeHtml(q)}</div>
-        </div>
-        <div style="flex:1;overflow-y:auto;">${buildPresentChart(q, responses)}</div>
-      </div>
-
-    </div>
-
-    <!-- BOTTOM NAV BAR -->
-    <div style="display:flex;align-items:center;gap:8px;width:100%;margin-top:14px;flex-shrink:0;">
-      <button onclick="presentNav(-1)" ${idx===0?'disabled':''} style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;font-family:Syne,sans-serif;font-weight:700;padding:7px 16px;cursor:pointer;${idx===0?'opacity:0.3;cursor:not-allowed;':''}">← Prev</button>
-      <button onclick="presentNav(1)"  ${idx===questions.length-1?'disabled':''} style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;font-family:Syne,sans-serif;font-weight:700;padding:7px 16px;cursor:pointer;${idx===questions.length-1?'opacity:0.3;cursor:not-allowed;':''}">Next →</button>
-      ${isChoice&&!revealed?`<button onclick="doReveal();renderPresentSlide(_presentIdx);" style="background:#6c63ff;border:none;border-radius:8px;color:#fff;font-size:13px;font-family:Syne,sans-serif;font-weight:700;padding:7px 16px;cursor:pointer;">🎯 Reveal Answer</button>`:''}
-      <div style="flex:1;"></div>
-      <span style="font-size:11px;color:rgba(255,255,255,0.25);">← → navigate  ·  R reveal  ·  ESC exit</span>
+  const qrBlockHtml = `
+    <div style="display:flex;flex-direction:column;align-items:center;gap:8px;${hasMedia?'':'flex:1;justify-content:center;'}">
+      <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.55);text-align:center;letter-spacing:0.04em;line-height:1.4;max-width:110px;">Scan with Phone Camera to Answer</div>
+      <div id="${qrId}" style="background:#fff;border-radius:10px;padding:8px;width:96px;height:96px;flex-shrink:0;"></div>
+      <div style="font-family:'DM Mono',monospace;font-size:9px;color:rgba(255,255,255,0.25);text-align:center;word-break:break-all;max-width:110px;line-height:1.5;">${qUrl}</div>
     </div>`;
+
+  container.innerHTML = `
+    <!-- ── TOP STATUS BAR (full width) ── -->
+    <div style="display:flex;justify-content:space-between;align-items:center;width:100%;margin-bottom:12px;flex-shrink:0;padding:0 2px;">
+      <div style="font-family:Syne,sans-serif;font-size:11px;font-weight:700;color:rgba(255,255,255,0.38);letter-spacing:0.12em;text-transform:uppercase;">Question ${idx+1} of ${questions.length}</div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-family:Syne,sans-serif;font-size:16px;font-weight:800;color:rgba(255,255,255,0.9);">${total}</span>
+        <span style="font-size:11px;color:rgba(255,255,255,0.38);">response${total!==1?'s':''}</span>
+        <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#43e97b;box-shadow:0 0 8px #43e97b;animation:livePulse 2s infinite;" title="Live"></span>
+      </div>
+    </div>
+
+    <!-- ── 9-COLUMN BODY (flex, flex: 1) ── -->
+    <div style="display:flex;gap:16px;width:100%;flex:1;min-height:0;">
+
+      <!-- LEFT 2/9: media (if any) + QR code -->
+      <div style="flex:2;display:flex;flex-direction:column;align-items:center;min-width:0;padding:0 4px;">
+        ${mediaHtml}
+        ${qrBlockHtml}
+      </div>
+
+      <!-- CENTER 5/9: question text + answer blocks -->
+      <div style="flex:5;display:flex;flex-direction:column;gap:14px;min-width:0;overflow-y:auto;">
+        <div style="font-family:Syne,sans-serif;font-size:clamp(17px,2.6vw,32px);font-weight:900;color:#fff;line-height:1.3;text-shadow:0 2px 14px rgba(0,0,0,0.5);">${escapeHtml(q.text||'')}</div>
+        ${optBlocksHtml}
+      </div>
+
+      <!-- RIGHT 2/9: live results panel -->
+      <div style="flex:2;display:flex;flex-direction:column;gap:10px;min-width:0;background:rgba(255,255,255,0.04);border-radius:14px;border:1px solid rgba(255,255,255,0.08);padding:14px;overflow-y:auto;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:6px;flex-wrap:wrap;">
+          <span style="font-family:Syne,sans-serif;font-size:10px;font-weight:700;color:rgba(255,255,255,0.3);letter-spacing:0.1em;text-transform:uppercase;">Live Results</span>
+          <div id="presentRevealBadge" style="flex-shrink:0;">${buildRevealBadgeHtml(q)}</div>
+        </div>
+        <div style="flex:1;overflow-y:auto;min-height:0;">${buildPresentChart(q, responses)}</div>
+      </div>
+
+    </div>
+
+    <!-- ── BOTTOM NAV BAR (full width) ── -->
+    <div style="display:flex;align-items:center;gap:8px;width:100%;margin-top:12px;flex-shrink:0;padding:0 2px;">
+      <button onclick="presentNav(-1)" ${idx===0?'disabled':''} style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;font-family:Syne,sans-serif;font-weight:700;padding:7px 16px;cursor:pointer;${idx===0?'opacity:0.28;cursor:not-allowed;':''}">← Prev</button>
+      <button onclick="presentNav(1)"  ${idx===questions.length-1?'disabled':''} style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;font-family:Syne,sans-serif;font-weight:700;padding:7px 16px;cursor:pointer;${idx===questions.length-1?'opacity:0.28;cursor:not-allowed;':''}">Next →</button>
+      ${isChoice&&!revealed?`<button onclick="doReveal();renderPresentSlide(_presentIdx);" style="background:linear-gradient(135deg,#6c63ff,#a78bfa);border:none;border-radius:8px;color:#fff;font-size:13px;font-family:Syne,sans-serif;font-weight:700;padding:7px 18px;cursor:pointer;box-shadow:0 2px 12px rgba(108,99,255,0.4);">🎯 Reveal Answer</button>`:''}
+      <div style="flex:1;"></div>
+      <span style="font-size:10px;color:rgba(255,255,255,0.2);">← → navigate &nbsp;·&nbsp; R reveal &nbsp;·&nbsp; ESC exit</span>
+    </div>`;
+
+  // Inject keyframe for live dot pulse (once)
+  if (!document.getElementById('presentKeyframes')) {
+    const s = document.createElement('style');
+    s.id = 'presentKeyframes';
+    s.textContent = '@keyframes livePulse{0%,100%{opacity:1}50%{opacity:0.4}}';
+    document.head.appendChild(s);
+  }
 
   // Render QR code
   const qrEl = document.getElementById(qrId);
   if (qrEl && typeof QRCode !== 'undefined') {
     qrEl.innerHTML = '';
-    new QRCode(qrEl, { text: qUrl, width: 68, height: 68, colorDark:'#0d0d18', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    new QRCode(qrEl, { text: qUrl, width: 80, height: 80, colorDark:'#0d0d18', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.M });
   }
 }
 
@@ -4033,9 +4087,39 @@ function renderPresentSlide(idx) {
 </script>
 
 <!-- ── PRESENT MODE OVERLAY ───────────────────────────────────────────────── -->
-<div id="presentOverlay" style="display:none;position:fixed;inset:0;z-index:99990;background:radial-gradient(ellipse at 30% 20%,#1a1040 0%,#0d0d18 60%);flex-direction:column;align-items:center;justify-content:center;padding:24px;">
-  <button onclick="closePresentMode()" style="position:absolute;top:18px;right:22px;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:rgba(255,255,255,0.7);font-size:13px;font-family:'DM Sans',sans-serif;padding:6px 14px;cursor:pointer;z-index:1;">✕ Exit  <kbd style="font-size:10px;opacity:0.6;">ESC</kbd></button>
-  <div id="presentContent" style="display:flex;flex-direction:column;align-items:center;width:100%;max-width:860px;"></div>
+<div id="presentOverlay" style="display:none;position:fixed;inset:0;z-index:99990;background:radial-gradient(ellipse at 25% 20%,#1a1040 0%,#0d0d18 65%);flex-direction:column;padding:18px 22px 14px;">
+  <button onclick="closePresentMode()" style="position:absolute;top:14px;right:18px;background:rgba(255,255,255,0.07);border:1px solid rgba(255,255,255,0.14);border-radius:8px;color:rgba(255,255,255,0.6);font-size:12px;font-family:'DM Sans',sans-serif;padding:5px 12px;cursor:pointer;z-index:1;">✕ Exit <kbd style="font-size:9px;opacity:0.5;">ESC</kbd></button>
+  <div id="presentContent" style="flex:1;display:flex;flex-direction:column;width:100%;min-height:0;"></div>
+</div>
+
+<!-- ── GIF PICKER MODAL ─────────────────────────────────────────────────────── -->
+<div id="gifPickerModal" style="display:none;position:fixed;inset:0;z-index:99995;background:rgba(0,0,0,0.72);align-items:center;justify-content:center;padding:20px;" onclick="if(event.target===this)closeGifPicker()">
+  <div style="background:var(--surface);border:1px solid var(--border2);border-radius:16px;width:100%;max-width:620px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,0.6);overflow:hidden;">
+    <!-- Header -->
+    <div style="display:flex;align-items:center;gap:10px;padding:16px 18px 12px;border-bottom:1px solid var(--border);">
+      <span style="font-family:Syne,sans-serif;font-size:15px;font-weight:800;flex:1;">🔍 Search GIFs</span>
+      <span id="gifPickerStatus" style="font-size:11px;color:var(--muted);flex:1;text-align:center;"></span>
+      <button onclick="closeGifPicker()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;padding:0 4px;line-height:1;" title="Close">✕</button>
+    </div>
+    <!-- Search bar -->
+    <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:center;">
+      <input id="gifPickerInput" type="text" placeholder="Search (e.g. celebration, funny cat, thinking)…"
+        style="flex:1;font-size:13px;padding:9px 12px;border-radius:8px;"
+        onkeyup="gifPickerKeyup(event)"
+        onkeydown="if(event.key==='Enter'){if(_gifDebounceTimer)clearTimeout(_gifDebounceTimer);runGifSearch(this.value.trim());}">
+      <button onclick="runGifSearch(document.getElementById('gifPickerInput').value.trim())"
+        style="background:var(--accent);border:none;border-radius:8px;color:#fff;font-family:Syne,sans-serif;font-weight:700;font-size:13px;padding:9px 18px;cursor:pointer;flex-shrink:0;">Search</button>
+    </div>
+    <!-- GIF grid -->
+    <div id="gifPickerGrid" style="display:flex;flex-wrap:wrap;gap:6px;padding:14px;overflow-y:auto;flex:1;align-content:flex-start;">
+      <div style="color:var(--muted);font-size:13px;padding:20px;text-align:center;width:100%;">Type a keyword above to find GIFs</div>
+    </div>
+    <!-- Footer -->
+    <div style="padding:8px 16px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+      <span style="font-size:10px;color:var(--muted);">Powered by <strong>Giphy</strong> · Click any GIF to use it · Results rated G</span>
+      <span style="font-size:10px;color:var(--muted);">Tip: results update as you type</span>
+    </div>
+  </div>
 </div>
 
 </body>
