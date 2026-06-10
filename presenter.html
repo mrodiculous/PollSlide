@@ -2388,9 +2388,8 @@ function renderRightPanel(q, responses) {
   const total = responses.length;
   const letters = ['A','B','C','D','E','F'];
 
-  const mediaThumb = renderMediaThumb(q);
   if (q.type === 'free_text') {
-    rs.innerHTML = `${mediaThumb}<div class="resp-big">${total} <span>responses</span></div>
+    rs.innerHTML = `<div class="resp-big">${total} <span>responses</span></div>
       ${total===0?'<div style="color:var(--muted);font-size:13px;">Waiting...</div>':
         responses.map(r=>`<div class="txt-resp">${r.answer==='__none__'?'<em style="color:var(--muted)">No answer</em>':safeJ(r.answer)}<div class="from">— ${r.name}</div></div>`).join('')}`;
   } else if (q.type === 'rating') {
@@ -2398,7 +2397,7 @@ function renderRightPanel(q, responses) {
     for(let i=1;i<=max;i++) counts[i]=0;
     responses.forEach(r=>{try{const v=JSON.parse(r.answer);if(v)counts[v]=(counts[v]||0)+1;}catch(e){}});
     const avg=total>0?(Object.entries(counts).reduce((s,[k,v])=>s+(+k*v),0)/total).toFixed(1):'—';
-    rs.innerHTML=`${mediaThumb}<div class="resp-big">${total} <span>avg ${avg}</span></div>
+    rs.innerHTML=`<div class="resp-big">${total} <span>avg ${avg}</span></div>
       ${Object.entries(counts).map(([val,cnt])=>`<div class="bar-wrap">
         <div class="bar-label"><span class="bn">★ ${val}</span><span class="bv">${cnt}</span></div>
         <div class="bar-bg"><div class="bar-fill" style="width:${total>0?Math.round(cnt/total*100):0}%"></div></div>
@@ -2527,13 +2526,18 @@ function renderRightPanel(q, responses) {
         // Only show the green "correct" highlight after reveal
         const showCorrect = revealed && correct.includes(i);
         const correctBadge = showCorrect ? ` <span style="font-size:10px;font-weight:700;color:var(--accent3);background:rgba(67,233,123,0.16);padding:1px 7px;border-radius:100px;margin-left:4px;">✓ Correct</span>` : '';
+        const imgRow = hasImg ? `<div style="margin-bottom:5px;">${isVideoUrl(opt.img)
+          ? `<video src="${opt.img}" style="width:100%;max-height:80px;border-radius:7px;object-fit:cover;background:#000;" autoplay loop muted playsinline></video>`
+          : `<img src="${opt.img}" style="width:100%;max-height:80px;border-radius:7px;object-fit:cover;display:block;" onerror="this.parentElement.style.display='none'">`
+        }</div>` : '';
         return `<div class="bar-wrap">
-        <div class="bar-label"><span class="bn">${hasImg?`<img src="${opt.img}" style="width:18px;height:18px;border-radius:4px;object-fit:cover;vertical-align:middle;margin-right:5px;" onerror="this.style.display='none'">`:''}${letters[i]}. ${opt.text||''}${correctBadge}</span><span class="bv">${count} (${pct(count)}%)</span></div>
+        ${imgRow}
+        <div class="bar-label"><span class="bn">${letters[i]}. ${opt.text||''}${correctBadge}</span><span class="bv">${count} (${pct(count)}%)</span></div>
         <div class="bar-bg"><div class="bar-fill ${showCorrect?'correct':''}" style="width:${pct(count)}%"></div></div>
       </div>`;}).join('');
     }
 
-    rs.innerHTML=`${mediaThumb}<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>${inner}`;
+    rs.innerHTML=`<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>${inner}`;
   }
 }
 
