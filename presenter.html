@@ -400,7 +400,6 @@
       </div>
     </div>
     <button class="btn btn-ghost" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark">🌙</button>
-    <button class="btn btn-ghost" id="addQBtn" onclick="addQuestion()" disabled>+ Question</button>
     <button class="btn btn-ghost" id="reportBtn" onclick="openReport()" disabled title="View response report">📊 Report</button>
     <button class="btn btn-reset" id="resetBtn" onclick="confirmResetAll()" disabled>↺ Reset All Tallies</button>
   </div>
@@ -521,7 +520,7 @@
 <div class="overlay hidden" id="resetPresModal">
   <div class="modal" style="max-width:400px;">
     <h2>Reset Presentation Tally?</h2>
-    <p>This clears all scores and responses for <strong id="resetPresName" style="color:var(--text);"></strong>. All questions stay live and QR codes keep working.</p>
+    <p>This clears all scores and responses for <strong id="resetPresModalName" style="color:var(--text);"></strong>. All questions stay live and QR codes keep working.</p>
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closeResetPres()">Cancel</button>
       <button class="btn btn-danger" onclick="doResetPres()">Yes, Reset Tally</button>
@@ -586,6 +585,91 @@
     <div id="presTallyContent"></div>
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="document.getElementById('presTallyModal').classList.add('hidden')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- PowerPoint Live Results Add-in Guide Modal -->
+<div class="overlay hidden" id="pptGuideModal" onclick="if(event.target===this)closePPTGuide()">
+  <div class="modal" style="max-width:620px;max-height:88vh;overflow-y:auto;padding:0;">
+
+    <!-- Header -->
+    <div style="background:linear-gradient(135deg,#6c63ff 0%,#ff6584 100%);border-radius:18px 18px 0 0;padding:28px 28px 20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:28px;">📊</span>
+          <div>
+            <div style="font-family:Syne,sans-serif;font-weight:800;font-size:20px;color:#fff;">PowerPoint Live Results</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.75);">Show live poll results inside your presentation deck</div>
+          </div>
+        </div>
+        <button onclick="closePPTGuide()" style="background:rgba(255,255,255,0.15);border:none;border-radius:8px;width:30px;height:30px;cursor:pointer;color:#fff;font-size:16px;display:flex;align-items:center;justify-content:center;">✕</button>
+      </div>
+    </div>
+
+    <div style="padding:24px 28px;">
+
+      <!-- What it does -->
+      <div style="background:rgba(108,99,255,0.08);border:1px solid rgba(108,99,255,0.2);border-radius:12px;padding:14px 16px;margin-bottom:22px;">
+        <div style="font-family:Syne,sans-serif;font-weight:700;font-size:12px;color:var(--accent);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.1em;">What this does</div>
+        <div style="font-size:13px;color:var(--text);line-height:1.6;">The PollSlide PowerPoint Add-in embeds a <strong>live results pane</strong> directly inside PowerPoint. As audience members submit answers on their phones, the chart updates in real time — right on your slide, no switching windows.</div>
+      </div>
+
+      <!-- Step 1 -->
+      <div style="display:flex;gap:14px;margin-bottom:18px;">
+        <div style="width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-family:Syne,sans-serif;font-weight:800;font-size:13px;color:#fff;flex-shrink:0;">1</div>
+        <div style="flex:1;">
+          <div style="font-family:Syne,sans-serif;font-weight:700;font-size:14px;margin-bottom:4px;">Install the Add-in</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:8px;">In PowerPoint, go to <strong style="color:var(--text);">Insert → Get Add-ins</strong> and search for <strong style="color:var(--accent);">PollSlide</strong>. Click Add. It will appear in your Home ribbon.</div>
+          <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--muted);">
+            💡 <strong style="color:var(--text);">Sideload for testing:</strong> In PowerPoint → Insert → Add-ins → Upload My Add-in → select <code style="background:var(--surface3);padding:1px 5px;border-radius:4px;">powerpoint-manifest.xml</code> from your PollSlide download.
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div style="display:flex;gap:14px;margin-bottom:18px;">
+        <div style="width:28px;height:28px;border-radius:50%;background:var(--accent2);display:flex;align-items:center;justify-content:center;font-family:Syne,sans-serif;font-weight:800;font-size:13px;color:#fff;flex-shrink:0;">2</div>
+        <div style="flex:1;">
+          <div style="font-family:Syne,sans-serif;font-weight:700;font-size:14px;margin-bottom:4px;">Launch a Question</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.6;">In PollSlide Presenter (this page), click a question in the sidebar to go live. The question becomes active and its <strong style="color:var(--text);">Session Code</strong> is shown below.</div>
+          <div id="pptLiveCode" style="margin-top:8px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <span style="color:var(--muted);">No question live yet — launch one first.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div style="display:flex;gap:14px;margin-bottom:18px;">
+        <div style="width:28px;height:28px;border-radius:50%;background:var(--accent3);display:flex;align-items:center;justify-content:center;font-family:Syne,sans-serif;font-weight:800;font-size:13px;color:#000;flex-shrink:0;">3</div>
+        <div style="flex:1;">
+          <div style="font-family:Syne,sans-serif;font-weight:700;font-size:14px;margin-bottom:4px;">Connect in PowerPoint</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.6;">Open the PollSlide panel inside PowerPoint. Paste the <strong style="color:var(--text);">Session Code</strong> (or the full results URL) into the add-in. The live chart will appear immediately and update as responses come in.</div>
+        </div>
+      </div>
+
+      <!-- Step 4 -->
+      <div style="display:flex;gap:14px;margin-bottom:22px;">
+        <div style="width:28px;height:28px;border-radius:50%;background:var(--accent4);display:flex;align-items:center;justify-content:center;font-family:Syne,sans-serif;font-weight:800;font-size:13px;color:#000;flex-shrink:0;">4</div>
+        <div style="flex:1;">
+          <div style="font-family:Syne,sans-serif;font-weight:700;font-size:14px;margin-bottom:4px;">Present — Results Update Live</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.6;">Run your slideshow normally. The PollSlide panel shows the results chart in real time. Click <strong style="color:var(--text);">Reveal</strong> here in Presenter to highlight correct answers — the add-in updates instantly.</div>
+        </div>
+      </div>
+
+      <!-- Direct link option -->
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:16px;">
+        <div style="font-family:Syne,sans-serif;font-weight:700;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Alternative: Embed in Browser / OBS / Companion</div>
+        <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px;">You can also embed the live results view in any browser window, OBS Studio overlay, or the PollSlide Keynote companion app using this URL format:</div>
+        <div id="pptEmbedUrl" onclick="copyPPTUrl()" style="background:var(--surface3);border:1px solid var(--border);border-radius:7px;padding:9px 12px;font-size:11px;font-family:monospace;cursor:pointer;word-break:break-all;color:var(--accent);">https://app.pollslide.com/answer?session=YOUR_CODE</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:5px;">↑ Click to copy · Replace YOUR_CODE with your session code</div>
+      </div>
+
+    </div>
+
+    <div style="padding:0 28px 24px;display:flex;gap:8px;justify-content:flex-end;">
+      <button class="btn btn-ghost" onclick="closePPTGuide()">Close</button>
+      <button class="btn btn-primary" onclick="window.open('https://pollslide.com/setup','_blank')">Full setup guide →</button>
     </div>
   </div>
 </div>
@@ -1244,7 +1328,7 @@ function toggleUserMenu() {
     const menuItems = [
       { icon:'🔗', label:'Connect Mac App',      fn:'generatePairingCode()' },
       { icon:'✨', label:'See plans & upgrade',   fn:'openPlanPicker()' },
-      
+      { icon:'📊', label:'PowerPoint live results', fn:'openPPTGuide()' },
       { icon:'📖', label:'Setup guide',           fn:"window.open('https://pollslide.com/setup','_blank')" },
       { icon:'⚠',  label:'Delete my account',     fn:'requestAccountDeletion()', danger:true },
     ];
@@ -1354,6 +1438,45 @@ document.getElementById('authPass').addEventListener('keydown', e => { if(e.key=
 document.getElementById('authEmail').addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('authPass').focus(); });
 
 // ─── THEME TOGGLE ─────────────────────────────────────────────────────────────
+// ─── POWERPOINT GUIDE MODAL ──────────────────────────────────────────────────
+function openPPTGuide() {
+  const modal = document.getElementById('pptGuideModal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+  // Populate live code if a question is active
+  const codeEl = document.getElementById('pptLiveCode');
+  const urlEl  = document.getElementById('pptEmbedUrl');
+  if (codeEl && activePresId && presentations[activePresId]) {
+    const pres = presentations[activePresId];
+    const code = pres.sessionCode || '';
+    if (liveQIdx !== null && code) {
+      const q = questions[liveQIdx];
+      const url = `https://app.pollslide.com/answer?session=${code}&q=${liveQIdx}`;
+      codeEl.innerHTML = `
+        <div>
+          <div style="font-size:10px;color:var(--muted);margin-bottom:2px;">Session code · Q${liveQIdx+1}: ${(q?.text||'').slice(0,40)}</div>
+          <div style="font-family:Syne,sans-serif;font-weight:800;font-size:16px;color:var(--accent);letter-spacing:0.05em;">${code}</div>
+        </div>
+        <button onclick="navigator.clipboard.writeText('${code}').then(()=>toast('Copied!','success'))" style="padding:5px 12px;background:var(--accent);border:none;border-radius:7px;color:#fff;font-family:Syne,sans-serif;font-weight:700;font-size:11px;cursor:pointer;flex-shrink:0;">Copy</button>`;
+      if (urlEl) {
+        urlEl.textContent = url;
+        urlEl.setAttribute('data-url', url);
+      }
+    } else {
+      codeEl.innerHTML = `<span style="color:var(--muted);">No question live yet — launch one first, then re-open this guide.</span>`;
+    }
+  }
+}
+function closePPTGuide() {
+  document.getElementById('pptGuideModal')?.classList.add('hidden');
+}
+function copyPPTUrl() {
+  const el = document.getElementById('pptEmbedUrl');
+  const url = el?.getAttribute('data-url') || el?.textContent || '';
+  if (!url || url.includes('YOUR_CODE')) { toast('Launch a question first to get the URL.', 'warn'); return; }
+  navigator.clipboard.writeText(url).then(() => toast('URL copied!', 'success')).catch(() => {});
+}
+
 function toggleTheme() {
   const isLight = document.body.classList.toggle('light');
   localStorage.setItem('ql_theme', isLight ? 'light' : 'dark');
@@ -1694,7 +1817,7 @@ let resetPresTarget = null;
 function confirmResetPres(presId) {
   resetPresTarget = presId;
   const pres = presentations[presId];
-  document.getElementById('resetPresName').textContent = `"${pres?.name}"`;
+  document.getElementById('resetPresModalName').textContent = `"${pres?.name}"`;
   document.getElementById('resetPresModal').classList.remove('hidden');
 }
 
@@ -1812,31 +1935,46 @@ async function launchQuestion(idx) {
 // ─── CLOSE / REVEAL removed — questions always stay live ─────────────────────
 
 // ─── LIVE VIEW ────────────────────────────────────────────────────────────────
+const MEDIA_SIZES = {
+  sm:   { label:'S',  h:'140px',  desc:'Small' },
+  md:   { label:'M',  h:'220px',  desc:'Medium' },
+  lg:   { label:'L',  h:'340px',  desc:'Large' },
+  full: { label:'⛶', h:'62vh',   desc:'Full height' },
+};
+
 function renderQuestionMedia(q, idx) {
   if (!q.image || !q.image.trim()) return '';
   const code = presentations[activePresId]?.sessionCode || '';
-  // Restore saved size for this question's media (resizable by the user)
-  const savedW = localStorage.getItem(`ql_qmedia_w_${code}_${idx}`) || '100%';
-  const savedH = localStorage.getItem(`ql_qmedia_h_${code}_${idx}`) || '260px';
+  const savedSize = localStorage.getItem(`ql_qmedia_size_${code}_${idx}`) || 'md';
+  const sz = MEDIA_SIZES[savedSize] || MEDIA_SIZES.md;
   const inner = isVideoUrl(q.image)
     ? `<video src="${q.image}" style="width:100%;height:100%;object-fit:contain;border-radius:10px;background:#000;" ${q.videoOpts?.loop?'loop':''} ${q.videoOpts?.autoplay?'autoplay':''} ${(q.videoOpts?.muted||q.videoOpts?.autoplay)?'muted':''} ${q.videoOpts?.controls?'controls':''} playsinline></video>`
     : `<img src="${q.image}" style="width:100%;height:100%;object-fit:contain;border-radius:10px;" onerror="this.parentElement.style.display='none'">`;
+  const sizeBtns = Object.entries(MEDIA_SIZES).map(([key, s]) =>
+    `<button onclick="setQMediaSize(${idx},'${key}')" title="${s.desc}"
+      style="padding:2px 7px;font-size:10px;font-family:Syne,sans-serif;font-weight:700;border-radius:5px;border:1px solid ${savedSize===key?'var(--accent)':'var(--border2)'};background:${savedSize===key?'var(--accent)':'var(--surface2)'};color:${savedSize===key?'#fff':'var(--muted)'};cursor:pointer;">${s.label}</button>`
+  ).join('');
   return `
-    <div id="qMediaBox_${idx}"
-         style="position:relative;width:${savedW};height:${savedH};max-width:100%;max-height:55vh;min-width:120px;min-height:80px;resize:vertical;overflow:hidden;margin-bottom:14px;border:1px dashed var(--border2);border-radius:12px;padding:4px;box-sizing:border-box;"
-         onmouseup="saveQMediaSize(${idx})"
-         title="Drag the bottom-right corner to resize">
-      ${inner}
-      <div style="position:absolute;bottom:2px;right:2px;font-size:10px;color:var(--muted);pointer-events:none;background:var(--surface);padding:1px 5px;border-radius:4px;opacity:0.7;">⤡ resize</div>
+    <div style="margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:5px;margin-bottom:5px;">
+        <span style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:0.06em;text-transform:uppercase;flex:1;">Media</span>
+        ${sizeBtns}
+      </div>
+      <div id="qMediaBox_${idx}" style="width:100%;height:${sz.h};max-height:65vh;overflow:hidden;border-radius:12px;border:1px solid var(--border2);background:var(--surface2);transition:height 0.2s ease;">
+        ${inner}
+      </div>
     </div>`;
 }
 
-function saveQMediaSize(idx) {
-  const box = document.getElementById(`qMediaBox_${idx}`);
-  if (!box) return;
+function setQMediaSize(idx, sizeKey) {
   const code = presentations[activePresId]?.sessionCode || '';
-  localStorage.setItem(`ql_qmedia_w_${code}_${idx}`, box.style.width);
-  localStorage.setItem(`ql_qmedia_h_${code}_${idx}`, box.style.height);
+  localStorage.setItem(`ql_qmedia_size_${code}_${idx}`, sizeKey);
+  const box = document.getElementById(`qMediaBox_${idx}`);
+  const sz = MEDIA_SIZES[sizeKey] || MEDIA_SIZES.md;
+  if (box) box.style.height = sz.h;
+  // Re-render only the media container so buttons update active state
+  const wrap = box?.parentElement;
+  if (wrap) wrap.outerHTML = renderQuestionMedia(questions[idx], idx);
 }
 
 function renderLiveView(idx, qId, q) {
@@ -2210,14 +2348,47 @@ function updateRevealCountdownLabel() {
   if (el) el.textContent = Math.max(0, revealRemaining) + 's';
 }
 
+function renderMediaThumb(q) {
+  if (!q.image || !q.image.trim()) return '';
+  const code = activePresId && presentations[activePresId] ? presentations[activePresId].sessionCode : '';
+  const idx = liveQIdx !== null ? liveQIdx : 0;
+  const savedSize = localStorage.getItem(`ql_qmedia_size_${code}_${idx}`) || 'md';
+  const sz = MEDIA_SIZES[savedSize] || MEDIA_SIZES.md;
+  const sizeBtns = Object.entries(MEDIA_SIZES).map(([key,s]) =>
+    `<button onclick="setRightMediaSize(${idx},'${key}')" title="${s.desc}" style="padding:1px 6px;font-size:9px;font-family:Syne,sans-serif;font-weight:700;border-radius:4px;border:1px solid ${savedSize===key?'var(--accent)':'var(--border2)'};background:${savedSize===key?'var(--accent)':'transparent'};color:${savedSize===key?'#fff':'var(--muted)'};cursor:pointer;">${s.label}</button>`
+  ).join('');
+  const media = isVideoUrl(q.image)
+    ? `<video src="${q.image}" style="width:100%;height:100%;object-fit:contain;border-radius:8px;background:#000;" autoplay loop muted playsinline></video>`
+    : `<img src="${q.image}" style="width:100%;height:100%;object-fit:contain;border-radius:8px;" onerror="this.parentElement.parentElement.style.display='none'">`;
+  return `<div style="margin-bottom:12px;">
+    <div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;">
+      <span style="font-size:9px;color:var(--muted);font-weight:600;letter-spacing:0.07em;text-transform:uppercase;flex:1;">Media</span>
+      ${sizeBtns}
+    </div>
+    <div id="rightMediaBox_${idx}" style="width:100%;height:${sz.h};max-height:45vh;overflow:hidden;border-radius:9px;border:1px solid var(--border2);background:var(--surface2);transition:height 0.2s ease;">${media}</div>
+  </div>`;
+}
+
+function setRightMediaSize(idx, sizeKey) {
+  const code = activePresId && presentations[activePresId] ? presentations[activePresId].sessionCode : '';
+  localStorage.setItem(`ql_qmedia_size_${code}_${idx}`, sizeKey);
+  const box = document.getElementById(`rightMediaBox_${idx}`);
+  const sz = MEDIA_SIZES[sizeKey] || MEDIA_SIZES.md;
+  if (box) box.style.height = sz.h;
+  if (liveQIdx !== null) renderRightPanel(questions[liveQIdx], _lastResponses || []);
+}
+let _lastResponses = [];
+
 function renderRightPanel(q, responses) {
+  _lastResponses = responses;
   const rs = document.getElementById('rightScroll');
   if (!rs) return;
   const total = responses.length;
   const letters = ['A','B','C','D','E','F'];
 
+  const mediaThumb = renderMediaThumb(q);
   if (q.type === 'free_text') {
-    rs.innerHTML = `<div class="resp-big">${total} <span>responses</span></div>
+    rs.innerHTML = `${mediaThumb}<div class="resp-big">${total} <span>responses</span></div>
       ${total===0?'<div style="color:var(--muted);font-size:13px;">Waiting...</div>':
         responses.map(r=>`<div class="txt-resp">${r.answer==='__none__'?'<em style="color:var(--muted)">No answer</em>':safeJ(r.answer)}<div class="from">— ${r.name}</div></div>`).join('')}`;
   } else if (q.type === 'rating') {
@@ -2225,7 +2396,7 @@ function renderRightPanel(q, responses) {
     for(let i=1;i<=max;i++) counts[i]=0;
     responses.forEach(r=>{try{const v=JSON.parse(r.answer);if(v)counts[v]=(counts[v]||0)+1;}catch(e){}});
     const avg=total>0?(Object.entries(counts).reduce((s,[k,v])=>s+(+k*v),0)/total).toFixed(1):'—';
-    rs.innerHTML=`<div class="resp-big">${total} <span>avg ${avg}</span></div>
+    rs.innerHTML=`${mediaThumb}<div class="resp-big">${total} <span>avg ${avg}</span></div>
       ${Object.entries(counts).map(([val,cnt])=>`<div class="bar-wrap">
         <div class="bar-label"><span class="bn">★ ${val}</span><span class="bv">${cnt}</span></div>
         <div class="bar-bg"><div class="bar-fill" style="width:${total>0?Math.round(cnt/total*100):0}%"></div></div>
@@ -2268,33 +2439,83 @@ function renderRightPanel(q, responses) {
           <div><div style="font-size:14px;font-weight:600;">${letters[i]}. ${(q.options[i]||{}).text||''}</div>
           <div style="font-size:12px;color:var(--muted);">${pct(count)}% of votes</div></div>
         </div>`).join('');
+    } else if (mode === 'column') {
+      // Vertical column chart using inline SVG
+      const nonEmpty = counts.filter(c=>c.count>0);
+      const maxCount = Math.max(...counts.map(c=>c.count), 1);
+      const barW = 28, gap = 10, chartH = 110, labelH = 18;
+      const totalW = counts.length * (barW + gap) - gap;
+      const segs = counts.map(({i,count})=>{
+        const barH = Math.round((count / maxCount) * chartH);
+        const x = i * (barW + gap);
+        const color = palette[i % palette.length];
+        const showCorrect = revealed && correct.includes(i);
+        const barColor = showCorrect ? '#43e97b' : color;
+        return `
+          <rect x="${x}" y="${chartH - barH}" width="${barW}" height="${barH}" rx="5" fill="${barColor}" opacity="0.9"/>
+          ${count > 0 ? `<text x="${x + barW/2}" y="${chartH - barH - 5}" text-anchor="middle" font-size="10" font-family="Syne,sans-serif" font-weight="700" fill="${barColor}">${pct(count)}%</text>` : ''}
+          <text x="${x + barW/2}" y="${chartH + labelH - 2}" text-anchor="middle" font-size="11" font-family="Syne,sans-serif" font-weight="700" fill="var(--muted)">${letters[i]}</text>`;
+      }).join('');
+      const legend = counts.map(({i,count})=>{
+        const showCorrect = revealed && correct.includes(i);
+        return `<div style="display:flex;align-items:center;gap:7px;font-size:12px;margin-bottom:5px;">
+          <span style="width:10px;height:10px;border-radius:2px;background:${showCorrect?'#43e97b':palette[i%palette.length]};flex-shrink:0;"></span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${letters[i]}. ${(q.options[i]||{}).text||''}</span>
+          <span style="font-family:Syne,sans-serif;font-weight:700;color:${showCorrect?'var(--accent3)':'var(--accent)'};">${count} (${pct(count)}%)</span>
+        </div>`;
+      }).join('');
+      inner = `<div style="display:flex;justify-content:center;margin-bottom:14px;overflow-x:auto;">
+        <svg viewBox="0 0 ${totalW} ${chartH + labelH}" width="${Math.min(totalW * 1.8, 260)}" height="${Math.round((chartH + labelH) * 1.8)}" style="overflow:visible;">${segs}</svg>
+      </div>${legend}`;
     } else if (mode === 'donut' || mode === 'pie') {
-      // Build SVG donut/pie
+      // Build SVG donut/pie — handles 100% single-segment via full circle
       let cum = 0;
       const r0 = mode==='donut'?16:18;
+      const sw = mode==='donut'?7:0;
       const cx=21, cy=21;
-      const segs = counts.filter(c=>c.count>0).map(({i,count})=>{
-        const frac = total>0?count/total:0;
-        const start = cum; cum += frac;
-        const a0 = start*2*Math.PI - Math.PI/2;
-        const a1 = cum*2*Math.PI - Math.PI/2;
-        const large = frac>0.5?1:0;
-        const x0=cx+r0*Math.cos(a0), y0=cy+r0*Math.sin(a0);
-        const x1=cx+r0*Math.cos(a1), y1=cy+r0*Math.sin(a1);
-        if(mode==='donut'){
-          return `<path d="M ${x0} ${y0} A ${r0} ${r0} 0 ${large} 1 ${x1} ${y1}" fill="none" stroke="${palette[i%palette.length]}" stroke-width="7"/>`;
+      const withVotes = counts.filter(c=>c.count>0);
+      let segs = '';
+      if (withVotes.length === 1) {
+        // Single segment fills 100% — SVG arcs can't draw a full circle in one path
+        const {i} = withVotes[0];
+        const color = palette[i % palette.length];
+        if (mode === 'donut') {
+          segs = `<circle cx="${cx}" cy="${cy}" r="${r0}" fill="none" stroke="${color}" stroke-width="${sw}"/>`;
         } else {
-          return `<path d="M ${cx} ${cy} L ${x0} ${y0} A ${r0} ${r0} 0 ${large} 1 ${x1} ${y1} Z" fill="${palette[i%palette.length]}"/>`;
+          segs = `<circle cx="${cx}" cy="${cy}" r="${r0}" fill="${color}"/>`;
         }
+      } else {
+        segs = withVotes.map(({i,count})=>{
+          const frac = total>0?count/total:0;
+          const start = cum; cum += frac;
+          const a0 = start*2*Math.PI - Math.PI/2;
+          const a1 = cum*2*Math.PI - Math.PI/2;
+          const large = frac>0.5?1:0;
+          const x0=cx+r0*Math.cos(a0), y0=cy+r0*Math.sin(a0);
+          const x1=cx+r0*Math.cos(a1), y1=cy+r0*Math.sin(a1);
+          const color = palette[i%palette.length];
+          const showCorrect = revealed && correct.includes(i);
+          const fillColor = showCorrect ? '#43e97b' : color;
+          if(mode==='donut'){
+            return `<path d="M ${x0.toFixed(3)} ${y0.toFixed(3)} A ${r0} ${r0} 0 ${large} 1 ${x1.toFixed(3)} ${y1.toFixed(3)}" fill="none" stroke="${fillColor}" stroke-width="${sw}" stroke-linecap="round"/>`;
+          } else {
+            return `<path d="M ${cx} ${cy} L ${x0.toFixed(3)} ${y0.toFixed(3)} A ${r0} ${r0} 0 ${large} 1 ${x1.toFixed(3)} ${y1.toFixed(3)} Z" fill="${fillColor}"/>`;
+          }
+        }).join('');
+      }
+      if (mode==='donut' && withVotes.length===0) {
+        segs = `<circle cx="${cx}" cy="${cy}" r="${r0}" fill="none" stroke="var(--surface3)" stroke-width="${sw}"/>`;
+      }
+      const legend = counts.map(({i,count})=>{
+        const showCorrect = revealed && correct.includes(i);
+        return `<div style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:5px;">
+          <span style="width:11px;height:11px;border-radius:3px;background:${showCorrect?'#43e97b':palette[i%palette.length]};flex-shrink:0;"></span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${letters[i]}. ${(q.options[i]||{}).text||''}</span>
+          <span style="font-family:Syne,sans-serif;font-weight:700;">${count} (${pct(count)}%)</span>
+        </div>`;
       }).join('');
-      const legend = counts.map(({i,count})=>`
-        <div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;">
-          <span style="width:12px;height:12px;border-radius:3px;background:${palette[i%palette.length]};flex-shrink:0;"></span>
-          <span style="flex:1;">${letters[i]}. ${(q.options[i]||{}).text||''}</span>
-          <span style="font-family:Syne,sans-serif;font-weight:700;">${pct(count)}%</span>
-        </div>`).join('');
-      inner = `<div style="display:flex;justify-content:center;margin-bottom:14px;">
-        <svg viewBox="0 0 42 42" style="width:150px;height:150px;">${segs||'<circle cx="21" cy="21" r="'+r0+'" fill="none" stroke="var(--surface2)" stroke-width="7"/>'}</svg>
+      inner = `<div style="display:flex;justify-content:center;margin-bottom:12px;">
+        <svg viewBox="0 0 42 42" width="140" height="140" style="overflow:visible;">${segs}</svg>
       </div>${legend}`;
     } else {
       // Default: bars
@@ -2310,7 +2531,7 @@ function renderRightPanel(q, responses) {
       </div>`;}).join('');
     }
 
-    rs.innerHTML=`<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>${inner}`;
+    rs.innerHTML=`${mediaThumb}<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>${inner}`;
   }
 }
 
@@ -2828,7 +3049,8 @@ function renderEditor(idx) {
         <div class="form-row" style="margin:0 0 12px">
           <label>Results Display</label>
           <select onchange="updateQ(${idx},'displayMode',this.value)" style="width:100%;">
-            <option value="bars"        ${(q.displayMode||'bars')==='bars'?'selected':''}>Bar chart</option>
+            <option value="bars"        ${(q.displayMode||'bars')==='bars'?'selected':''}>Bar chart (horizontal)</option>
+            <option value="column"      ${q.displayMode==='column'?'selected':''}>Column chart (vertical)</option>
             <option value="donut"       ${q.displayMode==='donut'?'selected':''}>Donut chart</option>
             <option value="pie"         ${q.displayMode==='pie'?'selected':''}>Pie chart</option>
             <option value="leaderboard" ${q.displayMode==='leaderboard'?'selected':''}>Leaderboard (names)</option>
