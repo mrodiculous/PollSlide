@@ -4103,7 +4103,9 @@ function renderPresentSlide(idx) {
       <button onclick="presentNav(-1)" ${idx===0?'disabled':''} style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;font-family:Syne,sans-serif;font-weight:700;padding:7px 16px;cursor:pointer;${idx===0?'opacity:0.28;cursor:not-allowed;':''}">← Prev</button>
       <button onclick="presentNav(1)"  ${idx===questions.length-1?'disabled':''} style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;font-family:Syne,sans-serif;font-weight:700;padding:7px 16px;cursor:pointer;${idx===questions.length-1?'opacity:0.28;cursor:not-allowed;':''}">Next →</button>
       ${isChoice&&!revealed?`<button onclick="doReveal();renderPresentSlide(_presentIdx);" style="background:linear-gradient(135deg,#6c63ff,#a78bfa);border:none;border-radius:8px;color:#fff;font-size:13px;font-family:Syne,sans-serif;font-weight:700;padding:7px 18px;cursor:pointer;box-shadow:0 2px 12px rgba(108,99,255,0.4);">🎯 Reveal Answer</button>`:''}
-      <div style="flex:1;"></div>
+      <div style="flex:1;display:flex;justify-content:center;align-items:center;">
+        <img src="Cool%20PollSlide%20300.png" style="height:32px;width:auto;opacity:0.45;" onerror="this.style.display='none'">
+      </div>
       <span style="font-size:10px;color:rgba(255,255,255,0.2);">← → navigate &nbsp;·&nbsp; R reveal &nbsp;·&nbsp; ESC exit</span>
     </div>`;
 
