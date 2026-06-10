@@ -6,7 +6,7 @@
 <title>PollSlide — Live Polls for PowerPoint</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 
-<!-- Office JS — MUST be loaded first in any Office add-in -->
+<!-- Office JS — MUST be loaded first, synchronously -->
 <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js" type="text/javascript"></script>
 
 <!-- Firebase -->
@@ -14,17 +14,19 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 
-<!-- QR library -->
+<!-- QR generator (for inserting onto slides) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<!-- jsQR — pure JS QR decoder used for auto-detecting QR codes on slides -->
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 
 <style>
   :root {
-    --bg:#07070f; --surface:#13131f; --surface2:#1a1a2c;
+    --bg:#07070f; --surface:#13131f; --surface2:#1a1a2c; --surface3:#22223a;
     --border:rgba(255,255,255,0.08); --border2:rgba(255,255,255,0.14);
     --accent:#6c63ff; --accent2:#ff6584; --accent3:#43e97b; --accent4:#f7b731;
     --text:#f4f4fc; --muted:#9090b8;
   }
-  /* PowerPoint task panes are narrow (~300px). Design mobile-first. */
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
     font-family:'DM Sans',sans-serif;
@@ -35,97 +37,100 @@
   }
   .hidden { display:none !important; }
 
-  /* Header */
+  /* ── Header ─────────────────────────────────────────────── */
   .hd {
     display:flex; align-items:center; gap:8px;
     padding:10px 12px; border-bottom:1px solid var(--border);
-    background:var(--surface);
+    background:var(--surface); flex-shrink:0;
   }
-  .hd-logo { font-family:'Syne',sans-serif; font-weight:800; font-size:15px; display:flex; align-items:center; gap:6px; }
-  .hd-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); }
-  .hd-right { margin-left:auto; display:flex; align-items:center; gap:6px; }
-  .btn { display:inline-flex; align-items:center; justify-content:center; gap:5px; padding:6px 12px; border-radius:8px; font-family:'Syne',sans-serif; font-weight:700; font-size:11px; border:none; cursor:pointer; }
+  .hd-logo { font-family:'Syne',sans-serif; font-weight:800; font-size:14px; display:flex; align-items:center; gap:6px; flex:1; }
+  .hd-right { display:flex; align-items:center; gap:5px; flex-shrink:0; }
+
+  /* ── Buttons ─────────────────────────────────────────────── */
+  .btn { display:inline-flex; align-items:center; justify-content:center; gap:5px; padding:6px 12px; border-radius:8px; font-family:'Syne',sans-serif; font-weight:700; font-size:11px; border:none; cursor:pointer; transition:opacity .15s; }
+  .btn:active { opacity:.75; }
   .btn-primary { background:var(--accent); color:#fff; }
   .btn-ghost { background:var(--surface2); border:1px solid var(--border2); color:var(--text); }
+  .btn-danger { background:rgba(255,101,132,.15); border:1px solid rgba(255,101,132,.3); color:var(--accent2); }
   .btn-sm { padding:5px 9px; font-size:10px; }
   .btn-full { width:100%; padding:10px; font-size:13px; }
 
-  /* Auth screen */
-  #authScreen { padding:16px; }
-  #authScreen h2 { font-family:'Syne',sans-serif; font-weight:800; font-size:17px; margin-bottom:6px; }
-  #authScreen p { color:var(--muted); font-size:12px; margin-bottom:16px; line-height:1.5; }
+  /* ── Auth screen ─────────────────────────────────────────── */
+  #authScreen { display:flex; flex-direction:column; min-height:100vh; }
+  .auth-body { padding:16px; }
+  .auth-body h2 { font-family:'Syne',sans-serif; font-weight:800; font-size:17px; margin-bottom:5px; }
+  .auth-body p { color:var(--muted); font-size:12px; margin-bottom:16px; line-height:1.5; }
   .field { margin-bottom:10px; }
   .field label { display:block; font-size:11px; font-weight:600; color:var(--muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:.05em; }
-  .field input { width:100%; padding:9px 10px; background:var(--surface2); border:1px solid var(--border2); border-radius:8px; color:var(--text); font-size:13px; outline:none; }
+  .field input { width:100%; padding:9px 10px; background:var(--surface2); border:1px solid var(--border2); border-radius:8px; color:var(--text); font-size:13px; outline:none; font-family:'DM Sans',sans-serif; }
   .field input:focus { border-color:var(--accent); }
-  .err { color:var(--accent2); font-size:11px; margin-top:6px; }
+  .err { color:var(--accent2); font-size:11px; margin-top:6px; min-height:16px; }
 
-  /* Main panel: list of presentations/questions */
-  #mainScreen { display:flex; flex-direction:column; height:calc(100vh - 42px); }
+  /* ── Main (pres list + q list) ───────────────────────────── */
+  #mainScreen { display:flex; flex-direction:column; height:100vh; }
   .pane-body { flex:1; overflow-y:auto; padding:10px; }
 
-  /* Presentation picker */
   .section-label { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); margin-bottom:6px; }
+
   .pres-item {
     display:flex; align-items:center; justify-content:space-between;
     padding:9px 10px; background:var(--surface); border:1px solid var(--border2);
     border-radius:9px; margin-bottom:7px; cursor:pointer;
   }
-  .pres-item:hover { border-color:var(--accent); }
-  .pres-item.active { border-color:var(--accent); background:rgba(108,99,255,.08); }
+  .pres-item:hover, .pres-item.active { border-color:var(--accent); }
+  .pres-item.active { background:rgba(108,99,255,.08); }
   .pres-name { font-weight:600; font-size:12px; }
   .pres-meta { font-size:11px; color:var(--muted); }
 
-  /* Question list */
-  .q-item {
-    background:var(--surface); border:1px solid var(--border2); border-radius:9px;
-    padding:10px; margin-bottom:8px; cursor:pointer;
-  }
-  .q-item:hover { border-color:var(--accent); }
+  .q-item { background:var(--surface); border:1px solid var(--border2); border-radius:9px; padding:10px; margin-bottom:8px; }
   .q-item.active { border-color:var(--accent); background:rgba(108,99,255,.08); }
   .q-num { font-size:10px; font-weight:700; color:var(--muted); margin-bottom:3px; }
-  .q-text { font-size:12px; font-weight:600; line-height:1.4; }
+  .q-text { font-size:12px; font-weight:600; line-height:1.4; margin-bottom:7px; }
 
-  /* Live results panel */
-  #livePanel { display:none; flex-direction:column; height:calc(100vh - 42px); }
-  .live-hd { padding:10px 12px; border-bottom:1px solid var(--border); background:var(--surface); display:flex; align-items:center; justify-content:space-between; }
-  .live-q { padding:10px 12px; font-size:12px; font-weight:600; line-height:1.4; border-bottom:1px solid var(--border); }
+  /* ── Live panel ───────────────────────────────────────────── */
+  #livePanel { display:none; flex-direction:column; height:100vh; }
+  .live-q { padding:9px 12px; font-size:12px; font-weight:600; line-height:1.4; border-bottom:1px solid var(--border); flex-shrink:0; }
   .live-body { flex:1; overflow-y:auto; padding:10px; }
-  .resp-count { font-family:'Syne',sans-serif; font-weight:800; font-size:22px; margin-bottom:10px; }
+  .resp-count { font-family:'Syne',sans-serif; font-weight:800; font-size:20px; margin-bottom:10px; }
   .resp-count span { font-size:12px; color:var(--muted); font-weight:400; }
-  .bar-wrap { margin-bottom:9px; }
+
+  .bar-wrap { margin-bottom:8px; }
   .bar-label { display:flex; justify-content:space-between; font-size:11px; margin-bottom:3px; }
-  .bar-bg { height:8px; background:var(--surface2); border-radius:100px; overflow:hidden; }
-  .bar-fill { height:100%; border-radius:100px; background:linear-gradient(90deg,var(--accent),#a78bfa); }
+  .bar-bg { height:7px; background:var(--surface2); border-radius:100px; overflow:hidden; }
+  .bar-fill { height:100%; border-radius:100px; background:linear-gradient(90deg,var(--accent),#a78bfa); transition:width .4s; }
   .bar-fill.correct { background:linear-gradient(90deg,var(--accent3),#6effb0); }
 
-  /* Reveal bar */
-  .reveal-bar { display:flex; align-items:center; justify-content:space-between; gap:6px; padding:8px 12px; border-bottom:1px solid var(--border); font-size:11px; min-height:36px; }
+  .reveal-bar { display:flex; align-items:center; justify-content:space-between; gap:6px; padding:7px 12px; border-bottom:1px solid var(--border); font-size:11px; flex-shrink:0; min-height:34px; }
 
-  /* QR panel */
-  .qr-pane { padding:10px; text-align:center; }
-  .qr-box { display:inline-block; background:#fff; padding:8px; border-radius:8px; margin-bottom:8px; }
+  /* ── Auto-detect status badge ─────────────────────────────── */
+  #autoStatus {
+    font-size:10px; padding:3px 8px; border-radius:100px; font-weight:600;
+    letter-spacing:.04em; flex-shrink:0;
+  }
+  #autoStatus.scanning { background:rgba(247,183,49,.15); color:var(--accent4); border:1px solid rgba(247,183,49,.3); }
+  #autoStatus.found    { background:rgba(67,233,123,.15);  color:var(--accent3); border:1px solid rgba(67,233,123,.3); }
+  #autoStatus.idle     { background:var(--surface3); color:var(--muted); border:1px solid var(--border); }
+
+  /* ── QR pane ─────────────────────────────────────────────── */
+  .qr-pane { padding:8px 0; text-align:center; }
+  .qr-box { display:inline-block; background:#fff; padding:6px; border-radius:8px; margin-bottom:6px; }
   .qr-label { font-size:11px; color:var(--muted); }
-  .qr-url { font-size:10px; color:var(--accent); word-break:break-all; margin-top:4px; }
+  .qr-url { font-size:10px; color:var(--accent); word-break:break-all; margin-top:3px; }
 
-  /* Slide insert */
-  .insert-box { background:var(--surface); border:1px solid var(--border2); border-radius:9px; padding:10px; margin-top:8px; }
-  .insert-box p { font-size:11px; color:var(--muted); margin-bottom:7px; line-height:1.5; }
-
-  /* Reveal / leaderboard */
-  .p-row { display:flex; align-items:center; gap:8px; padding:5px 0; border-bottom:1px solid var(--border); font-size:11px; }
-  .p-av { width:22px; height:22px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; flex-shrink:0; }
-  .p-name { flex:1; }
-  .p-score { font-weight:700; font-size:12px; }
-
-  /* Bottom tab bar */
+  /* ── Tab bar ─────────────────────────────────────────────── */
   .tab-bar { display:flex; border-top:1px solid var(--border); background:var(--surface); flex-shrink:0; }
-  .tab { flex:1; padding:8px 4px; display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer; color:var(--muted); font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
+  .tab { flex:1; padding:7px 4px; display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer; color:var(--muted); font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
   .tab.active { color:var(--accent); }
-  .tab-icon { font-size:16px; }
+  .tab-icon { font-size:15px; }
 
-  /* Toast */
-  #toast { position:fixed; bottom:10px; left:50%; transform:translateX(-50%) translateY(40px); background:var(--surface2); border:1px solid var(--border2); border-radius:8px; padding:8px 14px; font-size:12px; transition:transform .2s; z-index:999; white-space:nowrap; }
+  /* ── Help panel ──────────────────────────────────────────── */
+  #helpPanel { display:none; flex-direction:column; height:100vh; }
+  .help-card { background:var(--surface); border:1px solid var(--border2); border-radius:9px; padding:12px; margin-bottom:8px; }
+  .help-card h3 { font-size:12px; font-weight:700; margin-bottom:4px; }
+  .help-card p { font-size:11px; color:var(--muted); line-height:1.5; }
+
+  /* ── Toast ───────────────────────────────────────────────── */
+  #toast { position:fixed; bottom:10px; left:50%; transform:translateX(-50%) translateY(40px); background:var(--surface2); border:1px solid var(--border2); border-radius:8px; padding:7px 14px; font-size:12px; transition:transform .2s; z-index:999; white-space:nowrap; pointer-events:none; }
   #toast.show { transform:translateX(-50%) translateY(0); }
   #toast.success { border-color:rgba(67,233,123,.4); color:var(--accent3); }
   #toast.danger { border-color:rgba(255,101,132,.4); color:var(--accent2); }
@@ -134,31 +139,50 @@
 </head>
 <body>
 
-<!-- Auth screen -->
+<!-- ── Auth screen ──────────────────────────────────────────────────────────── -->
 <div id="authScreen">
-  <div class="hd"><div class="hd-logo"><span class="hd-dot"></span>PollSlide</div></div>
-  <div style="padding:16px;">
-    <h2>Sign in to PollSlide</h2>
-    <p>Use the same account as pollslide.com</p>
-    <div class="field"><label>Email</label><input type="email" id="ppEmail" placeholder="you@example.com"></div>
-    <div class="field"><label>Password</label><input type="password" id="ppPass" placeholder="••••••••" onkeydown="if(event.key==='Enter')ppSignIn()"></div>
+  <div class="hd">
+    <div class="hd-logo">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="20" height="20" style="flex-shrink:0;border-radius:6px;">
+        <rect width="100" height="100" rx="22" fill="#0d0d18"/>
+        <rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/>
+        <rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/>
+        <rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/>
+        <polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/>
+      </svg>
+      PollSlide
+    </div>
+  </div>
+  <div class="auth-body">
+    <h2>Sign in</h2>
+    <p>Use the same account as app.pollslide.com</p>
+    <div class="field"><label>Email</label><input type="email" id="ppEmail" placeholder="you@example.com" autocomplete="email"></div>
+    <div class="field"><label>Password</label><input type="password" id="ppPass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')ppSignIn()"></div>
     <button class="btn btn-primary btn-full" onclick="ppSignIn()">Sign in</button>
     <div class="err" id="ppErr"></div>
     <p style="margin-top:12px;font-size:11px;color:var(--muted);">No account? <a href="https://app.pollslide.com/presenter" target="_blank" style="color:var(--accent);">Sign up free →</a></p>
   </div>
 </div>
 
-<!-- Main screen -->
+<!-- ── Main screen (pres + question list) ────────────────────────────────────── -->
 <div id="mainScreen" class="hidden">
   <div class="hd">
-    <div class="hd-logo"><span class="hd-dot"></span>PollSlide</div>
+    <div class="hd-logo">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="18" height="18" style="flex-shrink:0;border-radius:5px;">
+        <rect width="100" height="100" rx="22" fill="#0d0d18"/>
+        <rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/>
+        <rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/>
+        <rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/>
+        <polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/>
+      </svg>
+      PollSlide
+    </div>
     <div class="hd-right">
-      <span id="ppUserEmail" style="font-size:11px;color:var(--muted);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
-      <button class="btn btn-ghost btn-sm" onclick="ppSignOut()">Out</button>
+      <span id="autoStatus" class="idle">Auto</span>
+      <button class="btn btn-ghost btn-sm" onclick="ppSignOut()">Sign out</button>
     </div>
   </div>
 
-  <!-- Tab content area -->
   <div id="tabPres" class="pane-body">
     <div class="section-label" style="margin-top:4px;">Your presentations</div>
     <div id="ppPresList"></div>
@@ -171,24 +195,20 @@
     </div>
   </div>
 
-  <!-- Tab bar -->
   <div class="tab-bar">
-    <div class="tab active" id="tab-polls" onclick="showTab('polls')">
-      <span class="tab-icon">📊</span>Polls
-    </div>
-    <div class="tab" id="tab-live" onclick="showTab('live')">
-      <span class="tab-icon">🔴</span>Live
-    </div>
-    <div class="tab" id="tab-help" onclick="showTab('help')">
-      <span class="tab-icon">?</span>Help
-    </div>
+    <div class="tab active" id="tab-polls" onclick="showTab('polls')"><span class="tab-icon">📊</span>Polls</div>
+    <div class="tab" id="tab-live" onclick="showTab('live')"><span class="tab-icon">🔴</span>Live</div>
+    <div class="tab" id="tab-help" onclick="showTab('help')"><span class="tab-icon">?</span>Help</div>
   </div>
 </div>
 
-<!-- Live panel (active question) -->
+<!-- ── Live panel ────────────────────────────────────────────────────────────── -->
 <div id="livePanel">
   <div class="hd">
-    <div class="hd-logo"><span class="hd-dot"></span>Live results</div>
+    <div class="hd-logo" style="font-size:13px;">
+      <span id="liveAutoTag" class="hidden" style="background:rgba(67,233,123,.15);color:var(--accent3);border:1px solid rgba(67,233,123,.3);border-radius:100px;font-size:9px;padding:2px 7px;font-weight:700;letter-spacing:.04em;">AUTO</span>
+      Live results
+    </div>
     <div class="hd-right">
       <button class="btn btn-ghost btn-sm" onclick="hideLivePanel()">← Polls</button>
     </div>
@@ -202,26 +222,28 @@
   </div>
 </div>
 
-<!-- Help panel -->
-<div id="helpPanel" class="hidden">
-  <div class="hd"><div class="hd-logo"><span class="hd-dot"></span>How to use</div></div>
+<!-- ── Help panel ─────────────────────────────────────────────────────────────── -->
+<div id="helpPanel">
+  <div class="hd">
+    <div class="hd-logo" style="font-size:13px;">How it works</div>
+  </div>
   <div class="pane-body">
-    <div style="display:flex;flex-direction:column;gap:10px;">
-      <div style="background:var(--surface);border:1px solid var(--border2);border-radius:9px;padding:12px;">
-        <div style="font-weight:700;font-size:12px;margin-bottom:4px;">1. Build your polls</div>
-        <div style="font-size:11px;color:var(--muted);line-height:1.5;">Create questions at <a href="https://app.pollslide.com/presenter" target="_blank" style="color:var(--accent);">app.pollslide.com</a></div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <div class="help-card">
+        <h3>1. Build your polls</h3>
+        <p>Create questions at <a href="https://app.pollslide.com/presenter" target="_blank" style="color:var(--accent);">app.pollslide.com</a> and launch a live session.</p>
       </div>
-      <div style="background:var(--surface);border:1px solid var(--border2);border-radius:9px;padding:12px;">
-        <div style="font-weight:700;font-size:12px;margin-bottom:4px;">2. Insert a QR code</div>
-        <div style="font-size:11px;color:var(--muted);line-height:1.5;">Select a question in the Polls tab, then click "Insert QR into slide". PowerPoint will add the QR to your current slide.</div>
+      <div class="help-card">
+        <h3>2. Insert a QR code</h3>
+        <p>Select a question from the Polls tab → click <strong style="color:var(--text);">Insert QR to slide</strong>. The QR is placed on your current slide.</p>
       </div>
-      <div style="background:var(--surface);border:1px solid var(--border2);border-radius:9px;padding:12px;">
-        <div style="font-weight:700;font-size:12px;margin-bottom:4px;">3. Present & watch results</div>
-        <div style="font-size:11px;color:var(--muted);line-height:1.5;">During your presentation, click "Live" tab to see responses in real time. Your audience scans the QR with their phone.</div>
+      <div class="help-card">
+        <h3>3. Auto-detect (recommended)</h3>
+        <p>As you navigate slides, PollSlide scans for QR codes automatically. The live results panel opens the moment a poll slide is detected — no manual step needed.</p>
       </div>
-      <div style="background:var(--surface);border:1px solid var(--border2);border-radius:9px;padding:12px;">
-        <div style="font-weight:700;font-size:12px;margin-bottom:4px;">4. Reveal the answer</div>
-        <div style="font-size:11px;color:var(--muted);line-height:1.5;">The correct answer is hidden until the countdown fires (or you click Reveal now). Then confetti! 🎉</div>
+      <div class="help-card">
+        <h3>4. Reveal answers</h3>
+        <p>The correct answer stays hidden until the countdown fires (or you click Reveal). Works in Presenter View too — the task pane is always visible on your laptop.</p>
       </div>
     </div>
     <div style="margin-top:12px;text-align:center;">
@@ -238,11 +260,7 @@
 <div id="toast"></div>
 
 <script>
-Office.onReady(function(info) {
-  // Office is ready — initialize Firebase and our app
-  initFirebase();
-});
-
+// ── Firebase config ───────────────────────────────────────────────────────────
 const FB_CONFIG = {
   apiKey: "AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME",
   authDomain: "echonest-live-survey.firebaseapp.com",
@@ -253,13 +271,25 @@ const FB_CONFIG = {
   appId: "1:285529140046:web:983c1ee8000a2ca8f80c1f"
 };
 const BASE_URL = "https://app.pollslide.com/answer";
+const ANSWER_HOST = "app.pollslide.com";
 const letters = ['A','B','C','D','E','F'];
 
 let auth, db, userId = null;
 let presentations = {}, questions = [], activePres = null, activeQ = null;
-let liveListener = null, revealed = false, revealArmed = false, revealTimer = null, revealRemaining = 0, revealSeconds = 30;
-let liveStartedAt = 0;
+let liveListener = null, revealed = false, revealArmed = false, revealTimer = null;
+let revealRemaining = 0, revealSeconds = 30, liveStartedAt = 0;
+let autoDetectEnabled = true, autoScanTimer = null, lastAutoKey = null;
+let isAutoSession = false; // true when live panel opened via auto-detection
 
+// ── Office ready ──────────────────────────────────────────────────────────────
+Office.onReady(function(info) {
+  initFirebase();
+  if (info.host === Office.HostType.PowerPoint) {
+    registerSlideChangeHandler();
+  }
+});
+
+// ── Firebase init ─────────────────────────────────────────────────────────────
 function initFirebase() {
   firebase.initializeApp(FB_CONFIG);
   auth = firebase.auth();
@@ -270,30 +300,33 @@ function initFirebase() {
       userId = user.uid;
       document.getElementById('authScreen').classList.add('hidden');
       document.getElementById('mainScreen').classList.remove('hidden');
-      document.getElementById('ppUserEmail').textContent = user.email || '';
       loadPresentations();
     } else {
       userId = null;
       document.getElementById('authScreen').classList.remove('hidden');
       document.getElementById('mainScreen').classList.add('hidden');
+      hideLivePanel(true);
     }
   });
 }
 
-// ── AUTH ──────────────────────────────────────────────────────────────────────
+// ── Auth ──────────────────────────────────────────────────────────────────────
 function ppSignIn() {
   const email = document.getElementById('ppEmail').value.trim();
   const pass  = document.getElementById('ppPass').value;
   document.getElementById('ppErr').textContent = '';
+  if (!email || !pass) { document.getElementById('ppErr').textContent = 'Email and password required.'; return; }
   auth.signInWithEmailAndPassword(email, pass)
     .catch(e => { document.getElementById('ppErr').textContent = e.message; });
 }
+
 function ppSignOut() {
   auth.signOut();
   presentations = {}; questions = []; activePres = null; activeQ = null;
+  lastAutoKey = null;
 }
 
-// ── LOAD PRESENTATIONS ────────────────────────────────────────────────────────
+// ── Load presentations ────────────────────────────────────────────────────────
 async function loadPresentations() {
   try {
     const snap = await db.ref(`users/${userId}/presentations`).get();
@@ -306,24 +339,24 @@ function renderPresList() {
   const list = document.getElementById('ppPresList');
   const pres = Object.values(presentations).sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
   if (!pres.length) {
-    list.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px;">No presentations yet.<br><a href="https://app.pollslide.com/presenter" target="_blank" style="color:var(--accent);">Create one at pollslide.com →</a></div>';
+    list.innerHTML = '<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px 10px;">No presentations yet.<br><br><a href="https://app.pollslide.com/presenter" target="_blank" style="color:var(--accent);">Create one at pollslide.com →</a></div>';
     return;
   }
   list.innerHTML = pres.map(p => `
-    <div class="pres-item ${activePres?.id === p.id ? 'active' : ''}" onclick="selectPres('${p.id}')">
+    <div class="pres-item ${activePres?.id===p.id?'active':''}" onclick="selectPres('${p.id}')">
       <div>
-        <div class="pres-name">${p.name || 'Untitled'}</div>
-        <div class="pres-meta">${Object.keys(p.questions||{}).length || (p.questions||[]).length} questions · ${p.sessionCode||'—'}</div>
+        <div class="pres-name">${escHtml(p.name||'Untitled')}</div>
+        <div class="pres-meta">${(p.questions||[]).length||Object.keys(p.questions||{}).length} Q · ${p.sessionCode||'—'}</div>
       </div>
       <span style="color:var(--muted);font-size:16px;">›</span>
     </div>`).join('');
 }
 
 function selectPres(id) {
-  activePres = presentations[id];
+  activePres = { ...presentations[id], id };
   if (!activePres) return;
-  questions = activePres.questions || [];
-  document.getElementById('ppQLabel').textContent = activePres.name || 'Questions';
+  questions = Array.isArray(activePres.questions) ? activePres.questions : Object.values(activePres.questions||{});
+  document.getElementById('ppQLabel').textContent = escHtml(activePres.name||'Questions');
   document.getElementById('ppPresList').classList.add('hidden');
   document.getElementById('ppQList').classList.remove('hidden');
   renderQList();
@@ -341,60 +374,58 @@ function renderQList() {
     return;
   }
   el.innerHTML = questions.map((q, i) => `
-    <div class="q-item ${activeQ === i ? 'active' : ''}" onclick="selectQuestion(${i})">
-      <div class="q-num">Q${i+1} · ${(q.type||'').replace(/_/g,' ')}</div>
-      <div class="q-text">${escHtml(q.text || 'Untitled')}</div>
-      <div style="display:flex;gap:5px;margin-top:7px;flex-wrap:wrap;">
-        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();goLive(${i})">▶ View live</button>
-        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();insertQR(${i})">⊞ Insert QR to slide</button>
+    <div class="q-item ${activeQ===i?'active':''}">
+      <div class="q-num">Q${i+1} · ${escHtml((q.type||'').replace(/_/g,' '))}</div>
+      <div class="q-text">${escHtml(q.text||'Untitled')}</div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm" onclick="goLive(${i})">▶ View live</button>
+        <button class="btn btn-ghost btn-sm" onclick="insertQR(${i})">⊞ Insert QR</button>
       </div>
     </div>`).join('');
 }
 
-function selectQuestion(i) {
-  activeQ = i;
-  renderQList();
-}
-
-// ── GO LIVE ───────────────────────────────────────────────────────────────────
-function goLive(idx) {
+// ── Go live (manual) ──────────────────────────────────────────────────────────
+function goLive(idx, fromAuto) {
   if (!activePres) return;
-  const q = questions[idx];
+  activeQ = idx;
+  const q    = questions[idx];
   const code = activePres.sessionCode;
   const qId  = `q${idx}_stable_${code}`;
+  isAutoSession = !!fromAuto;
+
   revealed = false; revealArmed = false;
   if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
   revealSeconds = q.revealDelay !== undefined ? Number(q.revealDelay) : 30;
-  liveStartedAt = 0; // will be set on first answer
+  liveStartedAt = 0;
   const isQuiz = q.type === 'multiple_choice' || q.type === 'multiple_choice_multi';
   if (!isQuiz) revealed = true;
 
   document.getElementById('liveQText').textContent = q.text || '';
+  document.getElementById('liveAutoTag').classList.toggle('hidden', !fromAuto);
   document.getElementById('mainScreen').classList.add('hidden');
   document.getElementById('helpPanel').classList.add('hidden');
-  document.getElementById('livePanel').style.display = 'flex';
-  document.getElementById('livePanel').style.flexDirection = 'column';
+  document.getElementById('livePanel').style.cssText = 'display:flex;flex-direction:column;';
 
   renderRevealBar();
-  renderQR(idx, code);
+  renderQRPane(idx, code);
   attachListener(idx, qId, q, code);
 }
 
-function hideLivePanel() {
+function hideLivePanel(force) {
   if (liveListener) { liveListener(); liveListener = null; }
   if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
   document.getElementById('livePanel').style.display = 'none';
+  if (!document.getElementById('helpPanel').classList.contains('hidden')) return;
   document.getElementById('mainScreen').classList.remove('hidden');
 }
 
-// ── LISTENER ──────────────────────────────────────────────────────────────────
+// ── Firebase listener ─────────────────────────────────────────────────────────
 function attachListener(idx, qId, q, code) {
   if (liveListener) { liveListener(); liveListener = null; }
   const ref = db.ref(`sessions/${code}/responses/${qId}`);
   const fn  = ref.on('value', snap => {
     const all = snap.exists() ? Object.values(snap.val()) : [];
     const responses = liveStartedAt > 0 ? all.filter(r => (r.submittedAt||0) >= liveStartedAt) : all;
-    // Start countdown on first answer
     if (all.length > 0 && !revealArmed && !revealed && liveStartedAt === 0) {
       liveStartedAt = Date.now();
       beginReveal();
@@ -404,17 +435,17 @@ function attachListener(idx, qId, q, code) {
   liveListener = () => ref.off('value', fn);
 }
 
-// ── REVEAL ────────────────────────────────────────────────────────────────────
+// ── Reveal logic ──────────────────────────────────────────────────────────────
 function beginReveal() {
   if (revealArmed || revealed) return;
   revealArmed = true;
-  if (revealSeconds === -1) { renderRevealBar(); return; } // manual only
+  if (revealSeconds === -1) { renderRevealBar(); return; }
   revealRemaining = revealSeconds;
   renderRevealBar();
   revealTimer = setInterval(() => {
     revealRemaining--;
     const el = document.getElementById('revealCount');
-    if (el) el.textContent = Math.max(0, revealRemaining) + 's';
+    if (el) el.textContent = Math.max(0,revealRemaining) + 's';
     if (revealRemaining <= 0) doReveal();
   }, 1000);
 }
@@ -423,14 +454,12 @@ function doReveal() {
   revealed = true;
   if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
   renderRevealBar();
-  // Re-render results with reveal
   if (activePres && activeQ !== null) {
     const code = activePres.sessionCode;
     const qId  = `q${activeQ}_stable_${code}`;
     db.ref(`sessions/${code}/responses/${qId}`).get().then(snap => {
       const all = snap.exists() ? Object.values(snap.val()) : [];
-      const responses = all.filter(r => (r.submittedAt||0) >= liveStartedAt);
-      renderResults(questions[activeQ], responses);
+      renderResults(questions[activeQ], liveStartedAt > 0 ? all.filter(r=>(r.submittedAt||0)>=liveStartedAt) : all);
     });
   }
 }
@@ -441,23 +470,26 @@ function renderRevealBar() {
   const isQuiz = activeQ !== null && (questions[activeQ]?.type === 'multiple_choice' || questions[activeQ]?.type === 'multiple_choice_multi');
   if (!isQuiz) { bar.innerHTML = ''; return; }
   const revBtn = `<button class="btn btn-ghost btn-sm" onclick="doReveal()">Reveal now</button>`;
-  if (!revealArmed) bar.innerHTML = `<span style="font-size:11px;color:var(--muted);">⏳ Starts on first answer</span>${revBtn}`;
+  if (!revealArmed) bar.innerHTML = `<span style="font-size:11px;color:var(--muted);">⏳ Waiting for first answer</span>${revBtn}`;
   else bar.innerHTML = `<span style="font-size:11px;color:var(--muted);">Reveal in <strong id="revealCount" style="color:var(--accent4);">${revealRemaining}s</strong></span>${revBtn}`;
 }
 
-// ── RESULTS ───────────────────────────────────────────────────────────────────
+// ── Results chart ─────────────────────────────────────────────────────────────
 function renderResults(q, responses) {
   const count = responses.length;
   document.getElementById('respCount').innerHTML = `${count} <span>response${count!==1?'s':''}</span>`;
   const el = document.getElementById('liveResults'); if (!el) return;
+
   if (!q.options || (q.type !== 'multiple_choice' && q.type !== 'multiple_choice_multi')) {
-    // Free text / rating
-    el.innerHTML = responses.map(r => `<div style="padding:6px 8px;background:var(--surface);border:1px solid var(--border);border-radius:7px;margin-bottom:5px;font-size:12px;">${escHtml(safeAnswer(r.answer))}<div style="font-size:10px;color:var(--muted);margin-top:2px;">— ${escHtml(r.name||'?')}</div></div>`).join('') || '<div style="color:var(--muted);font-size:11px;">Waiting…</div>';
+    el.innerHTML = responses.map(r =>
+      `<div style="padding:6px 8px;background:var(--surface);border:1px solid var(--border);border-radius:7px;margin-bottom:5px;font-size:12px;">${escHtml(safeAnswer(r.answer))}<div style="font-size:10px;color:var(--muted);margin-top:2px;">— ${escHtml(r.name||'?')}</div></div>`
+    ).join('') || '<div style="color:var(--muted);font-size:11px;padding:8px 0;">Waiting for responses…</div>';
     return;
   }
-  const _ca = q.correctAnswer;
-  const hasC = _ca !== undefined && _ca !== null && _ca !== '' && !(Array.isArray(_ca) && _ca.length === 0);
-  const correct = hasC ? (Array.isArray(_ca) ? _ca : [_ca]).map(Number) : [];
+
+  const _ca  = q.correctAnswer;
+  const hasC = _ca !== undefined && _ca !== null && _ca !== '' && !(Array.isArray(_ca) && _ca.length===0);
+  const correct = hasC ? (Array.isArray(_ca)?_ca:[_ca]).map(Number) : [];
   const counts = (q.options||[]).map((_,i) => ({ i, count: 0 }));
   responses.forEach(r => {
     try { const a = JSON.parse(r.answer); (Array.isArray(a)?a:[a]).forEach(v => { if (counts[v]) counts[v].count++; }); } catch(e) {}
@@ -465,8 +497,8 @@ function renderResults(q, responses) {
   const total = count || 1;
   el.innerHTML = counts.map(({i, count: c}) => {
     const showC = revealed && correct.includes(i);
-    const pct = Math.round(c / total * 100);
-    const badge = showC ? '<span style="font-size:10px;background:rgba(67,233,123,.2);color:var(--accent3);padding:1px 5px;border-radius:100px;margin-left:4px;">✓</span>' : '';
+    const pct   = Math.round(c / total * 100);
+    const badge = showC ? '<span style="font-size:9px;background:rgba(67,233,123,.2);color:var(--accent3);padding:1px 5px;border-radius:100px;margin-left:4px;">✓</span>' : '';
     return `<div class="bar-wrap">
       <div class="bar-label">
         <span>${letters[i]}. ${escHtml((q.options[i]||{}).text||'')}${badge}</span>
@@ -477,15 +509,31 @@ function renderResults(q, responses) {
   }).join('');
 }
 
-// ── INSERT QR INTO SLIDE (Office JS) ─────────────────────────────────────────
+// ── QR pane in live panel ─────────────────────────────────────────────────────
+function renderQRPane(idx, code) {
+  const qUrl = `${BASE_URL}#${code}/${idx}`;
+  const el   = document.getElementById('qrPane'); if (!el) return;
+  el.innerHTML = `<div class="qr-box" id="ppQRBox"></div>
+    <div class="qr-label">Audience scans to answer</div>
+    <div class="qr-url">${qUrl}</div>
+    <div style="margin-top:8px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap;">
+      <button class="btn btn-ghost btn-sm" onclick="insertQR(${idx})">⊞ Insert QR to slide</button>
+    </div>`;
+  setTimeout(() => {
+    const box = document.getElementById('ppQRBox'); if (!box) return;
+    box.innerHTML = '';
+    new QRCode(box, { text: qUrl, width: 90, height: 90, colorDark: '#0b0b15', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  }, 50);
+}
+
+// ── Insert QR into slide (with hidden notes metadata) ─────────────────────────
 function insertQR(idx) {
-  if (!activePres) return;
+  if (!activePres) { toast('Select a presentation first.', 'danger'); return; }
   const code = activePres.sessionCode;
   const qUrl = `${BASE_URL}#${code}/${idx}`;
 
-  // Generate the QR as a data URL using a hidden canvas
   const tmp = document.createElement('div');
-  tmp.style.cssText = 'position:fixed;left:-9999px;top:0;';
+  tmp.style.cssText = 'position:fixed;left:-9999px;top:0;width:300px;';
   document.body.appendChild(tmp);
   const qrDiv = document.createElement('div');
   tmp.appendChild(qrDiv);
@@ -493,47 +541,43 @@ function insertQR(idx) {
   new QRCode(qrDiv, { text: qUrl, width: 300, height: 300, colorDark: '#0b0b15', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
 
   setTimeout(() => {
-    const qrImg   = qrDiv.querySelector('img');
     const qrCanvas = qrDiv.querySelector('canvas');
-    const src = qrCanvas || qrImg;
+    const qrImg    = qrDiv.querySelector('img');
+    const src      = qrCanvas || qrImg;
 
     const buildAndInsert = () => {
-      // Build a composite canvas: QR + "Scan to answer" caption
       const size = 300, pad = 20, textH = 60;
       const canvas = document.createElement('canvas');
-      canvas.width = size + pad * 2; canvas.height = size + pad * 2 + textH;
+      canvas.width  = size + pad * 2;
+      canvas.height = size + pad * 2 + textH;
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
       if (src) ctx.drawImage(src, pad, pad, size, size);
-      ctx.fillStyle = '#0b0b15'; ctx.font = 'bold 28px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('Scan to answer', canvas.width / 2, size + pad + 38);
-      ctx.fillStyle = '#555'; ctx.font = '16px sans-serif';
-      ctx.fillText('Q' + (idx+1) + ': ' + (questions[idx]?.text||'').slice(0, 40), canvas.width / 2, size + pad + 58);
-      const dataUrl = canvas.toDataURL('image/png');
+      ctx.fillStyle = '#0b0b15'; ctx.font = 'bold 26px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText('Scan to answer', canvas.width / 2, size + pad + 36);
+      ctx.fillStyle = '#555'; ctx.font = '15px sans-serif';
+      ctx.fillText('Q' + (idx+1) + ': ' + (questions[idx]?.text||'').slice(0, 42), canvas.width / 2, size + pad + 56);
+      const base64 = canvas.toDataURL('image/png').split(',')[1];
       document.body.removeChild(tmp);
 
-      // Insert into the current PowerPoint slide.
-      // NOTE: PowerPoint's JS API has no shapes.addImage() — setSelectedDataAsync
-      // with Image coercion is the supported, cross-platform way (Windows/Mac/web).
-      // Matches the ImageCoercion 1.1 requirement declared in manifest.xml.
-      const base64 = dataUrl.split(',')[1];
+      // Write QR image to slide
       Office.context.document.setSelectedDataAsync(
         base64,
-        {
-          coercionType: Office.CoercionType.Image,
-          imageWidth: 200   // points; height auto-scales to keep aspect ratio
-        },
-        function (result) {
+        { coercionType: Office.CoercionType.Image, imageWidth: 200 },
+        function(result) {
           if (result.status === Office.AsyncResultStatus.Succeeded) {
-            toast('QR inserted into slide!', 'success');
+            toast(`QR for Q${idx+1} inserted!`, 'success');
+            // Write hidden metadata to slide notes so auto-detection works instantly
+            writeSlideNotesMetadata(code, idx);
           } else {
-            // Fallback: copy to clipboard so user can paste manually
+            // Fallback: clipboard
             canvas.toBlob(async blob => {
               try {
                 await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
-                toast('QR copied — paste it onto your slide (Ctrl+V)', 'success');
+                toast('QR copied — paste onto your slide (Ctrl+V)', 'success');
+                writeSlideNotesMetadata(code, idx);
               } catch(_) {
-                toast('Could not insert — copy the QR from the Polls tab.', 'danger');
+                toast('Insert failed. Try selecting the slide first.', 'danger');
               }
             }, 'image/png');
           }
@@ -546,47 +590,243 @@ function insertQR(idx) {
   }, 150);
 }
 
-// ── QR DISPLAY in live panel ──────────────────────────────────────────────────
-function renderQR(idx, code) {
-  const qUrl = `${BASE_URL}#${code}/${idx}`;
-  const el   = document.getElementById('qrPane'); if (!el) return;
-  el.innerHTML = `<div class="qr-box" id="ppQRBox"></div>
-    <div class="qr-label">Audience scans this to answer</div>
-    <div class="qr-url">${qUrl}</div>
-    <div style="margin-top:8px;">
-      <button class="btn btn-ghost btn-sm" onclick="insertQR(${idx})">⊞ Insert QR to slide</button>
-    </div>`;
-  setTimeout(() => {
-    const box = document.getElementById('ppQRBox'); if (!box) return;
-    box.innerHTML = '';
-    new QRCode(box, { text: qUrl, width: 100, height: 100, colorDark: '#0b0b15', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
-  }, 50);
+// Write <!-- pollslide:code/idx --> to current slide's notes for fast auto-detection
+async function writeSlideNotesMetadata(code, idx) {
+  try {
+    await PowerPoint.run(async ctx => {
+      const slides = ctx.presentation.getSelectedSlides();
+      slides.load('items');
+      await ctx.sync();
+      if (!slides.items.length) return;
+      const slide     = slides.items[0];
+      const notesPage = slide.getNotesPage();
+      const body      = notesPage.body;
+      body.load('text');
+      await ctx.sync();
+      // Strip any existing pollslide marker and append new one
+      const existing = (body.text || '').replace(/<!--\s*pollslide:[^>]+-->/gi, '').trim();
+      const marker   = `<!-- pollslide:${code}/${idx} -->`;
+      body.text = (existing ? existing + '\n' : '') + marker;
+      await ctx.sync();
+    });
+  } catch(e) {
+    // Notes API not available in this Office version — jsQR fallback still works
+  }
 }
 
-// ── TAB NAVIGATION ────────────────────────────────────────────────────────────
+// ── Auto-detection: slide change → QR scan ────────────────────────────────────
+function registerSlideChangeHandler() {
+  try {
+    Office.context.document.addHandlerAsync(
+      Office.EventType.DocumentSelectionChanged,
+      onDocumentSelectionChanged,
+      function(result) {
+        if (result.status !== Office.AsyncResultStatus.Succeeded) {
+          // Older host — auto-detect not available, silent failure
+        }
+      }
+    );
+  } catch(e) { /* Office JS not available or older version */ }
+}
+
+let _slideDebounce = null;
+function onDocumentSelectionChanged() {
+  // Debounce: wait until the user settles on a slide (avoids rapid scans while scrolling)
+  clearTimeout(_slideDebounce);
+  _slideDebounce = setTimeout(scanCurrentSlide, 400);
+}
+
+async function scanCurrentSlide() {
+  if (!userId || !autoDetectEnabled) return;
+  setAutoStatus('scanning');
+
+  try {
+    // ── Layer 1: check slide notes for hidden metadata (fast path) ──────────
+    const notesResult = await tryReadSlideNotes();
+    if (notesResult) {
+      const { sessionCode, qIdx } = notesResult;
+      await autoActivateByCode(sessionCode, qIdx);
+      return;
+    }
+
+    // ── Layer 2: jsQR image scan (fallback for QRs inserted outside add-in) ─
+    if (typeof jsQR === 'undefined') { setAutoStatus('idle'); return; }
+    const imageBase64 = await getSlideImageBase64();
+    if (!imageBase64) { setAutoStatus('idle'); return; }
+
+    const qrData = await decodeQRFromBase64(imageBase64);
+    if (!qrData) { setAutoStatus('idle'); return; }
+
+    const parsed = parsePollSlideQR(qrData);
+    if (!parsed) { setAutoStatus('idle'); return; }
+
+    await autoActivateByCode(parsed.sessionCode, parsed.qIdx);
+
+  } catch(e) {
+    setAutoStatus('idle');
+  }
+}
+
+// Read slide notes via PowerPoint JS API
+async function tryReadSlideNotes() {
+  try {
+    return await new Promise((resolve) => {
+      PowerPoint.run(async ctx => {
+        const slides = ctx.presentation.getSelectedSlides();
+        slides.load('items');
+        await ctx.sync();
+        if (!slides.items.length) { resolve(null); return; }
+        const notesPage = slides.items[0].getNotesPage();
+        notesPage.body.load('text');
+        await ctx.sync();
+        const text  = notesPage.body.text || '';
+        const match = text.match(/<!--\s*pollslide:([^/\s>]+)\/(\d+)\s*-->/i);
+        resolve(match ? { sessionCode: match[1], qIdx: parseInt(match[2], 10) } : null);
+      }).catch(() => resolve(null));
+    });
+  } catch(e) { return null; }
+}
+
+// Get current slide as base64 PNG via PowerPoint JS API 1.5
+async function getSlideImageBase64() {
+  try {
+    return await new Promise((resolve) => {
+      PowerPoint.run(async ctx => {
+        const slides = ctx.presentation.getSelectedSlides();
+        slides.load('items');
+        await ctx.sync();
+        if (!slides.items.length) { resolve(null); return; }
+        try {
+          const imageData = await slides.items[0].getImageAsync();
+          resolve(imageData || null);
+        } catch(e) {
+          resolve(null);
+        }
+      }).catch(() => resolve(null));
+    });
+  } catch(e) { return null; }
+}
+
+// Decode QR from base64 PNG using jsQR
+function decodeQRFromBase64(base64) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width  = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const result  = jsQR(imgData.data, imgData.width, imgData.height, { inversionAttempts: 'dontInvert' });
+        resolve(result ? result.data : null);
+      } catch(e) { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = 'data:image/png;base64,' + base64;
+  });
+}
+
+// Parse QR payload: https://app.pollslide.com/answer#code/qIdx
+function parsePollSlideQR(data) {
+  try {
+    const url = new URL(data);
+    if (url.hostname !== ANSWER_HOST) return null;
+    const hash  = url.hash.replace('#', '');
+    const parts = hash.split('/');
+    if (parts.length < 2) return null;
+    const sessionCode = parts[0];
+    const qIdx        = parseInt(parts[1], 10);
+    if (!sessionCode || isNaN(qIdx)) return null;
+    return { sessionCode, qIdx };
+  } catch(e) { return null; }
+}
+
+// Auto-activate: find matching presentation and go live
+async function autoActivateByCode(sessionCode, qIdx) {
+  const autoKey = `${sessionCode}/${qIdx}`;
+  // Don't re-trigger if we're already showing this exact question
+  if (lastAutoKey === autoKey && document.getElementById('livePanel').style.display !== 'none') {
+    setAutoStatus('found');
+    return;
+  }
+
+  // Find the presentation with this session code
+  let matchPres = null;
+  for (const [id, p] of Object.entries(presentations)) {
+    if (p.sessionCode === sessionCode) { matchPres = { ...p, id }; break; }
+  }
+
+  if (!matchPres) {
+    // Not in the loaded list — load from Firebase directly
+    try {
+      const snap = await db.ref(`sessions/${sessionCode}/meta`).get();
+      if (snap.exists()) {
+        const meta = snap.val();
+        // Try loading full presentation data
+        if (meta.userId && meta.presentationId) {
+          const presSnap = await db.ref(`users/${meta.userId}/presentations/${meta.presentationId}`).get();
+          if (presSnap.exists()) {
+            matchPres = { ...presSnap.val(), id: meta.presentationId };
+            presentations[meta.presentationId] = matchPres;
+          }
+        }
+      }
+    } catch(e) {}
+  }
+
+  if (!matchPres) {
+    // Last resort: load question data from quiz_builder (set when presenter launches a question)
+    try {
+      const snap = await db.ref(`quiz_builder/${sessionCode}/questions`).get();
+      if (snap.exists()) {
+        matchPres = { sessionCode, questions: Object.values(snap.val()), name: 'Session ' + sessionCode };
+      }
+    } catch(e) {}
+  }
+
+  if (!matchPres) { setAutoStatus('idle'); return; }
+
+  lastAutoKey = autoKey;
+  activePres  = matchPres;
+  questions   = Array.isArray(matchPres.questions) ? matchPres.questions : Object.values(matchPres.questions||{});
+
+  if (qIdx >= questions.length) { setAutoStatus('idle'); return; }
+
+  setAutoStatus('found');
+  goLive(qIdx, true /* fromAuto */);
+}
+
+function setAutoStatus(state) {
+  const el = document.getElementById('autoStatus'); if (!el) return;
+  el.className = state;
+  el.textContent = state === 'scanning' ? 'Scanning…' : state === 'found' ? 'Auto ✓' : 'Auto';
+}
+
+// ── Tab navigation ────────────────────────────────────────────────────────────
 function showTab(tab) {
   document.getElementById('livePanel').style.display = 'none';
+  document.getElementById('helpPanel').style.display = 'none';
   document.getElementById('mainScreen').classList.remove('hidden');
   document.getElementById('tabPres').classList.toggle('hidden', tab !== 'polls');
-  document.getElementById('helpPanel').classList.toggle('hidden', tab !== 'help');
+  document.getElementById('helpPanel').style.display = tab === 'help' ? 'flex' : 'none';
+  if (tab === 'help') document.getElementById('mainScreen').classList.add('hidden');
+
   ['polls','live','help'].forEach(t => {
-    const el = document.getElementById('tab-' + t);
-    if (el) el.classList.toggle('active', t === tab);
-    const hel = document.getElementById('htab-' + t);
-    if (hel) hel.classList.toggle('active', t === tab);
+    const a = document.getElementById('tab-' + t);
+    const b = document.getElementById('htab-' + t);
+    if (a) a.classList.toggle('active', t === tab);
+    if (b) b.classList.toggle('active', t === tab);
   });
+
   if (tab === 'live') {
-    // Show the live panel if a question is active, else prompt to select one
     if (activeQ !== null && activePres) { goLive(activeQ); }
-    else { toast('Select a question from Polls tab first.', 'info'); }
-  }
-  if (tab === 'help') {
-    document.getElementById('mainScreen').classList.add('hidden');
-    document.getElementById('helpPanel').classList.remove('hidden');
+    else { toast('Navigate to a poll slide or select a question first.'); }
   }
 }
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function escHtml(s){ return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function safeAnswer(a){ if(a==='__none__')return'No answer'; try{const v=JSON.parse(a);return typeof v==='string'?v:a;}catch(e){return a;} }
 let _tt;

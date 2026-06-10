@@ -337,7 +337,7 @@
 <div id="authGate" style="position:fixed;inset:0;z-index:100000;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:20px;">
   <div style="width:100%;max-width:400px;background:var(--surface);border:1px solid var(--border2);border-radius:18px;padding:36px 30px;">
     <div style="display:flex;align-items:center;gap:9px;margin-bottom:6px;">
-      <span style="width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;"><span style="width:9px;height:9px;background:#fff;border-radius:50%;"></span></span>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="30" height="30" style="flex-shrink:0;border-radius:9px;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>
       <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:21px;">PollSlide</span>
     </div>
     <h2 id="authTitle" style="font-family:'Syne',sans-serif;font-size:21px;font-weight:800;margin:18px 0 6px;">Welcome back</h2>
@@ -1491,6 +1491,10 @@ function toggleTheme() {
   }
 })();
 
+// Firebase returns saved arrays as plain objects {0:{…},1:{…}} when the array had
+// gaps or was stored via update(). This helper normalises both cases to a real array.
+function toQArr(q) { return Array.isArray(q) ? [...q] : (q ? Object.values(q) : []); }
+
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let presentations = {};   // { presId: { name, sessionCode, createdAt } }
 let activePresId  = null; // currently selected presentation
@@ -1621,7 +1625,7 @@ function selectPresentation(id) {
     }).catch(()=>{});
   }
 
-  questions = pres.questions ? [...pres.questions] : [];
+  questions = toQArr(pres.questions);
   selIdx = null;
   if (respListener) { respListener(); respListener = null; }
   // Restore live state from localStorage
@@ -1726,7 +1730,7 @@ function renderPresList() {
   const emojis = ['🎯','📊','🚀','💡','🏆','🎓','📋','⚡','🔥','🌟'];
   list.innerHTML = ids.map((id, i) => {
     const p   = presentations[id];
-    const qn  = (p.questions||[]).length;
+    const qn  = toQArr(p.questions).length;
     const isA = id === activePresId;
     return `
       <div class="pres-item ${isA?'active':''}" onclick="selectPresentation('${id}')">
@@ -1750,7 +1754,7 @@ function renderPresList() {
 function confirmResetAll() {
   if (!userId || !presentations || Object.keys(presentations).length === 0) return;
   const presCount = Object.keys(presentations).length;
-  const qCount = Object.values(presentations).reduce((n,p) => n + (p.questions||[]).length, 0);
+  const qCount = Object.values(presentations).reduce((n,p) => n + toQArr(p.questions).length, 0);
   const msg = `This will clear answers from ALL ${qCount} question${qCount!==1?'s':''} across ALL ${presCount} presentation${presCount!==1?'s':''}.
 
 This cannot be undone. Are you sure?`;
@@ -1777,7 +1781,7 @@ async function doResetAll() {
     // Reset every question's session-start timestamp so all cleared states are clean
     for (const [pid, pres] of Object.entries(presentations)) {
       const c = pres.sessionCode;
-      (pres.questions||[]).forEach((_, qi) => localStorage.setItem(`ql_liveStart_${c}_${qi}`, Date.now()));
+      toQArr(pres.questions).forEach((_, qi) => localStorage.setItem(`ql_liveStart_${c}_${qi}`, Date.now()));
     }
     renderQList();
     toast('All tallies cleared across every presentation. Questions remain live.', 'success');
@@ -1833,7 +1837,7 @@ async function doResetPres() {
   const pres = presentations[targetId];
   if (!pres) return;
   const code = pres.sessionCode;
-  const qs   = pres.questions || [];
+  const qs   = toQArr(pres.questions);
   try {
     // Step 1: Detach ALL listeners first so nothing re-fires during delete
     if (respListener) { respListener(); respListener = null; }
@@ -2573,7 +2577,7 @@ async function showPresTally(presId) {
   const pres = presentations[presId];
   if (!pres) return;
   const code = pres.sessionCode;
-  const qs   = pres.questions || [];
+  const qs   = toQArr(pres.questions);
 
   document.getElementById('presTallyName').textContent = pres.name;
   document.getElementById('presTallyContent').innerHTML =
@@ -3599,7 +3603,7 @@ function closeReport() {
 function exportCSV() {
   if (!_reportData) { toast('No report data.','danger'); return; }
   const { pres, report, participants } = _reportData;
-  const qs = pres.questions || [];
+  const qs = toQArr(pres.questions);
   const rows = [['Participant', 'Question #', 'Question Text', 'Question Type', 'Answer', 'Correct?', 'Time (ms)']];
 
   report.forEach(r => {
