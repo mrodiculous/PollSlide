@@ -1640,7 +1640,6 @@ function selectPresentation(id) {
 
   // Update topbar
   document.getElementById('activePres').innerHTML = `<strong>${pres.name}</strong> <span style="font-size:11px;color:var(--muted);margin-left:4px;">· ${pres.sessionCode}</span>`;
-  document.getElementById('addQBtn').disabled  = false;
   document.getElementById('addQBtn2').disabled = false;
   document.getElementById('resetBtn').disabled = false;
   document.getElementById('reportBtn').disabled = false;
@@ -1675,7 +1674,6 @@ async function doDeletePres() {
     questions = [];
     selIdx = null;
     document.getElementById('activePres').textContent = 'Select a presentation';
-    document.getElementById('addQBtn').disabled  = true;
     document.getElementById('addQBtn2').disabled = true;
     document.getElementById('resetBtn').disabled = true;
     document.getElementById('reportBtn').disabled = true;
