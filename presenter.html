@@ -3721,10 +3721,10 @@ function buildWordCloud(q, counts, responses) {
   return `<div style="display:flex;flex-wrap:wrap;gap:4px 8px;justify-content:center;align-items:center;padding:10px 4px;line-height:1.6;">${html}</div>`;
 }
 
-// ─── GIF SEARCH ───────────────────────────────────────────────────────────────
 // ─── GIF PICKER MODAL ────────────────────────────────────────────────────────
-// Replace GIPHY_KEY with your own free key from https://developers.giphy.com
-const GIPHY_KEY = 'dc6zaTOxFJmzC';
+// Uses Tenor v1 (demo key "LIVEJOHN"). Register a free production key at
+// https://tenor.com/developer/keyregistration and replace the value below.
+const TENOR_KEY = 'LIVEJOHN';
 let _gifPickerCallback = null;
 let _gifDebounceTimer = null;
 
@@ -3762,19 +3762,19 @@ function runGifSearch(query) {
   if (!grid) return;
   grid.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px;text-align:center;width:100%;">Searching…</div>';
   if (status) status.textContent = '';
-  fetch(`https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_KEY}&q=${encodeURIComponent(query)}&limit=24&rating=g&lang=en`)
+  fetch(`https://api.tenor.com/v1/search?key=${TENOR_KEY}&q=${encodeURIComponent(query)}&limit=24&media_filter=minimal&contentfilter=medium`)
     .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(data => {
-      if (!data.data || !data.data.length) {
+      if (!data.results || !data.results.length) {
         grid.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px;text-align:center;width:100%;">No GIFs found — try different keywords</div>';
         return;
       }
-      if (status) status.textContent = `${data.data.length} results for "${query}"`;
-      grid.innerHTML = data.data.map(g => {
-        const thumb = g.images?.fixed_height_small?.url || g.images?.preview_gif?.url || g.images?.downsized?.url || '';
-        const full  = g.images?.original?.url || g.images?.downsized?.url || thumb;
+      if (status) status.textContent = `${data.results.length} results for "${query}"`;
+      grid.innerHTML = data.results.map(g => {
+        const media = g.media?.[0] || {};
+        const thumb = media.tinygif?.url || media.gif?.url || '';
+        const full  = media.gif?.url || thumb;
         const title = (g.title || '').replace(/"/g, '&quot;');
-        // Store full URL as data attribute to avoid escaping issues in onclick
         return `<div class="gif-thumb" data-url="${full.replace(/"/g,'&quot;')}" title="${title}"
           style="width:calc(25% - 5px);aspect-ratio:4/3;border-radius:8px;overflow:hidden;cursor:pointer;border:2px solid transparent;transition:border-color 0.15s,transform 0.12s;flex-shrink:0;"
           onmouseover="this.style.borderColor='var(--accent)';this.style.transform='scale(1.04)'"
@@ -3785,8 +3785,8 @@ function runGifSearch(query) {
       }).join('');
     })
     .catch(err => {
-      grid.innerHTML = '<div style="color:var(--accent2);font-size:13px;padding:20px;text-align:center;width:100%;">Search failed — check your network or API key</div>';
-      if (status) status.textContent = String(err);
+      grid.innerHTML = `<div style="color:var(--accent2);font-size:13px;padding:20px;text-align:center;width:100%;">Search failed — ${err.message||err}. Check your network connection.</div>`;
+      if (status) status.textContent = '';
     });
 }
 
@@ -3878,10 +3878,10 @@ function buildRevealBadgeHtml(q) {
   return `<span style="background:rgba(247,183,49,0.15);border:1px solid #f7b731;border-radius:8px;padding:6px 14px;font-family:Syne,sans-serif;font-size:14px;font-weight:800;color:#f7b731;">⏱ Reveal in <strong>${Math.max(0,revealRemaining)}s</strong></span>`;
 }
 
-// Build the right-panel chart HTML for present mode (mirrors renderRightPanel logic)
+// Build the right-panel chart for present mode.
+// Always renders full chart structure even at 0 responses so reveal never causes reflow.
 function buildPresentChart(q, responses) {
   const letters = ['A','B','C','D','E','F'];
-  const palette = ['#6c63ff','#ff6584','#43e97b','#f7b731','#4facfe','#a78bfa'];
   const kahootColors = ['#e21b3c','#1368ce','#d89e00','#26890c'];
   const total = responses.length;
   const pct = (c) => total>0?Math.round(c/total*100):0;
@@ -3890,26 +3890,34 @@ function buildPresentChart(q, responses) {
   const _hasC = _qca !== undefined && _qca !== null && _qca !== '' && !(Array.isArray(_qca)&&_qca.length===0);
   const correct = _hasC ? (Array.isArray(_qca)?_qca:[_qca]).map(Number) : [];
 
-  if (total === 0) return `<div style="color:rgba(255,255,255,0.3);font-size:15px;text-align:center;margin-top:30px;">Waiting for responses…</div>`;
-
   if (q.type === 'free_text') {
-    if (q.displayMode === 'word_cloud') return buildWordCloud(q, [], responses);
-    return `<div style="display:flex;flex-direction:column;gap:6px;overflow-y:auto;max-height:56vh;">
-      ${responses.slice(-8).map(r=>`<div style="background:rgba(255,255,255,0.07);border-radius:8px;padding:8px 12px;font-size:13px;color:rgba(255,255,255,0.85);line-height:1.4;">
-        <em style="color:rgba(255,255,255,0.4);font-size:11px;">${escapeHtml(r.name||'Anonymous')}:</em> ${safeJ(r.answer==='__none__'?'No answer':r.answer)}
-      </div>`).join('')}
+    if (q.displayMode === 'word_cloud') {
+      return total > 0 ? buildWordCloud(q, [], responses)
+        : `<div style="color:rgba(255,255,255,0.25);font-size:13px;text-align:center;padding:20px 0;">Waiting for responses…</div>`;
+    }
+    return `<div style="display:flex;flex-direction:column;gap:6px;overflow-y:auto;">
+      ${total === 0
+        ? `<div style="color:rgba(255,255,255,0.25);font-size:13px;text-align:center;padding:20px 0;">Waiting for responses…</div>`
+        : responses.slice(-8).map(r=>`<div style="background:rgba(255,255,255,0.07);border-radius:8px;padding:8px 12px;font-size:13px;color:rgba(255,255,255,0.85);line-height:1.4;">
+            <em style="color:rgba(255,255,255,0.4);font-size:11px;">${escapeHtml(r.name||'Anonymous')}:</em> ${safeJ(r.answer==='__none__'?'No answer':r.answer)}
+          </div>`).join('')}
     </div>`;
   }
 
   if (q.type === 'rating') {
-    const max=q.ratingMax||5; const rCounts={};
-    for(let i=1;i<=max;i++) rCounts[i]=0;
+    const max = q.ratingMax || 5;
+    const rCounts = {};
+    for (let i = 1; i <= max; i++) rCounts[i] = 0;
     responses.forEach(r=>{try{const v=JSON.parse(r.answer);if(v)rCounts[v]=(rCounts[v]||0)+1;}catch(e){}});
-    const avg=total>0?(Object.entries(rCounts).reduce((s,[k,v])=>s+(+k*v),0)/total).toFixed(1):'—';
-    return `<div style="margin-bottom:12px;font-family:Syne,sans-serif;font-size:22px;font-weight:800;color:#f7b731;text-align:center;">avg ${avg} ★</div>
-      ${Object.entries(rCounts).map(([val,cnt])=>`<div style="margin-bottom:8px;">
-        <div style="display:flex;justify-content:space-between;font-size:13px;color:rgba(255,255,255,0.7);margin-bottom:3px;"><span>★ ${val}</span><span>${cnt}</span></div>
-        <div style="height:8px;background:rgba(255,255,255,0.1);border-radius:4px;overflow:hidden;"><div style="height:100%;width:${pct(cnt)}%;background:#f7b731;border-radius:4px;transition:width 0.4s;"></div></div>
+    const avg = total > 0 ? (Object.entries(rCounts).reduce((s,[k,v])=>s+(+k*v),0)/total).toFixed(1) : '—';
+    return `<div style="margin-bottom:10px;font-family:Syne,sans-serif;font-size:20px;font-weight:800;color:#f7b731;text-align:center;">
+        ${total > 0 ? `avg ${avg} ★` : '<span style="font-size:13px;color:rgba(255,255,255,0.25);">Waiting for responses…</span>'}
+      </div>
+      ${Object.entries(rCounts).map(([val,cnt])=>`<div style="margin-bottom:7px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:rgba(255,255,255,0.6);margin-bottom:3px;"><span>★ ${val}</span><span>${cnt}</span></div>
+        <div style="height:7px;background:rgba(255,255,255,0.08);border-radius:4px;overflow:hidden;">
+          <div style="height:100%;width:${pct(cnt)}%;background:#f7b731;border-radius:4px;transition:width 0.5s ease;"></div>
+        </div>
       </div>`).join('')}`;
   }
 
@@ -3917,31 +3925,36 @@ function buildPresentChart(q, responses) {
 
   const counts = (q.options||[]).map((_,i)=>({i,count:0}));
   responses.forEach(r=>{try{const a=JSON.parse(r.answer);(Array.isArray(a)?a:[a]).forEach(v=>{if(counts[v])counts[v].count++;});}catch(e){}});
-  const mode = q.displayMode || 'bars';
 
-  if (mode === 'word_cloud') return buildWordCloud(q, counts, responses);
+  if ((q.displayMode||'bars') === 'word_cloud') return total > 0
+    ? buildWordCloud(q, counts, responses)
+    : `<div style="color:rgba(255,255,255,0.25);font-size:13px;text-align:center;padding:20px 0;">Waiting for responses…</div>`;
 
-  // For present mode chart always use colorful bars (readable on dark bg)
-  return `<div style="display:flex;flex-direction:column;gap:10px;">
-    ${counts.map(({i,count})=>{
-      const opt=(q.options[i]||{});
-      const showCorrect = revealed && correct.includes(i);
-      const color = showCorrect ? '#43e97b' : kahootColors[i % kahootColors.length];
-      return `<div>
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:10px;">
-          <span style="display:flex;align-items:center;gap:8px;font-size:14px;color:#fff;font-weight:600;flex:1;min-width:0;">
-            <span style="width:22px;height:22px;border-radius:5px;background:${color};display:inline-flex;align-items:center;justify-content:center;font-family:Syne,sans-serif;font-size:11px;font-weight:900;color:#fff;flex-shrink:0;">${letters[i]}</span>
-            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(opt.text||'')}</span>
-            ${showCorrect?`<span style="font-size:14px;flex-shrink:0;">✓</span>`:''}
-          </span>
-          <span style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;color:${color};flex-shrink:0;">${count}</span>
-        </div>
-        <div style="height:10px;background:rgba(255,255,255,0.08);border-radius:5px;overflow:hidden;">
-          <div style="height:100%;width:${pct(count)}%;background:${color};border-radius:5px;transition:width 0.5s ease;"></div>
-        </div>
-      </div>`;
-    }).join('')}
-  </div>`;
+  // Always render all bars — width animates from 0 so structure never shifts
+  return `
+    ${total === 0 ? `<div style="color:rgba(255,255,255,0.25);font-size:12px;text-align:center;margin-bottom:10px;">Waiting for first response…</div>` : ''}
+    <div style="display:flex;flex-direction:column;gap:9px;">
+      ${counts.map(({i,count})=>{
+        const opt = q.options[i] || {};
+        const showCorrect = revealed && correct.includes(i);
+        const color = showCorrect ? '#43e97b' : kahootColors[i % kahootColors.length];
+        return `<div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:8px;">
+            <span style="display:flex;align-items:center;gap:7px;font-size:13px;color:#fff;font-weight:600;flex:1;min-width:0;">
+              <span style="width:20px;height:20px;border-radius:4px;background:${color};display:inline-flex;align-items:center;justify-content:center;font-family:Syne,sans-serif;font-size:10px;font-weight:900;color:#fff;flex-shrink:0;transition:background 0.4s;">${letters[i]}</span>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(opt.text||'')}</span>
+            </span>
+            <span style="display:flex;align-items:center;gap:5px;flex-shrink:0;">
+              <span style="font-family:Syne,sans-serif;font-weight:800;font-size:16px;color:${color};transition:color 0.4s;">${count}</span>
+              <span style="font-size:13px;transition:opacity 0.3s;${showCorrect?'opacity:1;':'opacity:0;'}">✓</span>
+            </span>
+          </div>
+          <div style="height:9px;background:rgba(255,255,255,0.08);border-radius:5px;overflow:hidden;">
+            <div style="height:100%;width:${pct(count)}%;background:${color};border-radius:5px;transition:width 0.5s ease,background 0.4s ease;"></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
 }
 
 function renderPresentSlide(idx) {
@@ -4016,8 +4029,8 @@ function renderPresentSlide(idx) {
 
   const qrBlockHtml = `
     <div style="display:flex;flex-direction:column;align-items:center;gap:8px;${hasMedia?'':'flex:1;justify-content:center;'}">
-      <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.55);text-align:center;letter-spacing:0.04em;line-height:1.4;max-width:110px;">Scan with Phone Camera to Answer</div>
-      <div id="${qrId}" style="background:#fff;border-radius:10px;padding:8px;width:96px;height:96px;flex-shrink:0;"></div>
+      <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.55);text-align:center;letter-spacing:0.04em;line-height:1.4;max-width:130px;">Scan with Phone Camera to Answer</div>
+      <div id="${qrId}" style="background:#fff;border-radius:10px;padding:8px;width:116px;height:116px;flex-shrink:0;"></div>
       <div style="font-family:'DM Mono',monospace;font-size:9px;color:rgba(255,255,255,0.25);text-align:center;word-break:break-all;max-width:110px;line-height:1.5;">${qUrl}</div>
     </div>`;
 
@@ -4035,25 +4048,25 @@ function renderPresentSlide(idx) {
     <!-- ── 9-COLUMN BODY (flex, flex: 1) ── -->
     <div style="display:flex;gap:16px;width:100%;flex:1;min-height:0;">
 
-      <!-- LEFT 2/9: media (if any) + QR code -->
-      <div style="flex:2;display:flex;flex-direction:column;align-items:center;min-width:0;padding:0 4px;">
+      <!-- LEFT 2/9: media (if any) + QR code — space-between when media, centered when not -->
+      <div style="flex:2;display:flex;flex-direction:column;align-items:center;justify-content:${hasMedia?'space-between':'center'};min-width:0;padding:4px;">
         ${mediaHtml}
         ${qrBlockHtml}
       </div>
 
-      <!-- CENTER 5/9: question text + answer blocks -->
-      <div style="flex:5;display:flex;flex-direction:column;gap:14px;min-width:0;overflow-y:auto;">
+      <!-- CENTER 5/9: question text + answer blocks — vertically centered -->
+      <div style="flex:5;display:flex;flex-direction:column;justify-content:center;gap:14px;min-width:0;overflow-y:auto;">
         <div style="font-family:Syne,sans-serif;font-size:clamp(17px,2.6vw,32px);font-weight:900;color:#fff;line-height:1.3;text-shadow:0 2px 14px rgba(0,0,0,0.5);">${escapeHtml(q.text||'')}</div>
         ${optBlocksHtml}
       </div>
 
-      <!-- RIGHT 2/9: live results panel -->
-      <div style="flex:2;display:flex;flex-direction:column;gap:10px;min-width:0;background:rgba(255,255,255,0.04);border-radius:14px;border:1px solid rgba(255,255,255,0.08);padding:14px;overflow-y:auto;">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:6px;flex-wrap:wrap;">
-          <span style="font-family:Syne,sans-serif;font-size:10px;font-weight:700;color:rgba(255,255,255,0.3);letter-spacing:0.1em;text-transform:uppercase;">Live Results</span>
-          <div id="presentRevealBadge" style="flex-shrink:0;">${buildRevealBadgeHtml(q)}</div>
+      <!-- RIGHT 2/9: live results panel — chart centered in remaining space -->
+      <div style="flex:2;display:flex;flex-direction:column;gap:10px;min-width:0;background:rgba(255,255,255,0.04);border-radius:14px;border:1px solid rgba(255,255,255,0.08);padding:14px;overflow:hidden;">
+        <div style="flex-shrink:0;">
+          <span style="font-family:Syne,sans-serif;font-size:10px;font-weight:700;color:rgba(255,255,255,0.3);letter-spacing:0.1em;text-transform:uppercase;display:block;margin-bottom:6px;">Live Results</span>
+          <div id="presentRevealBadge" style="min-height:32px;display:flex;align-items:center;">${buildRevealBadgeHtml(q)}</div>
         </div>
-        <div style="flex:1;overflow-y:auto;min-height:0;">${buildPresentChart(q, responses)}</div>
+        <div style="flex:1;overflow-y:auto;min-height:0;display:flex;flex-direction:column;justify-content:center;">${buildPresentChart(q, responses)}</div>
       </div>
 
     </div>
@@ -4079,7 +4092,7 @@ function renderPresentSlide(idx) {
   const qrEl = document.getElementById(qrId);
   if (qrEl && typeof QRCode !== 'undefined') {
     qrEl.innerHTML = '';
-    new QRCode(qrEl, { text: qUrl, width: 80, height: 80, colorDark:'#0d0d18', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    new QRCode(qrEl, { text: qUrl, width: 100, height: 100, colorDark:'#0d0d18', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.M });
   }
 }
 
@@ -4116,7 +4129,7 @@ function renderPresentSlide(idx) {
     </div>
     <!-- Footer -->
     <div style="padding:8px 16px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
-      <span style="font-size:10px;color:var(--muted);">Powered by <strong>Giphy</strong> · Click any GIF to use it · Results rated G</span>
+      <span style="font-size:10px;color:var(--muted);">Powered by <strong>Tenor</strong> · Click any GIF to insert it</span>
       <span style="font-size:10px;color:var(--muted);">Tip: results update as you type</span>
     </div>
   </div>
