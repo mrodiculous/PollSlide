@@ -3785,6 +3785,9 @@ let _presentIdx = null;
 let _presentKbHandler = null;
 let _presentFirebaseUnsub = null;
 
+let _lastPresResponses = [];
+let _presentCountdownTicker = null;
+
 function openPresentMode() {
   const idx = liveQIdx !== null ? liveQIdx : 0;
   if (!questions || !questions[idx]) return;
@@ -3794,6 +3797,15 @@ function openPresentMode() {
   overlay.style.display = 'flex';
   document.body.style.overflow = 'hidden';
   renderPresentSlide(_presentIdx);
+
+  // Tick the countdown label in present mode every second (no full re-render)
+  if (_presentCountdownTicker) clearInterval(_presentCountdownTicker);
+  _presentCountdownTicker = setInterval(() => {
+    const lbl = document.getElementById('presentRevealBadge');
+    if (!lbl) return;
+    lbl.innerHTML = buildRevealBadgeHtml(questions[_presentIdx]);
+  }, 1000);
+
   // Keyboard navigation
   if (_presentKbHandler) document.removeEventListener('keydown', _presentKbHandler);
   _presentKbHandler = (e) => {
@@ -3803,31 +3815,27 @@ function openPresentMode() {
     if (e.key === 'r' || e.key === 'R') { doReveal(); renderPresentSlide(_presentIdx); }
   };
   document.addEventListener('keydown', _presentKbHandler);
+
   // Subscribe to live response updates
   const code = presentations[activePresId]?.sessionCode;
-  if (code) {
-    const qId = liveQId;
-    if (qId) {
-      if (_presentFirebaseUnsub) _presentFirebaseUnsub();
-      const ref = db.ref(`sessions/${code}/responses/${qId}`);
-      ref.on('value', snap => {
-        if (document.getElementById('presentOverlay')?.style.display !== 'flex') return;
-        const all = snap.exists() ? Object.values(snap.val()) : [];
-        const filtered = all.filter(r=>(r.submittedAt||0) >= liveStartedAt);
-        _lastPresResponses = filtered;
-        renderPresentSlide(_presentIdx);
-      });
-      _presentFirebaseUnsub = () => ref.off('value');
-    }
+  if (code && liveQId) {
+    if (_presentFirebaseUnsub) _presentFirebaseUnsub();
+    const ref = db.ref(`sessions/${code}/responses/${liveQId}`);
+    ref.on('value', snap => {
+      if (document.getElementById('presentOverlay')?.style.display !== 'flex') return;
+      const all = snap.exists() ? Object.values(snap.val()) : [];
+      _lastPresResponses = all.filter(r=>(r.submittedAt||0) >= liveStartedAt);
+      renderPresentSlide(_presentIdx);
+    });
+    _presentFirebaseUnsub = () => ref.off('value');
   }
 }
-
-let _lastPresResponses = [];
 
 function closePresentMode() {
   const overlay = document.getElementById('presentOverlay');
   if (overlay) overlay.style.display = 'none';
   document.body.style.overflow = '';
+  if (_presentCountdownTicker) { clearInterval(_presentCountdownTicker); _presentCountdownTicker = null; }
   if (_presentKbHandler) { document.removeEventListener('keydown', _presentKbHandler); _presentKbHandler = null; }
   if (_presentFirebaseUnsub) { _presentFirebaseUnsub(); _presentFirebaseUnsub = null; }
 }
@@ -3836,11 +3844,89 @@ function presentNav(dir) {
   if (!questions) return;
   const newIdx = _presentIdx + dir;
   if (newIdx < 0 || newIdx >= questions.length) return;
-  // Switch the live question too
   selectQ(newIdx);
   _presentIdx = newIdx;
   _lastPresResponses = [];
   renderPresentSlide(_presentIdx);
+}
+
+// Returns HTML for the reveal status badge — called every second to update in place
+function buildRevealBadgeHtml(q) {
+  if (!q) return '';
+  const isQuiz = q.type === 'multiple_choice' || q.type === 'multiple_choice_multi';
+  if (!isQuiz) return '';
+  if (revealed) return `<span style="background:rgba(67,233,123,0.18);border:1px solid #43e97b;border-radius:8px;padding:6px 14px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#43e97b;">✓ Answer Revealed</span>`;
+  const total = (_lastPresResponses.length ? _lastPresResponses : (_lastResponses||[])).length;
+  if (total === 0) return `<span style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:6px 14px;font-family:Syne,sans-serif;font-size:13px;color:rgba(255,255,255,0.5);">Waiting for first response…</span>`;
+  if (!revealArmed) return `<span style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:6px 14px;font-family:Syne,sans-serif;font-size:13px;color:rgba(255,255,255,0.5);">Starting reveal countdown…</span>`;
+  if (revealSeconds === -1) return `<span style="background:rgba(108,99,255,0.18);border:1px solid #6c63ff;border-radius:8px;padding:6px 14px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#a78bfa;">Manual reveal</span>`;
+  return `<span style="background:rgba(247,183,49,0.15);border:1px solid #f7b731;border-radius:8px;padding:6px 14px;font-family:Syne,sans-serif;font-size:14px;font-weight:800;color:#f7b731;">⏱ Reveal in <strong>${Math.max(0,revealRemaining)}s</strong></span>`;
+}
+
+// Build the right-panel chart HTML for present mode (mirrors renderRightPanel logic)
+function buildPresentChart(q, responses) {
+  const letters = ['A','B','C','D','E','F'];
+  const palette = ['#6c63ff','#ff6584','#43e97b','#f7b731','#4facfe','#a78bfa'];
+  const kahootColors = ['#e21b3c','#1368ce','#d89e00','#26890c'];
+  const total = responses.length;
+  const pct = (c) => total>0?Math.round(c/total*100):0;
+  const isChoice = q.type === 'multiple_choice' || q.type === 'multiple_choice_multi';
+  const _qca = q.correctAnswer;
+  const _hasC = _qca !== undefined && _qca !== null && _qca !== '' && !(Array.isArray(_qca)&&_qca.length===0);
+  const correct = _hasC ? (Array.isArray(_qca)?_qca:[_qca]).map(Number) : [];
+
+  if (total === 0) return `<div style="color:rgba(255,255,255,0.3);font-size:15px;text-align:center;margin-top:30px;">Waiting for responses…</div>`;
+
+  if (q.type === 'free_text') {
+    if (q.displayMode === 'word_cloud') return buildWordCloud(q, [], responses);
+    return `<div style="display:flex;flex-direction:column;gap:6px;overflow-y:auto;max-height:56vh;">
+      ${responses.slice(-8).map(r=>`<div style="background:rgba(255,255,255,0.07);border-radius:8px;padding:8px 12px;font-size:13px;color:rgba(255,255,255,0.85);line-height:1.4;">
+        <em style="color:rgba(255,255,255,0.4);font-size:11px;">${escapeHtml(r.name||'Anonymous')}:</em> ${safeJ(r.answer==='__none__'?'No answer':r.answer)}
+      </div>`).join('')}
+    </div>`;
+  }
+
+  if (q.type === 'rating') {
+    const max=q.ratingMax||5; const rCounts={};
+    for(let i=1;i<=max;i++) rCounts[i]=0;
+    responses.forEach(r=>{try{const v=JSON.parse(r.answer);if(v)rCounts[v]=(rCounts[v]||0)+1;}catch(e){}});
+    const avg=total>0?(Object.entries(rCounts).reduce((s,[k,v])=>s+(+k*v),0)/total).toFixed(1):'—';
+    return `<div style="margin-bottom:12px;font-family:Syne,sans-serif;font-size:22px;font-weight:800;color:#f7b731;text-align:center;">avg ${avg} ★</div>
+      ${Object.entries(rCounts).map(([val,cnt])=>`<div style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:13px;color:rgba(255,255,255,0.7);margin-bottom:3px;"><span>★ ${val}</span><span>${cnt}</span></div>
+        <div style="height:8px;background:rgba(255,255,255,0.1);border-radius:4px;overflow:hidden;"><div style="height:100%;width:${pct(cnt)}%;background:#f7b731;border-radius:4px;transition:width 0.4s;"></div></div>
+      </div>`).join('')}`;
+  }
+
+  if (!isChoice) return '';
+
+  const counts = (q.options||[]).map((_,i)=>({i,count:0}));
+  responses.forEach(r=>{try{const a=JSON.parse(r.answer);(Array.isArray(a)?a:[a]).forEach(v=>{if(counts[v])counts[v].count++;});}catch(e){}});
+  const mode = q.displayMode || 'bars';
+
+  if (mode === 'word_cloud') return buildWordCloud(q, counts, responses);
+
+  // For present mode chart always use colorful bars (readable on dark bg)
+  return `<div style="display:flex;flex-direction:column;gap:10px;">
+    ${counts.map(({i,count})=>{
+      const opt=(q.options[i]||{});
+      const showCorrect = revealed && correct.includes(i);
+      const color = showCorrect ? '#43e97b' : kahootColors[i % kahootColors.length];
+      return `<div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;gap:10px;">
+          <span style="display:flex;align-items:center;gap:8px;font-size:14px;color:#fff;font-weight:600;flex:1;min-width:0;">
+            <span style="width:22px;height:22px;border-radius:5px;background:${color};display:inline-flex;align-items:center;justify-content:center;font-family:Syne,sans-serif;font-size:11px;font-weight:900;color:#fff;flex-shrink:0;">${letters[i]}</span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(opt.text||'')}</span>
+            ${showCorrect?`<span style="font-size:14px;flex-shrink:0;">✓</span>`:''}
+          </span>
+          <span style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;color:${color};flex-shrink:0;">${count}</span>
+        </div>
+        <div style="height:10px;background:rgba(255,255,255,0.08);border-radius:5px;overflow:hidden;">
+          <div style="height:100%;width:${pct(count)}%;background:${color};border-radius:5px;transition:width 0.5s ease;"></div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
 }
 
 function renderPresentSlide(idx) {
@@ -3848,7 +3934,6 @@ function renderPresentSlide(idx) {
   if (!container || !questions[idx]) return;
   const q = questions[idx];
   const letters = ['A','B','C','D','E','F'];
-  const palette = ['#6c63ff','#ff6584','#43e97b','#f7b731','#4facfe','#a78bfa'];
   const kahootColors = ['#e21b3c','#1368ce','#d89e00','#26890c'];
   const responses = _lastPresResponses.length ? _lastPresResponses : (_lastResponses || []);
   const total = responses.length;
@@ -3856,82 +3941,91 @@ function renderPresentSlide(idx) {
   const _qca = q.correctAnswer;
   const _hasC = _qca !== undefined && _qca !== null && _qca !== '' && !(Array.isArray(_qca)&&_qca.length===0);
   const correct = _hasC ? (Array.isArray(_qca)?_qca:[_qca]).map(Number) : [];
-
+  const pct = (c) => total>0?Math.round(c/total*100):0;
   let countsMap = {};
   if (isChoice) {
     (q.options||[]).forEach((_,i) => countsMap[i] = 0);
     responses.forEach(r => { try { const a=JSON.parse(r.answer); (Array.isArray(a)?a:[a]).forEach(v=>{ countsMap[v]=(countsMap[v]||0)+1; }); } catch(e){} });
   }
-  const pct = (c) => total>0?Math.round(c/total*100):0;
 
-  const optionsHtml = isChoice ? `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;max-width:820px;margin:0 auto;">
-      ${(q.options||[]).map((opt,i)=>{
-        const cnt = countsMap[i]||0;
-        const bg = kahootColors[i % kahootColors.length];
-        const showCorrect = revealed && correct.includes(i);
-        const border = showCorrect ? '3px solid #fff' : '3px solid transparent';
-        const glow = showCorrect ? 'box-shadow:0 0 0 4px #43e97b,0 8px 32px rgba(0,0,0,0.5);' : 'box-shadow:0 4px 20px rgba(0,0,0,0.4);';
-        const imgHtml = opt.img ? `<img src="${opt.img}" style="height:40px;width:auto;border-radius:6px;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">` : '';
-        return `<div style="background:${bg};border-radius:12px;border:${border};${glow}padding:14px 18px;min-height:66px;display:flex;align-items:center;gap:12px;position:relative;overflow:hidden;transition:box-shadow 0.3s;">
-          <span style="font-family:Syne,sans-serif;font-size:18px;font-weight:900;color:rgba(255,255,255,0.85);flex-shrink:0;">${letters[i]}</span>
-          ${imgHtml}
-          <span style="font-family:Syne,sans-serif;font-size:15px;font-weight:700;color:#fff;flex:1;line-height:1.3;">${escapeHtml(opt.text||'')}</span>
-          ${total>0?`<span style="font-family:Syne,sans-serif;font-size:22px;font-weight:900;color:#fff;flex-shrink:0;min-width:42px;text-align:right;">${cnt}</span>`:''}
-          ${total>0?`<div style="position:absolute;bottom:0;left:0;height:4px;background:rgba(255,255,255,0.4);width:${pct(cnt)}%;transition:width 0.5s ease;border-radius:0 0 0 12px;"></div>`:''}
-          ${showCorrect?`<span style="position:absolute;top:8px;right:8px;font-size:18px;">✓</span>`:''}
-        </div>`;
-      }).join('')}
-    </div>` : (q.type === 'rating' ? `
-    <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-top:10px;">
-      ${Array.from({length:q.ratingMax||5},(_,i)=>{
-        const star=i+1;
-        const cnt=responses.filter(r=>{try{return JSON.parse(r.answer)===star;}catch(e){}return false;}).length;
-        return `<div style="text-align:center;">
-          <div style="font-size:32px;">⭐</div>
-          <div style="font-family:Syne,sans-serif;font-size:22px;font-weight:800;color:#f7b731;">${star}</div>
-          <div style="font-size:14px;color:rgba(255,255,255,0.7);">${cnt} resp.</div>
-        </div>`;
-      }).join('')}
-    </div>` : `
-    <div style="max-width:600px;margin:0 auto;max-height:40vh;overflow-y:auto;display:flex;flex-direction:column;gap:6px;">
-      ${responses.slice(-6).map(r=>`<div style="background:rgba(255,255,255,0.08);border-radius:8px;padding:10px 14px;font-size:14px;color:rgba(255,255,255,0.9);"><em style="color:rgba(255,255,255,0.5);font-size:12px;">${r.name||'Anonymous'}:</em> ${safeJ(r.answer==='__none__'?'No answer':r.answer)}</div>`).join('') || '<div style="color:rgba(255,255,255,0.4);font-size:14px;">Waiting for responses…</div>'}
-    </div>`);
+  const optBlocksHtml = isChoice
+    ? `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%;">
+        ${(q.options||[]).map((opt,i)=>{
+          const cnt = countsMap[i]||0;
+          const bg = kahootColors[i % kahootColors.length];
+          const showCorrect = revealed && correct.includes(i);
+          const glow = showCorrect ? 'box-shadow:0 0 0 3px #43e97b,0 4px 16px rgba(0,0,0,0.5);' : 'box-shadow:0 2px 10px rgba(0,0,0,0.35);';
+          const imgHtml = opt.img ? `<img src="${opt.img}" style="height:32px;width:auto;border-radius:5px;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">` : '';
+          return `<div style="background:${bg};border-radius:10px;border:2px solid ${showCorrect?'#43e97b':'transparent'};${glow}padding:10px 14px;min-height:52px;display:flex;align-items:center;gap:8px;position:relative;overflow:hidden;">
+            <span style="font-family:Syne,sans-serif;font-size:15px;font-weight:900;color:rgba(255,255,255,0.8);flex-shrink:0;">${letters[i]}</span>
+            ${imgHtml}
+            <span style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#fff;flex:1;line-height:1.3;">${escapeHtml(opt.text||'')}</span>
+            ${total>0?`<span style="font-family:Syne,sans-serif;font-size:17px;font-weight:900;color:#fff;flex-shrink:0;">${cnt}</span>`:''}
+            ${total>0?`<div style="position:absolute;bottom:0;left:0;height:3px;background:rgba(255,255,255,0.35);width:${pct(cnt)}%;transition:width 0.5s;"></div>`:''}
+            ${showCorrect?`<span style="position:absolute;top:5px;right:7px;font-size:14px;">✓</span>`:''}
+          </div>`;
+        }).join('')}
+      </div>`
+    : '';
 
   const qUrl = `https://app.pollslide.com/answer#${presentations[activePresId]?.sessionCode||''}/${idx}`;
   const qrId = 'presentQR_' + idx;
 
   container.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;width:100%;max-width:860px;margin-bottom:18px;">
-      <div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:rgba(255,255,255,0.45);letter-spacing:0.1em;text-transform:uppercase;">Q${idx+1} of ${questions.length}</div>
+    <!-- TOP BAR -->
+    <div style="display:flex;justify-content:space-between;align-items:center;width:100%;margin-bottom:14px;flex-shrink:0;">
+      <div style="font-family:Syne,sans-serif;font-size:12px;font-weight:700;color:rgba(255,255,255,0.4);letter-spacing:0.1em;text-transform:uppercase;">Q${idx+1} / ${questions.length}</div>
       <div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;color:rgba(255,255,255,0.85);">${total}</span>
-        <span style="font-size:12px;color:rgba(255,255,255,0.45);">response${total!==1?'s':''}</span>
-        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#43e97b;box-shadow:0 0 8px #43e97b;margin-left:4px;" title="Live"></span>
+        <span style="font-family:Syne,sans-serif;font-size:17px;font-weight:800;color:rgba(255,255,255,0.9);">${total}</span>
+        <span style="font-size:12px;color:rgba(255,255,255,0.4);">response${total!==1?'s':''}</span>
+        <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#43e97b;box-shadow:0 0 7px #43e97b;" title="Live"></span>
       </div>
     </div>
 
-    <div style="font-family:Syne,sans-serif;font-size:clamp(22px,4vw,38px);font-weight:900;color:#fff;text-align:center;line-height:1.25;margin-bottom:24px;max-width:820px;text-shadow:0 2px 12px rgba(0,0,0,0.4);">${escapeHtml(q.text||'')}</div>
+    <!-- MAIN TWO-COLUMN BODY -->
+    <div style="display:flex;gap:24px;width:100%;flex:1;min-height:0;overflow:hidden;">
 
-    ${q.image&&q.image.trim()?`<div style="margin-bottom:18px;">${isVideoUrl(q.image)?`<video src="${q.image}" style="max-height:160px;border-radius:12px;object-fit:contain;" autoplay loop muted playsinline></video>`:`<img src="${q.image}" style="max-height:160px;border-radius:12px;object-fit:contain;" onerror="this.style.display='none'">`}</div>`:''}
-
-    ${optionsHtml}
-
-    <div style="display:flex;align-items:center;justify-content:space-between;width:100%;max-width:820px;margin-top:22px;">
-      <div style="display:flex;gap:8px;">
-        <button onclick="presentNav(-1)" ${idx===0?'disabled':''} style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:8px;color:#fff;font-size:14px;font-family:Syne,sans-serif;font-weight:700;padding:8px 18px;cursor:pointer;${idx===0?'opacity:0.3;cursor:not-allowed;':''}">← Prev</button>
-        <button onclick="presentNav(1)"  ${idx===questions.length-1?'disabled':''} style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:8px;color:#fff;font-size:14px;font-family:Syne,sans-serif;font-weight:700;padding:8px 18px;cursor:pointer;${idx===questions.length-1?'opacity:0.3;cursor:not-allowed;':''}">Next →</button>
-        ${isChoice&&!revealed?`<button onclick="doReveal();renderPresentSlide(_presentIdx);" style="background:#6c63ff;border:none;border-radius:8px;color:#fff;font-size:14px;font-family:Syne,sans-serif;font-weight:700;padding:8px 18px;cursor:pointer;">🎯 Reveal</button>`:''}
-        ${revealed?`<span style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#43e97b;padding:8px 14px;">✓ Revealed</span>`:''}
+      <!-- LEFT: question + options + QR -->
+      <div style="flex:1.1;display:flex;flex-direction:column;gap:14px;min-width:0;overflow:hidden;">
+        <div style="font-family:Syne,sans-serif;font-size:clamp(18px,2.8vw,30px);font-weight:900;color:#fff;line-height:1.3;text-shadow:0 2px 10px rgba(0,0,0,0.4);">${escapeHtml(q.text||'')}</div>
+        ${q.image&&q.image.trim()?`<div>${isVideoUrl(q.image)?`<video src="${q.image}" style="max-height:110px;border-radius:10px;object-fit:contain;" autoplay loop muted playsinline></video>`:`<img src="${q.image}" style="max-height:110px;border-radius:10px;object-fit:contain;" onerror="this.style.display='none'">`}</div>`:''}
+        ${optBlocksHtml}
+        <div style="flex:1;"></div>
+        <!-- QR block -->
+        <div style="display:flex;align-items:flex-end;gap:12px;flex-shrink:0;">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:6px;">
+            <div id="${qrId}" style="background:#fff;border-radius:8px;padding:6px;width:80px;height:80px;flex-shrink:0;"></div>
+            <div style="font-size:10px;font-weight:700;color:rgba(255,255,255,0.5);text-align:center;letter-spacing:0.03em;max-width:90px;line-height:1.3;">Scan with Phone Camera to Answer</div>
+          </div>
+          <div style="flex:1;font-family:'DM Mono',monospace;font-size:11px;color:rgba(255,255,255,0.3);word-break:break-all;line-height:1.6;">${qUrl}</div>
+        </div>
       </div>
-      <div id="${qrId}" style="background:#fff;border-radius:8px;padding:6px;width:72px;height:72px;flex-shrink:0;"></div>
+
+      <!-- RIGHT: reveal badge + live chart -->
+      <div style="flex:1;display:flex;flex-direction:column;gap:12px;min-width:0;background:rgba(255,255,255,0.04);border-radius:16px;border:1px solid rgba(255,255,255,0.08);padding:18px;overflow-y:auto;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+          <span style="font-family:Syne,sans-serif;font-size:11px;font-weight:700;color:rgba(255,255,255,0.35);letter-spacing:0.1em;text-transform:uppercase;">Live Results</span>
+          <div id="presentRevealBadge">${buildRevealBadgeHtml(q)}</div>
+        </div>
+        <div style="flex:1;overflow-y:auto;">${buildPresentChart(q, responses)}</div>
+      </div>
+
+    </div>
+
+    <!-- BOTTOM NAV BAR -->
+    <div style="display:flex;align-items:center;gap:8px;width:100%;margin-top:14px;flex-shrink:0;">
+      <button onclick="presentNav(-1)" ${idx===0?'disabled':''} style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;font-family:Syne,sans-serif;font-weight:700;padding:7px 16px;cursor:pointer;${idx===0?'opacity:0.3;cursor:not-allowed;':''}">← Prev</button>
+      <button onclick="presentNav(1)"  ${idx===questions.length-1?'disabled':''} style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:8px;color:#fff;font-size:13px;font-family:Syne,sans-serif;font-weight:700;padding:7px 16px;cursor:pointer;${idx===questions.length-1?'opacity:0.3;cursor:not-allowed;':''}">Next →</button>
+      ${isChoice&&!revealed?`<button onclick="doReveal();renderPresentSlide(_presentIdx);" style="background:#6c63ff;border:none;border-radius:8px;color:#fff;font-size:13px;font-family:Syne,sans-serif;font-weight:700;padding:7px 16px;cursor:pointer;">🎯 Reveal Answer</button>`:''}
+      <div style="flex:1;"></div>
+      <span style="font-size:11px;color:rgba(255,255,255,0.25);">← → navigate  ·  R reveal  ·  ESC exit</span>
     </div>`;
 
   // Render QR code
   const qrEl = document.getElementById(qrId);
   if (qrEl && typeof QRCode !== 'undefined') {
     qrEl.innerHTML = '';
-    new QRCode(qrEl, { text: qUrl, width: 60, height: 60, colorDark:'#0d0d18', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    new QRCode(qrEl, { text: qUrl, width: 68, height: 68, colorDark:'#0d0d18', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.M });
   }
 }
 
