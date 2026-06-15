@@ -311,7 +311,8 @@ function showTargetedQuestion(session, qIdx) {
     if (curQId !== qId) {
       curQId = qId;
       resetReveal(qObj);
-      liveStartedAt = q.launchedAt || 0; // count all responses for this question
+      viewMode = qObj.displayMode || 'bars';
+      liveStartedAt = q.launchedAt || 0;
       watchResponses(qId);
     }
     curQ = qObj;
@@ -348,6 +349,7 @@ function watchLiveQuestion() {
     if (curQId !== q.id) {
       curQId = q.id;
       resetReveal(q);
+      viewMode = q.displayMode || 'bars';
       liveStartedAt = q.launchedAt || Date.now();
       watchResponses(q.id);
     }
@@ -409,13 +411,14 @@ function renderAll() {
   // Always show the toggle bar when live so Media button is always reachable
   document.getElementById('toggleBar').style.display = 'flex';
 
-  // Show/hide mode buttons based on question type
+  // Show/hide mode buttons and sync active highlight to current viewMode
   document.querySelectorAll('.toggle-btn[data-mode]').forEach(btn => {
     const m = btn.dataset.mode;
     let show = false;
     if (m === 'bars' || m === 'donut' || m === 'number' || m === 'leaderboard') show = isChoice;
     if (m === 'word_cloud') show = isChoice || isFreeText;
     btn.style.display = show ? '' : 'none';
+    btn.classList.toggle('active', m === viewMode);
   });
 
   // If current mode is invalid for this type, reset to bars/bubbles
