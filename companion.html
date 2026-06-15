@@ -18,6 +18,18 @@
     --accent2: #ff6584;
     --accent3: #43e97b;
     --accent4: #f7b731;
+    --bar-bg: rgba(255,255,255,0.04);
+  }
+  /* Light mode — applied by toggling html.light */
+  html.light {
+    --bg: #f2f2fa;
+    --surface: #ffffff;
+    --surface2: #e8e8f5;
+    --border: rgba(0,0,0,0.09);
+    --border2: rgba(0,0,0,0.15);
+    --text: #1a1a2e;
+    --muted: #5a5a7e;
+    --bar-bg: rgba(0,0,0,0.04);
   }
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body { height:100%; }
@@ -96,7 +108,7 @@
   .resp-big { font-family:'Syne',sans-serif; font-weight:800; font-size:24px; margin-bottom:14px; }
   .resp-big span { font-size:13px; color:var(--muted); font-weight:600; }
   .bar-wrap {
-    margin-bottom:8px; background:rgba(255,255,255,0.04);
+    margin-bottom:8px; background:var(--bar-bg);
     border-radius:12px; padding:9px 12px;
     position:relative; overflow:hidden;
     border:1.5px solid transparent; transition:border-color 0.4s,box-shadow 0.4s;
@@ -174,6 +186,7 @@
   <div style="flex:1;"></div>
   <button class="toggle-btn" id="mediaToggleBtn" onclick="toggleMedia()" title="Show/hide question image or video">🖼 Media</button>
   <button class="toggle-btn" id="revealBtn" onclick="forceReveal()" title="Reveal the correct answer now">Reveal</button>
+  <button class="toggle-btn" id="themeBtn" onclick="toggleTheme()" title="Switch light / dark mode" style="font-size:14px;padding:4px 8px;">☀️</button>
 </div>
 
 <div class="body" id="body">
@@ -302,6 +315,20 @@ function boot() {
   }
 }
 boot();
+
+// ── LIGHT / DARK THEME ───────────────────────────────────────────────────────
+let _theme = localStorage.getItem('ql_companion_theme') || 'dark';
+function applyTheme() {
+  document.documentElement.classList.toggle('light', _theme === 'light');
+  const btn = document.getElementById('themeBtn');
+  if (btn) btn.textContent = _theme === 'light' ? '🌙' : '☀️';
+}
+function toggleTheme() {
+  _theme = _theme === 'dark' ? 'light' : 'dark';
+  localStorage.setItem('ql_companion_theme', _theme);
+  applyTheme();
+}
+applyTheme(); // apply saved preference on load
 
 // Show a specific question directly from quiz_builder — guarantees it matches the QR.
 function showTargetedQuestion(session, qIdx) {
@@ -692,7 +719,7 @@ function buildPostRevealContent(q, resps) {
       const score = `<span style="color:${_pCol};font-size:13px;">${_pTxt}</span>`;
       const isFastest = rank === fastestIdx && r.isCorrect === true;
       const fastBadge = isFastest ? `<span style="font-size:11px;background:#f7b73122;border:1px solid #f7b731;border-radius:6px;padding:1px 6px;color:#f7b731;flex-shrink:0;">⚡ Fastest</span>` : '';
-      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
         <span style="width:22px;text-align:center;font-size:12px;">${rank<3?medals[rank]:'#'+(rank+1)}</span>
         <span style="flex:1;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.name && r.name.trim() ? r.name : 'Player '+(rank+1))}${speed}</span>
         ${fastBadge}${score}</div>`;
@@ -711,7 +738,7 @@ function buildPostRevealContent(q, resps) {
       if (!r) return `<div style="flex:1;"></div>`;
       return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;">
         <div style="font-size:18px;">${medals[i]}</div>
-        <div style="font-size:11px;font-weight:700;color:#fff;text-align:center;max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.name && r.name.trim() ? r.name : 'Player '+(i+1))}</div>
+        <div style="font-size:11px;font-weight:700;color:var(--text);text-align:center;max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.name && r.name.trim() ? r.name : 'Player '+(i+1))}</div>
         ${r.elapsed?`<div style="font-size:9px;color:var(--muted);">${(r.elapsed/1000).toFixed(1)}s</div>`:''}
         <div style="width:100%;height:${heights[i]};background:${cols[i]};border-radius:6px 6px 0 0;box-shadow:0 0 14px ${cols2[i]};animation:podiumRise 0.6s ${0.1*i}s ease both;"></div>
       </div>`;
@@ -729,10 +756,10 @@ function buildPostRevealContent(q, resps) {
     const [emoji, label, col] = pct>=80?['🎉','Fantastic!','#43e97b']:pct>=60?['👏','Nice work!','#6c63ff']:pct>=40?['💪','Keep going!','#f7b731']:['🤔','Tough one!','#ff6584'];
     return `<div style="text-align:center;padding:4px 0;">
       <div style="font-size:48px;font-weight:900;color:${col};text-shadow:0 0 24px ${col}88;line-height:1;">${pct}%</div>
-      <div style="font-size:12px;color:rgba(255,255,255,0.6);margin-top:2px;">avg score · ${fullCorrect} fully correct / ${total}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px;">avg score · ${fullCorrect} fully correct / ${total}</div>
       <div style="margin-top:12px;font-size:18px;">${emoji}</div>
       <div style="font-size:14px;font-weight:700;color:${col};margin-top:2px;">${label}</div>
-      <div style="height:5px;background:rgba(255,255,255,0.08);border-radius:3px;margin-top:14px;overflow:hidden;">
+      <div style="height:5px;background:var(--border2);border-radius:3px;margin-top:14px;overflow:hidden;">
         <div style="height:100%;--target-w:${pct}%;width:var(--target-w);background:${col};box-shadow:0 0 8px ${col};border-radius:3px;animation:barGrow 1s .3s ease both;"></div>
       </div></div>`;
   }
@@ -741,7 +768,7 @@ function buildPostRevealContent(q, resps) {
     const text = q.postReveal?.explainerText || '';
     return `<div style="background:rgba(108,99,255,0.1);border:1px solid rgba(108,99,255,0.3);border-radius:10px;padding:14px 16px;">
       <div style="font-size:11px;font-weight:700;color:#a78bfa;letter-spacing:.06em;margin-bottom:8px;">💡 DID YOU KNOW?</div>
-      <div style="font-size:13px;line-height:1.6;color:#fff;">${escapeHtml(text)||'<em style="color:rgba(255,255,255,0.45)">No explainer text set.</em>'}</div></div>`;
+      <div style="font-size:13px;line-height:1.6;color:var(--text);">${escapeHtml(text)||'<em style="color:var(--muted)">No explainer text set.</em>'}</div></div>`;
   }
   return '';
 }
@@ -751,7 +778,8 @@ function renderResults() {
   if (!area || !curQ) return;
 
   // Post-reveal phase: replace chart with post-reveal content
-  if (presentPhase === 'post_reveal' && curQ.postReveal?.enabled) {
+  const inPostReveal = presentPhase === 'post_reveal' || curQ?.phase === 'post_reveal';
+  if (inPostReveal && curQ.postReveal?.enabled) {
     const label = {leaderboard:'Leaderboard',podium:'Podium',scorecard:'Score Card',explainer:'Explainer'}[curQ.postReveal.type]||'Post-Reveal';
     area.innerHTML = `<div style="animation:fadeInScale .4s ease;" class="resp-big">${responses.length} <span>responses · ${label}</span></div>${buildPostRevealContent(curQ, responses)}`;
     requestFitToContent();
@@ -883,7 +911,7 @@ function renderResults() {
         <span style="font-family:'Syne',sans-serif;font-weight:700;">${pct(count)}%</span>
       </div>`).join('');
     inner = `<div style="display:flex;justify-content:center;margin-bottom:14px;">
-      <svg viewBox="0 0 92 92" style="width:140px;height:140px;filter:drop-shadow(0 0 6px rgba(108,99,255,0.3));">${segs||'<circle cx="46" cy="46" r="38" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="14"/>'}</svg></div>${legend}`;
+      <svg viewBox="0 0 92 92" style="width:140px;height:140px;filter:drop-shadow(0 0 6px rgba(108,99,255,0.3));">${segs||'<circle cx="46" cy="46" r="38" fill="none" style="stroke:var(--border)" stroke-width="14"/>'}</svg></div>${legend}`;
 
   // ── Column chart (vertical bars) ──────────────────────────────────────────
   } else if (viewMode === 'column') {
@@ -911,7 +939,7 @@ function renderResults() {
     }).join('');
     inner = `<div style="display:flex;flex-direction:column;gap:0;">
       <div style="display:flex;gap:4px;padding:0 2px;margin-bottom:4px;">${letterRow}</div>
-      <div style="display:flex;align-items:flex-end;gap:4px;height:110px;padding:0 2px;border-bottom:1px solid rgba(255,255,255,0.08);">${barRow}</div>
+      <div style="display:flex;align-items:flex-end;gap:4px;height:110px;padding:0 2px;border-bottom:1px solid var(--border);">${barRow}</div>
       <div style="display:flex;gap:4px;padding:0 2px;margin-top:4px;">${textRow}</div>
     </div>`;
 
@@ -935,7 +963,7 @@ function renderResults() {
         <span style="font-family:'Syne',sans-serif;font-weight:700;">${pct(count)}%</span>
       </div>`).join('');
     inner = `<div style="display:flex;justify-content:center;margin-bottom:14px;">
-      <svg viewBox="0 0 42 42" style="width:150px;height:150px;">${segs||'<circle cx="21" cy="21" r="18" fill="rgba(255,255,255,0.05)"/>'}</svg></div>${legend}`;
+      <svg viewBox="0 0 42 42" style="width:150px;height:150px;">${segs||'<circle cx="21" cy="21" r="18" style="fill:var(--bar-bg)"/>'}</svg></div>${legend}`;
 
   // ── Neon Glass Bars (default) ──────────────────────────────────────────────
   } else {
