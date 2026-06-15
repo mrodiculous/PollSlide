@@ -681,7 +681,7 @@ function buildPostRevealContent(q, resps) {
     const text = q.postReveal?.explainerText || '';
     return `<div style="background:rgba(108,99,255,0.1);border:1px solid rgba(108,99,255,0.3);border-radius:10px;padding:14px 16px;">
       <div style="font-size:11px;font-weight:700;color:#a78bfa;letter-spacing:.06em;margin-bottom:8px;">💡 DID YOU KNOW?</div>
-      <div style="font-size:13px;line-height:1.6;color:rgba(255,255,255,0.85);">${escapeHtml(text)||'<em style="color:var(--muted)">No explainer text set.</em>'}</div></div>`;
+      <div style="font-size:13px;line-height:1.6;color:#fff;">${escapeHtml(text)||'<em style="color:rgba(255,255,255,0.45)">No explainer text set.</em>'}</div></div>`;
   }
   return '';
 }

@@ -2478,7 +2478,7 @@ function buildPostRevealContent(q, responses) {
     const text = q.postReveal?.explainerText || '';
     return `<div style="background:rgba(108,99,255,0.1);border:1px solid rgba(108,99,255,0.3);border-radius:12px;padding:16px 18px;">
       <div style="font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:10px;letter-spacing:.04em;">💡 DID YOU KNOW?</div>
-      <div style="font-size:14px;line-height:1.6;color:rgba(255,255,255,0.85);">${escapeHtml(text) || '<em style="color:var(--muted)">No explainer text set for this question.</em>'}</div>
+      <div style="font-size:14px;line-height:1.6;color:#fff;">${escapeHtml(text) || '<em style="color:rgba(255,255,255,0.45)">No explainer text set for this question.</em>'}</div>
     </div>`;
   }
 
@@ -3070,7 +3070,10 @@ function showLiveOrEdit(idx) {
   // Reset reveal state SYNCHRONOUSLY before any rendering or listener fires
   revealed = false;
   revealArmed = false;
+  postRevealPhase = false;
+  postRevealCountdown = 0;
   if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
+  if (postRevealTimer) { clearInterval(postRevealTimer); postRevealTimer = null; }
   const rb = document.getElementById('revealBar');
   if (rb) rb.innerHTML = '';
   // Arm reveal immediately; quiz questions wait, opinion polls show now
@@ -3106,6 +3109,9 @@ async function publishLive(idx, qId) {
     ratingMax: q.ratingMax||null, ratingLabels: q.ratingLabels||null,
     image: q.image || null, videoOpts: q.videoOpts || null,
     revealDelay: q.revealDelay!==undefined ? q.revealDelay : 30,
+    displayMode: q.displayMode || 'bars',
+    postReveal: q.postReveal || null,
+    phase: 'live',
     status: 'active', launchedAt: liveStartedAt || Date.now()
   };
   localStorage.setItem('ql_liveQIdx_' + code, idx);
@@ -3289,7 +3295,7 @@ function renderEditor(idx) {
             <option value="explainer"   ${q.postReveal?.type==='explainer'?'selected':''}>Explainer — "Did you know?" card</option>
           </select>
           ${q.postReveal?.type==='explainer' ? `
-          <textarea placeholder="Enter your explainer text…" onchange="updateQ(${idx},'postReveal',{...(questions[${idx}].postReveal||{}),explainerText:this.value});" style="width:100%;margin-top:8px;min-height:72px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:#fff;font-size:13px;padding:9px 12px;resize:vertical;font-family:inherit;box-sizing:border-box;">${q.postReveal?.explainerText||''}</textarea>
+          <textarea placeholder="Enter your explainer text…" onchange="updateQ(${idx},'postReveal',{...(questions[${idx}].postReveal||{}),explainerText:this.value});" style="width:100%;margin-top:8px;min-height:72px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 12px;resize:vertical;font-family:inherit;box-sizing:border-box;">${q.postReveal?.explainerText||''}</textarea>
           ` : ''}
           <select onchange="updateQ(${idx},'postReveal',{...(questions[${idx}].postReveal||{}),advanceDelay:this.value==='manual'?'manual':+this.value});" style="width:100%;margin-top:8px;">
             <option value="manual" ${(q.postReveal?.advanceDelay??'manual')==='manual'?'selected':''}>Manual — I'll click Next myself</option>
@@ -4029,6 +4035,8 @@ function presentNav(dir) {
   const newIdx = _presentIdx + dir;
   if (newIdx < 0 || newIdx >= questions.length) return;
   if (postRevealTimer) { clearInterval(postRevealTimer); postRevealTimer = null; }
+  postRevealPhase = false;
+  postRevealCountdown = 0;
   selectQ(newIdx);
   _presentIdx = newIdx;
   _lastPresResponses = [];
