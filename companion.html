@@ -225,8 +225,10 @@ let curQId = null;
 let liveStartedAt = 0;
 let showQR = false;
 let showMedia = false; // media OFF by default in the poll window (results are the focus)
+let presentPhase = 'live'; // 'live' | 'revealed' | 'post_reveal' — mirrors presenter's Firebase phase
 let macLinkRef = null;
 let liveQRef = null;
+let phaseRef = null; // watches currentQuestion/phase in QR-targeted mode
 
 // View toggle
 function toggleMedia() {
@@ -302,23 +304,38 @@ function showTargetedQuestion(session, qIdx) {
   // Detach any prior watchers
   if (liveQRef) { liveQRef.off(); liveQRef = null; }
   if (macLinkRef) { macLinkRef.off(); macLinkRef = null; }
+  if (phaseRef) { phaseRef.off(); phaseRef = null; }
 
   db.ref(`quiz_builder/${session}/questions`).get().then(snap => {
     const questions = snap.exists() ? snap.val() : [];
     const q = Array.isArray(questions) ? questions[qIdx] : null;
     if (!q || !q.text) { showWaiting('Question not found for this slide.'); return; }
-    // Build a question object consistent with what renderAll expects
     const qId = q.id || `q${qIdx}_stable_${session}`;
     const qObj = Object.assign({}, q, { id: qId, qIndex: qIdx });
     if (curQId !== qId) {
       curQId = qId;
       resetReveal(qObj);
       viewMode = qObj.displayMode || 'bars';
+      presentPhase = 'live';
       liveStartedAt = q.launchedAt || 0;
       watchResponses(qId);
     }
     curQ = qObj;
     renderAll();
+
+    // Watch currentQuestion/phase so post-reveal fires even in QR mode
+    phaseRef = db.ref(`sessions/${session}/currentQuestion`);
+    phaseRef.on('value', pSnap => {
+      const cq = pSnap.val();
+      if (!cq) return;
+      const newPhase = cq.phase || 'live';
+      // Also pull postReveal config from live currentQuestion if available
+      if (cq.postReveal && curQ) curQ = Object.assign({}, curQ, { postReveal: cq.postReveal });
+      if (newPhase !== presentPhase) {
+        presentPhase = newPhase;
+        renderAll();
+      }
+    });
   }).catch(() => showWaiting('Could not load this question.'));
 }
 
@@ -352,8 +369,12 @@ function watchLiveQuestion() {
       curQId = q.id;
       resetReveal(q);
       viewMode = q.displayMode || 'bars';
+      presentPhase = q.phase || 'live';
       liveStartedAt = q.launchedAt || Date.now();
       watchResponses(q.id);
+    } else {
+      // Same question — update phase if presenter advanced it
+      presentPhase = q.phase || 'live';
     }
     curQ = q;
     renderAll();
@@ -598,9 +619,85 @@ function toggleQR() { /* QR display removed from companion */ }
 const PS_COLORS = ['#6c63ff','#ff6584','#38d9f5','#f7b731','#a78bfa','#43e97b'];
 const STOP_WORDS = new Set(['a','an','the','and','or','but','in','on','at','to','for','of','with','by','from','is','it','its','was','are','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','this','that','these','those','i','we','you','he','she','they','my','our','your','his','her','their','not','no','so','if','as','up','out','about','into','than','then','when','where','who','what','how','all','any','each','other','more','also','just','can','get']);
 
+// ── POST-REVEAL CONTENT ───────────────────────────────────────────────────────
+function buildPostRevealContent(q, resps) {
+  const type = q.postReveal?.type || 'leaderboard';
+  const total = resps.length;
+  const sorted = [...resps].sort((a,b) => {
+    if (b.isCorrect===true && a.isCorrect!==true) return 1;
+    if (a.isCorrect===true && b.isCorrect!==true) return -1;
+    return (a.elapsed||999999)-(b.elapsed||999999);
+  });
+  const medals = ['🥇','🥈','🥉'];
+
+  if (type === 'leaderboard') {
+    const rows = sorted.map((r,rank) => {
+      const speed = r.elapsed ? `<span style="font-size:10px;color:var(--muted);margin-left:5px;">${(r.elapsed/1000).toFixed(1)}s</span>` : '';
+      const score = `<span style="color:${r.isCorrect===true?'#43e97b':r.isCorrect===false?'#ff6584':'var(--muted)'};font-size:13px;">${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}</span>`;
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+        <span style="width:22px;text-align:center;font-size:12px;">${rank<3?medals[rank]:'#'+(rank+1)}</span>
+        <span style="flex:1;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.name||'Anonymous')}${speed}</span>
+        ${score}</div>`;
+    }).join('') || '<div style="color:var(--muted);font-size:13px;">No responses yet.</div>';
+    return `<div style="font-size:11px;font-weight:700;color:#a78bfa;letter-spacing:.06em;margin-bottom:8px;">✦ LEADERBOARD</div>${rows}`;
+  }
+
+  if (type === 'podium') {
+    const top3 = sorted.slice(0,3);
+    const order = [1,0,2];
+    const heights = ['60px','90px','44px'];
+    const cols = ['#ff6584','#6c63ff','#f7b731'];
+    const cols2 = ['#ff658488','#6c63ff88','#f7b73188'];
+    const podiums = order.map(i => {
+      const r = top3[i];
+      if (!r) return `<div style="flex:1;"></div>`;
+      return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;">
+        <div style="font-size:18px;">${medals[i]}</div>
+        <div style="font-size:11px;font-weight:700;color:#fff;text-align:center;max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.name||'Anonymous')}</div>
+        ${r.elapsed?`<div style="font-size:9px;color:var(--muted);">${(r.elapsed/1000).toFixed(1)}s</div>`:''}
+        <div style="width:100%;height:${heights[i]};background:${cols[i]};border-radius:6px 6px 0 0;box-shadow:0 0 14px ${cols2[i]};"></div>
+      </div>`;
+    });
+    return `<div style="font-size:11px;font-weight:700;color:#a78bfa;letter-spacing:.06em;margin-bottom:10px;">✦ TOP 3</div>
+      <div style="display:flex;align-items:flex-end;gap:6px;justify-content:center;padding:0 4px;">${podiums.join('')}</div>
+      ${sorted.length>3?`<div style="margin-top:10px;font-size:11px;color:var(--muted);text-align:center;">+ ${sorted.length-3} more</div>`:''}`;
+  }
+
+  if (type === 'scorecard') {
+    const correctCount = resps.filter(r=>r.isCorrect===true).length;
+    const pct = total>0 ? Math.round(correctCount/total*100) : 0;
+    const [emoji, label, col] = pct>=80?['🎉','Fantastic!','#43e97b']:pct>=60?['👏','Nice work!','#6c63ff']:pct>=40?['💪','Keep going!','#f7b731']:['🤔','Tough one!','#ff6584'];
+    return `<div style="text-align:center;padding:4px 0;">
+      <div style="font-size:48px;font-weight:900;color:${col};text-shadow:0 0 24px ${col}88;line-height:1;">${pct}%</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.6);margin-top:2px;">got it right · ${correctCount}/${total}</div>
+      <div style="margin-top:12px;font-size:18px;">${emoji}</div>
+      <div style="font-size:14px;font-weight:700;color:${col};margin-top:2px;">${label}</div>
+      <div style="height:5px;background:rgba(255,255,255,0.08);border-radius:3px;margin-top:14px;overflow:hidden;">
+        <div style="height:100%;width:${pct}%;background:${col};box-shadow:0 0 8px ${col};border-radius:3px;"></div>
+      </div></div>`;
+  }
+
+  if (type === 'explainer') {
+    const text = q.postReveal?.explainerText || '';
+    return `<div style="background:rgba(108,99,255,0.1);border:1px solid rgba(108,99,255,0.3);border-radius:10px;padding:14px 16px;">
+      <div style="font-size:11px;font-weight:700;color:#a78bfa;letter-spacing:.06em;margin-bottom:8px;">💡 DID YOU KNOW?</div>
+      <div style="font-size:13px;line-height:1.6;color:rgba(255,255,255,0.85);">${escapeHtml(text)||'<em style="color:var(--muted)">No explainer text set.</em>'}</div></div>`;
+  }
+  return '';
+}
+
 function renderResults() {
   const area = document.getElementById('resultsArea');
   if (!area || !curQ) return;
+
+  // Post-reveal phase: replace chart with post-reveal content
+  if (presentPhase === 'post_reveal' && curQ.postReveal?.enabled) {
+    const label = {leaderboard:'Leaderboard',podium:'Podium',scorecard:'Score Card',explainer:'Explainer'}[curQ.postReveal.type]||'Post-Reveal';
+    area.innerHTML = `<div class="resp-big">${responses.length} <span>responses · ${label}</span></div>${buildPostRevealContent(curQ, responses)}`;
+    requestFitToContent();
+    return;
+  }
+
   const total = responses.length;
   const isChoice = curQ.type === 'multiple_choice' || curQ.type === 'multiple_choice_multi';
   const waiting = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">Waiting for responses…</div>';
@@ -770,17 +867,35 @@ function renderResults() {
     inner = counts.map(({i,count})=>{
       const opt = curQ.options[i] || {};
       const showCorrect = revealed && correct.includes(i);
+      const isWrong    = revealed && correct.length > 0 && !showCorrect;
       const color = showCorrect ? '#43e97b' : PS_COLORS[i%PS_COLORS.length];
       const p = pct(count);
-      const badge = showCorrect ? `<span style="font-size:10px;font-weight:700;color:#43e97b;background:rgba(67,233,123,0.16);padding:1px 6px;border-radius:100px;margin-left:5px;">✓</span>` : '';
       const imgHtml = opt.img ? `<img src="${escapeHtml(opt.img)}" class="bar-opt-img" onerror="this.style.display='none'">` : '';
-      return `<div class="bar-wrap" style="border-color:${color}44;box-shadow:0 0 12px ${color}18;">
-        <div class="bar-fill-bg" style="background:${color};width:${p}%;"></div>
-        <div class="bar-glow" style="background:${color};box-shadow:0 0 8px ${color};width:${p}%;"></div>
+
+      // Correct: bright full-border glow + stronger fill + "✓ Correct" pill
+      // Wrong after reveal: visually dimmed so correct answer stands out clearly
+      const wrapStyle = showCorrect
+        ? `border-color:#43e97bcc;box-shadow:0 0 22px #43e97b55,inset 0 0 40px #43e97b0a;background:rgba(67,233,123,0.09);`
+        : isWrong
+        ? `border-color:${color}18;box-shadow:none;opacity:0.38;`
+        : `border-color:${color}44;box-shadow:0 0 12px ${color}18;`;
+      const fillOpacity = showCorrect ? '0.22' : '0.10';
+      const glowExtra  = showCorrect ? `height:4px;box-shadow:0 0 14px #43e97b,0 0 28px #43e97b66;` : '';
+      const letterStyle = showCorrect
+        ? `background:#43e97b33;border:2px solid #43e97b;color:#43e97b;box-shadow:0 0 14px #43e97b99;font-size:13px;`
+        : `background:${color}22;border:1.5px solid ${color};color:${color};box-shadow:0 0 6px ${color}55;`;
+      const correctPill = showCorrect
+        ? `<span style="font-size:11px;font-weight:800;color:#43e97b;background:rgba(67,233,123,0.18);border:1px solid #43e97b77;padding:2px 9px;border-radius:100px;white-space:nowrap;flex-shrink:0;">✓ Correct</span>`
+        : '';
+
+      return `<div class="bar-wrap" style="${wrapStyle}">
+        <div class="bar-fill-bg" style="background:${color};width:${p}%;opacity:${fillOpacity};"></div>
+        <div class="bar-glow" style="background:${color};box-shadow:0 0 8px ${color};width:${p}%;${glowExtra}"></div>
         <div class="bar-inner">
-          <span class="bar-letter" style="background:${color}22;border:1.5px solid ${color};color:${color};box-shadow:0 0 6px ${color}55;">${letters[i]}</span>
+          <span class="bar-letter" style="${letterStyle}">${letters[i]}</span>
           ${imgHtml}
-          <span class="bar-opt-text">${escapeHtml(opt.text||'')}${badge}</span>
+          <span class="bar-opt-text">${escapeHtml(opt.text||'')}</span>
+          ${correctPill}
           <span class="bar-opt-count" style="color:${color};text-shadow:0 0 8px ${color}88;">${count}</span>
         </div>
       </div>`;
