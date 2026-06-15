@@ -2377,9 +2377,14 @@ function doReveal() {
   }
 
   renderRevealControl(false);
-  // Write revealed phase to Firebase so companion/live can react
+  // Write revealed phase (+ postReveal config) to Firebase so companion/live can react.
+  // Must include postReveal here because the question may have been edited after publishLive ran.
   const code = presentations[activePresId]?.sessionCode;
-  if (code) db.ref(`sessions/${code}/currentQuestion/phase`).set('revealed');
+  if (code) {
+    const update = { phase: 'revealed' };
+    if (qPR?.postReveal?.enabled) update.postReveal = qPR.postReveal;
+    db.ref(`sessions/${code}/currentQuestion`).update(update);
+  }
   if (code && liveQId && liveQIdx !== null) {
     db.ref(`sessions/${code}/responses/${liveQId}`).get().then(snap => {
       const all = snap.exists() ? Object.values(snap.val()) : [];
@@ -2405,7 +2410,12 @@ function doPostReveal() {
   postRevealPhase = true;
   postRevealCountdown = 0;
   const code = presentations[activePresId]?.sessionCode;
-  if (code) db.ref(`sessions/${code}/currentQuestion/phase`).set('post_reveal');
+  if (code) {
+    const q2 = liveQIdx !== null ? questions[liveQIdx] : null;
+    const update = { phase: 'post_reveal' };
+    if (q2?.postReveal?.enabled) update.postReveal = q2.postReveal;
+    db.ref(`sessions/${code}/currentQuestion`).update(update);
+  }
   renderRevealControl(false);
   if (liveQIdx !== null) renderRightPanel(questions[liveQIdx], _lastResponses || []);
   renderPresentSlide(_presentIdx);
@@ -3990,11 +4000,9 @@ function openPresentMode() {
   document.body.style.overflow = 'hidden';
   renderPresentSlide(_presentIdx);
 
-  // Tick the countdown label in present mode every second (no full re-render)
+  // Tick the reveal/post-reveal status badge every second without a full re-render
   if (_presentCountdownTicker) clearInterval(_presentCountdownTicker);
   _presentCountdownTicker = setInterval(() => {
-    // Skip full re-render if post-reveal countdown is ticking (timer handles badge)
-    if (postRevealTimer && postRevealCountdown > 0) return;
     const lbl = document.getElementById('presentRevealBadge');
     if (!lbl) return;
     lbl.innerHTML = buildRevealBadgeHtml(questions[_presentIdx]);
@@ -4010,19 +4018,24 @@ function openPresentMode() {
   };
   document.addEventListener('keydown', _presentKbHandler);
 
-  // Subscribe to live response updates
+  _subscribePresentResponses();
+}
+
+// Subscribe present-mode to the CURRENT question's responses.
+// Called on open and again on every presentNav so the old question's listener
+// doesn't keep feeding _lastPresResponses with stale data.
+function _subscribePresentResponses() {
+  if (_presentFirebaseUnsub) { _presentFirebaseUnsub(); _presentFirebaseUnsub = null; }
   const code = presentations[activePresId]?.sessionCode;
-  if (code && liveQId) {
-    if (_presentFirebaseUnsub) _presentFirebaseUnsub();
-    const ref = db.ref(`sessions/${code}/responses/${liveQId}`);
-    ref.on('value', snap => {
-      if (document.getElementById('presentOverlay')?.style.display !== 'flex') return;
-      const all = snap.exists() ? Object.values(snap.val()) : [];
-      _lastPresResponses = all.filter(r=>(r.submittedAt||0) >= liveStartedAt);
-      renderPresentSlide(_presentIdx);
-    });
-    _presentFirebaseUnsub = () => ref.off('value');
-  }
+  if (!code || !liveQId) return;
+  const ref = db.ref(`sessions/${code}/responses/${liveQId}`);
+  ref.on('value', snap => {
+    if (document.getElementById('presentOverlay')?.style.display !== 'flex') return;
+    const all = snap.exists() ? Object.values(snap.val()) : [];
+    _lastPresResponses = all.filter(r=>(r.submittedAt||0) >= liveStartedAt);
+    renderPresentSlide(_presentIdx);
+  });
+  _presentFirebaseUnsub = () => ref.off('value');
 }
 
 function closePresentMode() {
@@ -4044,9 +4057,10 @@ function presentNav(dir) {
   postRevealCountdown = 0;
   revealed = false;
   revealArmed = false;
-  selectQ(newIdx);
+  selectQ(newIdx);           // updates liveQId to the new question
   _presentIdx = newIdx;
   _lastPresResponses = [];
+  _subscribePresentResponses(); // re-subscribe to new question — old listener would re-fill tallies
   renderPresentSlide(_presentIdx);
 }
 
@@ -4055,7 +4069,11 @@ function buildRevealBadgeHtml(q) {
   if (!q) return '';
   const isQuiz = q.type === 'multiple_choice' || q.type === 'multiple_choice_multi';
   if (!isQuiz) return '';
-  if (revealed) return `<span style="background:rgba(67,233,123,0.18);border:1px solid #43e97b;border-radius:8px;padding:6px 14px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#43e97b;">✓ Answer Revealed</span>`;
+  if (revealed) {
+    if (postRevealPhase) return `<span style="background:rgba(167,139,250,0.18);border:1px solid #a78bfa;border-radius:8px;padding:6px 14px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#a78bfa;">✦ Post-Reveal Active</span>`;
+    if (postRevealCountdown > 0) return `<span style="background:rgba(167,139,250,0.15);border:1px solid #a78bfa;border-radius:8px;padding:6px 14px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#a78bfa;">Post-reveal in ${postRevealCountdown}s</span>`;
+    return `<span style="background:rgba(67,233,123,0.18);border:1px solid #43e97b;border-radius:8px;padding:6px 14px;font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#43e97b;">✓ Answer Revealed</span>`;
+  }
   const total = (_lastPresResponses.length ? _lastPresResponses : (_lastResponses||[])).length;
   if (total === 0) return `<span style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:6px 14px;font-family:Syne,sans-serif;font-size:13px;color:rgba(255,255,255,0.5);">Waiting for first response…</span>`;
   if (!revealArmed) return `<span style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.15);border-radius:8px;padding:6px 14px;font-family:Syne,sans-serif;font-size:13px;color:rgba(255,255,255,0.5);">Starting reveal countdown…</span>`;
