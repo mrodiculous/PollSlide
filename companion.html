@@ -93,14 +93,29 @@
   }
   .reveal-strong { color:var(--accent4); font-weight:700; }
 
-  /* Result bars */
+  /* Result bars — PollSlide Neon Glass */
   .resp-big { font-family:'Syne',sans-serif; font-weight:800; font-size:24px; margin-bottom:14px; }
   .resp-big span { font-size:13px; color:var(--muted); font-weight:600; }
-  .bar-wrap { margin-bottom:12px; }
-  .bar-label { display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px; }
-  .bar-bg { height:11px; background:rgba(255,255,255,0.07); border-radius:100px; overflow:hidden; }
-  .bar-fill { height:100%; background:linear-gradient(90deg,var(--accent),#a78bfa); border-radius:100px; transition:width 0.4s ease; }
-  .bar-fill.correct { background:linear-gradient(90deg,var(--accent3),#6effb0); }
+  .bar-wrap {
+    margin-bottom:8px; background:rgba(255,255,255,0.04);
+    border-radius:12px; padding:9px 12px;
+    position:relative; overflow:hidden;
+    border:1.5px solid transparent; transition:border-color 0.4s,box-shadow 0.4s;
+  }
+  .bar-glow { position:absolute;bottom:0;left:0;height:2px;transition:width .45s ease;border-radius:0 2px 0 0; }
+  .bar-fill-bg { position:absolute;inset:0;opacity:0.10;transition:width .45s ease;pointer-events:none; }
+  .bar-inner { display:flex;align-items:center;gap:8px;position:relative; }
+  .bar-letter { width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-size:11px;font-weight:900;flex-shrink:0; }
+  .bar-opt-img { height:28px;width:auto;border-radius:5px;object-fit:cover;flex-shrink:0; }
+  .bar-opt-text { flex:1;font-size:13px;line-height:1.3; }
+  .bar-opt-count { font-family:'Syne',sans-serif;font-weight:900;font-size:14px;flex-shrink:0; }
+
+  /* Word cloud */
+  .word-cloud { display:flex;flex-wrap:wrap;gap:7px 10px;align-items:center;padding:8px 0; }
+  .word-cloud span { font-family:'Syne',sans-serif;font-weight:800;border-radius:6px;padding:2px 5px;cursor:default;display:inline-block; }
+
+  /* Media — auto-fit natural size */
+  .q-media { width:100%;height:auto;object-fit:contain;border-radius:10px;margin-bottom:12px;display:block; }
 
   /* Leaderboard rows */
   .p-row { display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--border); font-size:13px; }
@@ -147,6 +162,7 @@
 
 <div class="toggle-bar" id="toggleBar" style="display:none;">
   <button class="toggle-btn active" data-mode="bars"        onclick="setMode('bars')">Bars</button>
+  <button class="toggle-btn"        data-mode="word_cloud"  onclick="setMode('word_cloud')">Word Cloud</button>
   <button class="toggle-btn"        data-mode="donut"       onclick="setMode('donut')">Donut</button>
   <button class="toggle-btn"        data-mode="number"      onclick="setMode('number')">Numbers</button>
   <button class="toggle-btn"        data-mode="leaderboard" onclick="setMode('leaderboard')">Leaderboard</button>
@@ -537,38 +553,89 @@ function fireConfetti() {
 
 function toggleQR() { /* QR display removed from companion */ }
 
+const PS_COLORS = ['#6c63ff','#ff6584','#38d9f5','#f7b731','#a78bfa','#43e97b'];
+const STOP_WORDS = new Set(['a','an','the','and','or','but','in','on','at','to','for','of','with','by','from','is','it','its','was','are','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','this','that','these','those','i','we','you','he','she','they','my','our','your','his','her','their','not','no','so','if','as','up','out','about','into','than','then','when','where','who','what','how','all','any','each','other','more','also','just','can','get']);
+
 function renderResults() {
   const area = document.getElementById('resultsArea');
   if (!area || !curQ) return;
   const total = responses.length;
+  const isChoice = curQ.type === 'multiple_choice' || curQ.type === 'multiple_choice_multi';
+  const waiting = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">Waiting for responses…</div>';
 
+  // ── Free text ──────────────────────────────────────────────────────────────
   if (curQ.type === 'free_text') {
-    area.innerHTML = `<div class="resp-big">${total} <span>responses</span></div>` +
-      (total===0 ? '<div style="color:var(--muted);font-size:13px;">Waiting…</div>'
-        : responses.map(r => `<div class="txt-resp">${escapeHtml(safeAnswer(r.answer))}<div class="from">— ${escapeHtml(r.name||'Anonymous')}</div></div>`).join(''));
-    return;
-  }
-  if (curQ.type === 'rating') {
-    const max = curQ.ratingMax || 5; const counts = {};
-    for (let i=1;i<=max;i++) counts[i]=0;
-    responses.forEach(r=>{ try{const v=JSON.parse(r.answer); if(v)counts[v]=(counts[v]||0)+1;}catch(e){} });
-    const avg = total>0 ? (Object.entries(counts).reduce((s,[k,v])=>s+(+k*v),0)/total).toFixed(1) : '—';
-    area.innerHTML = `<div class="resp-big">${total} <span>avg ${avg}</span></div>` +
-      Object.entries(counts).map(([val,cnt])=>`<div class="bar-wrap">
-        <div class="bar-label"><span>★ ${val}</span><span>${cnt}</span></div>
-        <div class="bar-bg"><div class="bar-fill" style="width:${total>0?Math.round(cnt/total*100):0}%"></div></div>
-      </div>`).join('');
-    return;
+    if (viewMode === 'word_cloud' && total > 0) {
+      const wc = buildWordCloud(responses.map(r => safeAnswer(r.answer)).join(' '));
+      area.innerHTML = `<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>${wc}`;
+    } else {
+      area.innerHTML = `<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>` +
+        (total===0 ? waiting : responses.map(r =>
+          `<div class="txt-resp">${escapeHtml(safeAnswer(r.answer))}<div class="from">— ${escapeHtml(r.name||'Anonymous')}</div></div>`
+        ).join(''));
+    }
+    requestFitToContent(); return;
   }
 
-  // Choice questions
-  const correct = (Array.isArray(curQ.correctAnswer) ? curQ.correctAnswer : [curQ.correctAnswer]).map(Number);
+  // ── Rating ─────────────────────────────────────────────────────────────────
+  if (curQ.type === 'rating') {
+    const max = curQ.ratingMax || 5;
+    const counts = {};
+    for (let i=1;i<=max;i++) counts[i]=0;
+    responses.forEach(r=>{ try{const v=JSON.parse(r.answer);if(v)counts[v]=(counts[v]||0)+1;}catch(e){} });
+    const avg = total>0 ? (Object.entries(counts).reduce((s,[k,v])=>s+(+k*v),0)/total).toFixed(1) : '—';
+    area.innerHTML = `<div class="resp-big">${total} <span>responses · avg ${avg} ★</span></div>` +
+      Object.entries(counts).map(([val,cnt])=>{
+        const p = total>0?Math.round(cnt/total*100):0;
+        return `<div class="bar-wrap" style="border-color:#f7b73144;box-shadow:0 0 10px #f7b73118;">
+          <div class="bar-fill-bg" style="background:#f7b731;width:${p}%;"></div>
+          <div class="bar-glow" style="background:#f7b731;box-shadow:0 0 8px #f7b731;width:${p}%;"></div>
+          <div class="bar-inner">
+            <span class="bar-letter" style="background:#f7b73122;border:1.5px solid #f7b731;color:#f7b731;box-shadow:0 0 6px #f7b73166;">★${val}</span>
+            <span class="bar-opt-text"></span>
+            <span class="bar-opt-count" style="color:#f7b731;">${cnt}</span>
+          </div>
+        </div>`;
+      }).join('');
+    requestFitToContent(); return;
+  }
+
+  if (!isChoice) { requestFitToContent(); return; }
+
+  // ── Choice: counts ─────────────────────────────────────────────────────────
+  const _ca = curQ.correctAnswer;
+  const hasC = _ca !== undefined && _ca !== null && _ca !== '' && !(Array.isArray(_ca)&&_ca.length===0);
+  const correct = hasC ? (Array.isArray(_ca)?_ca:[_ca]).map(Number) : [];
   const counts = (curQ.options||[]).map((_,i)=>({i,count:0}));
   responses.forEach(r=>{ try{const a=JSON.parse(r.answer);(Array.isArray(a)?a:[a]).forEach(v=>{if(counts[v])counts[v].count++;});}catch(e){} });
   const pct = c => total>0?Math.round(c/total*100):0;
-  const palette = ['#6c63ff','#ff6584','#43e97b','#f7b731','#4facfe','#a78bfa'];
 
   let inner = '';
+
+  // ── Word Cloud ─────────────────────────────────────────────────────────────
+  if (viewMode === 'word_cloud') {
+    const wordCounts = {};
+    (curQ.options||[]).forEach((opt,i) => { wordCounts[opt.text||('Option '+(i+1))] = 0; });
+    responses.forEach(r=>{ try{const a=JSON.parse(r.answer);(Array.isArray(a)?a:[a]).forEach(v=>{
+      const t=(curQ.options[v]||{}).text||''; if(t) wordCounts[t]=(wordCounts[t]||0)+1;
+    });}catch(e){} });
+    const words = Object.entries(wordCounts).filter(([,c])=>c>0).sort((a,b)=>b[1]-a[1]);
+    if (!words.length) {
+      area.innerHTML = `<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>${waiting}`;
+    } else {
+      const max=words[0][1], min=words[words.length-1][1];
+      inner = `<div class="word-cloud">${words.map(([w,c],idx)=>{
+        const sz = max===min ? 20 : Math.round(12+(c-min)/(max-min)*26);
+        const col = PS_COLORS[idx % PS_COLORS.length];
+        const rot = (Math.random()*8-4).toFixed(1);
+        return `<span style="font-size:${sz}px;color:${col};transform:rotate(${rot}deg);" title="${c}">${escapeHtml(w)}</span>`;
+      }).join('')}</div>`;
+      area.innerHTML = `<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>${inner}`;
+    }
+    requestFitToContent(); return;
+  }
+
+  // ── Leaderboard ────────────────────────────────────────────────────────────
   if (viewMode === 'leaderboard') {
     const sorted = [...responses].sort((a,b)=>{
       if(b.isCorrect===true&&a.isCorrect!==true)return 1;
@@ -580,53 +647,81 @@ function renderResults() {
       const score = revealed
         ? `<span class="p-score" style="color:${r.isCorrect===true?'var(--accent3)':r.isCorrect===false?'var(--accent2)':'var(--muted)'}">${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}</span>`
         : `<span class="p-score" style="color:var(--accent3)">●</span>`;
-      const speed = (revealed && r.elapsed) ? `<span style="font-size:10px;color:var(--muted);margin-left:6px;">${(r.elapsed/1000).toFixed(1)}s</span>` : '';
-      return `<div class="p-row">
-        <span class="p-rank">${revealed?(rank<3?medals[rank]:'#'+(rank+1)):'•'}</span>
-        <span class="p-name">${escapeHtml(r.name||'Anonymous')}${speed}</span>${score}
-      </div>`;
-    }).join('') || '<div style="color:var(--muted);font-size:13px;">Waiting…</div>';
+      const speed = (revealed&&r.elapsed)?`<span style="font-size:10px;color:var(--muted);margin-left:6px;">${(r.elapsed/1000).toFixed(1)}s</span>`:'';
+      return `<div class="p-row"><span class="p-rank">${revealed?(rank<3?medals[rank]:'#'+(rank+1)):'•'}</span><span class="p-name">${escapeHtml(r.name||'Anonymous')}${speed}</span>${score}</div>`;
+    }).join('') || waiting;
+
+  // ── Numbers ────────────────────────────────────────────────────────────────
   } else if (viewMode === 'number') {
-    inner = counts.map(({i,count})=>`
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:28px;color:${(revealed&&correct.includes(i))?'var(--accent3)':'var(--accent)'};min-width:54px;">${count}</div>
-        <div><div style="font-size:14px;font-weight:600;">${letters[i]}. ${escapeHtml((curQ.options[i]||{}).text||'')}</div>
-        <div style="font-size:12px;color:var(--muted);">${pct(count)}%</div></div>
-      </div>`).join('');
+    inner = counts.map(({i,count})=>{
+      const color = (revealed&&correct.includes(i)) ? '#43e97b' : PS_COLORS[i%PS_COLORS.length];
+      return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+        <div style="font-family:'Syne',sans-serif;font-weight:900;font-size:28px;color:${color};min-width:48px;text-shadow:0 0 12px ${color}88;">${count}</div>
+        <div><div style="font-size:13px;font-weight:600;">${letters[i]}. ${escapeHtml((curQ.options[i]||{}).text||'')}</div>
+        <div style="font-size:11px;color:var(--muted);">${pct(count)}%</div></div>
+      </div>`;
+    }).join('');
+
+  // ── Donut ──────────────────────────────────────────────────────────────────
   } else if (viewMode === 'donut') {
-    let cum=0; const r0=16, cx=21, cy=21;
+    let cum=0; const r0=16,cx=21,cy=21;
     const segs = counts.filter(c=>c.count>0).map(({i,count})=>{
       const frac=total>0?count/total:0; const start=cum; cum+=frac;
       const a0=start*2*Math.PI-Math.PI/2, a1=cum*2*Math.PI-Math.PI/2;
       const large=frac>0.5?1:0;
-      const x0=cx+r0*Math.cos(a0), y0=cy+r0*Math.sin(a0);
-      const x1=cx+r0*Math.cos(a1), y1=cy+r0*Math.sin(a1);
-      return `<path d="M ${x0} ${y0} A ${r0} ${r0} 0 ${large} 1 ${x1} ${y1}" fill="none" stroke="${palette[i%palette.length]}" stroke-width="7"/>`;
+      const x0=cx+r0*Math.cos(a0),y0=cy+r0*Math.sin(a0);
+      const x1=cx+r0*Math.cos(a1),y1=cy+r0*Math.sin(a1);
+      return `<path d="M ${x0} ${y0} A ${r0} ${r0} 0 ${large} 1 ${x1} ${y1}" fill="none" stroke="${PS_COLORS[i%PS_COLORS.length]}" stroke-width="7"/>`;
     }).join('');
     const legend = counts.map(({i,count})=>`
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;">
-        <span style="width:12px;height:12px;border-radius:3px;background:${palette[i%palette.length]};"></span>
+        <span style="width:10px;height:10px;border-radius:50%;background:${PS_COLORS[i%PS_COLORS.length]};box-shadow:0 0 6px ${PS_COLORS[i%PS_COLORS.length]};flex-shrink:0;"></span>
         <span style="flex:1;">${letters[i]}. ${escapeHtml((curQ.options[i]||{}).text||'')}</span>
         <span style="font-family:'Syne',sans-serif;font-weight:700;">${pct(count)}%</span>
       </div>`).join('');
     inner = `<div style="display:flex;justify-content:center;margin-bottom:14px;">
-      <svg viewBox="0 0 42 42" style="width:140px;height:140px;">${segs||'<circle cx="21" cy="21" r="16" fill="none" stroke="var(--surface2)" stroke-width="7"/>'}</svg></div>${legend}`;
+      <svg viewBox="0 0 42 42" style="width:130px;height:130px;">${segs||'<circle cx="21" cy="21" r="16" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="7"/>'}</svg></div>${legend}`;
+
+  // ── Neon Glass Bars (default) ──────────────────────────────────────────────
   } else {
-    // Bars (default)
     inner = counts.map(({i,count})=>{
-      const opt=(curQ.options[i]||{});
+      const opt = curQ.options[i] || {};
       const showCorrect = revealed && correct.includes(i);
-      const badge = showCorrect ? ` <span style="font-size:10px;font-weight:700;color:var(--accent3);background:rgba(67,233,123,0.16);padding:1px 7px;border-radius:100px;">✓ Correct</span>` : '';
-      return `<div class="bar-wrap">
-        <div class="bar-label"><span>${letters[i]}. ${escapeHtml(opt.text||'')}${badge}</span><span>${count} (${pct(count)}%)</span></div>
-        <div class="bar-bg"><div class="bar-fill ${showCorrect?'correct':''}" style="width:${pct(count)}%"></div></div>
+      const color = showCorrect ? '#43e97b' : PS_COLORS[i%PS_COLORS.length];
+      const p = pct(count);
+      const badge = showCorrect ? `<span style="font-size:10px;font-weight:700;color:#43e97b;background:rgba(67,233,123,0.16);padding:1px 6px;border-radius:100px;margin-left:5px;">✓</span>` : '';
+      const imgHtml = opt.img ? `<img src="${escapeHtml(opt.img)}" class="bar-opt-img" onerror="this.style.display='none'">` : '';
+      return `<div class="bar-wrap" style="border-color:${color}44;box-shadow:0 0 12px ${color}18;">
+        <div class="bar-fill-bg" style="background:${color};width:${p}%;"></div>
+        <div class="bar-glow" style="background:${color};box-shadow:0 0 8px ${color};width:${p}%;"></div>
+        <div class="bar-inner">
+          <span class="bar-letter" style="background:${color}22;border:1.5px solid ${color};color:${color};box-shadow:0 0 6px ${color}55;">${letters[i]}</span>
+          ${imgHtml}
+          <span class="bar-opt-text">${escapeHtml(opt.text||'')}${badge}</span>
+          <span class="bar-opt-count" style="color:${color};text-shadow:0 0 8px ${color}88;">${count}</span>
+        </div>
       </div>`;
     }).join('');
   }
 
-  area.innerHTML = `<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>${inner}`;
-  // After rendering, ask the Mac window to fit the content so every response shows
+  area.innerHTML = `<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>${inner||waiting}`;
   requestFitToContent();
+}
+
+function buildWordCloud(text) {
+  const wordCounts = {};
+  text.toLowerCase().replace(/[^a-z0-9\s]/g,'').split(/\s+/).forEach(w=>{
+    if (w.length > 2 && !STOP_WORDS.has(w)) wordCounts[w]=(wordCounts[w]||0)+1;
+  });
+  const words = Object.entries(wordCounts).filter(([,c])=>c>0).sort((a,b)=>b[1]-a[1]).slice(0,40);
+  if (!words.length) return '<div style="color:var(--muted);font-size:13px;">Waiting for responses…</div>';
+  const max=words[0][1], min=words[words.length-1][1];
+  return `<div class="word-cloud">${words.map(([w,c],i)=>{
+    const sz = max===min ? 20 : Math.round(12+(c-min)/(max-min)*26);
+    const col = PS_COLORS[i%PS_COLORS.length];
+    const rot = (Math.random()*8-4).toFixed(1);
+    return `<span style="font-size:${sz}px;color:${col};transform:rotate(${rot}deg);" title="${c}">${escapeHtml(w)}</span>`;
+  }).join('')}</div>`;
 }
 
 function safeAnswer(a) {
