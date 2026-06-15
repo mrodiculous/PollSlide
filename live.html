@@ -589,7 +589,7 @@ function buildPostRevealContent(q, resps) {
       const score = `<span style="color:${r.isCorrect===true?'#43e97b':r.isCorrect===false?'#ff6584':'var(--muted)'};">${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}</span>`;
       return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
         <span style="width:28px;text-align:center;font-size:14px;">${rank<3?medals[rank]:'#'+(rank+1)}</span>
-        <span style="flex:1;font-size:14px;font-weight:600;">${escHtml(r.name||'Anonymous')}${speed}</span>${score}</div>`;
+        <span style="flex:1;font-size:14px;font-weight:600;">${escHtml(r.name && r.name.trim() ? r.name : 'Player '+(rank+1))}${speed}</span>${score}</div>`;
     }).join('')||'<div style="color:var(--muted);font-size:14px;">No responses yet.</div>';
     return `<div style="font-size:12px;font-weight:700;color:#a78bfa;letter-spacing:.06em;margin-bottom:10px;">✦ LEADERBOARD</div>${rows}`;
   }
@@ -602,7 +602,7 @@ function buildPostRevealContent(q, resps) {
       if(!r)return`<div style="flex:1;"></div>`;
       return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
         <div style="font-size:26px;">${medals[i]}</div>
-        <div style="font-size:13px;font-weight:700;color:#fff;text-align:center;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(r.name||'Anonymous')}</div>
+        <div style="font-size:13px;font-weight:700;color:#fff;text-align:center;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(r.name && r.name.trim() ? r.name : 'Player '+(i+1))}</div>
         ${r.elapsed?`<div style="font-size:10px;color:var(--muted);">${(r.elapsed/1000).toFixed(1)}s</div>`:''}
         <div style="width:100%;height:${heights[i]};background:${cols[i]};border-radius:8px 8px 0 0;box-shadow:0 0 18px ${cols[i]}88;"></div>
       </div>`;
@@ -679,7 +679,7 @@ function renderChart(q, responses) {
     el.innerHTML = responses.map(r =>
       `<div class="resp-bubble">
         <div class="resp-text">${escHtml(safeAnswer(r.answer))}</div>
-        <div class="resp-name">— ${escHtml(r.name||'Anonymous')}</div>
+        <div class="resp-name">— ${escHtml(r.name && r.name.trim() ? r.name : 'Anonymous')}</div>
       </div>`
     ).join('') || '<div style="color:var(--muted);font-size:14px;padding:8px 0;">Waiting for responses…</div>';
     return;

@@ -143,6 +143,9 @@
   .qr-info h3 { font-family:'Syne',sans-serif; font-size:14px; font-weight:800; margin-bottom:4px; }
   .qr-info p { font-size:12px; color:var(--muted); line-height:1.4; }
   .qr-collapsed { cursor:pointer; }
+  @keyframes fadeInScale { from { opacity:0; transform:scale(0.96); } to { opacity:1; transform:scale(1); } }
+  @keyframes podiumRise { from { height:0; opacity:0; } to { opacity:1; } }
+  @keyframes barGrow { from { width:0; } }
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
@@ -157,6 +160,7 @@
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>
   <span class="logo-txt">PollSlide</span>
   <span class="live-pill" id="livePill" style="display:none;">LIVE</span>
+  <span class="live-pill" id="progressPill" style="display:none;color:var(--muted);background:var(--surface2);"></span>
 </div>
 
 <div class="toggle-bar" id="toggleBar" style="display:none;">
@@ -229,6 +233,7 @@ let presentPhase = 'live'; // 'live' | 'revealed' | 'post_reveal' — mirrors pr
 let macLinkRef = null;
 let liveQRef = null;
 let phaseRef = null; // watches currentQuestion/phase in QR-targeted mode
+let _recentResponses = []; // timestamps of recent responses for velocity calc
 
 // View toggle
 function toggleMedia() {
@@ -328,6 +333,8 @@ function showTargetedQuestion(session, qIdx) {
     phaseRef.on('value', pSnap => {
       const cq = pSnap.val();
       if (!cq) return;
+      // Only react if this currentQuestion is the same question the QR points to
+      if (cq.id && cq.id !== curQId) return;
       const newPhase = cq.phase || 'live';
       // Also pull postReveal config from live currentQuestion if available
       if (cq.postReveal && curQ) curQ = Object.assign({}, curQ, { postReveal: cq.postReveal });
@@ -357,6 +364,7 @@ function watchMacLink() {
 
 function watchLiveQuestion() {
   if (liveQRef) { liveQRef.off(); liveQRef = null; }
+  if (phaseRef) { phaseRef.off(); phaseRef = null; }
   liveQRef = db.ref(`sessions/${sessionCode}/currentQuestion`);
   liveQRef.on('value', snap => {
     const q = snap.val();
@@ -379,6 +387,24 @@ function watchLiveQuestion() {
     curQ = q;
     renderAll();
   });
+
+  // Belt-and-suspenders: also watch phase directly for post-reveal
+  if (phaseRef) { phaseRef.off(); phaseRef = null; }
+  phaseRef = db.ref(`sessions/${sessionCode}/currentQuestion`);
+  phaseRef.on('value', pSnap => {
+    const cq = pSnap.val();
+    if (!cq || !cq.id) return;
+    // Only handle same-question phase changes; new questions are handled by liveQRef
+    if (cq.id !== curQId) return;
+    const newPhase = cq.phase || 'live';
+    if (cq.postReveal) {
+      if (curQ) curQ = Object.assign({}, curQ, { postReveal: cq.postReveal });
+    }
+    if (newPhase !== presentPhase) {
+      presentPhase = newPhase;
+      renderAll();
+    }
+  });
 }
 
 function watchResponses(qId) {
@@ -389,7 +415,15 @@ function watchResponses(qId) {
     const all = snap.exists() ? Object.values(snap.val()) : [];
     // Only use responses from the current live session — ignore stale data
     // left over in Firebase from a previous run of this same question.
-    responses = all.filter(r => (r.submittedAt||0) >= liveStartedAt);
+    const newResponses = all.filter(r => (r.submittedAt||0) >= liveStartedAt);
+    // Track timestamps for velocity indicator (Feature 5)
+    const newCount = newResponses.length;
+    if (newCount > responses.length) {
+      for (let i = responses.length; i < newCount; i++) {
+        _recentResponses.push(Date.now());
+      }
+    }
+    responses = newResponses;
     if (responses.length > 0 && !revealArmed && !revealed) beginRevealCountdown();
     renderAll();
   });
@@ -399,6 +433,7 @@ function watchResponses(qId) {
 function resetReveal(q) {
   revealed = false; revealArmed = false;
   if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
+  _recentResponses = [];
   const d = q.revealDelay;
   revealSeconds = (d === 'manual' || d === -1) ? -1 : ((d === undefined || d === null) ? 30 : +d);
   // Quiz = choice type. These wait for reveal. Only free_text/rating show immediately.
@@ -423,6 +458,15 @@ function beginRevealCountdown() {
 function renderAll() {
   if (!curQ) return;
   document.getElementById('livePill').style.display = '';
+  const progPill = document.getElementById('progressPill');
+  if (progPill) {
+    if (curQ.index && curQ.total) {
+      progPill.textContent = `Q${curQ.index} / ${curQ.total}`;
+      progPill.style.display = '';
+    } else {
+      progPill.style.display = 'none';
+    }
+  }
   const rBtn = document.getElementById('revealBtn');
   if (rBtn) { rBtn.classList.toggle('active', revealed); }
   const mBtn = document.getElementById('mediaToggleBtn');
@@ -631,13 +675,16 @@ function buildPostRevealContent(q, resps) {
   const medals = ['🥇','🥈','🥉'];
 
   if (type === 'leaderboard') {
+    const fastestIdx = sorted.findIndex(r => r.isCorrect === true);
     const rows = sorted.map((r,rank) => {
       const speed = r.elapsed ? `<span style="font-size:10px;color:var(--muted);margin-left:5px;">${(r.elapsed/1000).toFixed(1)}s</span>` : '';
       const score = `<span style="color:${r.isCorrect===true?'#43e97b':r.isCorrect===false?'#ff6584':'var(--muted)'};font-size:13px;">${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}</span>`;
+      const isFastest = rank === fastestIdx && r.isCorrect === true;
+      const fastBadge = isFastest ? `<span style="font-size:11px;background:#f7b73122;border:1px solid #f7b731;border-radius:6px;padding:1px 6px;color:#f7b731;flex-shrink:0;">⚡ Fastest</span>` : '';
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
         <span style="width:22px;text-align:center;font-size:12px;">${rank<3?medals[rank]:'#'+(rank+1)}</span>
-        <span style="flex:1;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.name||'Anonymous')}${speed}</span>
-        ${score}</div>`;
+        <span style="flex:1;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.name && r.name.trim() ? r.name : 'Player '+(rank+1))}${speed}</span>
+        ${fastBadge}${score}</div>`;
     }).join('') || '<div style="color:var(--muted);font-size:13px;">No responses yet.</div>';
     return `<div style="font-size:11px;font-weight:700;color:#a78bfa;letter-spacing:.06em;margin-bottom:8px;">✦ LEADERBOARD</div>${rows}`;
   }
@@ -653,9 +700,9 @@ function buildPostRevealContent(q, resps) {
       if (!r) return `<div style="flex:1;"></div>`;
       return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;">
         <div style="font-size:18px;">${medals[i]}</div>
-        <div style="font-size:11px;font-weight:700;color:#fff;text-align:center;max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.name||'Anonymous')}</div>
+        <div style="font-size:11px;font-weight:700;color:#fff;text-align:center;max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.name && r.name.trim() ? r.name : 'Player '+(i+1))}</div>
         ${r.elapsed?`<div style="font-size:9px;color:var(--muted);">${(r.elapsed/1000).toFixed(1)}s</div>`:''}
-        <div style="width:100%;height:${heights[i]};background:${cols[i]};border-radius:6px 6px 0 0;box-shadow:0 0 14px ${cols2[i]};"></div>
+        <div style="width:100%;height:${heights[i]};background:${cols[i]};border-radius:6px 6px 0 0;box-shadow:0 0 14px ${cols2[i]};animation:podiumRise 0.6s ${0.1*i}s ease both;"></div>
       </div>`;
     });
     return `<div style="font-size:11px;font-weight:700;color:#a78bfa;letter-spacing:.06em;margin-bottom:10px;">✦ TOP 3</div>
@@ -673,7 +720,7 @@ function buildPostRevealContent(q, resps) {
       <div style="margin-top:12px;font-size:18px;">${emoji}</div>
       <div style="font-size:14px;font-weight:700;color:${col};margin-top:2px;">${label}</div>
       <div style="height:5px;background:rgba(255,255,255,0.08);border-radius:3px;margin-top:14px;overflow:hidden;">
-        <div style="height:100%;width:${pct}%;background:${col};box-shadow:0 0 8px ${col};border-radius:3px;"></div>
+        <div style="height:100%;--target-w:${pct}%;width:var(--target-w);background:${col};box-shadow:0 0 8px ${col};border-radius:3px;animation:barGrow 1s .3s ease both;"></div>
       </div></div>`;
   }
 
@@ -693,7 +740,7 @@ function renderResults() {
   // Post-reveal phase: replace chart with post-reveal content
   if (presentPhase === 'post_reveal' && curQ.postReveal?.enabled) {
     const label = {leaderboard:'Leaderboard',podium:'Podium',scorecard:'Score Card',explainer:'Explainer'}[curQ.postReveal.type]||'Post-Reveal';
-    area.innerHTML = `<div class="resp-big">${responses.length} <span>responses · ${label}</span></div>${buildPostRevealContent(curQ, responses)}`;
+    area.innerHTML = `<div style="animation:fadeInScale .4s ease;" class="resp-big">${responses.length} <span>responses · ${label}</span></div>${buildPostRevealContent(curQ, responses)}`;
     requestFitToContent();
     return;
   }
@@ -710,7 +757,7 @@ function renderResults() {
     } else {
       area.innerHTML = `<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>` +
         (total===0 ? waiting : responses.map(r =>
-          `<div class="txt-resp">${escapeHtml(safeAnswer(r.answer))}<div class="from">— ${escapeHtml(r.name||'Anonymous')}</div></div>`
+          `<div class="txt-resp">${escapeHtml(safeAnswer(r.answer))}<div class="from">— ${escapeHtml(r.name && r.name.trim() ? r.name : 'Anonymous')}</div></div>`
         ).join(''));
     }
     requestFitToContent(); return;
@@ -787,7 +834,7 @@ function renderResults() {
         ? `<span class="p-score" style="color:${r.isCorrect===true?'var(--accent3)':r.isCorrect===false?'var(--accent2)':'var(--muted)'}">${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}</span>`
         : `<span class="p-score" style="color:var(--accent3)">●</span>`;
       const speed = (revealed&&r.elapsed)?`<span style="font-size:10px;color:var(--muted);margin-left:6px;">${(r.elapsed/1000).toFixed(1)}s</span>`:'';
-      return `<div class="p-row"><span class="p-rank">${revealed?(rank<3?medals[rank]:'#'+(rank+1)):'•'}</span><span class="p-name">${escapeHtml(r.name||'Anonymous')}${speed}</span>${score}</div>`;
+      return `<div class="p-row"><span class="p-rank">${revealed?(rank<3?medals[rank]:'#'+(rank+1)):'•'}</span><span class="p-name">${escapeHtml(r.name && r.name.trim() ? r.name : 'Player '+(rank+1))}${speed}</span>${score}</div>`;
     }).join('') || waiting;
 
   // ── Numbers ────────────────────────────────────────────────────────────────
@@ -836,7 +883,7 @@ function renderResults() {
             <div style="position:absolute;inset:0;background:linear-gradient(180deg,${color}ff,${color}99);border-radius:6px 6px 0 0;"></div>
           </div>
           <div style="margin-top:6px;width:22px;height:22px;border-radius:50%;background:${color}22;border:1.5px solid ${color};color:${color};font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 0 6px ${color}55;">${letters[i]}</div>
-          <div style="font-size:10px;color:var(--muted);margin-top:3px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;max-width:52px;">${escapeHtml((opt.text||'').slice(0,12))}</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:3px;text-align:center;width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">${escapeHtml(opt.text||'')}</div>
         </div>`;
       }).join('') + `</div>`;
 
@@ -902,7 +949,25 @@ function renderResults() {
     }).join('');
   }
 
-  area.innerHTML = `<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>${inner||waiting}`;
+  // Feature 5 — Response velocity indicator (only when live, not revealed)
+  let velChip = '';
+  if (!revealed) {
+    const now = Date.now();
+    _recentResponses = _recentResponses.filter(t => now - t < 10000);
+    const velocity = _recentResponses.length;
+    velChip = velocity >= 3 ? `<div style="font-size:11px;color:#f7b731;margin-bottom:8px;">🔥 ${velocity} responses in 10s</div>` : '';
+  }
+
+  // Feature 1 — Smart insight chip after reveal (choice questions with correct answer)
+  let insightChip = '';
+  if (revealed && correct.length > 0 && total > 0 && presentPhase !== 'post_reveal') {
+    const correctCount = counts.filter(c => correct.includes(c.i)).reduce((s, c) => s + c.count, 0);
+    const pctVal = Math.round(correctCount / total * 100);
+    const [emoji, msg, col] = pctVal >= 80 ? ['🎉','Most got it right!','#43e97b'] : pctVal >= 50 ? ['👏','Over half correct!','#6c63ff'] : pctVal >= 25 ? ['🤔','Tricky one!','#f7b731'] : ['😅','Tough crowd!','#ff6584'];
+    insightChip = `<div style="display:flex;align-items:center;gap:7px;background:${col}18;border:1px solid ${col}44;border-radius:10px;padding:7px 12px;margin-bottom:12px;font-size:12px;font-weight:700;color:${col};">${emoji} ${msg} <span style="margin-left:auto;font-family:Syne,sans-serif;font-size:13px;">${pctVal}% correct</span></div>`;
+  }
+
+  area.innerHTML = `<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>${velChip}${insightChip}${inner||waiting}`;
   requestFitToContent();
 }
 

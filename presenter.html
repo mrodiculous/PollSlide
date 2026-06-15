@@ -2240,9 +2240,10 @@ function listenResponses(qIdx, qId, q) {
           const scoreCell = revealed
             ? `<div class="p-score" style="color:${r.isCorrect===true?'var(--accent3)':r.isCorrect===false?'var(--accent2)':'var(--muted)'}">${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}</div>`
             : `<div class="p-score" style="color:var(--accent3)">●</div>`;
+          const displayName = r.name && r.name.trim() ? r.name : 'Anonymous';
           return `<div class="p-row">
-            <div class="p-av">${(r.name||'?')[0].toUpperCase()}</div>
-            <div class="p-name">${r.name||'Anonymous'}</div>
+            <div class="p-av">${displayName[0].toUpperCase()}</div>
+            <div class="p-name">${displayName}</div>
             ${scoreCell}
           </div>`;
         }).join('');
@@ -2386,11 +2387,13 @@ function doReveal() {
       renderRightPanel(questions[liveQIdx], responses);
       const pList = document.getElementById('pList');
       if (pList && responses.length) {
-        pList.innerHTML = responses.map(r =>
-          `<div class="p-row"><div class="p-av">${(r.name||'?')[0].toUpperCase()}</div>
-            <div class="p-name">${r.name||'Anonymous'}</div>
+        pList.innerHTML = responses.map(r => {
+          const dn = r.name && r.name.trim() ? r.name : 'Anonymous';
+          return `<div class="p-row"><div class="p-av">${dn[0].toUpperCase()}</div>
+            <div class="p-name">${dn}</div>
             <div class="p-score" style="color:${r.isCorrect===true?'var(--accent3)':r.isCorrect===false?'var(--accent2)':'var(--muted)'}">${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}</div>
-          </div>`).join('');
+          </div>`;
+        }).join('');
       }
     });
   }
@@ -2429,7 +2432,7 @@ function buildPostRevealContent(q, responses) {
     const rows = sorted.map((r,rank) => {
       const speed = r.elapsed ? `<span style="font-size:10px;color:var(--muted);margin-left:6px;">${(r.elapsed/1000).toFixed(1)}s</span>` : '';
       const score = `<span style="color:${r.isCorrect===true?'var(--accent3)':r.isCorrect===false?'var(--accent2)':'var(--muted)'}">${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}</span>`;
-      return `<div class="p-row"><div style="width:24px;text-align:center;">${rank<3?medals[rank]:'#'+(rank+1)}</div><div class="p-name">${escapeHtml(r.name||'Anonymous')}${speed}</div>${score}</div>`;
+      return `<div class="p-row"><div style="width:24px;text-align:center;">${rank<3?medals[rank]:'#'+(rank+1)}</div><div class="p-name">${escapeHtml(r.name && r.name.trim() ? r.name : 'Player '+(rank+1))}${speed}</div>${score}</div>`;
     }).join('') || '<div style="color:var(--muted);font-size:13px;">No responses yet.</div>';
     return `<div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:10px;letter-spacing:.04em;">✦ LEADERBOARD</div>${rows}`;
   }
@@ -2446,7 +2449,7 @@ function buildPostRevealContent(q, responses) {
       const speed = r.elapsed ? `<div style="font-size:10px;color:var(--muted);margin-top:2px;">${(r.elapsed/1000).toFixed(1)}s</div>` : '';
       return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
         <div style="font-size:22px;">${medals[i]}</div>
-        <div style="font-size:12px;font-weight:700;text-align:center;color:#fff;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.name||'Anonymous')}</div>
+        <div style="font-size:12px;font-weight:700;text-align:center;color:#fff;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.name && r.name.trim() ? r.name : 'Player '+(i+1))}</div>
         ${speed}
         <div style="width:100%;height:${heights[i]};background:${PS_COLORS[i]};border-radius:8px 8px 0 0;opacity:0.85;box-shadow:0 0 18px ${PS_COLORS[i]}66;"></div>
       </div>`;
@@ -2615,7 +2618,7 @@ function renderRightPanel(q, responses) {
         const speedLabel = (revealed && r.elapsed) ? `<span style="font-size:10px;color:var(--muted);margin-left:6px;">${(r.elapsed/1000).toFixed(1)}s</span>` : '';
         return `<div class="p-row">
           <div style="width:24px;text-align:center;font-size:13px;">${revealed?(rank<3?medals[rank]:'#'+(rank+1)):'•'}</div>
-          <div class="p-name">${r.name||'Anonymous'}${speedLabel}</div>
+          <div class="p-name">${r.name && r.name.trim() ? r.name : 'Player '+(rank+1)}${speedLabel}</div>
           ${scoreCell}
         </div>`;
       }).join('') || '<div style="color:var(--muted);font-size:13px;">Waiting...</div>';
@@ -3990,6 +3993,8 @@ function openPresentMode() {
   // Tick the countdown label in present mode every second (no full re-render)
   if (_presentCountdownTicker) clearInterval(_presentCountdownTicker);
   _presentCountdownTicker = setInterval(() => {
+    // Skip full re-render if post-reveal countdown is ticking (timer handles badge)
+    if (postRevealTimer && postRevealCountdown > 0) return;
     const lbl = document.getElementById('presentRevealBadge');
     if (!lbl) return;
     lbl.innerHTML = buildRevealBadgeHtml(questions[_presentIdx]);
@@ -4037,6 +4042,8 @@ function presentNav(dir) {
   if (postRevealTimer) { clearInterval(postRevealTimer); postRevealTimer = null; }
   postRevealPhase = false;
   postRevealCountdown = 0;
+  revealed = false;
+  revealArmed = false;
   selectQ(newIdx);
   _presentIdx = newIdx;
   _lastPresResponses = [];
