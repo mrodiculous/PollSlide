@@ -315,7 +315,7 @@ function showTargetedQuestion(session, qIdx) {
     const questions = snap.exists() ? snap.val() : [];
     const q = Array.isArray(questions) ? questions[qIdx] : null;
     if (!q || !q.text) { showWaiting('Question not found for this slide.'); return; }
-    const qId = q.id || `q${qIdx}_stable_${session}`;
+    const qId = `q${qIdx}_stable_${session}`; // always use stable QID — matches presenter's stableQId
     const qObj = Object.assign({}, q, { id: qId, qIndex: qIdx });
     if (curQId !== qId) {
       curQId = qId;
@@ -379,13 +379,18 @@ function watchLiveQuestion() {
     if (curQId !== q.id) {
       curQId = q.id;
       resetReveal(q);
+      showMedia = false; // reset media to OFF for each new question
       viewMode = q.displayMode || 'bars';
       presentPhase = q.phase || 'live';
       liveStartedAt = q.launchedAt || Date.now();
       watchResponses(q.id);
     } else {
-      // Same question — update phase if presenter advanced it
+      // Same question — update phase and merge any new postReveal config from Firebase
       presentPhase = q.phase || 'live';
+      if (q.postReveal !== undefined) {
+        // Always sync postReveal from Firebase — presenter may have written it after publishLive
+        curQ = Object.assign({}, curQ, { postReveal: q.postReveal });
+      }
     }
     // Sync local revealed flag from presenter's phase — critical for
     // correct-answer highlighting, medals, and insight chip
@@ -683,8 +688,9 @@ function buildPostRevealContent(q, resps) {
   const type = q.postReveal?.type || 'leaderboard';
   const total = resps.length;
   const sorted = [...resps].sort((a,b) => {
-    if (b.isCorrect===true && a.isCorrect!==true) return 1;
-    if (a.isCorrect===true && b.isCorrect!==true) return -1;
+    const sa = a.isCorrect===true?1:(typeof a.isCorrect==='number'?a.isCorrect:0);
+    const sb = b.isCorrect===true?1:(typeof b.isCorrect==='number'?b.isCorrect:0);
+    if (sb!==sa) return sb-sa;
     return (a.elapsed||999999)-(b.elapsed||999999);
   });
   const medals = ['🥇','🥈','🥉'];
@@ -693,7 +699,10 @@ function buildPostRevealContent(q, resps) {
     const fastestIdx = sorted.findIndex(r => r.isCorrect === true);
     const rows = sorted.map((r,rank) => {
       const speed = r.elapsed ? `<span style="font-size:10px;color:var(--muted);margin-left:5px;">${(r.elapsed/1000).toFixed(1)}s</span>` : '';
-      const score = `<span style="color:${r.isCorrect===true?'#43e97b':r.isCorrect===false?'#ff6584':'var(--muted)'};font-size:13px;">${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}</span>`;
+      const _psc = r.isCorrect===true?1:(typeof r.isCorrect==='number'?r.isCorrect:r.isCorrect===false?-1:null);
+      const _pCol = _psc===1?'#43e97b':_psc===-1?'#ff6584':_psc!==null?'#f7b731':'var(--muted)';
+      const _pTxt = _psc===1?'✓':_psc===-1?'✗':_psc!==null?Math.round(_psc*100)+'%':'·';
+      const score = `<span style="color:${_pCol};font-size:13px;">${_pTxt}</span>`;
       const isFastest = rank === fastestIdx && r.isCorrect === true;
       const fastBadge = isFastest ? `<span style="font-size:11px;background:#f7b73122;border:1px solid #f7b731;border-radius:6px;padding:1px 6px;color:#f7b731;flex-shrink:0;">⚡ Fastest</span>` : '';
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
@@ -839,14 +848,18 @@ function renderResults() {
   // ── Leaderboard ────────────────────────────────────────────────────────────
   if (viewMode === 'leaderboard') {
     const sorted = [...responses].sort((a,b)=>{
-      if(b.isCorrect===true&&a.isCorrect!==true)return 1;
-      if(a.isCorrect===true&&b.isCorrect!==true)return -1;
+      const sa=a.isCorrect===true?1:(typeof a.isCorrect==='number'?a.isCorrect:0);
+      const sb=b.isCorrect===true?1:(typeof b.isCorrect==='number'?b.isCorrect:0);
+      if(sb!==sa) return sb-sa;
       return (a.elapsed||999999)-(b.elapsed||999999);
     });
     const medals=['🥇','🥈','🥉'];
     inner = sorted.map((r,rank)=>{
+      const _ls=r.isCorrect===true?1:(typeof r.isCorrect==='number'?r.isCorrect:r.isCorrect===false?-1:null);
+      const _lc=_ls===1?'var(--accent3)':_ls===-1?'var(--accent2)':_ls!==null?'#f7b731':'var(--muted)';
+      const _lt=_ls===1?'✓':_ls===-1?'✗':_ls!==null?Math.round(_ls*100)+'%':'·';
       const score = revealed
-        ? `<span class="p-score" style="color:${r.isCorrect===true?'var(--accent3)':r.isCorrect===false?'var(--accent2)':'var(--muted)'}">${r.isCorrect===true?'✓':r.isCorrect===false?'✗':'·'}</span>`
+        ? `<span class="p-score" style="color:${_lc}">${_lt}</span>`
         : `<span class="p-score" style="color:var(--accent3)">●</span>`;
       const speed = (revealed&&r.elapsed)?`<span style="font-size:10px;color:var(--muted);margin-left:6px;">${(r.elapsed/1000).toFixed(1)}s</span>`:'';
       return `<div class="p-row"><span class="p-rank">${revealed?(rank<3?medals[rank]:'#'+(rank+1)):'•'}</span><span class="p-name">${escapeHtml(r.name && r.name.trim() ? r.name : 'Player '+(rank+1))}${speed}</span>${score}</div>`;
@@ -865,14 +878,14 @@ function renderResults() {
 
   // ── Donut ──────────────────────────────────────────────────────────────────
   } else if (viewMode === 'donut') {
-    let cum=0; const r0=16,cx=21,cy=21;
+    let cum=0; const r0=38,cx=46,cy=46;
     const segs = counts.filter(c=>c.count>0).map(({i,count})=>{
       const frac=total>0?count/total:0; const start=cum; cum+=frac;
       const a0=start*2*Math.PI-Math.PI/2, a1=cum*2*Math.PI-Math.PI/2;
       const large=frac>0.5?1:0;
       const x0=cx+r0*Math.cos(a0),y0=cy+r0*Math.sin(a0);
       const x1=cx+r0*Math.cos(a1),y1=cy+r0*Math.sin(a1);
-      return `<path d="M ${x0} ${y0} A ${r0} ${r0} 0 ${large} 1 ${x1} ${y1}" fill="none" stroke="${PS_COLORS[i%PS_COLORS.length]}" stroke-width="7"/>`;
+      return `<path d="M ${x0} ${y0} A ${r0} ${r0} 0 ${large} 1 ${x1} ${y1}" fill="none" stroke="${PS_COLORS[i%PS_COLORS.length]}" stroke-width="14" stroke-linecap="butt"/>`;
     }).join('');
     const legend = counts.map(({i,count})=>`
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;">
@@ -881,7 +894,7 @@ function renderResults() {
         <span style="font-family:'Syne',sans-serif;font-weight:700;">${pct(count)}%</span>
       </div>`).join('');
     inner = `<div style="display:flex;justify-content:center;margin-bottom:14px;">
-      <svg viewBox="0 0 42 42" style="width:130px;height:130px;">${segs||'<circle cx="21" cy="21" r="16" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="7"/>'}</svg></div>${legend}`;
+      <svg viewBox="0 0 92 92" style="width:140px;height:140px;filter:drop-shadow(0 0 6px rgba(108,99,255,0.3));">${segs||'<circle cx="46" cy="46" r="38" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="14"/>'}</svg></div>${legend}`;
 
   // ── Column chart (vertical bars) ──────────────────────────────────────────
   } else if (viewMode === 'column') {
@@ -915,7 +928,7 @@ function renderResults() {
 
   // ── Pie chart ──────────────────────────────────────────────────────────────
   } else if (viewMode === 'pie') {
-    let cum=0; const r0=18,cx=21,cy=21;
+    let cum=0; const r0=45,cx=50,cy=50;
     const segs = counts.filter(c=>c.count>0).map(({i,count})=>{
       const frac=total>0?count/total:0; const start=cum; cum+=frac;
       const a0=start*2*Math.PI-Math.PI/2, a1=cum*2*Math.PI-Math.PI/2;
@@ -924,7 +937,7 @@ function renderResults() {
       const x1=cx+r0*Math.cos(a1),y1=cy+r0*Math.sin(a1);
       const mx=cx+r0*Math.cos((a0+a1)/2)*0.6, my=cy+r0*Math.sin((a0+a1)/2)*0.6;
       const col = PS_COLORS[i%PS_COLORS.length];
-      return `<path d="M ${cx} ${cy} L ${x0} ${y0} A ${r0} ${r0} 0 ${large} 1 ${x1} ${y1} Z" fill="${col}" opacity="0.85" filter="url(#glow${i})"/>`;
+      return `<path d="M ${cx} ${cy} L ${x0} ${y0} A ${r0} ${r0} 0 ${large} 1 ${x1} ${y1} Z" fill="${col}" opacity="0.9"/>`;
     }).join('');
     const legend = counts.map(({i,count})=>`
       <div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;">

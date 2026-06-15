@@ -461,9 +461,20 @@ async function submitToDb(answer) {
       const a = Array.isArray(answer) ? answer[0] : answer;
       isCorrect = a === q.correctAnswer;
     } else {
-      const correct = Array.isArray(q.correctAnswer) ? [...q.correctAnswer].sort().join(',') : String(q.correctAnswer);
-      const given   = Array.isArray(answer) ? [...answer].sort().join(',') : '';
-      isCorrect = correct === given;
+      // Partial credit: each correct selection earns a fraction; no bonus for wrong picks
+      const correctSet = new Set(Array.isArray(q.correctAnswer) ? q.correctAnswer.map(Number) : [Number(q.correctAnswer)]);
+      const givenArr   = Array.isArray(answer) ? answer.map(Number) : [];
+      const wrongPicked    = givenArr.filter(a => !correctSet.has(a)).length;
+      const correctPicked  = givenArr.filter(a => correctSet.has(a)).length;
+      if (correctSet.size === 0) {
+        isCorrect = null;
+      } else if (wrongPicked > 0) {
+        isCorrect = false;                                         // wrong answer chosen = 0
+      } else if (correctPicked === correctSet.size) {
+        isCorrect = true;                                          // all correct, none wrong = 100%
+      } else {
+        isCorrect = parseFloat((correctPicked / correctSet.size).toFixed(4)); // partial 0<x<1
+      }
     }
   }
 
