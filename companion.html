@@ -161,8 +161,10 @@
 
 <div class="toggle-bar" id="toggleBar" style="display:none;">
   <button class="toggle-btn active" data-mode="bars"        onclick="setMode('bars')">Bars</button>
+  <button class="toggle-btn"        data-mode="column"      onclick="setMode('column')">Column</button>
   <button class="toggle-btn"        data-mode="word_cloud"  onclick="setMode('word_cloud')">Word Cloud</button>
   <button class="toggle-btn"        data-mode="donut"       onclick="setMode('donut')">Donut</button>
+  <button class="toggle-btn"        data-mode="pie"         onclick="setMode('pie')">Pie</button>
   <button class="toggle-btn"        data-mode="number"      onclick="setMode('number')">Numbers</button>
   <button class="toggle-btn"        data-mode="leaderboard" onclick="setMode('leaderboard')">Leaderboard</button>
   <div style="flex:1;"></div>
@@ -415,7 +417,7 @@ function renderAll() {
   document.querySelectorAll('.toggle-btn[data-mode]').forEach(btn => {
     const m = btn.dataset.mode;
     let show = false;
-    if (m === 'bars' || m === 'donut' || m === 'number' || m === 'leaderboard') show = isChoice;
+    if (m === 'bars' || m === 'column' || m === 'donut' || m === 'pie' || m === 'number' || m === 'leaderboard') show = isChoice;
     if (m === 'word_cloud') show = isChoice || isFreeText;
     btn.style.display = show ? '' : 'none';
     btn.classList.toggle('active', m === viewMode);
@@ -488,7 +490,15 @@ function renderAll() {
 // grow → resize → re-measure → grow feedback loop.
 let _resizeT = null;
 let _suppressResizeUntil = 0;
+let _lastDPR = window.devicePixelRatio;
 window.addEventListener('resize', () => {
+  // When the window moves to a different display (Retina ↔ 1×), devicePixelRatio
+  // changes. Clear the cached height so the next requestFitToContent() always
+  // sends a fresh message regardless of the 8px threshold.
+  if (window.devicePixelRatio !== _lastDPR) {
+    _lastDPR = window.devicePixelRatio;
+    _lastRequestedH = 0;
+  }
   if (Date.now() < _suppressResizeUntil) return; // our own fit caused this
   clearTimeout(_resizeT);
   _resizeT = setTimeout(() => { if (curQ) renderAll(); }, 200);
@@ -713,6 +723,47 @@ function renderResults() {
       </div>`).join('');
     inner = `<div style="display:flex;justify-content:center;margin-bottom:14px;">
       <svg viewBox="0 0 42 42" style="width:130px;height:130px;">${segs||'<circle cx="21" cy="21" r="16" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="7"/>'}</svg></div>${legend}`;
+
+  // ── Column chart (vertical bars) ──────────────────────────────────────────
+  } else if (viewMode === 'column') {
+    const maxCount = Math.max(...counts.map(c=>c.count), 1);
+    inner = `<div style="display:flex;align-items:flex-end;justify-content:center;gap:8px;height:160px;padding:0 4px;">` +
+      counts.map(({i,count})=>{
+        const showCorrect = revealed && correct.includes(i);
+        const color = showCorrect ? '#43e97b' : PS_COLORS[i%PS_COLORS.length];
+        const heightPct = Math.round(count/maxCount*100);
+        const opt = curQ.options[i] || {};
+        return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:0;">
+          <div style="font-size:11px;color:${color};font-weight:700;margin-bottom:4px;">${count}</div>
+          <div style="width:100%;height:${heightPct}%;min-height:4px;background:${color};border-radius:6px 6px 0 0;box-shadow:0 0 12px ${color}88;position:relative;">
+            <div style="position:absolute;inset:0;background:linear-gradient(180deg,${color}ff,${color}99);border-radius:6px 6px 0 0;"></div>
+          </div>
+          <div style="margin-top:6px;width:22px;height:22px;border-radius:50%;background:${color}22;border:1.5px solid ${color};color:${color};font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 0 6px ${color}55;">${letters[i]}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:3px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%;max-width:52px;">${escapeHtml((opt.text||'').slice(0,12))}</div>
+        </div>`;
+      }).join('') + `</div>`;
+
+  // ── Pie chart ──────────────────────────────────────────────────────────────
+  } else if (viewMode === 'pie') {
+    let cum=0; const r0=18,cx=21,cy=21;
+    const segs = counts.filter(c=>c.count>0).map(({i,count})=>{
+      const frac=total>0?count/total:0; const start=cum; cum+=frac;
+      const a0=start*2*Math.PI-Math.PI/2, a1=cum*2*Math.PI-Math.PI/2;
+      const large=frac>0.5?1:0;
+      const x0=cx+r0*Math.cos(a0),y0=cy+r0*Math.sin(a0);
+      const x1=cx+r0*Math.cos(a1),y1=cy+r0*Math.sin(a1);
+      const mx=cx+r0*Math.cos((a0+a1)/2)*0.6, my=cy+r0*Math.sin((a0+a1)/2)*0.6;
+      const col = PS_COLORS[i%PS_COLORS.length];
+      return `<path d="M ${cx} ${cy} L ${x0} ${y0} A ${r0} ${r0} 0 ${large} 1 ${x1} ${y1} Z" fill="${col}" opacity="0.85" filter="url(#glow${i})"/>`;
+    }).join('');
+    const legend = counts.map(({i,count})=>`
+      <div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;">
+        <span style="width:10px;height:10px;border-radius:2px;background:${PS_COLORS[i%PS_COLORS.length]};box-shadow:0 0 6px ${PS_COLORS[i%PS_COLORS.length]};flex-shrink:0;"></span>
+        <span style="flex:1;">${letters[i]}. ${escapeHtml((curQ.options[i]||{}).text||'')}</span>
+        <span style="font-family:'Syne',sans-serif;font-weight:700;">${pct(count)}%</span>
+      </div>`).join('');
+    inner = `<div style="display:flex;justify-content:center;margin-bottom:14px;">
+      <svg viewBox="0 0 42 42" style="width:150px;height:150px;">${segs||'<circle cx="21" cy="21" r="18" fill="rgba(255,255,255,0.05)"/>'}</svg></div>${legend}`;
 
   // ── Neon Glass Bars (default) ──────────────────────────────────────────────
   } else {
