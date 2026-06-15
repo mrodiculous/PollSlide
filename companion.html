@@ -81,7 +81,6 @@
 
 
   /* Question */
-  .q-media { width:100%; max-height:220px; object-fit:contain; border-radius:10px; margin-bottom:12px; background:#000; }
   .q-text { font-family:'Syne',sans-serif; font-size:18px; font-weight:800; line-height:1.35; margin-bottom:4px; }
 
   /* Reveal bar */
@@ -111,11 +110,11 @@
   .bar-opt-count { font-family:'Syne',sans-serif;font-weight:900;font-size:14px;flex-shrink:0; }
 
   /* Word cloud */
-  .word-cloud { display:flex;flex-wrap:wrap;gap:7px 10px;align-items:center;padding:8px 0; }
-  .word-cloud span { font-family:'Syne',sans-serif;font-weight:800;border-radius:6px;padding:2px 5px;cursor:default;display:inline-block; }
+  .word-cloud { display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:center;padding:12px 4px; }
+  .word-cloud span { font-family:'Syne',sans-serif;font-weight:800;border-radius:6px;padding:3px 6px;cursor:default;display:inline-block;transform-origin:center center; }
 
-  /* Media — auto-fit natural size */
-  .q-media { width:100%;height:auto;object-fit:contain;border-radius:10px;margin-bottom:12px;display:block; }
+  /* Media — auto-fit natural size, no height cap */
+  .q-media { width:100%;height:auto;max-height:none;object-fit:contain;border-radius:10px;margin-bottom:12px;display:block;background:transparent; }
 
   /* Leaderboard rows */
   .p-row { display:flex; align-items:center; gap:10px; padding:7px 0; border-bottom:1px solid var(--border); font-size:13px; }
@@ -268,9 +267,11 @@ function mediaTag(url, opts) {
     if (opts.muted||opts.autoplay) a += 'muted ';
     if (opts.autoplay) a += 'autoplay ';
     if (opts.controls) a += 'controls ';
-    return `<video class="q-media" src="${url}" ${a}></video>`;
+    return `<video class="q-media" src="${url}" ${a} onloadedmetadata="requestFitToContent()"></video>`;
   }
-  return `<img class="q-media" src="${url}" onerror="this.style.display='none'">`;
+  // onload fires once natural dimensions are known — retriggers fit so window
+  // grows to show the full image height, not just the pre-load placeholder size
+  return `<img class="q-media" src="${url}" onload="requestFitToContent()" onerror="this.style.display='none'">`;
 }
 
 function showWaiting(msg) {
@@ -402,9 +403,25 @@ function renderAll() {
   const mBtn = document.getElementById('mediaToggleBtn');
   if (mBtn) { mBtn.classList.toggle('active', showMedia); }
   const isChoice = curQ.type !== 'free_text' && curQ.type !== 'rating';
-  document.getElementById('toggleBar').style.display = isChoice ? 'flex' : 'none';
+  const isFreeText = curQ.type === 'free_text';
+  const hasImage = !!(curQ.image && curQ.image.trim());
 
-  const media = (showMedia && curQ.image) ? mediaTag(curQ.image, curQ.videoOpts) : '';
+  // Always show the toggle bar when live so Media button is always reachable
+  document.getElementById('toggleBar').style.display = 'flex';
+
+  // Show/hide mode buttons based on question type
+  document.querySelectorAll('.toggle-btn[data-mode]').forEach(btn => {
+    const m = btn.dataset.mode;
+    let show = false;
+    if (m === 'bars' || m === 'donut' || m === 'number' || m === 'leaderboard') show = isChoice;
+    if (m === 'word_cloud') show = isChoice || isFreeText;
+    btn.style.display = show ? '' : 'none';
+  });
+
+  // If current mode is invalid for this type, reset to bars/bubbles
+  if (!isChoice && viewMode !== 'word_cloud') viewMode = 'bars';
+
+  const media = (showMedia && hasImage) ? mediaTag(curQ.image, curQ.videoOpts) : '';
   let revealBar = '';
   const isQuiz = (curQ.type === 'multiple_choice' || curQ.type === 'multiple_choice_multi');
   if (isQuiz && !revealed) {
@@ -458,6 +475,9 @@ function renderAll() {
   }
 
   renderResults();
+
+  // Fit after full render — catches layout from toggle bar, reveal bar, QR pane
+  requestFitToContent();
 }
 
 // Re-render on resize so the layout switches between side-by-side and stacked.
@@ -471,32 +491,41 @@ window.addEventListener('resize', () => {
   _resizeT = setTimeout(() => { if (curQ) renderAll(); }, 200);
 });
 
-// ── AUTO-FIT: report the content's natural height to the Mac app once per
-// content change, so the window shows every response. Measures the inner
-// content (the .panes element), NOT scrollHeight of the scrolling body —
-// scrollHeight grows with the window and causes runaway growth.
+// ── AUTO-FIT: report the content's natural height to the Mac app so the
+// window grows/shrinks to show everything without scrolling.
+// Uses scrollHeight (full content height regardless of clipping) so the
+// window expands even when content is taller than the current window.
 let _lastRequestedH = 0;
+let _fitRAF = null;
 function requestFitToContent() {
-  try {
-    const header = document.querySelector('.hd');
-    const toggle = document.getElementById('toggleBar');
-    const panes  = document.querySelector('.panes');
-    if (!panes) return;
-    const headH = (header ? header.offsetHeight : 0)
-                + (toggle && toggle.style.display !== 'none' ? toggle.offsetHeight : 0);
-    // getBoundingClientRect height of the CONTENT, plus body padding (32 ~ 16*2)
-    const contentH = panes.getBoundingClientRect().height + 32;
-    let desiredH = Math.round(headH + contentH);
-    desiredH = Math.min(900, Math.max(260, desiredH));
-    // Only request if it changed meaningfully — prevents repeated nudges
-    if (Math.abs(desiredH - _lastRequestedH) < 10) return;
-    _lastRequestedH = desiredH;
-    // Suppress the resize echo our request will cause
-    _suppressResizeUntil = Date.now() + 600;
-    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.fit) {
-      window.webkit.messageHandlers.fit.postMessage({ height: desiredH });
-    }
-  } catch(e) {}
+  // Debounce into next animation frame so layout is complete
+  cancelAnimationFrame(_fitRAF);
+  _fitRAF = requestAnimationFrame(() => {
+    try {
+      const header = document.querySelector('.hd');
+      const toggle = document.getElementById('toggleBar');
+      const panes  = document.querySelector('.panes');
+      if (!panes) return;
+
+      const headH = (header ? header.offsetHeight : 0)
+                  + (toggle && toggle.style.display !== 'none' ? toggle.offsetHeight : 0);
+
+      // scrollHeight = full natural height even if overflow is clipped
+      const contentH = panes.scrollHeight + 32; // 32 = body padding top+bottom
+      let desiredH = Math.round(headH + contentH);
+      desiredH = Math.min(960, Math.max(260, desiredH));
+
+      // Only send if meaningfully different — prevents jitter
+      if (Math.abs(desiredH - _lastRequestedH) < 8) return;
+      _lastRequestedH = desiredH;
+
+      // Suppress the resize echo that our own fit request causes
+      _suppressResizeUntil = Date.now() + 700;
+      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.fit) {
+        window.webkit.messageHandlers.fit.postMessage({ height: desiredH });
+      }
+    } catch(e) {}
+  });
 }
 
 // ── CONFETTI: celebratory burst across the window on answer reveal ──
