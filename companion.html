@@ -401,26 +401,13 @@ function watchLiveQuestion() {
     renderAll();
   });
 
-  // Belt-and-suspenders: also watch phase directly for post-reveal
-  if (phaseRef) { phaseRef.off(); phaseRef = null; }
-  phaseRef = db.ref(`sessions/${sessionCode}/currentQuestion`);
-  phaseRef.on('value', pSnap => {
-    const cq = pSnap.val();
-    if (!cq || !cq.id) return;
-    // Only handle same-question phase changes; new questions are handled by liveQRef
-    if (cq.id !== curQId) return;
-    const newPhase = cq.phase || 'live';
-    if (cq.postReveal) {
-      if (curQ) curQ = Object.assign({}, curQ, { postReveal: cq.postReveal });
-    }
-    if (newPhase !== presentPhase) {
-      presentPhase = newPhase;
-      if (presentPhase === 'revealed' || presentPhase === 'post_reveal') {
-        if (!revealed) { revealed = true; if (revealTimer) { clearInterval(revealTimer); revealTimer = null; } }
-      }
-      renderAll();
-    }
-  });
+  // NOTE: phaseRef removed from watchLiveQuestion — liveQRef already watches
+  // the same path (sessions/${sessionCode}/currentQuestion) and handles ALL
+  // phase transitions correctly. A second listener on the same path created a
+  // race condition: whichever fired second saw newPhase===presentPhase (already
+  // updated by the first) and skipped renderAll(), which caused Q2+ post-reveal
+  // to be silently dropped. Single listener = no race. phaseRef is still used
+  // in showTargetedQuestion (QR mode) where liveQRef is not active.
 }
 
 function watchResponses(qId) {
@@ -735,12 +722,14 @@ function buildPostRevealContent(q, resps) {
   }
 
   if (type === 'scorecard') {
-    const correctCount = resps.filter(r=>r.isCorrect===true).length;
-    const pct = total>0 ? Math.round(correctCount/total*100) : 0;
+    // Average score across all respondents — accounts for partial credit (0<isCorrect<1)
+    const totalScore = resps.reduce((sum,r)=>sum+(r.isCorrect===true?1:typeof r.isCorrect==='number'&&r.isCorrect>0?r.isCorrect:0),0);
+    const pct = total>0 ? Math.round(totalScore/total*100) : 0;
+    const fullCorrect = resps.filter(r=>r.isCorrect===true).length;
     const [emoji, label, col] = pct>=80?['🎉','Fantastic!','#43e97b']:pct>=60?['👏','Nice work!','#6c63ff']:pct>=40?['💪','Keep going!','#f7b731']:['🤔','Tough one!','#ff6584'];
     return `<div style="text-align:center;padding:4px 0;">
       <div style="font-size:48px;font-weight:900;color:${col};text-shadow:0 0 24px ${col}88;line-height:1;">${pct}%</div>
-      <div style="font-size:12px;color:rgba(255,255,255,0.6);margin-top:2px;">got it right · ${correctCount}/${total}</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.6);margin-top:2px;">avg score · ${fullCorrect} fully correct / ${total}</div>
       <div style="margin-top:12px;font-size:18px;">${emoji}</div>
       <div style="font-size:14px;font-weight:700;color:${col};margin-top:2px;">${label}</div>
       <div style="height:5px;background:rgba(255,255,255,0.08);border-radius:3px;margin-top:14px;overflow:hidden;">
