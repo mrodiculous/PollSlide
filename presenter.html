@@ -2351,6 +2351,9 @@ function fireConfetti() {
 function doReveal() {
   revealed = true;
   if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
+  // Immediately update the present-mode badge — the ticker interval can lag up to 1s
+  const _presLbl = document.getElementById('presentRevealBadge');
+  if (_presLbl && _presentIdx !== null) _presLbl.innerHTML = buildRevealBadgeHtml(questions[_presentIdx]);
   fireConfetti();
 
   // If post-reveal is enabled with a timer, start the countdown now.

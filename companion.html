@@ -340,6 +340,9 @@ function showTargetedQuestion(session, qIdx) {
       if (cq.postReveal && curQ) curQ = Object.assign({}, curQ, { postReveal: cq.postReveal });
       if (newPhase !== presentPhase) {
         presentPhase = newPhase;
+        if (presentPhase === 'revealed' || presentPhase === 'post_reveal') {
+          if (!revealed) { revealed = true; if (revealTimer) { clearInterval(revealTimer); revealTimer = null; } }
+        }
         renderAll();
       }
     });
@@ -384,6 +387,11 @@ function watchLiveQuestion() {
       // Same question — update phase if presenter advanced it
       presentPhase = q.phase || 'live';
     }
+    // Sync local revealed flag from presenter's phase — critical for
+    // correct-answer highlighting, medals, and insight chip
+    if (presentPhase === 'revealed' || presentPhase === 'post_reveal') {
+      if (!revealed) { revealed = true; if (revealTimer) { clearInterval(revealTimer); revealTimer = null; } }
+    }
     curQ = q;
     renderAll();
   });
@@ -402,6 +410,9 @@ function watchLiveQuestion() {
     }
     if (newPhase !== presentPhase) {
       presentPhase = newPhase;
+      if (presentPhase === 'revealed' || presentPhase === 'post_reveal') {
+        if (!revealed) { revealed = true; if (revealTimer) { clearInterval(revealTimer); revealTimer = null; } }
+      }
       renderAll();
     }
   });
@@ -588,13 +599,17 @@ function requestFitToContent() {
       const headH = (header ? header.offsetHeight : 0)
                   + (toggle && toggle.style.display !== 'none' ? toggle.offsetHeight : 0);
 
-      // scrollHeight = full natural height even if overflow is clipped
-      const contentH = panes.scrollHeight + 32; // 32 = body padding top+bottom
+      // Use body.scrollHeight so padding is included automatically.
+      // Add 24px as a small visual border so content never presses the window edge.
+      const bodyEl = document.querySelector('.body');
+      const contentH = (bodyEl ? bodyEl.scrollHeight : panes.scrollHeight) + 24;
       let desiredH = Math.round(headH + contentH);
-      desiredH = Math.min(960, Math.max(260, desiredH));
+      // Min 280px so the window is never uselessly tiny.
+      // No hard upper cap — Swift clamps to the screen's visible frame.
+      desiredH = Math.max(280, desiredH);
 
       // Only send if meaningfully different — prevents jitter
-      if (Math.abs(desiredH - _lastRequestedH) < 8) return;
+      if (Math.abs(desiredH - _lastRequestedH) < 6) return;
       _lastRequestedH = desiredH;
 
       // Suppress the resize echo that our own fit request causes
