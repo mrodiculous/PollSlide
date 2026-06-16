@@ -363,8 +363,13 @@ function showTargetedQuestion(session, qIdx) {
       // Only react if this currentQuestion is the same question the QR points to
       if (cq.id && cq.id !== curQId) return;
       const newPhase = cq.phase || 'live';
-      // Also pull postReveal config from live currentQuestion if available
-      if (cq.postReveal && curQ) curQ = Object.assign({}, curQ, { postReveal: cq.postReveal });
+      // Keep curQ in sync with the live phase + latest post-reveal config. Stamping
+      // phase onto curQ makes renderResults' post-reveal check (presentPhase OR
+      // curQ.phase) reliable for EVERY question — not just the first one shown.
+      if (curQ) {
+        curQ = Object.assign({}, curQ, { phase: newPhase });
+        if (cq.postReveal) curQ.postReveal = cq.postReveal;
+      }
       if (newPhase !== presentPhase) {
         presentPhase = newPhase;
         if (presentPhase === 'revealed' || presentPhase === 'post_reveal') {
@@ -412,12 +417,10 @@ function watchLiveQuestion() {
       liveStartedAt = q.launchedAt || Date.now();
       watchResponses(q.id);
     } else {
-      // Same question — update phase and merge any new postReveal config from Firebase
+      // Same question — just track the latest phase. curQ is replaced with the full
+      // currentQuestion snapshot below (it already carries phase + postReveal), so no
+      // separate merge is needed here.
       presentPhase = q.phase || 'live';
-      if (q.postReveal !== undefined) {
-        // Always sync postReveal from Firebase — presenter may have written it after publishLive
-        curQ = Object.assign({}, curQ, { postReveal: q.postReveal });
-      }
     }
     // Sync local revealed flag from presenter's phase — critical for
     // correct-answer highlighting, medals, and insight chip
@@ -1017,8 +1020,12 @@ function renderResults() {
   // Feature 1 — Smart insight chip after reveal (choice questions with correct answer)
   let insightChip = '';
   if (revealed && correct.length > 0 && total > 0 && presentPhase !== 'post_reveal') {
-    const correctCount = counts.filter(c => correct.includes(c.i)).reduce((s, c) => s + c.count, 0);
-    const pctVal = Math.round(correctCount / total * 100);
+    // Count PARTICIPANTS who got it fully right (isCorrect === true) — never option picks.
+    // On a multi-select with 2 correct answers, picking only 1 earns partial credit
+    // (0 < isCorrect < 1), which is NOT "got it right". Summing option-pick counts used
+    // to mark those partial answers as correct — the bug this fixes.
+    const fullyCorrect = responses.filter(r => r.isCorrect === true).length;
+    const pctVal = Math.round(fullyCorrect / total * 100);
     const [emoji, msg, col] = pctVal >= 80 ? ['🎉','Most got it right!','#43e97b'] : pctVal >= 50 ? ['👏','Over half correct!','#6c63ff'] : pctVal >= 25 ? ['🤔','Tricky one!','#f7b731'] : ['😅','Tough crowd!','#ff6584'];
     insightChip = `<div style="display:flex;align-items:center;gap:7px;background:${col}18;border:1px solid ${col}44;border-radius:10px;padding:7px 12px;margin-bottom:12px;font-size:12px;font-weight:700;color:${col};">${emoji} ${msg} <span style="margin-left:auto;font-family:Syne,sans-serif;font-size:13px;">${pctVal}% correct</span></div>`;
   }

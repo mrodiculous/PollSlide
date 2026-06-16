@@ -1909,6 +1909,17 @@ async function launchQuestion(idx) {
   if (!activePresId) return;
   if (respListener) { respListener(); respListener = null; }
 
+  // Clean slate per question. Without this, a post-reveal auto-advance timer left
+  // running from the PREVIOUS question can fire mid-way through THIS one — writing
+  // phase:'post_reveal' to the wrong question and breaking post-reveal for every
+  // question after the first. Reset all reveal + post-reveal state up front.
+  if (revealTimer)     { clearInterval(revealTimer);     revealTimer = null; }
+  if (postRevealTimer) { clearInterval(postRevealTimer); postRevealTimer = null; }
+  revealed = false;
+  revealArmed = false;
+  postRevealPhase = false;
+  postRevealCountdown = 0;
+
   liveQIdx = idx;
   const q    = questions[idx];
   // Use stable qId so participant responses always match regardless of when launched
