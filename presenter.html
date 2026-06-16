@@ -2322,6 +2322,9 @@ function beginRevealCountdown() {
         const _delay = _q.postReveal.advanceDelay;
         if (_delay && _delay !== 'manual') {
           postRevealCountdown = parseInt(_delay);
+          // Publish the absolute fire time so the companion's countdown stays in sync.
+          const _code = presentations[activePresId]?.sessionCode;
+          if (_code) db.ref(`sessions/${_code}/currentQuestion`).update({ postRevealAt: Date.now() + postRevealCountdown * 1000 }).catch(()=>{});
           postRevealTimer = setInterval(() => {
             postRevealCountdown--;
             const b1 = document.getElementById('postRevealAdvanceBadge');
@@ -2405,11 +2408,13 @@ function doReveal() {
   // The timer fires doPostReveal() — transitioning to the post-reveal display,
   // NOT advancing to the next question.
   const qPR = liveQIdx !== null ? questions[liveQIdx] : null;
+  let postRevealAt = null; // absolute time post-reveal will fire — shared with the companion so its countdown stays in sync
   if (qPR?.postReveal?.enabled) {
     const prDelay = qPR.postReveal.advanceDelay;
     if (prDelay && prDelay !== 'manual') {
       if (postRevealTimer) clearInterval(postRevealTimer);
       postRevealCountdown = parseInt(prDelay);
+      postRevealAt = Date.now() + postRevealCountdown * 1000;
       postRevealTimer = setInterval(() => {
         postRevealCountdown--;
         const b1 = document.getElementById('postRevealAdvanceBadge');
@@ -2429,7 +2434,7 @@ function doReveal() {
   // Must include postReveal here because the question may have been edited after publishLive ran.
   const code = presentations[activePresId]?.sessionCode;
   if (code) {
-    const update = { phase: 'revealed', postReveal: qPR?.postReveal || null };
+    const update = { phase: 'revealed', postReveal: qPR?.postReveal || null, postRevealAt: postRevealAt };
     db.ref(`sessions/${code}/currentQuestion`).update(update).catch(e => console.error('doReveal Firebase err:', e));
   }
   if (code && liveQId && liveQIdx !== null) {
@@ -2459,7 +2464,7 @@ function doPostReveal() {
   const code = presentations[activePresId]?.sessionCode;
   if (code) {
     const q2 = liveQIdx !== null ? questions[liveQIdx] : null;
-    const update = { phase: 'post_reveal', postReveal: q2?.postReveal || null };
+    const update = { phase: 'post_reveal', postReveal: q2?.postReveal || null, postRevealAt: null };
     db.ref(`sessions/${code}/currentQuestion`).update(update).catch(e => console.error('doPostReveal Firebase err:', e));
   }
   renderRevealControl(false);
@@ -2628,6 +2633,61 @@ function setRightMediaSize(idx, sizeKey) {
 }
 let _lastResponses = [];
 
+// ── Shared donut / pie chart — ONE source of truth for the live view AND present
+// mode (the companion mirrors this exact logic in companion.html). An SVG arc can't
+// draw a full circle in a single path, so a lone 100% segment is emitted as a
+// <circle>; without that the chart vanishes whenever one option holds all the votes.
+function donutPieChartHTML(mode, counts, total, correct, revealed, opts) {
+  opts = opts || {};
+  const palette = opts.palette || ['#6c63ff','#ff6584','#38d9f5','#f7b731','#a78bfa','#43e97b'];
+  const letters = ['A','B','C','D','E','F'];
+  const options = opts.options || [];
+  const sizePx  = opts.size || 140;
+  const r0 = mode === 'donut' ? 16 : 18;   // radius
+  const sw = mode === 'donut' ? 7  : 0;    // donut ring thickness
+  const cx = 21, cy = 21;
+  const pct = c => total > 0 ? Math.round(c / total * 100) : 0;
+  const withVotes = counts.filter(c => c.count > 0);
+  let segs = '';
+  if (withVotes.length === 1) {
+    const { i } = withVotes[0];
+    const color = (revealed && correct.includes(i)) ? '#43e97b' : palette[i % palette.length];
+    segs = mode === 'donut'
+      ? `<circle cx="${cx}" cy="${cy}" r="${r0}" fill="none" stroke="${color}" stroke-width="${sw}"/>`
+      : `<circle cx="${cx}" cy="${cy}" r="${r0}" fill="${color}"/>`;
+  } else if (withVotes.length > 1) {
+    let cum = 0;
+    segs = withVotes.map(({ i, count }) => {
+      const frac = total > 0 ? count / total : 0;
+      const start = cum; cum += frac;
+      const a0 = start * 2 * Math.PI - Math.PI / 2;
+      const a1 = cum   * 2 * Math.PI - Math.PI / 2;
+      const large = frac > 0.5 ? 1 : 0;
+      const x0 = cx + r0 * Math.cos(a0), y0 = cy + r0 * Math.sin(a0);
+      const x1 = cx + r0 * Math.cos(a1), y1 = cy + r0 * Math.sin(a1);
+      const color = (revealed && correct.includes(i)) ? '#43e97b' : palette[i % palette.length];
+      return mode === 'donut'
+        ? `<path d="M ${x0.toFixed(3)} ${y0.toFixed(3)} A ${r0} ${r0} 0 ${large} 1 ${x1.toFixed(3)} ${y1.toFixed(3)}" fill="none" stroke="${color}" stroke-width="${sw}" stroke-linecap="butt"/>`
+        : `<path d="M ${cx} ${cy} L ${x0.toFixed(3)} ${y0.toFixed(3)} A ${r0} ${r0} 0 ${large} 1 ${x1.toFixed(3)} ${y1.toFixed(3)} Z" fill="${color}"/>`;
+    }).join('');
+  } else {
+    segs = mode === 'donut'
+      ? `<circle cx="${cx}" cy="${cy}" r="${r0}" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="${sw}"/>`
+      : `<circle cx="${cx}" cy="${cy}" r="${r0}" fill="rgba(255,255,255,0.05)"/>`;
+  }
+  const legend = counts.map(({ i, count }) => {
+    const showCorrect = revealed && correct.includes(i);
+    return `<div style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:5px;">
+      <span style="width:11px;height:11px;border-radius:3px;background:${showCorrect ? '#43e97b' : palette[i % palette.length]};flex-shrink:0;"></span>
+      <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${letters[i]}. ${escapeHtml((options[i] || {}).text || '')}</span>
+      <span style="font-family:Syne,sans-serif;font-weight:700;">${count} (${pct(count)}%)</span>
+    </div>`;
+  }).join('');
+  return `<div style="display:flex;justify-content:center;margin-bottom:12px;">
+    <svg viewBox="0 0 42 42" width="${sizePx}" height="${sizePx}" style="overflow:visible;">${segs}</svg>
+  </div>${legend}`;
+}
+
 function renderRightPanel(q, responses) {
   _lastResponses = responses;
   const rs = document.getElementById('rightScroll');
@@ -2729,55 +2789,7 @@ function renderRightPanel(q, responses) {
         <svg viewBox="0 0 ${totalW} ${chartH + labelH}" width="${Math.min(totalW * 1.8, 260)}" height="${Math.round((chartH + labelH) * 1.8)}" style="overflow:visible;">${segs}</svg>
       </div>${legend}`;
     } else if (mode === 'donut' || mode === 'pie') {
-      // Build SVG donut/pie — handles 100% single-segment via full circle
-      let cum = 0;
-      const r0 = mode==='donut'?16:18;
-      const sw = mode==='donut'?7:0;
-      const cx=21, cy=21;
-      const withVotes = counts.filter(c=>c.count>0);
-      let segs = '';
-      if (withVotes.length === 1) {
-        // Single segment fills 100% — SVG arcs can't draw a full circle in one path
-        const {i} = withVotes[0];
-        const color = palette[i % palette.length];
-        if (mode === 'donut') {
-          segs = `<circle cx="${cx}" cy="${cy}" r="${r0}" fill="none" stroke="${color}" stroke-width="${sw}"/>`;
-        } else {
-          segs = `<circle cx="${cx}" cy="${cy}" r="${r0}" fill="${color}"/>`;
-        }
-      } else {
-        segs = withVotes.map(({i,count})=>{
-          const frac = total>0?count/total:0;
-          const start = cum; cum += frac;
-          const a0 = start*2*Math.PI - Math.PI/2;
-          const a1 = cum*2*Math.PI - Math.PI/2;
-          const large = frac>0.5?1:0;
-          const x0=cx+r0*Math.cos(a0), y0=cy+r0*Math.sin(a0);
-          const x1=cx+r0*Math.cos(a1), y1=cy+r0*Math.sin(a1);
-          const color = palette[i%palette.length];
-          const showCorrect = revealed && correct.includes(i);
-          const fillColor = showCorrect ? '#43e97b' : color;
-          if(mode==='donut'){
-            return `<path d="M ${x0.toFixed(3)} ${y0.toFixed(3)} A ${r0} ${r0} 0 ${large} 1 ${x1.toFixed(3)} ${y1.toFixed(3)}" fill="none" stroke="${fillColor}" stroke-width="${sw}" stroke-linecap="round"/>`;
-          } else {
-            return `<path d="M ${cx} ${cy} L ${x0.toFixed(3)} ${y0.toFixed(3)} A ${r0} ${r0} 0 ${large} 1 ${x1.toFixed(3)} ${y1.toFixed(3)} Z" fill="${fillColor}"/>`;
-          }
-        }).join('');
-      }
-      if (mode==='donut' && withVotes.length===0) {
-        segs = `<circle cx="${cx}" cy="${cy}" r="${r0}" fill="none" stroke="var(--surface3)" stroke-width="${sw}"/>`;
-      }
-      const legend = counts.map(({i,count})=>{
-        const showCorrect = revealed && correct.includes(i);
-        return `<div style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:5px;">
-          <span style="width:11px;height:11px;border-radius:3px;background:${showCorrect?'#43e97b':palette[i%palette.length]};flex-shrink:0;"></span>
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${letters[i]}. ${(q.options[i]||{}).text||''}</span>
-          <span style="font-family:Syne,sans-serif;font-weight:700;">${count} (${pct(count)}%)</span>
-        </div>`;
-      }).join('');
-      inner = `<div style="display:flex;justify-content:center;margin-bottom:12px;">
-        <svg viewBox="0 0 42 42" width="140" height="140" style="overflow:visible;">${segs}</svg>
-      </div>${legend}`;
+      inner = donutPieChartHTML(mode, counts, total, correct, revealed, { palette, options: q.options, size: 140 });
     } else if (mode === 'word_cloud') {
       inner = buildWordCloud(q, counts, responses);
     } else {
@@ -4207,9 +4219,17 @@ function buildPresentChart(q, responses) {
   const counts = (q.options||[]).map((_,i)=>({i,count:0}));
   responses.forEach(r=>{try{const a=JSON.parse(r.answer);(Array.isArray(a)?a:[a]).forEach(v=>{if(counts[v])counts[v].count++;});}catch(e){}});
 
-  if ((q.displayMode||'bars') === 'word_cloud') return total > 0
+  const _dm = q.displayMode || 'bars';
+  if (_dm === 'word_cloud') return total > 0
     ? buildWordCloud(q, counts, responses)
     : `<div style="color:rgba(255,255,255,0.25);font-size:13px;text-align:center;padding:20px 0;">Waiting for responses…</div>`;
+
+  // Donut / pie use the same shared builder as the live view (handles the 100%
+  // single-segment case). Sized up for the present-mode results panel.
+  if (_dm === 'donut' || _dm === 'pie') {
+    if (total === 0) return `<div style="color:rgba(255,255,255,0.25);font-size:13px;text-align:center;padding:20px 0;">Waiting for responses…</div>`;
+    return donutPieChartHTML(_dm, counts, total, correct, revealed, { palette: PS_COLORS, options: q.options, size: 170 });
+  }
 
   // Always render all bars — width animates from 0 so structure never shifts
   return `

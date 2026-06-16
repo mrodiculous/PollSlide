@@ -247,6 +247,33 @@ let macLinkRef = null;
 let liveQRef = null;
 let phaseRef = null; // watches currentQuestion/phase in QR-targeted mode
 let _recentResponses = []; // timestamps of recent responses for velocity calc
+let _prTicker = null;      // 1s interval driving the visual post-reveal countdown badge
+
+// Seconds until post-reveal fires, synced to the presenter's published postRevealAt.
+// Returns null when no countdown should show (not enabled, already in post-reveal, or
+// no target time set yet). One source of truth for the badge + the ticker.
+function postRevealRemaining() {
+  if (!curQ || !curQ.postReveal || !curQ.postReveal.enabled) return null;
+  if (presentPhase === 'post_reveal') return null;
+  const at = curQ.postRevealAt;
+  if (!at) return null;
+  return Math.max(0, Math.ceil((at - Date.now()) / 1000));
+}
+
+// Start/stop the 1s ticker that keeps the countdown badge live between renders.
+function syncPostRevealTicker() {
+  const active = postRevealRemaining() !== null;
+  if (active && !_prTicker) {
+    _prTicker = setInterval(() => {
+      const rem = postRevealRemaining();
+      if (rem === null) { clearInterval(_prTicker); _prTicker = null; return; }
+      const el = document.getElementById('prCount');
+      if (el) el.textContent = rem + 's';
+    }, 1000);
+  } else if (!active && _prTicker) {
+    clearInterval(_prTicker); _prTicker = null;
+  }
+}
 
 // View toggle
 function toggleMedia() {
@@ -366,11 +393,16 @@ function showTargetedQuestion(session, qIdx) {
       // Keep curQ in sync with the live phase + latest post-reveal config. Stamping
       // phase onto curQ makes renderResults' post-reveal check (presentPhase OR
       // curQ.phase) reliable for EVERY question — not just the first one shown.
+      // postRevealAt drives the synced countdown badge.
+      const oldPrAt = (curQ && curQ.postRevealAt) || null;
+      const newPrAt = cq.postRevealAt || null;
       if (curQ) {
-        curQ = Object.assign({}, curQ, { phase: newPhase });
+        curQ = Object.assign({}, curQ, { phase: newPhase, postRevealAt: newPrAt });
         if (cq.postReveal) curQ.postReveal = cq.postReveal;
       }
-      if (newPhase !== presentPhase) {
+      // Re-render on a phase change OR when the countdown target appears/changes —
+      // non-quiz questions publish postRevealAt without changing phase.
+      if (newPhase !== presentPhase || newPrAt !== oldPrAt) {
         presentPhase = newPhase;
         if (presentPhase === 'revealed' || presentPhase === 'post_reveal') {
           if (!revealed) { revealed = true; if (revealTimer) { clearInterval(revealTimer); revealTimer = null; } }
@@ -527,6 +559,8 @@ function renderAll() {
   const media = (showMedia && hasImage) ? mediaTag(curQ.image, curQ.videoOpts) : '';
   let revealBar = '';
   const isQuiz = (curQ.type === 'multiple_choice' || curQ.type === 'multiple_choice_multi');
+  const prRem = postRevealRemaining(); // synced to presenter; null when no countdown should show
+  const prBadge = `<div class="reveal-bar"><span style="color:#a78bfa;font-weight:700;">✦ Post-reveal in <strong class="reveal-strong" id="prCount">${prRem}s</strong></span></div>`;
   if (isQuiz && !revealed) {
     revealBar = revealArmed
       ? (revealSeconds === -1
@@ -536,7 +570,13 @@ function renderAll() {
           ? `<div class="reveal-bar"><span>Manual reveal</span></div>`
           : `<div class="reveal-bar"><span>⏳ Reveal starts on first answer</span></div>`);
   } else if (isQuiz && revealed) {
-    revealBar = `<div class="reveal-bar"><span style="color:var(--accent3);font-weight:600;">✓ Answer revealed</span></div>`;
+    // Once revealed, show the post-reveal countdown if one is running, else "revealed".
+    revealBar = (prRem !== null)
+      ? prBadge
+      : `<div class="reveal-bar"><span style="color:var(--accent3);font-weight:600;">✓ Answer revealed</span></div>`;
+  } else if (!isQuiz && prRem !== null) {
+    // Opinion polls (word cloud / rating) are always "revealed" — show the countdown.
+    revealBar = prBadge;
   }
 
   // QR pane — links to this specific question so the audience can scan & answer
@@ -578,6 +618,7 @@ function renderAll() {
   }
 
   renderResults();
+  syncPostRevealTicker(); // keep the post-reveal countdown badge ticking between renders
 
   // Fit after full render — catches layout from toggle bar, reveal bar, QR pane
   requestFitToContent();
@@ -776,6 +817,55 @@ function buildPostRevealContent(q, resps) {
   return '';
 }
 
+// Shared donut / pie builder — mirrors the same function in presenter.html. A lone
+// 100% segment is drawn as a <circle> (SVG can't arc a full circle), and BOTH charts
+// use one 0–42 viewBox so the geometry can't drift off-canvas. (The old pie used
+// cx=50,r=45 inside a 0–42 box, so it rendered almost entirely outside the frame.)
+function donutPieChartHTML(mode, counts, total, correct, revealed, opts) {
+  opts = opts || {};
+  const palette = opts.palette || PS_COLORS;
+  const options = opts.options || (curQ && curQ.options) || [];
+  const sizePx  = opts.size || 150;
+  const r0 = mode === 'donut' ? 15 : 18;
+  const sw = mode === 'donut' ? 9  : 0;
+  const cx = 21, cy = 21;
+  const colOf = i => (revealed && correct.includes(i)) ? '#43e97b' : palette[i % palette.length];
+  const withVotes = counts.filter(c => c.count > 0);
+  let segs = '';
+  if (withVotes.length === 1) {
+    const { i } = withVotes[0];
+    segs = mode === 'donut'
+      ? `<circle cx="${cx}" cy="${cy}" r="${r0}" fill="none" stroke="${colOf(i)}" stroke-width="${sw}"/>`
+      : `<circle cx="${cx}" cy="${cy}" r="${r0}" fill="${colOf(i)}"/>`;
+  } else if (withVotes.length > 1) {
+    let cum = 0;
+    segs = withVotes.map(({ i, count }) => {
+      const frac = total > 0 ? count / total : 0;
+      const start = cum; cum += frac;
+      const a0 = start * 2 * Math.PI - Math.PI / 2;
+      const a1 = cum   * 2 * Math.PI - Math.PI / 2;
+      const large = frac > 0.5 ? 1 : 0;
+      const x0 = cx + r0 * Math.cos(a0), y0 = cy + r0 * Math.sin(a0);
+      const x1 = cx + r0 * Math.cos(a1), y1 = cy + r0 * Math.sin(a1);
+      return mode === 'donut'
+        ? `<path d="M ${x0.toFixed(3)} ${y0.toFixed(3)} A ${r0} ${r0} 0 ${large} 1 ${x1.toFixed(3)} ${y1.toFixed(3)}" fill="none" stroke="${colOf(i)}" stroke-width="${sw}" stroke-linecap="butt"/>`
+        : `<path d="M ${cx} ${cy} L ${x0.toFixed(3)} ${y0.toFixed(3)} A ${r0} ${r0} 0 ${large} 1 ${x1.toFixed(3)} ${y1.toFixed(3)} Z" fill="${colOf(i)}"/>`;
+    }).join('');
+  } else {
+    segs = mode === 'donut'
+      ? `<circle cx="${cx}" cy="${cy}" r="${r0}" fill="none" stroke="var(--bar-bg)" stroke-width="${sw}"/>`
+      : `<circle cx="${cx}" cy="${cy}" r="${r0}" style="fill:var(--bar-bg)"/>`;
+  }
+  const legend = counts.map(({ i, count }) => `
+    <div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;">
+      <span style="width:10px;height:10px;border-radius:${mode==='donut'?'50%':'2px'};background:${colOf(i)};box-shadow:0 0 6px ${colOf(i)};flex-shrink:0;"></span>
+      <span style="flex:1;">${letters[i]}. ${escapeHtml((options[i]||{}).text||'')}</span>
+      <span style="font-family:'Syne',sans-serif;font-weight:700;">${total>0?Math.round(count/total*100):0}%</span>
+    </div>`).join('');
+  return `<div style="display:flex;justify-content:center;margin-bottom:14px;">
+    <svg viewBox="0 0 42 42" style="width:${sizePx}px;height:${sizePx}px;filter:drop-shadow(0 0 6px rgba(108,99,255,0.3));">${segs}</svg></div>${legend}`;
+}
+
 function renderResults() {
   const area = document.getElementById('resultsArea');
   if (!area || !curQ) return;
@@ -898,23 +988,7 @@ function renderResults() {
 
   // ── Donut ──────────────────────────────────────────────────────────────────
   } else if (viewMode === 'donut') {
-    let cum=0; const r0=38,cx=46,cy=46;
-    const segs = counts.filter(c=>c.count>0).map(({i,count})=>{
-      const frac=total>0?count/total:0; const start=cum; cum+=frac;
-      const a0=start*2*Math.PI-Math.PI/2, a1=cum*2*Math.PI-Math.PI/2;
-      const large=frac>0.5?1:0;
-      const x0=cx+r0*Math.cos(a0),y0=cy+r0*Math.sin(a0);
-      const x1=cx+r0*Math.cos(a1),y1=cy+r0*Math.sin(a1);
-      return `<path d="M ${x0} ${y0} A ${r0} ${r0} 0 ${large} 1 ${x1} ${y1}" fill="none" stroke="${PS_COLORS[i%PS_COLORS.length]}" stroke-width="14" stroke-linecap="butt"/>`;
-    }).join('');
-    const legend = counts.map(({i,count})=>`
-      <div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;">
-        <span style="width:10px;height:10px;border-radius:50%;background:${PS_COLORS[i%PS_COLORS.length]};box-shadow:0 0 6px ${PS_COLORS[i%PS_COLORS.length]};flex-shrink:0;"></span>
-        <span style="flex:1;">${letters[i]}. ${escapeHtml((curQ.options[i]||{}).text||'')}</span>
-        <span style="font-family:'Syne',sans-serif;font-weight:700;">${pct(count)}%</span>
-      </div>`).join('');
-    inner = `<div style="display:flex;justify-content:center;margin-bottom:14px;">
-      <svg viewBox="0 0 92 92" style="width:140px;height:140px;filter:drop-shadow(0 0 6px rgba(108,99,255,0.3));">${segs||'<circle cx="46" cy="46" r="38" fill="none" style="stroke:var(--border)" stroke-width="14"/>'}</svg></div>${legend}`;
+    inner = donutPieChartHTML('donut', counts, total, correct, revealed, { palette: PS_COLORS, options: curQ.options });
 
   // ── Column chart (vertical bars) ──────────────────────────────────────────
   } else if (viewMode === 'column') {
@@ -948,25 +1022,7 @@ function renderResults() {
 
   // ── Pie chart ──────────────────────────────────────────────────────────────
   } else if (viewMode === 'pie') {
-    let cum=0; const r0=45,cx=50,cy=50;
-    const segs = counts.filter(c=>c.count>0).map(({i,count})=>{
-      const frac=total>0?count/total:0; const start=cum; cum+=frac;
-      const a0=start*2*Math.PI-Math.PI/2, a1=cum*2*Math.PI-Math.PI/2;
-      const large=frac>0.5?1:0;
-      const x0=cx+r0*Math.cos(a0),y0=cy+r0*Math.sin(a0);
-      const x1=cx+r0*Math.cos(a1),y1=cy+r0*Math.sin(a1);
-      const mx=cx+r0*Math.cos((a0+a1)/2)*0.6, my=cy+r0*Math.sin((a0+a1)/2)*0.6;
-      const col = PS_COLORS[i%PS_COLORS.length];
-      return `<path d="M ${cx} ${cy} L ${x0} ${y0} A ${r0} ${r0} 0 ${large} 1 ${x1} ${y1} Z" fill="${col}" opacity="0.9"/>`;
-    }).join('');
-    const legend = counts.map(({i,count})=>`
-      <div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:6px;">
-        <span style="width:10px;height:10px;border-radius:2px;background:${PS_COLORS[i%PS_COLORS.length]};box-shadow:0 0 6px ${PS_COLORS[i%PS_COLORS.length]};flex-shrink:0;"></span>
-        <span style="flex:1;">${letters[i]}. ${escapeHtml((curQ.options[i]||{}).text||'')}</span>
-        <span style="font-family:'Syne',sans-serif;font-weight:700;">${pct(count)}%</span>
-      </div>`).join('');
-    inner = `<div style="display:flex;justify-content:center;margin-bottom:14px;">
-      <svg viewBox="0 0 42 42" style="width:150px;height:150px;">${segs||'<circle cx="21" cy="21" r="18" style="fill:var(--bar-bg)"/>'}</svg></div>${legend}`;
+    inner = donutPieChartHTML('pie', counts, total, correct, revealed, { palette: PS_COLORS, options: curQ.options });
 
   // ── Neon Glass Bars (default) ──────────────────────────────────────────────
   } else {
