@@ -382,31 +382,25 @@ function showTargetedQuestion(session, qIdx) {
     curQ = qObj;
     renderAll();
 
-    // Watch currentQuestion/phase so post-reveal fires even in QR mode
-    phaseRef = db.ref(`sessions/${session}/currentQuestion`);
-    phaseRef.on('value', pSnap => {
-      const cq = pSnap.val();
-      if (!cq) return;
-      // Only react if this currentQuestion is the question the companion is showing.
-      // Match on stable id OR qIndex — qIndex is the robust key (the stable-id STRING
-      // can differ if the session code's formatting ever drifts between the QR and the
-      // presenter, which would silently block every phase update incl. post-reveal).
-      const idMatch  = cq.id != null && cq.id === curQId;
-      const idxMatch = cq.qIndex != null && curQ && cq.qIndex === curQ.qIndex;
-      if (!idMatch && !idxMatch) return;
-      const newPhase = cq.phase || 'live';
-      // Keep curQ in sync with the live phase + latest post-reveal config. Stamping
-      // phase onto curQ makes renderResults' post-reveal check (presentPhase OR
-      // curQ.phase) reliable for EVERY question — not just the first one shown.
-      // postRevealAt drives the synced countdown badge.
+    // Watch THIS question's OWN state node (qstate/<qId>), not the shared
+    // currentQuestion. This is the core fix: the companion reacts to reveal /
+    // post-reveal for exactly the question its slide QR points to — independent of
+    // which question happens to be "current" in the presenter. No id/index matching
+    // is needed because we're reading this question's dedicated node directly, so it
+    // works for every slide in a Keynote/PowerPoint deck (and any future companion).
+    phaseRef = db.ref(`sessions/${session}/qstate/${qId}`);
+    phaseRef.on('value', sSnap => {
+      const st = sSnap.val();
+      if (!st) return; // no published state yet → stay on live results
+      const newPhase = st.phase || 'live';
       const oldPrAt = (curQ && curQ.postRevealAt) || null;
-      const newPrAt = cq.postRevealAt || null;
+      const newPrAt = st.postRevealAt || null;
       if (curQ) {
         curQ = Object.assign({}, curQ, { phase: newPhase, postRevealAt: newPrAt });
-        if (cq.postReveal) curQ.postReveal = cq.postReveal;
+        if (st.postReveal) curQ.postReveal = st.postReveal;
       }
-      // Re-render on a phase change OR when the countdown target appears/changes —
-      // non-quiz questions publish postRevealAt without changing phase.
+      // Re-render on a phase change OR when the countdown target appears/changes
+      // (non-quiz publishes postRevealAt without changing phase).
       if (newPhase !== presentPhase || newPrAt !== oldPrAt) {
         presentPhase = newPhase;
         if (presentPhase === 'revealed' || presentPhase === 'post_reveal') {

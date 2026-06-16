@@ -1979,6 +1979,13 @@ async function launchQuestion(idx, opts) {
 
   postRevealPhase = false;
   await db.ref(`sessions/${code}/currentQuestion`).set(payload);
+  // Per-question state — lets ANY companion read THIS question's phase by its own
+  // stable id, independent of which question is "current" in the presenter. This is
+  // what makes the Keynote/PowerPoint companion show reveal/post-reveal for whatever
+  // slide's QR it's pointed at, not just the one selected in the presenter webpage.
+  db.ref(`sessions/${code}/qstate/${qId}`).set({
+    phase: 'live', postReveal: q.postReveal || null, postRevealAt: null, launchedAt: launchedAt
+  }).catch(()=>{});
   renderQList();
   // Set reveal delay and arm BEFORE listener fires so revealed state is correct
   revealSeconds = normalizeRevealDelay(q.revealDelay);
@@ -2349,7 +2356,11 @@ function beginRevealCountdown() {
           postRevealCountdown = parseInt(_delay);
           // Publish the absolute fire time so the companion's countdown stays in sync.
           const _code = presentations[activePresId]?.sessionCode;
-          if (_code) db.ref(`sessions/${_code}/currentQuestion`).update({ postRevealAt: Date.now() + postRevealCountdown * 1000 }).catch(()=>{});
+          const _prAt = Date.now() + postRevealCountdown * 1000;
+          if (_code) {
+            db.ref(`sessions/${_code}/currentQuestion`).update({ postRevealAt: _prAt }).catch(()=>{});
+            if (liveQId) db.ref(`sessions/${_code}/qstate/${liveQId}`).update({ postRevealAt: _prAt }).catch(()=>{});
+          }
           postRevealTimer = setInterval(() => {
             postRevealCountdown--;
             const b1 = document.getElementById('postRevealAdvanceBadge');
@@ -2461,6 +2472,9 @@ function doReveal() {
   if (code) {
     const update = { phase: 'revealed', postReveal: qPR?.postReveal || null, postRevealAt: postRevealAt };
     db.ref(`sessions/${code}/currentQuestion`).update(update).catch(e => console.error('doReveal Firebase err:', e));
+    // Mirror to this question's own state node so its companion reacts even if it's
+    // not the "current" question (Keynote/PowerPoint per-slide QR workflow).
+    if (liveQId) db.ref(`sessions/${code}/qstate/${liveQId}`).update(update).catch(()=>{});
   }
   if (code && liveQId && liveQIdx !== null) {
     db.ref(`sessions/${code}/responses/${liveQId}`).get().then(snap => {
@@ -2491,6 +2505,8 @@ function doPostReveal() {
     const q2 = liveQIdx !== null ? questions[liveQIdx] : null;
     const update = { phase: 'post_reveal', postReveal: q2?.postReveal || null, postRevealAt: null };
     db.ref(`sessions/${code}/currentQuestion`).update(update).catch(e => console.error('doPostReveal Firebase err:', e));
+    // Mirror to this question's own state node (per-slide QR companions).
+    if (liveQId) db.ref(`sessions/${code}/qstate/${liveQId}`).update(update).catch(()=>{});
   }
   renderRevealControl(false);
   if (liveQIdx !== null) renderRightPanel(questions[liveQIdx], _lastResponses || []);
@@ -3228,6 +3244,10 @@ async function publishLive(idx, qId) {
   localStorage.setItem('ql_liveQIdx_' + code, idx);
   localStorage.setItem('ql_liveQId_' + code, qId);
   await db.ref(`sessions/${code}/currentQuestion`).set(payload).catch(()=>{});
+  // Per-question state so the companion reading THIS question's QR reacts directly.
+  db.ref(`sessions/${code}/qstate/${qId}`).set({
+    phase: 'live', postReveal: q.postReveal || null, postRevealAt: null, launchedAt: payload.launchedAt
+  }).catch(()=>{});
   // armReveal is called synchronously in showLiveOrEdit before this runs
 }
 
