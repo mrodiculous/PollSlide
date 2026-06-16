@@ -1515,6 +1515,7 @@ let postRevealPhase = false;   // true after presenter clicks "→ Post-Reveal"
 let postRevealTimer = null;    // auto-advance countdown interval
 let postRevealCountdown = 0;   // seconds remaining before auto-advancing
 let revealRemaining = 0;       // seconds left in countdown
+let _qLaunchedAt = {};         // stable launch time per question id (this session)
 let participantListener = null;
 let participantData = {};
 let saveTimeout   = null;
@@ -1905,7 +1906,8 @@ function clearRightPanel() {
 }
 
 // ─── LAUNCH QUESTION ─────────────────────────────────────────────────────────
-async function launchQuestion(idx) {
+async function launchQuestion(idx, opts) {
+  opts = opts || {};
   if (!activePresId) return;
   if (respListener) { respListener(); respListener = null; }
 
@@ -1930,6 +1932,13 @@ async function launchQuestion(idx) {
   localStorage.setItem('ql_liveQIdx_' + code, idx);
   localStorage.setItem('ql_liveQId_' + code, qId);
 
+  // Stable per-question launch time. Reusing it means navigating BACK to an
+  // already-shown question still displays the responses gathered earlier rather
+  // than hiding them behind a fresh cutoff. (In-memory; resets on page reload.)
+  _qLaunchedAt[qId] = _qLaunchedAt[qId] || Date.now();
+  const launchedAt = _qLaunchedAt[qId];
+  liveStartedAt = launchedAt; // set synchronously so callers right after launch read the right cutoff
+
   const payload = {
     id: qId, qIndex: idx, index: idx+1, total: questions.length,
     text: q.text, type: q.type,
@@ -1937,7 +1946,7 @@ async function launchQuestion(idx) {
     correctAnswer: q.correctAnswer!==undefined ? q.correctAnswer : null,
     ratingMax: q.ratingMax||null, ratingLabels: q.ratingLabels||null,
     image: q.image || null, videoOpts: q.videoOpts || null,
-    status: 'active', launchedAt: Date.now(),
+    status: 'active', launchedAt: launchedAt,
     phase: 'live',
     postReveal: q.postReveal || null,
     displayMode: q.displayMode || 'bars'
@@ -1949,10 +1958,9 @@ async function launchQuestion(idx) {
   // Set reveal delay and arm BEFORE listener fires so revealed state is correct
   revealSeconds = normalizeRevealDelay(q.revealDelay);
   armReveal(q);
-  liveStartedAt = Date.now(); // mark start of this live session
   renderLiveView(idx, qId, q);
   listenResponses(idx, qId, q);
-  toast(`Q${idx+1} is now live!`, 'success');
+  if (!opts.silent) toast(`Q${idx+1} is now live!`, 'success');
 }
 
 // ─── CLOSE / REVEAL removed — questions always stay live ─────────────────────
@@ -4051,6 +4059,10 @@ function openPresentMode() {
   if (!overlay) return;
   overlay.style.display = 'flex';
   document.body.style.overflow = 'hidden';
+  // Make sure the opening slide is actually live in Firebase so the companion
+  // follows from question one. If it's already the live question, don't re-launch
+  // (that would reset its reveal state); otherwise launch it now.
+  if (liveQIdx !== idx) launchQuestion(idx, { silent: true });
   renderPresentSlide(_presentIdx);
 
   // Tick the reveal/post-reveal status badge every second without a full re-render
@@ -4105,15 +4117,17 @@ function presentNav(dir) {
   if (!questions) return;
   const newIdx = _presentIdx + dir;
   if (newIdx < 0 || newIdx >= questions.length) return;
-  if (postRevealTimer) { clearInterval(postRevealTimer); postRevealTimer = null; }
-  postRevealPhase = false;
-  postRevealCountdown = 0;
-  revealed = false;
-  revealArmed = false;
-  selectQ(newIdx);           // updates liveQId to the new question
   _presentIdx = newIdx;
+  selIdx = newIdx;
   _lastPresResponses = [];
-  _subscribePresentResponses(); // re-subscribe to new question — old listener would re-fill tallies
+  // Launch the new slide LIVE so the companion + participants follow the deck.
+  // Previously this called selectQ(), which only changed the presenter's local
+  // view — it never wrote sessions/<code>/currentQuestion. So the companion stayed
+  // pinned to the FIRST launched question and never received the reveal/post-reveal
+  // phase for Q2+. launchQuestion() writes the new id + phase:'live' + postReveal,
+  // and also resets all reveal/post-reveal state for a clean slate per slide.
+  launchQuestion(newIdx, { silent: true });
+  _subscribePresentResponses(); // present-mode response feed for the new question
   renderPresentSlide(_presentIdx);
 }
 
