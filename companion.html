@@ -387,8 +387,13 @@ function showTargetedQuestion(session, qIdx) {
     phaseRef.on('value', pSnap => {
       const cq = pSnap.val();
       if (!cq) return;
-      // Only react if this currentQuestion is the same question the QR points to
-      if (cq.id && cq.id !== curQId) return;
+      // Only react if this currentQuestion is the question the companion is showing.
+      // Match on stable id OR qIndex — qIndex is the robust key (the stable-id STRING
+      // can differ if the session code's formatting ever drifts between the QR and the
+      // presenter, which would silently block every phase update incl. post-reveal).
+      const idMatch  = cq.id != null && cq.id === curQId;
+      const idxMatch = cq.qIndex != null && curQ && cq.qIndex === curQ.qIndex;
+      if (!idMatch && !idxMatch) return;
       const newPhase = cq.phase || 'live';
       // Keep curQ in sync with the live phase + latest post-reveal config. Stamping
       // phase onto curQ makes renderResults' post-reveal check (presentPhase OR
@@ -870,11 +875,17 @@ function renderResults() {
   const area = document.getElementById('resultsArea');
   if (!area || !curQ) return;
 
-  // Post-reveal phase: replace chart with post-reveal content
+  // Post-reveal phase: replace chart with post-reveal content.
+  // The presenter ONLY moves currentQuestion to phase:'post_reveal' when post-reveal
+  // is enabled (the timer/button don't exist otherwise), so we honor that decision
+  // unconditionally — never gating on postReveal.enabled surviving the data round-trip.
+  // This mirrors present mode, which simply checks its local postRevealPhase flag.
   const inPostReveal = presentPhase === 'post_reveal' || curQ?.phase === 'post_reveal';
-  if (inPostReveal && curQ.postReveal?.enabled) {
-    const label = {leaderboard:'Leaderboard',podium:'Podium',scorecard:'Score Card',explainer:'Explainer'}[curQ.postReveal.type]||'Post-Reveal';
-    area.innerHTML = `<div style="animation:fadeInScale .4s ease;" class="resp-big">${responses.length} <span>responses · ${label}</span></div>${buildPostRevealContent(curQ, responses)}`;
+  if (inPostReveal) {
+    const pr = (curQ.postReveal && typeof curQ.postReveal === 'object') ? curQ.postReveal : { type: 'leaderboard' };
+    const label = {leaderboard:'Leaderboard',podium:'Podium',scorecard:'Score Card',explainer:'Explainer'}[pr.type] || 'Post-Reveal';
+    const qForPR = Object.assign({}, curQ, { postReveal: pr });
+    area.innerHTML = `<div style="animation:fadeInScale .4s ease;" class="resp-big">${responses.length} <span>responses · ${label}</span></div>${buildPostRevealContent(qForPR, responses)}`;
     requestFitToContent();
     return;
   }
