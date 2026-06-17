@@ -63,9 +63,8 @@ function buildMessages({ topic, type, count, difficulty, audience }) {
       "text": "the question or poll prompt",
       "emoji": "ONE relevant emoji for this question",
       "options": ["option 1", "option 2", "option 3", "option 4"],
-      "correctAnswer": 0,
-      "explanation": "1-2 lively sentences, sprinkle in a couple fitting emojis",
-      "imagePrompt": "a vivid, detailed visual description an image generator can use to illustrate this question"
+      "answer": "the correct option, copied WORD-FOR-WORD from options (empty string for opinion polls/surveys)",
+      "explanation": "1-2 lively sentences with a couple fitting emojis"
     }
   ]
 }`;
@@ -75,7 +74,7 @@ function buildMessages({ topic, type, count, difficulty, audience }) {
     `You write lively, audience-friendly ${guide}. ` +
     `Always weave in relevant emojis so the content pops. ` +
     `Every question must have exactly 4 options. ` +
-    `correctAnswer is the 0-based index of the right option, or -1 when there is no right answer. ` +
+    `"answer" MUST be one of the options copied word-for-word (use "" when there is no correct answer). ` +
     `Return ONLY valid JSON in exactly this shape — no markdown, no commentary:\n${schema}`;
 
   const user =
@@ -117,6 +116,35 @@ async function callChat({ baseURL, apiKey, model, messages, timeoutMs, extraHead
   }
 }
 
+// Resolve the correct-option index robustly. Small models return the answer as text,
+// a letter, or an index inconsistently — matching on the option TEXT is the reliable
+// signal, with letter/number fallbacks. (Fixes Polly defaulting every answer to "A".)
+function resolveCorrect(q, options) {
+  const norm = s => String(s == null ? '' : s).trim().toLowerCase();
+  const optN = options.map(norm);
+
+  // 1) Preferred: "answer" copied verbatim from the options.
+  if (norm(q.answer)) {
+    const i = optN.indexOf(norm(q.answer));
+    if (i >= 0) return i;
+  }
+  const raw = String((q.correctAnswer != null ? q.correctAnswer : q.answer) ?? '').trim();
+  // 2) A letter A–F.
+  if (/^[A-Fa-f]$/.test(raw)) {
+    const i = raw.toUpperCase().charCodeAt(0) - 65;
+    if (i >= 0 && i < options.length) return i;
+  }
+  // 3) The answer text living in correctAnswer.
+  if (raw && optN.indexOf(raw.toLowerCase()) >= 0) return optN.indexOf(raw.toLowerCase());
+  // 4) A number — accept 0-based; shift if it looks 1-based.
+  const n = Number(raw);
+  if (Number.isInteger(n)) {
+    if (n >= 0 && n < options.length) return n;
+    if (n >= 1 && n <= options.length) return n - 1;
+  }
+  return 0;
+}
+
 // Clean and shape whatever the model returned into a predictable array.
 function normalizeQuestions(raw) {
   let parsed;
@@ -132,15 +160,12 @@ function normalizeQuestions(raw) {
       .filter(Boolean)
       .slice(0, 6);
     while (options.length < 2) options.push('');   // never fewer than 2 options
-    let correct = Number.isInteger(q.correctAnswer) ? q.correctAnswer : 0;
-    if (correct >= options.length) correct = 0;
     return {
       text:        String(q.text || '').trim(),
       emoji:       String(q.emoji || '').trim(),
       options,
-      correctAnswer: correct,
+      correctAnswer: resolveCorrect(q, options),
       explanation: String(q.explanation || '').trim(),
-      imagePrompt: String(q.imagePrompt || q.image_prompt || '').trim(),
     };
   }).filter((q) => q.text);
 }
@@ -161,7 +186,7 @@ module.exports = async function handler(req, res) {
   const body       = req.body || {};
   const topic      = String(body.topic || '').trim();
   const type       = ['poll', 'survey', 'quiz', 'study', 'presentation'].includes(body.type) ? body.type : 'quiz';
-  const count      = Math.min(Math.max(parseInt(body.count, 10) || 1, 1), 10);   // clamp 1–10
+  const count      = Math.min(Math.max(parseInt(body.count, 10) || 1, 1), 30);   // clamp 1–10
   const difficulty = body.difficulty ? String(body.difficulty).slice(0, 40) : '';
   const audience   = body.audience   ? String(body.audience).slice(0, 80)   : '';
 

@@ -563,7 +563,7 @@
     <div style="display:flex;gap:10px;margin-bottom:12px;">
       <div style="flex:1;">
         <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">How many</label>
-        <select id="pollyCount" style="width:100%;"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option><option>8</option></select>
+        <input type="number" id="pollyCount" min="1" max="30" value="5" style="width:100%;">
       </div>
       <div style="flex:1;">
         <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Difficulty</label>
@@ -572,9 +572,6 @@
     </div>
     <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Style</label>
     <select id="pollyStyle" style="width:100%;margin-bottom:12px;"><option value="">Auto</option><option>Fun &amp; casual</option><option>Professional</option><option>Trivia challenge</option><option>Thought-provoking</option><option>Quick &amp; punchy</option></select>
-    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;">
-      <input type="checkbox" id="pollyImages" style="width:auto;margin:0;"> Also draw an image for each <span style="color:var(--muted);font-size:11px;">(slower)</span>
-    </label>
     <div id="pollyStatus" style="display:none;margin-top:12px;padding:9px 12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border2);font-size:13px;color:var(--text);"></div>
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closePolly()">Cancel</button>
@@ -3514,7 +3511,6 @@ async function runPolly() {
   const difficulty = document.getElementById('pollyDiff').value;
   const styleEl    = document.getElementById('pollyStyle');
   const style      = styleEl ? styleEl.value : '';
-  const withImages = document.getElementById('pollyImages').checked;
   const goBtn  = document.getElementById('pollyGoBtn');
   const status = document.getElementById('pollyStatus');
   goBtn.disabled = true;
@@ -3531,22 +3527,7 @@ async function runPolly() {
     }
     let added = 0;
     for (const gq of data.questions) {
-      const q = pollyToQuestion(gq);
-      if (withImages && gq.imagePrompt) {
-        status.textContent = `🎨 Drawing image ${added + 1} of ${data.questions.length}…`;
-        try {
-          const ir = await fetch('/api/polly-image', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: gq.imagePrompt })
-          });
-          const idata = await ir.json();
-          if (ir.ok && idata.image) {
-            // Upload to Storage and keep the URL (not the raw base64) so it persists.
-            try { q.image = await uploadDataUrl(idata.image); }
-            catch (_) { /* upload failed — keep the question without the image */ }
-          }
-        } catch (_) { /* image is optional — keep the question */ }
-      }
+      const q = pollyToQuestion(gq);   // emojis baked into the text; add images per-question if wanted
       questions.push(q);
       added++;
     }
@@ -3746,6 +3727,11 @@ function showSetup() {
             <button class="btn btn-primary" style="font-size:13px;padding:10px 20px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#fff;" onclick="openPolly()">✨ Ask Polly</button>
             <button class="btn btn-ghost" style="font-size:13px;padding:10px 18px;" onclick="addQuestion()">+ Add manually</button>
           </div>
+          ${['survey','quiz','study'].includes(activeProduct) ? `
+          <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border);max-width:360px;margin-left:auto;margin-right:auto;">
+            <p style="color:var(--muted);font-size:12px;line-height:1.6;margin-bottom:10px;">📣 When it's ready, <b style="color:var(--text);">share a link, show a QR, or email it to a list</b> — people respond on their own time and results roll into the right panel.</p>
+            <button class="btn btn-ghost" style="font-size:13px;padding:9px 18px;" onclick="openShareModal()">🔗 Share / 📧 Email</button>
+          </div>` : ''}
         </div>
       </div>`;
     return;
