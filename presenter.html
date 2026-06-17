@@ -621,7 +621,27 @@
     <div id="qrModalCode"></div>
     <div class="qr-modal-url" id="qrModalURL" onclick="copyQRURL()">—</div>
     <button class="btn btn-primary" onclick="copyQRURL()" style="width:100%;justify-content:center;margin-bottom:7px;padding:10px;">Copy Link</button>
+    <button class="btn btn-ghost"   id="qrEmailBtn" onclick="openEmailCompose()" style="display:none;width:100%;justify-content:center;margin-bottom:7px;padding:10px;">✉️ Email it</button>
     <button class="btn btn-ghost"   onclick="closeQRModal()" style="width:100%;justify-content:center;padding:10px;">Close</button>
+  </div>
+</div>
+
+<!-- Email Compose Modal (sends from the user's OWN mail client via mailto) -->
+<div class="overlay hidden" id="emailComposeModal" onclick="if(event.target===this)document.getElementById('emailComposeModal').classList.add('hidden')">
+  <div class="modal" style="max-width:460px;">
+    <h2 style="margin-bottom:4px;">Email this survey</h2>
+    <p style="margin-bottom:14px;">Opens your own mail app with everything filled in — it sends <strong style="color:var(--text);">from your address</strong>, so replies come back to you.</p>
+    <label>Recipients <span style="color:var(--muted);font-weight:400;">(comma or new line — added as BCC so they can't see each other)</span></label>
+    <textarea id="emailRecipients" rows="3" placeholder="alice@example.com, bob@example.com" style="margin-bottom:12px;"></textarea>
+    <label>Subject</label>
+    <input type="text" id="emailSubject" style="margin-bottom:12px;">
+    <label>Message</label>
+    <textarea id="emailBody" rows="5" style="margin-bottom:6px;"></textarea>
+    <p id="emailErr" style="color:var(--accent2);font-size:12px;margin:0 0 12px;min-height:14px;"></p>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="document.getElementById('emailComposeModal').classList.add('hidden')">Cancel</button>
+      <button class="btn btn-primary" onclick="sendSurveyEmail()">✉️ Open in my mail app</button>
+    </div>
   </div>
 </div>
 
@@ -3892,7 +3912,51 @@ function openShareModal() {
   document.getElementById('qrModalURL').textContent   = url;
   const el = document.getElementById('qrModalCode'); el.innerHTML = '';
   new QRCode(el, { text:url, width:210, height:210, colorDark:'#ffffff', colorLight:'#10101a', correctLevel:QRCode.CorrectLevel.M });
+  // Email-it is for async products (people answer on their own time).
+  const emailBtn = document.getElementById('qrEmailBtn');
+  if (emailBtn) emailBtn.style.display = ['survey','study'].includes(presType(pres)) ? '' : 'none';
   document.getElementById('qrModal').classList.remove('hidden');
+}
+
+// ─── EMAIL DISTRIBUTION (mailto v1 — sends from the user's own address) ────────
+// Opens the user's mail client pre-filled. No server, no deliverability setup, and
+// the message genuinely comes FROM them. (Pro upgrade later: Gmail/Outlook send-as.)
+function openEmailCompose() {
+  if (!activePresId) return;
+  const pres = presentations[activePresId];
+  const prod = PRODUCTS[presType(pres)];
+  const url  = getSurveyURL();
+  const noun = prod.name.replace('Slide','').toLowerCase();
+  document.getElementById('emailSubject').value = `Please take my ${noun}: ${pres.name}`;
+  document.getElementById('emailBody').value =
+    `Hi,\n\nI'd love your input — it only takes a minute.\n\n${pres.name}\n${url}\n\nThanks!`;
+  document.getElementById('emailErr').textContent = '';
+  document.getElementById('qrModal').classList.add('hidden');
+  document.getElementById('emailComposeModal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('emailRecipients').focus(), 60);
+}
+
+function sendSurveyEmail() {
+  const raw = document.getElementById('emailRecipients').value || '';
+  // Accept commas, semicolons, spaces, or new lines between addresses.
+  const list = raw.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean);
+  const bad  = list.filter(e => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
+  const err  = document.getElementById('emailErr');
+  if (list.length === 0) { err.textContent = 'Add at least one recipient email.'; return; }
+  if (bad.length)        { err.textContent = 'Check these addresses: ' + bad.slice(0,3).join(', '); return; }
+
+  const subject = encodeURIComponent(document.getElementById('emailSubject').value || '');
+  const body    = encodeURIComponent(document.getElementById('emailBody').value || '');
+  // BCC keeps recipients private from each other. Empty "to" is fine for a BCC blast.
+  const mailto  = `mailto:?bcc=${encodeURIComponent(list.join(','))}&subject=${subject}&body=${body}`;
+
+  if (mailto.length > 1900) {
+    err.textContent = 'Too many recipients for one email — send in smaller batches (≈30 at a time).';
+    return;
+  }
+  window.location.href = mailto; // hands off to the user's mail client
+  document.getElementById('emailComposeModal').classList.add('hidden');
+  toast('Opening your mail app…', 'success');
 }
 
 // Show the topbar Share button only for async products (one link for the whole set).
