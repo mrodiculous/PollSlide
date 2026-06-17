@@ -557,6 +557,7 @@ function showAlreadyAnswered() {
 // ════════════════════════════════════════════════════════════════════════════
 let surveyQuestions = [];
 let surveyAnswers   = {};   // { qIndex: answerValue }
+let formIsQuiz      = false; // graded (QuizSlide assignment) vs ungraded (SurveySlide)
 const SURVEY_LETTERS = ['A','B','C','D','E','F','G','H'];
 
 async function loadSurvey() {
@@ -568,6 +569,12 @@ async function loadSurvey() {
   } catch(e) { qs = []; }
   // Firebase may return an object if keys are sparse — normalize to array.
   surveyQuestions = Array.isArray(qs) ? qs.filter(Boolean) : Object.values(qs).filter(Boolean);
+
+  // Is this a graded quiz assignment? (Presenter publishes productType to quiz_builder.)
+  try {
+    const ptSnap = await db.ref(`quiz_builder/${SESSION}/productType`).get();
+    formIsQuiz = ptSnap.exists() && ptSnap.val() === 'quiz';
+  } catch(e) { formIsQuiz = false; }
 
   if (surveyQuestions.length === 0) {
     render(`
@@ -641,9 +648,11 @@ function showSurveyForm() {
   render(`
     ${logoMarkup()}
     <h1 style="margin-bottom:4px;">${surveyQuestions.length} question${surveyQuestions.length!==1?'s':''}</h1>
-    <p class="subtitle">Answer at your own pace, then submit. You can skip any question.</p>
+    <p class="subtitle">${formIsQuiz
+      ? 'Answer all you can, then submit to see your score.'
+      : 'Answer at your own pace, then submit. You can skip any question.'}</p>
     <div id="surveyForm">${cards}</div>
-    <button class="btn btn-primary" id="surveySubmitBtn" onclick="submitSurvey()" style="margin-top:6px;">Submit Survey</button>
+    <button class="btn btn-primary" id="surveySubmitBtn" onclick="submitSurvey()" style="margin-top:6px;">${formIsQuiz ? 'Submit & See Score' : 'Submit Survey'}</button>
     <p id="surveyErr" style="color:var(--accent2);font-size:13px;margin-top:10px;text-align:center;"></p>
   `);
 }
@@ -725,10 +734,10 @@ async function submitSurvey() {
 
   try {
     await Promise.all(writes);
-    showSurveyDone(false);
+    if (formIsQuiz) showQuizScore(); else showSurveyDone(false);
   } catch(e) {
     submitting = false;
-    if (btn) { btn.disabled = false; btn.textContent = 'Submit Survey'; }
+    if (btn) { btn.disabled = false; btn.textContent = formIsQuiz ? 'Submit & See Score' : 'Submit Survey'; }
     document.getElementById('surveyErr').textContent = 'Could not submit — check your connection and try again.';
   }
 }
@@ -739,9 +748,89 @@ function showSurveyDone(already) {
     <div style="text-align:center;padding:14px 0 20px;">
       <div style="font-size:46px;margin-bottom:12px;">✓</div>
       <h1 style="margin-bottom:8px;">${already ? 'Already submitted' : 'Thank you!'}</h1>
-      <p class="subtitle">${already ? 'You\'ve already completed this survey.' : 'Your responses have been recorded.'}</p>
+      <p class="subtitle">${already ? 'You\'ve already completed this ' + (formIsQuiz?'quiz':'survey') + '.' : 'Your responses have been recorded.'}</p>
     </div>
   `);
+}
+
+// ─── QUIZ SCORE (gamified, shareable — the QuizSlide payoff) ──────────────────
+function answerLabel(q, answer) {
+  if (answer === undefined || answer === null) return '<span style="opacity:0.6;">(skipped)</span>';
+  if (q.type === 'multiple_choice' || q.type === 'multiple_choice_multi') {
+    const arr = Array.isArray(answer) ? answer : [answer];
+    return arr.map(i => SURVEY_LETTERS[i] + '. ' + ((q.options||[])[i]?.text || '')).join(', ') || '(skipped)';
+  }
+  if (q.type === 'rating') return String(answer);
+  return String(answer);
+}
+function correctLabel(q) {
+  const ca = q.correctAnswer;
+  if (ca === null || ca === undefined) return '';
+  const arr = Array.isArray(ca) ? ca : [ca];
+  return arr.map(i => SURVEY_LETTERS[i] + '. ' + ((q.options||[])[Number(i)]?.text || '')).join(', ');
+}
+
+function showQuizScore() {
+  // Grade only the gradable (choice) questions that have a correct answer set.
+  let gradable = 0, earned = 0;
+  const rows = surveyQuestions.map((q, idx) => {
+    const ans = surveyAnswers[idx];
+    const score = surveyComputeCorrect(q, ans); // true / false / 0..1 / null
+    const isGradable = score !== null;
+    if (isGradable) { gradable++; earned += (score === true ? 1 : (typeof score === 'number' ? score : 0)); }
+    const state = !isGradable ? 'na' : (score === true ? 'right' : (score === false || score === 0 ? 'wrong' : 'partial'));
+    const icon  = state==='right' ? '✓' : state==='wrong' ? '✗' : state==='partial' ? '◐' : '•';
+    const color = state==='right' ? 'var(--accent3,#22c55e)' : state==='wrong' ? 'var(--accent2)' : state==='partial' ? 'var(--accent4)' : 'var(--muted)';
+    const showCorrect = (state==='wrong' || state==='partial');
+    return `
+      <div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);text-align:left;">
+        <div style="color:${color};font-weight:800;font-size:16px;flex-shrink:0;width:18px;">${icon}</div>
+        <div style="min-width:0;flex:1;">
+          <div style="font-size:13px;font-weight:600;margin-bottom:2px;">${idx+1}. ${q.text||''}</div>
+          ${isGradable ? `<div style="font-size:12px;color:var(--muted);">Your answer: ${answerLabel(q, ans)}</div>` : `<div style="font-size:12px;color:var(--muted);">${answerLabel(q, ans)}</div>`}
+          ${showCorrect ? `<div style="font-size:12px;color:var(--accent3,#22c55e);">Correct: ${correctLabel(q)}</div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+
+  const pct = gradable ? Math.round((earned / gradable) * 100) : 0;
+  const display = gradable ? `${(Math.round(earned*10)/10)} / ${gradable}` : '—';
+  const headline = !gradable ? 'Submitted!' :
+                   pct >= 80 ? '🏆 Excellent!' :
+                   pct >= 50 ? '👏 Nice work!' : '💪 Keep practicing!';
+  const ring = gradable ? `
+    <div style="position:relative;width:120px;height:120px;margin:0 auto 14px;">
+      <svg viewBox="0 0 36 36" style="width:120px;height:120px;transform:rotate(-90deg);">
+        <circle cx="18" cy="18" r="16" fill="none" stroke="var(--surface3)" stroke-width="3"/>
+        <circle cx="18" cy="18" r="16" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"
+                stroke-dasharray="100.5" stroke-dashoffset="${(100.5*(1-pct/100)).toFixed(1)}"/>
+      </svg>
+      <div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+        <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:30px;line-height:1;">${pct}%</div>
+        <div style="font-size:11px;color:var(--muted);">${display}</div>
+      </div>
+    </div>` : '<div style="font-size:46px;margin-bottom:12px;">✓</div>';
+
+  window._quizSharePct = pct; window._quizShareScore = display;
+  render(`
+    ${logoMarkup()}
+    <div style="text-align:center;padding:6px 0 8px;">
+      ${ring}
+      <h1 style="margin-bottom:4px;">${headline}</h1>
+      ${gradable ? `<p class="subtitle">You scored <strong style="color:var(--text);">${display}</strong> correct.</p>` : `<p class="subtitle">Your answers were recorded.</p>`}
+    </div>
+    ${gradable ? `<button class="btn btn-primary" onclick="shareQuizScore()" style="width:100%;justify-content:center;margin-bottom:14px;">📣 Share my score</button>` : ''}
+    <div style="text-align:left;">${rows}</div>
+  `);
+}
+
+function shareQuizScore() {
+  const text = `I scored ${window._quizShareScore} (${window._quizSharePct}%) on this quiz! Try it: ${location.href}`;
+  if (navigator.share) {
+    navigator.share({ text }).catch(()=>{});
+  } else {
+    navigator.clipboard.writeText(text).then(()=> toast('Result copied — paste it anywhere!', 'success')).catch(()=>{});
+  }
 }
 
 // ─── BOOT (called last, after all functions defined) ─────────────────────────

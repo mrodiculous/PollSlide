@@ -1677,9 +1677,11 @@ async function saveCurrentPresentation() {
     const pres = presentations[activePresId];
     // Save full presentation record
     await db.ref(`users/${userId}/presentations/${activePresId}`).set(pres);
-    // ALSO mirror questions to quiz_builder/sessionCode so participants can find them by QR
+    // ALSO mirror questions to quiz_builder/sessionCode so participants can find them by QR.
+    // Publish productType too so the participant page knows whether to grade (quiz) or not.
     if (pres.sessionCode && pres.questions) {
       await db.ref(`quiz_builder/${pres.sessionCode}/questions`).set(pres.questions);
+      await db.ref(`quiz_builder/${pres.sessionCode}/productType`).set(presType(pres));
     }
     markSaved();
   } catch(e) { document.getElementById('saveText').textContent='Save failed'; }
@@ -1758,6 +1760,7 @@ function selectPresentation(id) {
   // Mirror questions to quiz_builder path so participants can find them
   if (pres.sessionCode && questions.length > 0) {
     db.ref(`quiz_builder/${pres.sessionCode}/questions`).set(questions).catch(()=>{});
+    db.ref(`quiz_builder/${pres.sessionCode}/productType`).set(presType(pres)).catch(()=>{});
   }
 
   // Update topbar
@@ -1866,6 +1869,7 @@ async function doDuplicatePresentation() {
 
   // Mirror questions to quiz_builder so participants can find them
   await db.ref(`quiz_builder/${newCode}/questions`).set(questions);
+  await db.ref(`quiz_builder/${newCode}/productType`).set(presType(source));
 
   duplicatePresTarget = null;
   renderPresList();
@@ -1923,6 +1927,7 @@ async function doCopyQuestion(targetPresId) {
   const code = presentations[targetPresId].sessionCode;
   await db.ref(`users/${userId}/presentations/${targetPresId}/questions`).set(targetQs);
   await db.ref(`quiz_builder/${code}/questions`).set(targetQs);
+  await db.ref(`quiz_builder/${code}/productType`).set(presType(presentations[targetPresId]));
 
   copyFromQIdx = null;
   toast(`Copied to "${presentations[targetPresId].name}"!`, 'success');
@@ -3906,15 +3911,18 @@ function openShareModal() {
   const pres = presentations[activePresId];
   const prod = PRODUCTS[presType(pres)];
   const url  = getSurveyURL();
+  const pt   = presType(pres);
+  const verb = pt==='quiz' ? 'take this quiz' : pt==='study' ? 'study this set' : 'respond to this survey';
+  const title= pt==='quiz' ? 'Share Assignment' : `Share ${prod.name.replace('Slide','')}`;
   currentQRURL = url;
-  document.getElementById('qrModalTitle').textContent = `Share ${prod.name.replace('Slide','')}`;
-  document.getElementById('qrModalDesc').textContent  = `Anyone with this link can respond to "${pres.name}".`;
+  document.getElementById('qrModalTitle').textContent = title;
+  document.getElementById('qrModalDesc').textContent  = `Anyone with this link can ${verb}: "${pres.name}".`;
   document.getElementById('qrModalURL').textContent   = url;
   const el = document.getElementById('qrModalCode'); el.innerHTML = '';
   new QRCode(el, { text:url, width:210, height:210, colorDark:'#ffffff', colorLight:'#10101a', correctLevel:QRCode.CorrectLevel.M });
   // Email-it is for async products (people answer on their own time).
   const emailBtn = document.getElementById('qrEmailBtn');
-  if (emailBtn) emailBtn.style.display = ['survey','study'].includes(presType(pres)) ? '' : 'none';
+  if (emailBtn) emailBtn.style.display = ['survey','study','quiz'].includes(pt) ? '' : 'none';
   document.getElementById('qrModal').classList.remove('hidden');
 }
 
@@ -3959,12 +3967,16 @@ function sendSurveyEmail() {
   toast('Opening your mail app…', 'success');
 }
 
-// Show the topbar Share button only for async products (one link for the whole set).
+// Show the topbar Share button for products that have a whole-set link.
+// Survey/Study: the primary way to share. Quiz: an optional async "assignment" link
+// (live quizzes still use per-slide QRs too).
 function updateShareButton() {
   const btn = document.getElementById('shareBtn');
   if (!btn) return;
-  const isAsync = activePresId && ['survey','study'].includes(presType(presentations[activePresId]));
-  btn.style.display = isAsync ? '' : 'none';
+  const pt = activePresId ? presType(presentations[activePresId]) : null;
+  const show = ['survey','study','quiz'].includes(pt);
+  btn.style.display = show ? '' : 'none';
+  if (show) btn.textContent = pt==='quiz' ? '🔗 Assign' : '🔗 Share';
 }
 
 function showQRModal(idx){
