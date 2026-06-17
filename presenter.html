@@ -146,6 +146,14 @@
   .panel-hd-title { font-family:'Syne',sans-serif; font-size:10px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); }
   .pres-list { overflow-y:auto; flex:1; padding:6px; }
 
+  /* Product switcher (Polls / Surveys / Quizzes / Study) */
+  .product-tabs { display:flex; gap:3px; padding:6px 6px 0; flex-shrink:0; }
+  .product-tab { flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; padding:7px 2px 6px; border-radius:9px 9px 0 0; cursor:pointer; border:1px solid transparent; border-bottom:none; background:transparent; color:var(--muted); transition:all 0.15s; font-family:'DM Sans',sans-serif; }
+  .product-tab:hover { background:var(--surface2); color:var(--text); }
+  .product-tab.active { background:var(--surface); border-color:var(--border); color:var(--accent); }
+  .product-tab-icon { font-size:15px; line-height:1; }
+  .product-tab-label { font-size:10px; font-weight:700; white-space:nowrap; }
+
   .pres-item { padding:9px 11px; border-radius:var(--radius-sm); cursor:pointer; transition:all 0.15s; margin-bottom:3px; border:1.5px solid transparent; display:flex; align-items:center; gap:9px; }
   .pres-item:hover { background:var(--surface2); }
   .pres-item.active { background:rgba(108,99,255,0.14); border-color:rgba(108,99,255,0.3); }
@@ -395,7 +403,7 @@
 
 <!-- ── TOP BAR ── -->
 <div class="topbar">
-  <a href="https://pollslide.com" class="logo" target="_blank" style="text-decoration:none;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</a>
+  <a href="https://pollslide.com" class="logo" target="_blank" style="text-decoration:none;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg><span id="brandName">PollSlide</span></a>
   <div class="active-pres" id="activePres">Select a presentation</div>
   <div class="save-status">
     <span class="save-dot" id="saveDot"></span>
@@ -457,14 +465,16 @@
 
     <!-- PRESENTATIONS panel -->
     <div class="pres-panel">
-      <div class="panel-hd">
-        <span class="panel-hd-title">Presentations</span>
+      <!-- Product switcher: Polls / Surveys / Quizzes / Study -->
+      <div class="product-tabs" id="productTabs"></div>
+      <div class="panel-hd" style="border-top:1px solid var(--border);">
+        <span class="panel-hd-title" id="presPanelTitle">Presentations</span>
       </div>
       <div class="pres-list" id="presList">
         <div style="padding:16px;text-align:center;color:var(--muted);font-size:12px;">No presentations yet.</div>
       </div>
       <div style="padding:8px;border-top:1px solid var(--border);flex-shrink:0;">
-        <button class="btn btn-primary" style="width:100%;justify-content:center;padding:9px 14px;font-size:12px;" onclick="createPresentation()">+ Create New Presentation</button>
+        <button class="btn btn-primary" id="createPresBtn" style="width:100%;justify-content:center;padding:9px 14px;font-size:12px;" onclick="createPresentation()">+ Create New</button>
       </div>
     </div>
 
@@ -1544,8 +1554,33 @@ function toggleTheme() {
 // gaps or was stored via update(). This helper normalises both cases to a real array.
 function toQArr(q) { return Array.isArray(q) ? [...q] : (q ? Object.values(q) : []); }
 
+// ─── PRODUCT SUITE ────────────────────────────────────────────────────────────
+// One engine, four products. Every presentation carries a productType; the UI
+// filters by the active product and the question types / live behavior adapt to it.
+// Single source of truth — add a product here and the switcher + branding follow.
+const PRODUCTS = {
+  poll:   { key:'poll',   name:'PollSlide',   short:'Polls',   icon:'🗳️', tagline:'Live audience polls',
+            blurb:'Live polls over your own slides',
+            qTypes:['multiple_choice','multiple_choice_multi','free_text','rating','word_cloud'] },
+  survey: { key:'survey', name:'SurveySlide', short:'Surveys', icon:'📋', tagline:'Async surveys & forms',
+            blurb:'Collect responses on their own time',
+            qTypes:['multiple_choice','multiple_choice_multi','free_text','rating','nps','ranking'] },
+  quiz:   { key:'quiz',   name:'QuizSlide',   short:'Quizzes', icon:'🏆', tagline:'Graded quizzes & games',
+            blurb:'Scored quizzes, live or as homework',
+            qTypes:['multiple_choice','multiple_choice_multi','free_text'] },
+  study:  { key:'study',  name:'StudySlide',  short:'Study',   icon:'📚', tagline:'Flashcards & spaced repetition',
+            blurb:'Turn questions into study sets',
+            qTypes:['flashcard','multiple_choice','free_text'] }
+};
+const PRODUCT_ORDER = ['poll','survey','quiz','study'];
+// Active product surface in the UI. Persisted so the user lands where they left off.
+let activeProduct = localStorage.getItem('ql_active_product') || 'poll';
+if (!PRODUCTS[activeProduct]) activeProduct = 'poll';
+// Treat any presentation with no productType as a poll (backward compatible).
+function presType(p) { return (p && PRODUCTS[p.productType]) ? p.productType : 'poll'; }
+
 // ─── STATE ────────────────────────────────────────────────────────────────────
-let presentations = {};   // { presId: { name, sessionCode, createdAt } }
+let presentations = {};   // { presId: { name, sessionCode, createdAt, productType } }
 let activePresId  = null; // currently selected presentation
 let questions     = [];   // questions for active presentation
 let selIdx        = null; // selected question index in editor
@@ -1589,15 +1624,22 @@ async function loadPresentations() {
     }
   } catch(e) { console.error('Load failed', e); }
 
-  // Restore last active
+  // Restore last active — and land on its product tab so it's visible in the list.
   const lastActive = localStorage.getItem('ql_active_pres');
+  if (lastActive && presentations[lastActive]) {
+    activeProduct = presType(presentations[lastActive]);
+    localStorage.setItem('ql_active_product', activeProduct);
+  }
   renderPresList();
 
   if (lastActive && presentations[lastActive]) {
     selectPresentation(lastActive);
   } else {
-    const ids = Object.keys(presentations);
-    if (ids.length > 0) selectPresentation(ids[0]);
+    // Pick the first presentation within the active product, else any.
+    const inProduct = Object.keys(presentations).filter(id => presType(presentations[id]) === activeProduct);
+    const ids = inProduct.length ? inProduct : Object.keys(presentations);
+    if (ids.length > 0) { activeProduct = presType(presentations[ids[0]]); selectPresentation(ids[0]); }
+    renderPresList();
   }
 }
 
@@ -1636,13 +1678,15 @@ async function createPresentation() {
   }
   const id   = 'pres_' + Date.now();
   const code = genCode();
-  const name = 'New Presentation';
+  const prod = PRODUCTS[activeProduct] || PRODUCTS.poll;
+  const name = 'New ' + prod.name.replace('Slide','');
 
   presentations[id] = {
     id,
     name,
     sessionCode: code,
     createdAt: Date.now(),
+    productType: activeProduct,   // tag the presentation with the active product
     questions: []
   };
 
@@ -1651,7 +1695,7 @@ async function createPresentation() {
   selectPresentation(id);
   // Immediately open rename
   openRenamePres(id);
-  toast('Presentation created!', 'success');
+  toast(prod.name + ' created!', 'success');
 }
 
 // ─── SELECT PRESENTATION ──────────────────────────────────────────────────────
@@ -1661,6 +1705,10 @@ function selectPresentation(id) {
 
   const pres = presentations[id];
   if (!pres) return;
+
+  // Keep the product tab in sync with the selected presentation.
+  const pt = presType(pres);
+  if (pt !== activeProduct) { activeProduct = pt; localStorage.setItem('ql_active_product', pt); renderProductTabs(); }
 
   // Publish a public pointer so the paired Mac companion app knows which
   // session to follow. Exposes only the session code (already public via QR),
@@ -1787,6 +1835,7 @@ async function doDuplicatePresentation() {
     name: source.name + ' (Copy)',
     sessionCode: newCode,
     createdAt: Date.now(),
+    productType: presType(source),   // duplicate stays in the same product
     questions: JSON.parse(JSON.stringify(questions)) // Deep copy
   };
 
@@ -1818,11 +1867,21 @@ function openCopyQuestion(idx) {
     return;
   }
 
+  // Sort so same-product targets appear first, then other products.
+  currentPresIds.sort((a,b) => {
+    const sa = presType(presentations[a]) === activeProduct ? 0 : 1;
+    const sb = presType(presentations[b]) === activeProduct ? 0 : 1;
+    return sa - sb;
+  });
   list.innerHTML = currentPresIds.map(id => {
     const p = presentations[id];
-    return `<div onclick="doCopyQuestion('${id}')" style="padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--border2);transition:background 0.15s;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
-      <div style="font-weight:600;color:var(--text);">${p.name}</div>
-      <div style="font-size:11px;color:var(--muted);">${toQArr(p.questions).length} questions · ${p.sessionCode}</div>
+    const pt = PRODUCTS[presType(p)];
+    return `<div onclick="doCopyQuestion('${id}')" style="padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--border2);transition:background 0.15s;display:flex;align-items:center;gap:10px;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+      <span style="font-size:16px;flex-shrink:0;" title="${pt.name}">${pt.icon}</span>
+      <div style="min-width:0;">
+        <div style="font-weight:600;color:var(--text);">${p.name}</div>
+        <div style="font-size:11px;color:var(--muted);">${pt.short} · ${toQArr(p.questions).length} questions · ${p.sessionCode}</div>
+      </div>
     </div>`;
   }).join('');
 
@@ -1847,28 +1906,75 @@ async function doCopyQuestion(targetPresId) {
   toast(`Copied to "${presentations[targetPresId].name}"!`, 'success');
 }
 
+// ─── PRODUCT SWITCHER ─────────────────────────────────────────────────────────
+function renderProductTabs() {
+  const bar = document.getElementById('productTabs');
+  if (!bar) return;
+  bar.innerHTML = PRODUCT_ORDER.map(key => {
+    const p = PRODUCTS[key];
+    const n = Object.values(presentations).filter(pr => presType(pr) === key).length;
+    return `<div class="product-tab ${key===activeProduct?'active':''}" onclick="switchProduct('${key}')" title="${p.name} — ${p.tagline}">
+      <span class="product-tab-icon">${p.icon}</span>
+      <span class="product-tab-label">${p.short}${n?` (${n})`:''}</span>
+    </div>`;
+  }).join('');
+  // Reflect the active product in the topbar brand + create button.
+  const prod = PRODUCTS[activeProduct];
+  const brand = document.getElementById('brandName');
+  if (brand) brand.textContent = prod.name;
+  const cb = document.getElementById('createPresBtn');
+  if (cb) cb.textContent = '+ New ' + prod.name.replace('Slide','');
+  const ttl = document.getElementById('presPanelTitle');
+  if (ttl) ttl.textContent = prod.short;
+}
+
+function switchProduct(key) {
+  if (!PRODUCTS[key]) return;
+  activeProduct = key;
+  localStorage.setItem('ql_active_product', key);
+  // If the selected presentation belongs to a different product, deselect it.
+  if (activePresId && presentations[activePresId] && presType(presentations[activePresId]) !== key) {
+    activePresId = null;
+    questions = [];
+    selIdx = null;
+    document.getElementById('activePres').textContent = 'Select a ' + PRODUCTS[key].name.replace('Slide','').toLowerCase();
+    document.getElementById('addQBtn2').disabled = true;
+    document.getElementById('resetBtn').disabled = true;
+    document.getElementById('reportBtn').disabled = true;
+    showSetup();
+    renderQList();
+  }
+  renderProductTabs();
+  renderPresList();
+}
+
 // ─── RENDER PRESENTATIONS LIST ────────────────────────────────────────────────
 function renderPresList() {
+  renderProductTabs();
   const list = document.getElementById('presList');
-  const ids  = Object.keys(presentations).sort((a,b) => (presentations[a].createdAt||0)-(presentations[b].createdAt||0));
+  const prod = PRODUCTS[activeProduct];
+  // Only show presentations belonging to the active product.
+  const ids  = Object.keys(presentations)
+    .filter(id => presType(presentations[id]) === activeProduct)
+    .sort((a,b) => (presentations[a].createdAt||0)-(presentations[b].createdAt||0));
 
   if (ids.length === 0) {
+    const label = prod.name.replace('Slide','').toLowerCase();
     list.innerHTML = `<div style="padding:20px 14px;text-align:center;">
-      <div style="font-size:28px;margin-bottom:8px;">📋</div>
-      <div style="color:var(--muted);font-size:12px;line-height:1.6;margin-bottom:12px;">No presentations yet.<br>Create one to get started.</div>
-      <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:11px;" onclick="createPresentation()">+ Create Presentation</button>
+      <div style="font-size:28px;margin-bottom:8px;">${prod.icon}</div>
+      <div style="color:var(--muted);font-size:12px;line-height:1.6;margin-bottom:12px;">No ${prod.short.toLowerCase()} yet.<br>${prod.blurb}.</div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:11px;" onclick="createPresentation()">+ Create ${label}</button>
     </div>`;
     return;
   }
 
-  const emojis = ['🎯','📊','🚀','💡','🏆','🎓','📋','⚡','🔥','🌟'];
-  list.innerHTML = ids.map((id, i) => {
+  list.innerHTML = ids.map((id) => {
     const p   = presentations[id];
     const qn  = toQArr(p.questions).length;
     const isA = id === activePresId;
     return `
       <div class="pres-item ${isA?'active':''}" onclick="selectPresentation('${id}')">
-        <div class="pres-icon">${emojis[i % emojis.length]}</div>
+        <div class="pres-icon">${PRODUCTS[presType(p)].icon}</div>
         <div class="pres-meta">
           <div class="pres-name">${p.name}</div>
           <div class="pres-sub">${qn} question${qn!==1?'s':''} · ${p.sessionCode}</div>
