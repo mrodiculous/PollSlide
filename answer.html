@@ -126,6 +126,11 @@
   .timer-text.warn { color:var(--accent2); }
   .timer-label { font-size:12px; color:var(--muted); }
   .expired-box { background:rgba(247,183,49,0.1); border:1px solid rgba(247,183,49,0.25); color:var(--accent4); border-radius:var(--radius-sm); padding:14px; text-align:center; font-weight:500; font-size:14px; margin-bottom:14px; }
+  /* Survey (async whole-form) mode */
+  .survey-card { position:relative; background:var(--surface2); border:1px solid var(--border); border-radius:var(--radius); padding:18px 16px 16px; margin-bottom:14px; }
+  .survey-qnum { position:absolute; top:-11px; left:14px; width:24px; height:24px; border-radius:50%; background:var(--accent); color:#fff; font-family:'Syne',sans-serif; font-weight:800; font-size:12px; display:flex; align-items:center; justify-content:center; }
+  .survey-card .options-grid { margin-bottom:0; }
+  .survey-card .rating-wrap { margin-bottom:8px; }
 </style>
 <link rel="icon" type="image/svg+xml" href="https://pollslide.com/logo.svg">
 <link rel="icon" type="image/x-icon" href="https://pollslide.com/favicon.ico">
@@ -156,9 +161,10 @@ const db = firebase.database();
 // Fallback: ?session=CODE&q=0
 function parseLocation() {
   const hash = window.location.hash.replace('#','').trim();
-  if (hash && hash.includes('/')) {
+  if (hash) {
+    // "#SESSION/0" → single question (poll/quiz live).  "#SESSION" → whole-form (survey).
     const parts = hash.split('/');
-    return { session: parts[0].toUpperCase(), qIndex: parseInt(parts[1] || '-1') };
+    return { session: parts[0].toUpperCase(), qIndex: parts.length > 1 ? parseInt(parts[1] || '-1') : -1 };
   }
   const params = new URLSearchParams(window.location.search);
   return {
@@ -167,6 +173,8 @@ function parseLocation() {
   };
 }
 const { session: SESSION, qIndex: Q_INDEX } = parseLocation();
+// No question index → answer the whole set as one async form (SurveySlide / quiz homework).
+const SURVEY_MODE = !!SESSION && (isNaN(Q_INDEX) || Q_INDEX < 0);
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 // participantId is unique per person per SESSION (stored in sessionStorage)
@@ -188,7 +196,7 @@ function render(html) { document.getElementById('app').innerHTML = html; }
 
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
 function bootApp() {
-  if (!SESSION || Q_INDEX < 0) {
+  if (!SESSION) {
     render(`
       <a href="https://pollslide.com" class="logo" style="text-decoration:none;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</a>
       <div class="status-box error">Invalid link. Please scan the correct QR code.</div>
@@ -203,7 +211,7 @@ function bootApp() {
   if (storedId && storedName && storedName !== 'null' && storedName !== 'undefined') {
     participantId   = storedId;
     participantName = storedName;
-    loadQuestion();
+    SURVEY_MODE ? loadSurvey() : loadQuestion();
   } else {
     showNameEntry();
   }
@@ -234,7 +242,7 @@ function joinSession() {
   sessionStorage.setItem(`ql_pid_${SESSION}`,  participantId);
   sessionStorage.setItem(`ql_pname_${SESSION}`, participantName);
 
-  loadQuestion();
+  SURVEY_MODE ? loadSurvey() : loadQuestion();
 }
 
 // ─── LOAD QUESTION ────────────────────────────────────────────────────────────
@@ -541,8 +549,204 @@ function showAlreadyAnswered() {
   `);
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// SURVEY MODE — answer the whole set as one async form (SurveySlide).
+// Responses write to the SAME per-question buckets as live polls
+// (sessions/SESSION/responses/q{idx}_stable_SESSION/participantId), so the
+// presenter's existing report & tally aggregate them with zero extra work.
+// ════════════════════════════════════════════════════════════════════════════
+let surveyQuestions = [];
+let surveyAnswers   = {};   // { qIndex: answerValue }
+const SURVEY_LETTERS = ['A','B','C','D','E','F','G','H'];
+
+async function loadSurvey() {
+  render(`<div class="spinner"></div><p class="center" style="color:var(--muted);font-size:13px;">Loading…</p>`);
+  let qs = [];
+  try {
+    const snap = await db.ref(`quiz_builder/${SESSION}/questions`).get();
+    qs = snap.exists() ? (snap.val() || []) : [];
+  } catch(e) { qs = []; }
+  // Firebase may return an object if keys are sparse — normalize to array.
+  surveyQuestions = Array.isArray(qs) ? qs.filter(Boolean) : Object.values(qs).filter(Boolean);
+
+  if (surveyQuestions.length === 0) {
+    render(`
+      ${logoMarkup()}
+      <div style="text-align:center;padding:10px 0 20px;">
+        <div style="font-size:40px;margin-bottom:12px;">📋</div>
+        <h1 style="margin-bottom:8px;">Nothing here yet</h1>
+        <p class="subtitle">This survey has no questions yet.<br>Check back shortly.</p>
+      </div>`);
+    return;
+  }
+
+  // Already submitted? If this participant has a response in ANY question bucket, treat
+  // the survey as completed (one submission per person).
+  try {
+    const respSnap = await db.ref(`sessions/${SESSION}/responses`).get();
+    if (respSnap.exists()) {
+      const byQ = respSnap.val();
+      const done = Object.values(byQ).some(bucket => bucket && typeof bucket === 'object' && bucket[participantId]);
+      if (done) { showSurveyDone(true); return; }
+    }
+  } catch(e) { /* if the check fails, let them answer */ }
+
+  showSurveyForm();
+}
+
+function logoMarkup() {
+  return `<div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</div>`;
+}
+
+function surveyQuestionBody(q, idx) {
+  const isMulti  = q.type === 'multiple_choice_multi';
+  const isText   = q.type === 'free_text';
+  const isRating = q.type === 'rating';
+  if (isText) {
+    return `<textarea id="sq${idx}_txt" placeholder="Type your answer…" oninput="surveyAnswers[${idx}]=this.value.trim()" style="margin-bottom:0;"></textarea>`;
+  }
+  if (isRating) {
+    const max = q.ratingMax || 5;
+    const labels = q.ratingLabels || {};
+    return `
+      <div class="rating-wrap">
+        ${Array.from({length:max},(_,i)=>`<button type="button" class="r-btn" id="sq${idx}_r${i+1}" onclick="surveyPickRating(${idx},${i+1})">${i+1}</button>`).join('')}
+      </div>
+      ${labels.low||labels.high ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>${labels.low||''}</span><span>${labels.high||''}</span></div>` : ''}`;
+  }
+  // single or multi choice
+  return `
+    ${isMulti ? '<p class="multi-hint">✓ Select all that apply</p>' : ''}
+    <div class="options-grid">
+      ${(q.options||[]).map((opt,i) => {
+        const hasImg = opt.img && opt.img.trim();
+        return `<button type="button" class="option ${hasImg?'has-img':''}" id="sq${idx}_opt${i}" onclick="surveyPickOption(${idx},${i},${isMulti})">
+          <span class="opt-letter">${SURVEY_LETTERS[i]}</span>
+          ${hasImg?mediaTag(opt.img, opt.videoOpts, 'opt-img'):''}
+          <span>${opt.text||''}</span>
+        </button>`;
+      }).join('')}
+    </div>`;
+}
+
+function showSurveyForm() {
+  const cards = surveyQuestions.map((q, idx) => `
+    <div class="survey-card" id="surveyCard${idx}">
+      <div class="survey-qnum">${idx+1}</div>
+      ${mediaTag(q.image, q.videoOpts, 'q-image')}
+      <div class="q-text" style="font-size:18px;margin-bottom:14px;">${q.text || ''}</div>
+      ${surveyQuestionBody(q, idx)}
+    </div>`).join('');
+
+  render(`
+    ${logoMarkup()}
+    <h1 style="margin-bottom:4px;">${surveyQuestions.length} question${surveyQuestions.length!==1?'s':''}</h1>
+    <p class="subtitle">Answer at your own pace, then submit. You can skip any question.</p>
+    <div id="surveyForm">${cards}</div>
+    <button class="btn btn-primary" id="surveySubmitBtn" onclick="submitSurvey()" style="margin-top:6px;">Submit Survey</button>
+    <p id="surveyErr" style="color:var(--accent2);font-size:13px;margin-top:10px;text-align:center;"></p>
+  `);
+}
+
+function surveyPickOption(idx, i, isMulti) {
+  if (isMulti) {
+    const cur = new Set(Array.isArray(surveyAnswers[idx]) ? surveyAnswers[idx] : []);
+    if (cur.has(i)) { cur.delete(i); document.getElementById(`sq${idx}_opt${i}`).classList.remove('selected'); }
+    else { cur.add(i); document.getElementById(`sq${idx}_opt${i}`).classList.add('selected'); }
+    surveyAnswers[idx] = Array.from(cur);
+  } else {
+    (surveyQuestions[idx].options||[]).forEach((_,j) => document.getElementById(`sq${idx}_opt${j}`)?.classList.remove('selected'));
+    document.getElementById(`sq${idx}_opt${i}`).classList.add('selected');
+    surveyAnswers[idx] = [i];
+  }
+}
+
+function surveyPickRating(idx, val) {
+  const max = surveyQuestions[idx].ratingMax || 5;
+  for (let n=1;n<=max;n++) document.getElementById(`sq${idx}_r${n}`)?.classList.toggle('selected', n===val);
+  surveyAnswers[idx] = val;
+}
+
+function surveyComputeCorrect(q, answer) {
+  if (!(q.type === 'multiple_choice' || q.type === 'multiple_choice_multi')) return null;
+  if (q.correctAnswer === null || q.correctAnswer === undefined) return null; // ungraded (survey)
+  if (q.type === 'multiple_choice') {
+    const a = Array.isArray(answer) ? answer[0] : answer;
+    return a === q.correctAnswer;
+  }
+  const correctSet = new Set(Array.isArray(q.correctAnswer) ? q.correctAnswer.map(Number) : [Number(q.correctAnswer)]);
+  const givenArr   = Array.isArray(answer) ? answer.map(Number) : [];
+  const wrongPicked   = givenArr.filter(a => !correctSet.has(a)).length;
+  const correctPicked = givenArr.filter(a => correctSet.has(a)).length;
+  if (correctSet.size === 0) return null;
+  if (wrongPicked > 0) return false;
+  if (correctPicked === correctSet.size) return true;
+  return parseFloat((correctPicked / correctSet.size).toFixed(4));
+}
+
+function surveyIsAnswered(idx) {
+  const a = surveyAnswers[idx];
+  if (a === undefined || a === null) return false;
+  if (Array.isArray(a)) return a.length > 0;
+  if (typeof a === 'string') return a.trim().length > 0;
+  return true; // number (rating)
+}
+
+async function submitSurvey() {
+  if (submitting) return;
+  // Require at least one answer so we don't store an empty submission.
+  const answeredCount = surveyQuestions.reduce((n,_,idx) => n + (surveyIsAnswered(idx) ? 1 : 0), 0);
+  if (answeredCount === 0) {
+    document.getElementById('surveyErr').textContent = 'Please answer at least one question before submitting.';
+    return;
+  }
+  submitting = true;
+  const btn = document.getElementById('surveySubmitBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
+
+  const submittedAt = Date.now();
+  const writes = [];
+  surveyQuestions.forEach((q, idx) => {
+    if (!surveyIsAnswered(idx)) return; // skip blanks
+    const answer    = surveyAnswers[idx];
+    const stableQId = `q${idx}_stable_${SESSION}`;
+    const isCorrect = surveyComputeCorrect(q, answer);
+    writes.push(
+      db.ref(`sessions/${SESSION}/responses/${stableQId}/${participantId}`).set({
+        participantId,
+        name: participantName,
+        answer: (answer === null || answer === undefined) ? '__none__' : JSON.stringify(answer),
+        elapsed: 0,
+        isCorrect,
+        submittedAt
+      })
+    );
+  });
+
+  try {
+    await Promise.all(writes);
+    showSurveyDone(false);
+  } catch(e) {
+    submitting = false;
+    if (btn) { btn.disabled = false; btn.textContent = 'Submit Survey'; }
+    document.getElementById('surveyErr').textContent = 'Could not submit — check your connection and try again.';
+  }
+}
+
+function showSurveyDone(already) {
+  render(`
+    ${logoMarkup()}
+    <div style="text-align:center;padding:14px 0 20px;">
+      <div style="font-size:46px;margin-bottom:12px;">✓</div>
+      <h1 style="margin-bottom:8px;">${already ? 'Already submitted' : 'Thank you!'}</h1>
+      <p class="subtitle">${already ? 'You\'ve already completed this survey.' : 'Your responses have been recorded.'}</p>
+    </div>
+  `);
+}
+
 // ─── BOOT (called last, after all functions defined) ─────────────────────────
-// Force full reload when hash changes (new QR scanned for different question)
+// Force full reload when hash changes (new QR scanned for different question).
+// In survey mode the hash never changes, so this is a no-op there.
 window.addEventListener('hashchange', () => { window.location.reload(); });
 
 bootApp();
