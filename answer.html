@@ -220,9 +220,9 @@ function bootApp() {
     return;
   }
 
-  // Restore identity from sessionStorage if available
-  const storedId   = sessionStorage.getItem(`ql_pid_${SESSION}`);
-  const storedName = sessionStorage.getItem(`ql_pname_${SESSION}`);
+  // Restore identity from localStorage (persists across tabs / fresh QR scans within the same presentation)
+  const storedId   = localStorage.getItem(`ql_pid_${SESSION}`);
+  const storedName = localStorage.getItem(`ql_pname_${SESSION}`);
   if (storedId && storedName && storedName !== 'null' && storedName !== 'undefined') {
     participantId   = storedId;
     participantName = storedName;
@@ -254,8 +254,10 @@ function joinSession() {
   // Generate a unique ID for this person in this session
   participantId = 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
 
-  sessionStorage.setItem(`ql_pid_${SESSION}`,  participantId);
-  sessionStorage.setItem(`ql_pname_${SESSION}`, participantName);
+  // localStorage (not sessionStorage) so the name survives a new tab / fresh QR scan per question,
+  // and the same person keeps ONE id across all questions → accurate cumulative quiz scoring.
+  localStorage.setItem(`ql_pid_${SESSION}`,  participantId);
+  localStorage.setItem(`ql_pname_${SESSION}`, participantName);
 
   SURVEY_MODE ? loadSurvey() : loadQuestion();
 }
