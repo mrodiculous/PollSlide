@@ -570,6 +570,8 @@
         <select id="pollyDiff" style="width:100%;"><option value="">Any</option><option>Easy</option><option selected>Medium</option><option>Hard</option></select>
       </div>
     </div>
+    <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Style</label>
+    <select id="pollyStyle" style="width:100%;margin-bottom:12px;"><option value="">Auto</option><option>Fun &amp; casual</option><option>Professional</option><option>Trivia challenge</option><option>Thought-provoking</option><option>Quick &amp; punchy</option></select>
     <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;">
       <input type="checkbox" id="pollyImages" style="width:auto;margin:0;"> Also draw an image for each <span style="color:var(--muted);font-size:11px;">(slower)</span>
     </label>
@@ -1717,7 +1719,7 @@ async function saveCurrentPresentation() {
 }
 
 // ─── CREATE PRESENTATION ──────────────────────────────────────────────────────
-async function createPresentation() {
+async function createPresentation(thenPolly = false) {
   // Free-tier limit: cap number of saved presentations
   const limit = tierLimits().maxPresentations;
   const current = Object.keys(presentations).length;
@@ -1745,8 +1747,11 @@ async function createPresentation() {
   await db.ref(`users/${userId}/presentations/${id}`).set(presentations[id]);
   renderPresList();
   selectPresentation(id);
-  // Immediately open rename
-  openRenamePres(id);
+  if (thenPolly === true) {
+    openPolly();          // jump straight into Polly to fill the brand-new presentation
+  } else {
+    openRenamePres(id);   // Immediately open rename
+  }
   toast(prod.name + ' created!', 'success');
 }
 
@@ -2037,8 +2042,14 @@ function switchProduct(key) {
     document.getElementById('addQBtn2').disabled = true;
     document.getElementById('resetBtn').disabled = true;
     document.getElementById('reportBtn').disabled = true;
-    showSetup();
+  }
+  // Always repaint BOTH panels so they match the product you switched to
+  // (fixes stale center/right panels, incl. StudySlide showing Quiz content).
+  if (!activePresId) {
+    showSetup();           // center → this product's welcome
     renderQList();
+    clearRightPanel();     // detach listeners + reset live state
+    setRightPanelIdle();   // right → this product's idle header + copy
   }
   renderProductTabs();
   renderPresList();
@@ -2210,6 +2221,22 @@ async function doResetPres() {
 
 
 // ─── HELPERS ─────────────────────────────────────────────────────────────────
+// Per-product idle copy for the right panel — the foundation for mode-aware live
+// results (poll bars → survey feed → quiz leaderboard → study progress).
+const RIGHT_PANEL_IDLE = {
+  poll:   { label:'Live Results', body:'Launch a question to see<br>votes roll in live.' },
+  survey: { label:'Responses',    body:'Share your survey — responses<br>land here as they arrive.' },
+  quiz:   { label:'Leaderboard',  body:'Start the quiz to see scores<br>and the live leaderboard.' },
+  study:  { label:'Progress',     body:'Study activity and mastery<br>show up here.' }
+};
+function setRightPanelIdle() {
+  const r = RIGHT_PANEL_IDLE[activeProduct] || RIGHT_PANEL_IDLE.poll;
+  const hd = document.querySelector('#rightPanel .right-hd span');
+  if (hd) hd.textContent = r.label;
+  const rs = document.getElementById('rightScroll');
+  if (rs) rs.innerHTML = `<div style="padding-top:28px;text-align:center;color:var(--muted);font-size:13px;line-height:1.6;">${r.body}</div>`;
+}
+
 function clearRightPanel() {
   // Detach ALL response listeners — both the current one and any per-question ones
   if (respListener) { respListener(); respListener = null; }
@@ -3485,6 +3512,8 @@ async function runPolly() {
   if (!topic) { toast('Give Polly a topic to work with.', 'danger'); return; }
   const count      = parseInt(document.getElementById('pollyCount').value, 10) || 3;
   const difficulty = document.getElementById('pollyDiff').value;
+  const styleEl    = document.getElementById('pollyStyle');
+  const style      = styleEl ? styleEl.value : '';
   const withImages = document.getElementById('pollyImages').checked;
   const goBtn  = document.getElementById('pollyGoBtn');
   const status = document.getElementById('pollyStatus');
@@ -3494,7 +3523,7 @@ async function runPolly() {
   try {
     const r = await fetch('/api/polly', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic, type: activeProduct, count, difficulty })
+      body: JSON.stringify({ topic: style ? `${topic} — style: ${style}` : topic, type: activeProduct, count, difficulty })
     });
     const data = await r.json();
     if (!r.ok || !Array.isArray(data.questions) || !data.questions.length) {
@@ -3511,7 +3540,11 @@ async function runPolly() {
             body: JSON.stringify({ prompt: gq.imagePrompt })
           });
           const idata = await ir.json();
-          if (ir.ok && idata.image) q.image = idata.image;
+          if (ir.ok && idata.image) {
+            // Upload to Storage and keep the URL (not the raw base64) so it persists.
+            try { q.image = await uploadDataUrl(idata.image); }
+            catch (_) { /* upload failed — keep the question without the image */ }
+          }
         } catch (_) { /* image is optional — keep the question */ }
       }
       questions.push(q);
@@ -3735,7 +3768,8 @@ function showSetup() {
           <span style="font-size:14px;">💡</span><span>${s.tip}</span>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-primary" style="font-size:13px;padding:10px 18px;" onclick="createPresentation()">+ New ${prod.name.replace('Slide','')}</button>
+          <button class="btn btn-primary" style="font-size:13px;padding:10px 18px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#fff;" onclick="createPresentation(true)">✨ New with Polly</button>
+          <button class="btn btn-ghost" style="font-size:13px;padding:10px 16px;" onclick="createPresentation()">+ Blank ${prod.name.replace('Slide','')}</button>
           <a href="https://pollslide.com/setup" target="_blank" class="btn btn-ghost" style="font-size:12px;padding:10px 14px;text-decoration:none;">Setup guide →</a>
         </div>
       </div>
@@ -3959,6 +3993,18 @@ function toggleVideoOpt(idx, target, key) {
 }
 
 // ─── MEDIA UPLOAD (Firebase Storage) ──────────────────────────────────────────
+// Upload a base64 data-URL (e.g. a Polly-generated image) to Firebase Storage and
+// return a short download URL — keeps the giant base64 OUT of the Realtime Database
+// (that's why Polly's images weren't sticking to questions before).
+async function uploadDataUrl(dataUrl) {
+  if (!userId) throw new Error('not signed in');
+  const blob = await (await fetch(dataUrl)).blob();   // data URL → binary blob
+  const ext  = ((blob.type.split('/')[1] || 'png').split('+')[0]);
+  const path = `users/${userId}/images/polly_${Date.now()}_${Math.random().toString(36).slice(2,7)}.${ext}`;
+  const snap = await storage.ref(path).put(blob);
+  return await snap.ref.getDownloadURL();
+}
+
 function uploadFile(onDone) {
   const input = document.createElement('input');
   input.type = 'file';
