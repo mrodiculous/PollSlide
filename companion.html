@@ -245,7 +245,8 @@ let showMedia = false; // media OFF by default in the poll window (results are t
 let presentPhase = 'live'; // 'live' | 'revealed' | 'post_reveal' — mirrors presenter's Firebase phase
 let macLinkRef = null;
 let liveQRef = null;
-let phaseRef = null; // watches currentQuestion/phase in QR-targeted mode
+let phaseRef = null;  // watches this question's qstate/<qId> in QR-targeted mode
+let phaseRef2 = null; // fallback: watches shared currentQuestion (older presenters)
 let _recentResponses = []; // timestamps of recent responses for velocity calc
 let _prTicker = null;      // 1s interval driving the visual post-reveal countdown badge
 
@@ -364,6 +365,7 @@ function showTargetedQuestion(session, qIdx) {
   if (liveQRef) { liveQRef.off(); liveQRef = null; }
   if (macLinkRef) { macLinkRef.off(); macLinkRef = null; }
   if (phaseRef) { phaseRef.off(); phaseRef = null; }
+  if (phaseRef2) { phaseRef2.off(); phaseRef2 = null; }
 
   db.ref(`quiz_builder/${session}/questions`).get().then(snap => {
     const questions = snap.exists() ? snap.val() : [];
@@ -382,25 +384,27 @@ function showTargetedQuestion(session, qIdx) {
     curQ = qObj;
     renderAll();
 
-    // Watch THIS question's OWN state node (qstate/<qId>), not the shared
-    // currentQuestion. This is the core fix: the companion reacts to reveal /
-    // post-reveal for exactly the question its slide QR points to — independent of
-    // which question happens to be "current" in the presenter. No id/index matching
-    // is needed because we're reading this question's dedicated node directly, so it
-    // works for every slide in a Keynote/PowerPoint deck (and any future companion).
-    phaseRef = db.ref(`sessions/${session}/qstate/${qId}`);
-    phaseRef.on('value', sSnap => {
-      const st = sSnap.val();
-      if (!st) return; // no published state yet → stay on live results
-      const newPhase = st.phase || 'live';
+    // Phase comes from THIS question's own state node (qstate/<qId>) when available —
+    // the per-question source that works for every slide in a deck, independent of
+    // which question is "current" in the presenter. We ALSO watch the shared
+    // currentQuestion and fall back to it when qstate is absent (older presenter code
+    // that only writes currentQuestion), but only if currentQuestion is actually THIS
+    // question (id or index match) so a different current question can't bleed in.
+    let _stQ = null, _stCur = null;
+    function applyTargetedState() {
+      let src = _stQ;
+      if (!src && _stCur && ((_stCur.id && _stCur.id === curQId) ||
+                             (_stCur.qIndex != null && curQ && _stCur.qIndex === curQ.qIndex))) {
+        src = _stCur;
+      }
+      if (!src) return; // nothing applicable yet → stay on live results
+      const newPhase = src.phase || 'live';
       const oldPrAt = (curQ && curQ.postRevealAt) || null;
-      const newPrAt = st.postRevealAt || null;
+      const newPrAt = src.postRevealAt || null;
       if (curQ) {
         curQ = Object.assign({}, curQ, { phase: newPhase, postRevealAt: newPrAt });
-        if (st.postReveal) curQ.postReveal = st.postReveal;
+        if (src.postReveal) curQ.postReveal = src.postReveal;
       }
-      // Re-render on a phase change OR when the countdown target appears/changes
-      // (non-quiz publishes postRevealAt without changing phase).
       if (newPhase !== presentPhase || newPrAt !== oldPrAt) {
         presentPhase = newPhase;
         if (presentPhase === 'revealed' || presentPhase === 'post_reveal') {
@@ -408,7 +412,11 @@ function showTargetedQuestion(session, qIdx) {
         }
         renderAll();
       }
-    });
+    }
+    phaseRef = db.ref(`sessions/${session}/qstate/${qId}`);
+    phaseRef.on('value', s => { _stQ = s.val(); applyTargetedState(); });
+    phaseRef2 = db.ref(`sessions/${session}/currentQuestion`);
+    phaseRef2.on('value', s => { _stCur = s.val(); applyTargetedState(); });
   }).catch(() => showWaiting('Could not load this question.'));
 }
 
@@ -431,6 +439,7 @@ function watchMacLink() {
 function watchLiveQuestion() {
   if (liveQRef) { liveQRef.off(); liveQRef = null; }
   if (phaseRef) { phaseRef.off(); phaseRef = null; }
+  if (phaseRef2) { phaseRef2.off(); phaseRef2 = null; }
   liveQRef = db.ref(`sessions/${sessionCode}/currentQuestion`);
   liveQRef.on('value', snap => {
     const q = snap.val();
