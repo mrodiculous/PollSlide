@@ -249,6 +249,39 @@ let phaseRef = null;  // watches this question's qstate/<qId> in QR-targeted mod
 let phaseRef2 = null; // fallback: watches shared currentQuestion (older presenters)
 let _recentResponses = []; // timestamps of recent responses for velocity calc
 let _prTicker = null;      // 1s interval driving the visual post-reveal countdown badge
+let _autoPRStarted = false; // armed the companion's OWN post-reveal for this question?
+let _autoPRTimer = null;    // timeout that fires the autonomous post-reveal transition
+
+// The companion reveals on its own (local reveal countdown) — so it must also run the
+// Post-Reveal Step on its own, instead of waiting for the presenter to have this exact
+// question selected. Once the answer is revealed and at least one response is in, arm a
+// local post-reveal countdown from the question's own postReveal.advanceDelay. If the
+// presenter IS actively driving this question (it published postRevealAt), we defer to
+// it. Reset per question in resetReveal().
+function maybeStartAutoPostReveal() {
+  if (_autoPRStarted) return;
+  if (presentPhase === 'post_reveal') return;     // already there
+  if (!revealed) return;                          // only after the answer is revealed
+  if (!responses || responses.length === 0) return; // need ≥1 answer (matches reveal behavior)
+  const pr = curQ && curQ.postReveal;
+  if (!pr || !pr.enabled) return;                 // post-reveal not enabled for this question
+  const delay = pr.advanceDelay;
+  if (!delay || delay === 'manual') return;       // manual advance → wait for the host
+  if (curQ.postRevealAt) return;                  // presenter is driving it → let the synced path win
+  _autoPRStarted = true;
+  const ms = parseInt(delay) * 1000;
+  // Give the countdown badge a target (postRevealRemaining/ticker read curQ.postRevealAt).
+  curQ = Object.assign({}, curQ, { postRevealAt: Date.now() + ms });
+  if (_autoPRTimer) clearTimeout(_autoPRTimer);
+  _autoPRTimer = setTimeout(() => {
+    if (presentPhase !== 'post_reveal') {
+      presentPhase = 'post_reveal';
+      if (curQ) curQ = Object.assign({}, curQ, { phase: 'post_reveal' });
+      renderAll();
+    }
+  }, ms);
+  // (No renderAll here — the caller is renderAll; the badge shows in this same pass.)
+}
 
 // Seconds until post-reveal fires, synced to the presenter's published postRevealAt.
 // Returns null when no countdown should show (not enabled, already in post-reveal, or
@@ -506,6 +539,9 @@ function watchResponses(qId) {
 function resetReveal(q) {
   revealed = false; revealArmed = false;
   if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
+  // Clear autonomous post-reveal state for the new question.
+  _autoPRStarted = false;
+  if (_autoPRTimer) { clearTimeout(_autoPRTimer); _autoPRTimer = null; }
   _recentResponses = [];
   const d = q.revealDelay;
   revealSeconds = (d === 'manual' || d === -1) ? -1 : ((d === undefined || d === null) ? 30 : +d);
@@ -530,6 +566,7 @@ function beginRevealCountdown() {
 // ── Rendering ──
 function renderAll() {
   if (!curQ) return;
+  maybeStartAutoPostReveal(); // companion runs its OWN post-reveal once revealed (set before render so the badge shows this pass)
   document.getElementById('livePill').style.display = '';
   const progPill = document.getElementById('progressPill');
   if (progPill) {
