@@ -131,6 +131,21 @@
   .survey-qnum { position:absolute; top:-11px; left:14px; width:24px; height:24px; border-radius:50%; background:var(--accent); color:#fff; font-family:'Syne',sans-serif; font-weight:800; font-size:12px; display:flex; align-items:center; justify-content:center; }
   .survey-card .options-grid { margin-bottom:0; }
   .survey-card .rating-wrap { margin-bottom:8px; }
+  /* StudySlide flashcards */
+  .study-card { position:relative; background:var(--surface2); border:1.5px solid var(--border); border-radius:var(--radius); min-height:210px; display:flex; align-items:center; justify-content:center; text-align:center; padding:30px 22px; cursor:pointer; margin-bottom:14px; transition:border-color 0.2s, transform 0.1s; }
+  .study-card:active { transform:scale(0.99); }
+  .study-card.flipped { border-color:var(--accent); }
+  .study-front { font-family:'Syne',sans-serif; font-weight:800; font-size:clamp(18px,5vw,24px); line-height:1.35; }
+  .study-face-label { position:absolute; top:12px; left:0; right:0; text-align:center; font-size:10px; letter-spacing:0.18em; font-weight:700; color:var(--muted); text-transform:uppercase; }
+  .study-speak { position:absolute; top:8px; right:10px; background:var(--surface3); border:1px solid var(--border); border-radius:8px; font-size:15px; line-height:1; padding:5px 8px; cursor:pointer; }
+  .study-rate { display:grid; grid-template-columns:repeat(4,1fr); gap:7px; }
+  .study-rate-btn { display:flex; flex-direction:column; align-items:center; gap:2px; padding:11px 4px; border-radius:var(--radius-sm); border:1.5px solid var(--border); background:var(--surface2); color:var(--text); font-family:'Syne',sans-serif; font-weight:700; font-size:13px; cursor:pointer; transition:all 0.15s; }
+  .study-rate-btn span { font-size:9px; font-weight:500; color:var(--muted); }
+  .study-rate-btn:hover { transform:translateY(-1px); }
+  .study-rate-btn.again:hover { border-color:var(--accent2); }
+  .study-rate-btn.hard:hover  { border-color:var(--accent4); }
+  .study-rate-btn.good:hover  { border-color:var(--accent); }
+  .study-rate-btn.easy:hover  { border-color:var(--accent3,#22c55e); }
 </style>
 <link rel="icon" type="image/svg+xml" href="https://pollslide.com/logo.svg">
 <link rel="icon" type="image/x-icon" href="https://pollslide.com/favicon.ico">
@@ -558,6 +573,7 @@ function showAlreadyAnswered() {
 let surveyQuestions = [];
 let surveyAnswers   = {};   // { qIndex: answerValue }
 let formIsQuiz      = false; // graded (QuizSlide assignment) vs ungraded (SurveySlide)
+let formProduct     = 'survey'; // survey | quiz | study (from quiz_builder/<code>/productType)
 const SURVEY_LETTERS = ['A','B','C','D','E','F','G','H'];
 
 async function loadSurvey() {
@@ -570,22 +586,27 @@ async function loadSurvey() {
   // Firebase may return an object if keys are sparse — normalize to array.
   surveyQuestions = Array.isArray(qs) ? qs.filter(Boolean) : Object.values(qs).filter(Boolean);
 
-  // Is this a graded quiz assignment? (Presenter publishes productType to quiz_builder.)
+  // What product is this? (Presenter publishes productType to quiz_builder.)
   try {
     const ptSnap = await db.ref(`quiz_builder/${SESSION}/productType`).get();
-    formIsQuiz = ptSnap.exists() && ptSnap.val() === 'quiz';
-  } catch(e) { formIsQuiz = false; }
+    formProduct = ptSnap.exists() ? ptSnap.val() : 'survey';
+  } catch(e) { formProduct = 'survey'; }
+  formIsQuiz = formProduct === 'quiz';
 
   if (surveyQuestions.length === 0) {
+    const noun = formProduct === 'study' ? 'study set' : formProduct;
     render(`
       ${logoMarkup()}
       <div style="text-align:center;padding:10px 0 20px;">
-        <div style="font-size:40px;margin-bottom:12px;">📋</div>
+        <div style="font-size:40px;margin-bottom:12px;">${formProduct==='study'?'📚':'📋'}</div>
         <h1 style="margin-bottom:8px;">Nothing here yet</h1>
-        <p class="subtitle">This survey has no questions yet.<br>Check back shortly.</p>
+        <p class="subtitle">This ${noun} has no ${formProduct==='study'?'cards':'questions'} yet.<br>Check back shortly.</p>
       </div>`);
     return;
   }
+
+  // StudySlide: a study set is reviewed repeatedly (spaced repetition), not "submitted".
+  if (formProduct === 'study') { startStudySession(); return; }
 
   // Already submitted? If this participant has a response in ANY question bucket, treat
   // the survey as completed (one submission per person).
@@ -831,6 +852,182 @@ function shareQuizScore() {
   } else {
     navigator.clipboard.writeText(text).then(()=> toast('Result copied — paste it anywhere!', 'success')).catch(()=>{});
   }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// STUDYSLIDE — spaced-repetition flashcards (Anki/Quizlet-class), client-side.
+// SRS state lives in localStorage per device+set (no login needed). Forward-
+// thinking extras: text-to-speech, daily streak, and "add next review to
+// calendar" for re-engagement. The killer growth flow (quiz→study set) is
+// generated on the presenter side.
+// ════════════════════════════════════════════════════════════════════════════
+let studyCards = [];      // [{front, back, idx}]
+let studyQueue = [];      // indices still to review this session
+let studyReviewed = 0;    // cards completed this session
+let studyFlipped = false;
+
+// A card's front/back from any question type (flashcard, or derive from a Q+answer).
+function cardFront(q) {
+  if (q.type === 'flashcard') return q.front || q.text || '';
+  return q.text || '';
+}
+function cardBack(q) {
+  if (q.type === 'flashcard') return q.back || '';
+  if ((q.type === 'multiple_choice' || q.type === 'multiple_choice_multi') &&
+      q.correctAnswer !== null && q.correctAnswer !== undefined) {
+    const arr = Array.isArray(q.correctAnswer) ? q.correctAnswer : [q.correctAnswer];
+    return arr.map(i => (q.options||[])[Number(i)]?.text || '').filter(Boolean).join(', ');
+  }
+  if (q.options && q.options.length) return q.options.map(o=>o.text).filter(Boolean).join(' · ');
+  return '(no answer set)';
+}
+
+// ── SRS state (localStorage) ──
+function srsLoad() { try { return JSON.parse(localStorage.getItem(`ql_srs_${SESSION}`) || '{}'); } catch(e) { return {}; } }
+function srsSave(s) { try { localStorage.setItem(`ql_srs_${SESSION}`, JSON.stringify(s)); } catch(e) {} }
+
+// SM-2 lite: rating ∈ again|hard|good|easy → updated {interval(days), ease, reps, due}
+function srsSchedule(st, rating) {
+  st = st || { interval:0, ease:2.5, reps:0, due:0 };
+  if (rating === 'again') {
+    st.reps = 0; st.interval = 0; st.ease = Math.max(1.3, st.ease - 0.2);
+    st.due = Date.now(); // resurface later this same session
+  } else {
+    st.reps++;
+    if (rating === 'hard')      { st.ease = Math.max(1.3, st.ease - 0.15); st.interval = st.interval ? st.interval * 1.2 : 1; }
+    else if (rating === 'good') { st.interval = st.interval ? st.interval * st.ease : 1; }
+    else if (rating === 'easy') { st.ease += 0.15; st.interval = (st.interval || 1) * st.ease * 1.3; }
+    st.due = Date.now() + st.interval * 86400000;
+  }
+  return st;
+}
+
+function startStudySession(reviewAll) {
+  studyCards = surveyQuestions.map((q, idx) => ({ idx, front: cardFront(q), back: cardBack(q) }))
+                              .filter(c => c.front);
+  const srs = srsLoad();
+  const now = Date.now();
+  // Due = new cards (no state) or cards whose due time has passed. reviewAll ignores due.
+  studyQueue = studyCards
+    .filter(c => reviewAll || !srs[c.idx] || (srs[c.idx].due || 0) <= now)
+    .map(c => c.idx);
+  // Light shuffle so order varies between sessions.
+  for (let i = studyQueue.length - 1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [studyQueue[i],studyQueue[j]]=[studyQueue[j],studyQueue[i]]; }
+  studyReviewed = 0;
+  if (studyQueue.length === 0) { showStudyDone(true); return; }
+  showStudyCard();
+}
+
+function studyCardByIdx(idx) { return studyCards.find(c => c.idx === idx); }
+
+function showStudyCard() {
+  if (studyQueue.length === 0) { showStudyDone(false); return; }
+  studyFlipped = false;
+  const idx = studyQueue[0];
+  const card = studyCardByIdx(idx);
+  const total = studyReviewed + studyQueue.length;
+  const pct = total ? Math.round((studyReviewed / total) * 100) : 0;
+  render(`
+    ${logoMarkup()}
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+      <div style="flex:1;height:6px;background:var(--surface3);border-radius:100px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:var(--accent);border-radius:100px;transition:width 0.3s;"></div></div>
+      <div style="font-size:12px;color:var(--muted);white-space:nowrap;">${studyReviewed}/${total}</div>
+    </div>
+    <div class="study-card" id="studyCard" onclick="flipStudyCard()">
+      <button class="study-speak" onclick="event.stopPropagation();speakCard()" title="Read aloud">🔊</button>
+      <div class="study-face-label" id="studyFaceLabel">TAP TO FLIP</div>
+      <div class="study-front" id="studyText">${card.front}</div>
+    </div>
+    <div id="studyControls">
+      <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="flipStudyCard()">Show Answer</button>
+    </div>
+  `);
+}
+
+function flipStudyCard() {
+  if (studyFlipped) return;
+  studyFlipped = true;
+  const idx = studyQueue[0];
+  const card = studyCardByIdx(idx);
+  document.getElementById('studyText').innerHTML = card.back;
+  document.getElementById('studyFaceLabel').textContent = 'ANSWER';
+  document.getElementById('studyCard').classList.add('flipped');
+  document.getElementById('studyControls').innerHTML = `
+    <div class="study-rate">
+      <button class="study-rate-btn again" onclick="rateCard('again')">Again<span>&lt;1m</span></button>
+      <button class="study-rate-btn hard"  onclick="rateCard('hard')">Hard<span>1d</span></button>
+      <button class="study-rate-btn good"  onclick="rateCard('good')">Good<span>≈3d</span></button>
+      <button class="study-rate-btn easy"  onclick="rateCard('easy')">Easy<span>≈7d</span></button>
+    </div>`;
+}
+
+function rateCard(rating) {
+  const idx = studyQueue.shift();
+  const srs = srsLoad();
+  srs[idx] = srsSchedule(srs[idx], rating);
+  srsSave(srs);
+  if (rating === 'again') studyQueue.push(idx); // re-show later this session
+  else studyReviewed++;
+  showStudyCard();
+}
+
+function speakCard() {
+  try {
+    if (!('speechSynthesis' in window)) return;
+    const txt = document.getElementById('studyText')?.textContent || '';
+    speechSynthesis.cancel();
+    speechSynthesis.speak(new SpeechSynthesisUtterance(txt));
+  } catch(e) {}
+}
+
+// ── Daily streak (habit loop) ──
+function studyStreak() {
+  let s; try { s = JSON.parse(localStorage.getItem(`ql_streak_${SESSION}`) || '{}'); } catch(e) { s = {}; }
+  const today = new Date().toDateString();
+  const yest  = new Date(Date.now()-86400000).toDateString();
+  if (s.lastDay === today) { /* already counted today */ }
+  else if (s.lastDay === yest) { s.count = (s.count||0)+1; s.lastDay = today; }
+  else { s.count = 1; s.lastDay = today; }
+  try { localStorage.setItem(`ql_streak_${SESSION}`, JSON.stringify(s)); } catch(e) {}
+  return s.count || 1;
+}
+
+// ── "Add next review to calendar" (re-engagement) ──
+function nextDueDate() {
+  const srs = srsLoad();
+  const dues = studyCards.map(c => srs[c.idx]?.due).filter(d => d && d > Date.now());
+  if (!dues.length) return null;
+  return new Date(Math.min(...dues));
+}
+function addStudyToCalendar() {
+  const d = nextDueDate() || new Date(Date.now()+86400000);
+  const fmt = dt => dt.toISOString().replace(/[-:]/g,'').split('.')[0]+'Z';
+  const end = new Date(d.getTime()+15*60000);
+  const url = 'https://calendar.google.com/calendar/render?action=TEMPLATE'
+    + '&text=' + encodeURIComponent('Review flashcards (PollSlide)')
+    + '&dates=' + fmt(d) + '/' + fmt(end)
+    + '&details=' + encodeURIComponent('Your next spaced-repetition review is due. ' + location.href);
+  window.open(url, '_blank');
+}
+
+function showStudyDone(nothingDue) {
+  const streak = studyStreak();
+  const due = nextDueDate();
+  const dueTxt = due ? `Next review ${due.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})}` : 'All caught up!';
+  render(`
+    ${logoMarkup()}
+    <div style="text-align:center;padding:8px 0 6px;">
+      <div style="font-size:46px;margin-bottom:8px;">${nothingDue?'✅':'🎉'}</div>
+      <h1 style="margin-bottom:6px;">${nothingDue?'Nothing due right now':'Session complete!'}</h1>
+      <p class="subtitle">${nothingDue?'You\'re all caught up — come back later for your next review.':`You reviewed <strong style="color:var(--text);">${studyReviewed}</strong> card${studyReviewed!==1?'s':''}.`}</p>
+      <div style="display:inline-flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:8px 16px;margin:14px 0;">
+        <span style="font-size:18px;">🔥</span><span style="font-weight:700;">${streak}-day streak</span>
+      </div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">${dueTxt}</div>
+    </div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:8px;" onclick="addStudyToCalendar()">📅 Remind me to review</button>
+    <button class="btn btn-ghost" style="width:100%;justify-content:center;" onclick="startStudySession(true)">🔁 Study all again</button>
+  `);
 }
 
 // ─── BOOT (called last, after all functions defined) ─────────────────────────

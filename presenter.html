@@ -1876,6 +1876,46 @@ async function doDuplicatePresentation() {
   toast('Presentation duplicated!', 'success');
 }
 
+// ─── MAKE STUDY SET (cross-product growth flow: quiz/poll → StudySlide) ───────
+// Converts a presentation's questions into flashcards (front = question, back =
+// correct answer / options) and creates a new Study presentation. This is the
+// loop that turns a teacher's quiz into students' study material with one click.
+function deriveBack(q) {
+  if (q.type === 'flashcard') return q.back || '';
+  if ((q.type === 'multiple_choice' || q.type === 'multiple_choice_multi') &&
+      q.correctAnswer !== null && q.correctAnswer !== undefined) {
+    const arr = Array.isArray(q.correctAnswer) ? q.correctAnswer : [q.correctAnswer];
+    return arr.map(i => (q.options||[])[Number(i)]?.text || '').filter(Boolean).join(', ');
+  }
+  if (q.options && q.options.length) return q.options.map(o => o.text).filter(Boolean).join(' · ');
+  return '';
+}
+
+async function makeStudySet(srcId) {
+  const src = presentations[srcId];
+  if (!src) return;
+  const cards = toQArr(src.questions)
+    .map(q => ({ type:'flashcard', front: (q.text || q.front || ''), back: deriveBack(q) }))
+    .filter(c => c.front);
+  if (cards.length === 0) { toast('Add some questions first.', 'warn'); return; }
+
+  const id = 'pres_' + Date.now();
+  const code = genCode();
+  presentations[id] = {
+    id, name: src.name + ' — Study', sessionCode: code,
+    createdAt: Date.now(), productType: 'study', questions: cards
+  };
+  await db.ref(`users/${userId}/presentations/${id}`).set(presentations[id]);
+  await db.ref(`quiz_builder/${code}/questions`).set(cards);
+  await db.ref(`quiz_builder/${code}/productType`).set('study');
+
+  activeProduct = 'study';
+  localStorage.setItem('ql_active_product', 'study');
+  renderPresList();
+  selectPresentation(id);
+  toast(`Study set created — ${cards.length} card${cards.length!==1?'s':''}! 📚`, 'success');
+}
+
 // ─── COPY QUESTIONS ──────────────────────────────────────────────────────────
 let copyFromQIdx = null;
 
@@ -2009,6 +2049,7 @@ function renderPresList() {
         </div>
         <div class="pres-actions">
           <button class="icon-btn" onclick="event.stopPropagation();showPresTally('${id}')" title="View Tally" style="color:var(--accent);">📊</button>
+          ${['poll','quiz'].includes(presType(p)) ? `<button class="icon-btn" onclick="event.stopPropagation();makeStudySet('${id}')" title="Make a study set from this" style="color:var(--accent);">📚</button>` : ''}
           <button class="icon-btn" onclick="event.stopPropagation();openDuplicatePresentation('${id}')" title="Duplicate">📑</button>
           <button class="icon-btn" onclick="event.stopPropagation();openRenamePres('${id}')" title="Rename">✏️</button>
           <button class="icon-btn" onclick="event.stopPropagation();confirmResetPres('${id}')" title="Reset Tally" style="color:var(--accent2);">↺</button>
