@@ -32,7 +32,7 @@ const CF_ACCESS_HEADERS = (process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACC
     }
   : {};
 
-const DRAWTHINGS_TIMEOUT_MS = 60000;   // local image gen is slower than text
+const DRAWTHINGS_TIMEOUT_MS = 35000;   // leave room inside the 60s function budget for an OpenAI fallback
 
 async function drawThings(prompt, { width, height, steps }) {
   const controller = new AbortController();

@@ -42,7 +42,7 @@ const CF_ACCESS_HEADERS = (process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACC
     }
   : {};
 
-const LOCAL_TIMEOUT_MS  = 8000;   // fail fast to the cloud if the Mac is asleep/away
+const LOCAL_TIMEOUT_MS  = 20000;  // Mac models (e.g. qwen3:14b ≈16s) are slow; give them room before cloud fallback
 const CLOUD_TIMEOUT_MS  = 30000;
 
 // Supported content types → how Polly should think about each.

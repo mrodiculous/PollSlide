@@ -492,6 +492,7 @@
       </div>
       <div class="sidebar-foot">
         <button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:11px;" id="addQBtn2" onclick="addQuestion()" disabled>+ Add Question</button>
+        <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:11px;margin-top:6px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#fff;" onclick="openPolly()">✨ Ask Polly</button>
       </div>
     </div>
 
@@ -548,6 +549,34 @@
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closeReset()">Cancel</button>
       <button class="btn btn-danger" onclick="doReset()">Yes, Reset Everything</button>
+    </div>
+  </div>
+</div>
+
+<!-- Polly AI Modal -->
+<div class="overlay hidden" id="pollyModal" onclick="if(event.target===this)closePolly()">
+  <div class="modal" style="max-width:460px;">
+    <h2 id="pollyTitle">✨ Polly</h2>
+    <p id="pollySub" style="color:var(--muted);">Describe a topic and Polly drafts ready-to-go questions.</p>
+    <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Topic</label>
+    <input type="text" id="pollyTopic" maxlength="140" placeholder="e.g. The water cycle" style="margin-bottom:12px;" onkeydown="if(event.key==='Enter')runPolly()">
+    <div style="display:flex;gap:10px;margin-bottom:12px;">
+      <div style="flex:1;">
+        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">How many</label>
+        <select id="pollyCount" style="width:100%;"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option><option>6</option><option>8</option></select>
+      </div>
+      <div style="flex:1;">
+        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Difficulty</label>
+        <select id="pollyDiff" style="width:100%;"><option value="">Any</option><option>Easy</option><option selected>Medium</option><option>Hard</option></select>
+      </div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);cursor:pointer;">
+      <input type="checkbox" id="pollyImages" style="width:auto;margin:0;"> Also draw an image for each <span style="color:var(--muted);font-size:11px;">(slower)</span>
+    </label>
+    <div id="pollyStatus" style="display:none;margin-top:12px;padding:9px 12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border2);font-size:13px;color:var(--text);"></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="closePolly()">Cancel</button>
+      <button class="btn btn-primary" id="pollyGoBtn" onclick="runPolly()">✨ Generate</button>
     </div>
   </div>
 </div>
@@ -3437,6 +3466,88 @@ function addQuestion() {
   }, 80);
 }
 
+// ─── POLLY AI — draft questions for the ACTIVE product (poll/survey/quiz/study) ─
+function openPolly() {
+  if (!activePresId) { toast('Pick or create a ' + PRODUCTS[activeProduct].name.replace('Slide','').toLowerCase() + ' first.', 'danger'); return; }
+  const p = PRODUCTS[activeProduct];
+  document.getElementById('pollyTitle').textContent = `✨ Polly · ${p.name}`;
+  document.getElementById('pollySub').textContent = `Give Polly a topic and she'll draft ${p.short.toLowerCase()} you can drop straight in.`;
+  document.getElementById('pollyStatus').style.display = 'none';
+  document.getElementById('pollyGoBtn').disabled = false;
+  document.getElementById('pollyModal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('pollyTopic').focus(), 50);
+}
+function closePolly() { document.getElementById('pollyModal').classList.add('hidden'); }
+
+async function runPolly() {
+  if (!activePresId) return;
+  const topic = document.getElementById('pollyTopic').value.trim();
+  if (!topic) { toast('Give Polly a topic to work with.', 'danger'); return; }
+  const count      = parseInt(document.getElementById('pollyCount').value, 10) || 3;
+  const difficulty = document.getElementById('pollyDiff').value;
+  const withImages = document.getElementById('pollyImages').checked;
+  const goBtn  = document.getElementById('pollyGoBtn');
+  const status = document.getElementById('pollyStatus');
+  goBtn.disabled = true;
+  status.style.display = 'block';
+  status.textContent = '✨ Polly is thinking…';
+  try {
+    const r = await fetch('/api/polly', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic, type: activeProduct, count, difficulty })
+    });
+    const data = await r.json();
+    if (!r.ok || !Array.isArray(data.questions) || !data.questions.length) {
+      throw new Error(data.error || 'No questions came back');
+    }
+    let added = 0;
+    for (const gq of data.questions) {
+      const q = pollyToQuestion(gq);
+      if (withImages && gq.imagePrompt) {
+        status.textContent = `🎨 Drawing image ${added + 1} of ${data.questions.length}…`;
+        try {
+          const ir = await fetch('/api/polly-image', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: gq.imagePrompt })
+          });
+          const idata = await ir.json();
+          if (ir.ok && idata.image) q.image = idata.image;
+        } catch (_) { /* image is optional — keep the question */ }
+      }
+      questions.push(q);
+      added++;
+    }
+    presentations[activePresId].questions = questions;
+    selIdx = questions.length - 1;
+    renderQList();
+    renderEditor(selIdx);
+    scheduleSave();
+    closePolly();
+    toast(`✨ Polly added ${added} ${PRODUCTS[activeProduct].short.toLowerCase()} · via ${data.source === 'local' ? 'your Mac 🖥️' : 'OpenAI ☁️'}`, 'success');
+  } catch (e) {
+    status.style.display = 'block';
+    status.textContent = '⚠️ ' + e.message;
+    goBtn.disabled = false;
+  }
+}
+
+// Map Polly's JSON output into PollSlide's question schema.
+function pollyToQuestion(gq) {
+  const opinion = activeProduct === 'poll' || activeProduct === 'survey'; // no graded answer
+  const opts = (Array.isArray(gq.options) ? gq.options : []).map(t => ({ text: String(t || ''), img: '' }));
+  while (opts.length < 2) opts.push({ text: '', img: '' });
+  let correct = Number.isInteger(gq.correctAnswer) ? gq.correctAnswer : 0;
+  if (correct < 0 || correct >= opts.length) correct = 0;
+  return {
+    text: (gq.emoji ? gq.emoji + ' ' : '') + (gq.text || ''),
+    type: 'multiple_choice',
+    options: opts.slice(0, 6),
+    correctAnswer: opinion ? 0 : correct,
+    image: '', timer: 0, displayMode: 'bars', revealDelay: 30,
+    postReveal: { enabled: false, type: 'leaderboard', explainerText: gq.explanation || '', advanceDelay: 'manual' }
+  };
+}
+
 function renderQList() {
   document.getElementById('qCount').textContent = questions.length;
   const icons = { multiple_choice:'⊙', multiple_choice_multi:'☑', free_text:'✎', rating:'★' };
@@ -3553,38 +3664,78 @@ function doneEditing(idx) {
   showLiveOrEdit(idx);
 }
 
+// Per-product setup copy — catchy, anticipatory (tells them what's next before they ask).
+// Single source of truth alongside PRODUCTS; add a product here and the center pane follows.
+const PRODUCT_SETUP = {
+  poll:  { punch:'Live polls that crash your slides — on purpose.',
+           readyH:'Locked &amp; loaded',
+           readySub:`Drop a question or let <b style="color:var(--accent);">✨ Polly</b> draft them, hit <b style="color:var(--accent3);">▶ Save &amp; Go Live</b>, then stamp the QR on your slide. The room votes; the bars dance.`,
+           steps:[['Build it','Type questions, or let <b>✨ Polly</b> draft a set in seconds.'],
+                  ['Stamp your slide','<b>📋 Copy QR box</b> → paste onto Keynote, PowerPoint or Google Slides.'],
+                  ['Go live','Present. They scan, they vote, results bloom over your slide.']],
+           tip:'Works over any slide app — no plugin, nothing to install.' },
+  survey:{ punch:'Ask once. Harvest answers while you sleep.',
+           readyH:'Ready to collect',
+           readySub:`Build it or let <b style="color:var(--accent);">✨ Polly</b> draft it, then share a link — responses roll in on their own time.`,
+           steps:[['Build it','By hand or <b>✨ Polly</b> — ratings, NPS, ranking, open text.'],
+                  ['Send it','<b>🔗 Share</b> a link or email it straight from here.'],
+                  ['Watch it fill','Responses stack up live — export to CSV anytime.']],
+           tip:'No live audience required — async by design.' },
+  quiz:  { punch:'Quizzes with a scoreboard and a pulse.',
+           readyH:'Game on',
+           readySub:`Draft questions or summon <b style="color:var(--accent);">✨ Polly</b>, then run it live or assign it as homework. Leaderboard included.`,
+           steps:[['Build it','<b>✨ Polly</b> drafts graded questions with answers + explanations.'],
+                  ['Run or assign','Present live, or <b>🔗 Assign</b> it — they play on their own time.'],
+                  ['Crown a winner','Live leaderboard, scores and accuracy, out of the box.']],
+           tip:'Done quizzing? Turn it into a StudySlide set in one tap. 📚' },
+  study: { punch:'Turn answers into memory.',
+           readyH:'Ready to study',
+           readySub:`Build a set or let <b style="color:var(--accent);">✨ Polly</b> draft flashcards, then study solo or share the set.`,
+           steps:[['Build it','<b>✨ Polly</b> turns any topic into study cards with answers.'],
+                  ['Study','Flip through with spaced repetition that targets weak spots.'],
+                  ['Share','<b>🔗 Send</b> the set to your class or study group.']],
+           tip:'Built from a quiz? Your scores tell Polly what to drill first.' }
+};
+
 function showSetup() {
+  const prod = PRODUCTS[activeProduct];
+  const s = PRODUCT_SETUP[activeProduct] || PRODUCT_SETUP.poll;
   const hasPres = activePresId && presentations[activePresId];
-  document.getElementById('centerPanel').innerHTML = hasPres ? `
-    <div class="setup">
-      <div class="setup-icon">🎯</div>
-      <div>
-        <h2 style="font-family:Syne,sans-serif;font-size:20px;font-weight:800;margin-bottom:8px;">Ready to Go</h2>
-        <p style="color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:18px;">Add a question, fill in the details,<br>then click <strong style="color:var(--accent3);">▶ Save &amp; Go Live</strong> when ready.<br><br>Use <strong style="color:var(--accent2);">↺ Reset Tally</strong> before your presentation.</p>
-        <button class="btn btn-primary" style="font-size:13px;padding:10px 22px;justify-content:center;" onclick="addQuestion()">+ Add First Question</button>
-      </div>
-    </div>` : `
-    <div class="setup">
-      <div class="setup-icon">🎯</div>
-      <div>
-        <h2 style="font-family:Syne,sans-serif;font-size:20px;font-weight:800;margin-bottom:8px;">Welcome to PollSlide</h2>
-        <p style="color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:16px;">Live polls that float over your Keynote. Three steps to get started:</p>
-        <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:18px;">
-          <div style="display:flex;align-items:flex-start;gap:10px;padding:11px 13px;background:var(--surface2);border-radius:10px;border:1px solid var(--border2);">
-            <div style="width:24px;height:24px;border-radius:7px;background:rgba(108,99,255,.2);color:var(--accent);font-family:Syne,sans-serif;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">1</div>
-            <div><div style="font-weight:600;font-size:13px;margin-bottom:1px;">Create a presentation</div><div style="color:var(--muted);font-size:12px;line-height:1.4;">Click <strong style="color:var(--text);">+ New Presentation</strong> below to begin.</div></div>
-          </div>
-          <div style="display:flex;align-items:flex-start;gap:10px;padding:11px 13px;background:var(--surface2);border-radius:10px;border:1px solid var(--border2);">
-            <div style="width:24px;height:24px;border-radius:7px;background:rgba(108,99,255,.2);color:var(--accent);font-family:Syne,sans-serif;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">2</div>
-            <div><div style="font-weight:600;font-size:13px;margin-bottom:1px;">Build your questions</div><div style="color:var(--muted);font-size:12px;line-height:1.4;">Multiple choice, free text, rating. Questions stay live once saved.</div></div>
-          </div>
-          <div style="display:flex;align-items:flex-start;gap:10px;padding:11px 13px;background:var(--surface2);border-radius:10px;border:1px solid var(--border2);">
-            <div style="width:24px;height:24px;border-radius:7px;background:rgba(108,99,255,.2);color:var(--accent);font-family:Syne,sans-serif;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">3</div>
-            <div><div style="font-weight:600;font-size:13px;margin-bottom:1px;">Put the QR on your slide</div><div style="color:var(--muted);font-size:12px;line-height:1.4;">Use <strong style="color:var(--text);">📋 Copy QR box</strong> — paste onto your Keynote slide.</div></div>
+  const cp = document.getElementById('centerPanel');
+  if (hasPres) {
+    cp.innerHTML = `
+      <div class="setup">
+        <div class="setup-icon">${prod.icon}</div>
+        <div>
+          <h2 style="font-family:Syne,sans-serif;font-size:20px;font-weight:800;margin-bottom:8px;">${s.readyH}</h2>
+          <p style="color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:18px;">${s.readySub}</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+            <button class="btn btn-primary" style="font-size:13px;padding:10px 20px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#fff;" onclick="openPolly()">✨ Ask Polly</button>
+            <button class="btn btn-ghost" style="font-size:13px;padding:10px 18px;" onclick="addQuestion()">+ Add manually</button>
           </div>
         </div>
+      </div>`;
+    return;
+  }
+  const stepHtml = s.steps.map((st,i)=>`
+          <div style="display:flex;align-items:flex-start;gap:10px;padding:11px 13px;background:var(--surface2);border-radius:10px;border:1px solid var(--border2);">
+            <div style="width:24px;height:24px;border-radius:7px;background:rgba(108,99,255,.2);color:var(--accent);font-family:Syne,sans-serif;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">${i+1}</div>
+            <div><div style="font-weight:600;font-size:13px;margin-bottom:1px;">${st[0]}</div><div style="color:var(--muted);font-size:12px;line-height:1.4;">${st[1]}</div></div>
+          </div>`).join('');
+  cp.innerHTML = `
+    <div class="setup">
+      <div class="setup-icon">${prod.icon}</div>
+      <div>
+        <div style="font-family:Syne,sans-serif;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:6px;">${prod.name}</div>
+        <h2 style="font-family:Syne,sans-serif;font-size:21px;font-weight:800;margin-bottom:8px;line-height:1.15;">${s.punch}</h2>
+        <p style="color:var(--muted);font-size:13px;line-height:1.7;margin-bottom:14px;">${prod.blurb}. Three steps:</p>
+        <div style="display:flex;flex-direction:column;gap:9px;margin-bottom:14px;">${stepHtml}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);background:var(--surface2);border:1px dashed var(--border2);border-radius:9px;padding:9px 12px;margin-bottom:18px;">
+          <span style="font-size:14px;">💡</span><span>${s.tip}</span>
+        </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button class="btn btn-primary" style="font-size:13px;padding:10px 18px;" onclick="createPresentation()">+ Create Your First Presentation</button>
+          <button class="btn btn-primary" style="font-size:13px;padding:10px 18px;" onclick="createPresentation()">+ New ${prod.name.replace('Slide','')}</button>
           <a href="https://pollslide.com/setup" target="_blank" class="btn btn-ghost" style="font-size:12px;padding:10px 14px;text-decoration:none;">Setup guide →</a>
         </div>
       </div>
