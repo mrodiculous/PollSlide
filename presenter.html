@@ -433,6 +433,7 @@
       </div>
     </div>
     <button class="btn btn-ghost" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark">🌙</button>
+    <button class="btn btn-primary" id="shareBtn" onclick="openShareModal()" style="display:none;" title="Share link / QR for this survey">🔗 Share</button>
     <button class="btn btn-ghost" id="reportBtn" onclick="openReport()" disabled title="View response report">📊 Report</button>
     <button class="btn btn-reset" id="resetBtn" onclick="confirmResetAll()" disabled>↺ Reset All Tallies</button>
   </div>
@@ -1744,6 +1745,7 @@ function selectPresentation(id) {
   document.getElementById('addQBtn2').disabled = false;
   document.getElementById('resetBtn').disabled = false;
   document.getElementById('reportBtn').disabled = false;
+  updateShareButton();
 
   renderPresList();
   renderQList();
@@ -1946,6 +1948,7 @@ function switchProduct(key) {
   }
   renderProductTabs();
   renderPresList();
+  updateShareButton();
 }
 
 // ─── RENDER PRESENTATIONS LIST ────────────────────────────────────────────────
@@ -3868,6 +3871,36 @@ function saveAndLaunch(idx) {
 function getQuestionURL(idx) {
   const code = presentations[activePresId]?.sessionCode || '';
   return `${BASE_URL}#${code}/${idx}`;
+}
+
+// Whole-set link (no question index) — used by async products (survey / study).
+// answer.html sees the bare #CODE and shows the full form.
+function getSurveyURL() {
+  const code = presentations[activePresId]?.sessionCode || '';
+  return `${BASE_URL}#${code}`;
+}
+
+// One share link + QR for the entire survey/study set (not per-question).
+function openShareModal() {
+  if (!activePresId) return;
+  const pres = presentations[activePresId];
+  const prod = PRODUCTS[presType(pres)];
+  const url  = getSurveyURL();
+  currentQRURL = url;
+  document.getElementById('qrModalTitle').textContent = `Share ${prod.name.replace('Slide','')}`;
+  document.getElementById('qrModalDesc').textContent  = `Anyone with this link can respond to "${pres.name}".`;
+  document.getElementById('qrModalURL').textContent   = url;
+  const el = document.getElementById('qrModalCode'); el.innerHTML = '';
+  new QRCode(el, { text:url, width:210, height:210, colorDark:'#ffffff', colorLight:'#10101a', correctLevel:QRCode.CorrectLevel.M });
+  document.getElementById('qrModal').classList.remove('hidden');
+}
+
+// Show the topbar Share button only for async products (one link for the whole set).
+function updateShareButton() {
+  const btn = document.getElementById('shareBtn');
+  if (!btn) return;
+  const isAsync = activePresId && ['survey','study'].includes(presType(presentations[activePresId]));
+  btn.style.display = isAsync ? '' : 'none';
 }
 
 function showQRModal(idx){
