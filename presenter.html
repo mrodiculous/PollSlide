@@ -578,6 +578,30 @@
   </div>
 </div>
 
+<!-- Duplicate Presentation Modal -->
+<div class="overlay hidden" id="duplicatePresModal" onclick="if(event.target===this)document.getElementById('duplicatePresModal').classList.add('hidden')">
+  <div class="modal" style="max-width:400px;">
+    <h2>Duplicate Presentation?</h2>
+    <p>This will create a copy of <strong id="duplicatePresName" style="color:var(--text);"></strong> with all its questions and a new session code.</p>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="document.getElementById('duplicatePresModal').classList.add('hidden')">Cancel</button>
+      <button class="btn btn-primary" onclick="doDuplicatePresentation()">Duplicate</button>
+    </div>
+  </div>
+</div>
+
+<!-- Copy Questions Modal -->
+<div class="overlay hidden" id="copyQuestionsModal" onclick="if(event.target===this)document.getElementById('copyQuestionsModal').classList.add('hidden')">
+  <div class="modal" style="max-width:420px;">
+    <h2>Copy Question(s) To...</h2>
+    <p>Select a presentation to copy to:</p>
+    <div id="copyQuestionsPresListModal" style="max-height:240px;overflow-y:auto;margin-bottom:12px;border:1px solid var(--border);border-radius:8px;"></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="document.getElementById('copyQuestionsModal').classList.add('hidden')">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- Full QR Modal -->
 <div class="overlay hidden" id="qrModal" onclick="if(event.target===this)closeQRModal()">
   <div class="modal" style="max-width:320px;text-align:center;">
@@ -1740,6 +1764,89 @@ async function doRenamePres() {
 
 document.getElementById('renameInput').addEventListener('keydown', e => { if(e.key==='Enter') doRenamePres(); });
 
+// ─── DUPLICATE PRESENTATION ──────────────────────────────────────────────────
+let duplicatePresTarget = null;
+
+function openDuplicatePresentation(id) {
+  duplicatePresTarget = id;
+  document.getElementById('duplicatePresName').textContent = presentations[id]?.name || 'this presentation';
+  document.getElementById('duplicatePresModal').classList.remove('hidden');
+}
+
+async function doDuplicatePresentation() {
+  if (!duplicatePresTarget || !presentations[duplicatePresTarget]) return;
+  document.getElementById('duplicatePresModal').classList.add('hidden');
+
+  const source = presentations[duplicatePresTarget];
+  const newId = 'pres_' + Date.now();
+  const newCode = genCode();
+  const questions = toQArr(source.questions);
+
+  presentations[newId] = {
+    id: newId,
+    name: source.name + ' (Copy)',
+    sessionCode: newCode,
+    createdAt: Date.now(),
+    questions: JSON.parse(JSON.stringify(questions)) // Deep copy
+  };
+
+  // Save to Firebase
+  await db.ref(`users/${userId}/presentations/${newId}`).set(presentations[newId]);
+
+  // Mirror questions to quiz_builder so participants can find them
+  await db.ref(`quiz_builder/${newCode}/questions`).set(questions);
+
+  duplicatePresTarget = null;
+  renderPresList();
+  toast('Presentation duplicated!', 'success');
+}
+
+// ─── COPY QUESTIONS ──────────────────────────────────────────────────────────
+let copyFromQIdx = null;
+
+function openCopyQuestion(idx) {
+  if (!activePresId || !questions[idx]) return;
+  copyFromQIdx = idx;
+
+  // Show modal with list of other presentations
+  const list = document.getElementById('copyQuestionsPresListModal');
+  const currentPresIds = Object.keys(presentations).filter(id => id !== activePresId);
+
+  if (currentPresIds.length === 0) {
+    list.innerHTML = '<div style="padding:12px;text-align:center;color:var(--muted);font-size:12px;">Create another presentation to copy to.</div>';
+    document.getElementById('copyQuestionsModal').classList.remove('hidden');
+    return;
+  }
+
+  list.innerHTML = currentPresIds.map(id => {
+    const p = presentations[id];
+    return `<div onclick="doCopyQuestion('${id}')" style="padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--border2);transition:background 0.15s;" onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">
+      <div style="font-weight:600;color:var(--text);">${p.name}</div>
+      <div style="font-size:11px;color:var(--muted);">${toQArr(p.questions).length} questions · ${p.sessionCode}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('copyQuestionsModal').classList.remove('hidden');
+}
+
+async function doCopyQuestion(targetPresId) {
+  if (copyFromQIdx === null || !presentations[targetPresId]) return;
+
+  document.getElementById('copyQuestionsModal').classList.add('hidden');
+
+  const q = JSON.parse(JSON.stringify(questions[copyFromQIdx])); // Deep copy
+  const targetQs = toQArr(presentations[targetPresId].questions);
+  targetQs.push(q);
+  presentations[targetPresId].questions = targetQs;
+
+  const code = presentations[targetPresId].sessionCode;
+  await db.ref(`users/${userId}/presentations/${targetPresId}/questions`).set(targetQs);
+  await db.ref(`quiz_builder/${code}/questions`).set(targetQs);
+
+  copyFromQIdx = null;
+  toast(`Copied to "${presentations[targetPresId].name}"!`, 'success');
+}
+
 // ─── RENDER PRESENTATIONS LIST ────────────────────────────────────────────────
 function renderPresList() {
   const list = document.getElementById('presList');
@@ -1768,6 +1875,7 @@ function renderPresList() {
         </div>
         <div class="pres-actions">
           <button class="icon-btn" onclick="event.stopPropagation();showPresTally('${id}')" title="View Tally" style="color:var(--accent);">📊</button>
+          <button class="icon-btn" onclick="event.stopPropagation();openDuplicatePresentation('${id}')" title="Duplicate">📑</button>
           <button class="icon-btn" onclick="event.stopPropagation();openRenamePres('${id}')" title="Rename">✏️</button>
           <button class="icon-btn" onclick="event.stopPropagation();confirmResetPres('${id}')" title="Reset Tally" style="color:var(--accent2);">↺</button>
           <button class="icon-btn del" onclick="event.stopPropagation();openDeletePres('${id}')" title="Delete">🗑</button>
@@ -3170,11 +3278,17 @@ function renderQList() {
   list.innerHTML = questions.map((q,i)=>`
     <div class="q-item ${i===selIdx?'sel':''}" onclick="selectQ(${i})">
       <div class="q-num">${i+1}</div>
-      <div>
+      <div style="flex:1;">
         <div class="q-label">${q.text||'<span style="color:var(--muted);font-style:italic;">Untitled</span>'}</div>
         <div class="q-type-tag">${icons[q.type]||'?'} ${(q.type||'').replace(/_/g,' ')}</div>
       </div>
+      <button class="icon-btn" onclick="event.stopPropagation();openCopyQuestion(${i})" title="Copy to another presentation" style="opacity:0;transition:opacity 0.15s;">📋</button>
     </div>`).join('');
+  // Show copy button on hover
+  document.querySelectorAll('.q-item').forEach((el) => {
+    el.addEventListener('mouseenter', () => el.querySelector('.icon-btn')?.style.setProperty('opacity', '1'));
+    el.addEventListener('mouseleave', () => el.querySelector('.icon-btn')?.style.setProperty('opacity', '0'));
+  });
 }
 
 function selectQ(idx) {
