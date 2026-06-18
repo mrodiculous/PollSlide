@@ -1826,7 +1826,7 @@ function selectPresentation(id) {
   // Async/aggregate dashboards (gated — poll's live + companion path is never entered).
   if (presType(pres) === 'survey') attachSurveyDashboard(pres);
   else if (presType(pres) === 'quiz' && liveQIdx === null) attachQuizLeaderboard(pres);
-  else if (presType(pres) === 'study') renderStudyOverview(pres);
+  else if (presType(pres) === 'study') attachStudyDashboard(pres);
 }
 
 // ─── DELETE / RENAME PRESENTATIONS ───────────────────────────────────────────
@@ -2384,21 +2384,54 @@ function renderQuizLeaderboard(pres, all) {
         </div>`).join(''));
 }
 
-// ─── STUDY SET OVERVIEW ──────────────────────────────────────────────────────
-// Study is self-paced (no live audience responses), so this is a simple overview
-// + share prompt. Real per-studier mastery needs a study-progress data layer (future).
-function renderStudyOverview(pres) {
+// ─── STUDY MASTERY DASHBOARD ─────────────────────────────────────────────────
+// Live per-studier mastery, fed by recordStudyProgress() in answer.html
+// (sessions/<code>/study/<pid>/cards/<idx> = again|hard|good|easy). Reuses _dashListener.
+function attachStudyDashboard(pres) {
+  if (_dashListener) { _dashListener(); _dashListener = null; }
+  const hd = document.querySelector('#rightPanel .right-hd span');
+  if (hd) hd.textContent = 'Study mastery';
+  const ref = db.ref(`sessions/${pres.sessionCode}/study`);
+  const cb  = ref.on('value', snap => renderStudyMastery(pres, snap.exists() ? snap.val() : {}));
+  _dashListener = () => ref.off('value', cb);
+}
+function renderStudyMastery(pres, studiers) {
   const rs = document.getElementById('rightScroll');
   if (!rs) return;
-  const hd = document.querySelector('#rightPanel .right-hd span');
-  if (hd) hd.textContent = 'Study set';
-  const n = toQArr(pres.questions).length;
-  const rc = document.getElementById('respCounter'); if (rc) rc.textContent = n;
-  rs.innerHTML = `<div class="resp-big" style="padding:14px;">${n} <span>card${n !== 1 ? 's' : ''}</span></div>
-    <div style="padding:14px;color:var(--muted);font-size:13px;line-height:1.7;">
-      📚 Flip through to study, or <b style="color:var(--text);">🔗 Share</b> the set so others can study on their own time.
-      <br><br><span style="font-size:11px;">Per-studier mastery tracking is coming soon.</span>
-    </div>`;
+  const cards  = toQArr(pres.questions);
+  const people = Object.values(studiers || {});
+  const rc = document.getElementById('respCounter'); if (rc) rc.textContent = people.length;
+  if (people.length === 0) {
+    rs.innerHTML = `<div class="resp-big" style="padding:14px;">${cards.length} <span>card${cards.length!==1?'s':''}</span></div>
+      <div style="padding:14px;color:var(--muted);font-size:13px;line-height:1.7;">📚 <b style="color:var(--text);">Share this set</b> — as people study, their mastery shows up here live.</div>`;
+    return;
+  }
+  const isMastered = r => r === 'good' || r === 'easy';
+  let totalRatings = 0, totalMastered = 0;
+  const perCard = cards.map(() => ({ seen: 0, mastered: 0 }));
+  people.forEach(p => Object.entries(p.cards || {}).forEach(([idx, rating]) => {
+    const i = Number(idx); if (!perCard[i]) return;
+    perCard[i].seen++; totalRatings++;
+    if (isMastered(rating)) { perCard[i].mastered++; totalMastered++; }
+  }));
+  const overall = totalRatings ? Math.round(totalMastered / totalRatings * 100) : 0;
+  const ranked = perCard.map((pc, i) => ({ i, ratio: pc.seen ? pc.mastered / pc.seen : 1, seen: pc.seen }))
+                        .filter(c => c.seen > 0).sort((a, b) => a.ratio - b.ratio);
+  rs.innerHTML =
+    `<div class="resp-big" style="padding:14px;">${overall}% <span>mastered · ${people.length} studier${people.length!==1?'s':''}</span></div>` +
+    `<div style="padding:4px 12px 6px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;font-weight:700;">Toughest cards</div>` +
+    ranked.slice(0, 6).map(c => {
+      const front = cards[c.i].front || cards[c.i].text || ('Card ' + (c.i + 1));
+      const pctM = Math.round(c.ratio * 100);
+      const col = pctM < 50 ? 'var(--accent2)' : pctM < 80 ? 'var(--accent4)' : 'var(--accent3)';
+      return `<div style="padding:9px 12px;border-bottom:1px solid var(--border);">
+        <div style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:5px;">${escapeHtml(front)}</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="flex:1;height:6px;background:var(--surface2);border-radius:100px;overflow:hidden;"><div style="height:100%;width:${pctM}%;background:${col};"></div></div>
+          <span style="font-size:11px;color:var(--muted);white-space:nowrap;">${pctM}%</span>
+        </div>
+      </div>`;
+    }).join('');
 }
 
 function clearRightPanel() {

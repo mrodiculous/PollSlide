@@ -968,9 +968,23 @@ function rateCard(rating) {
   const srs = srsLoad();
   srs[idx] = srsSchedule(srs[idx], rating);
   srsSave(srs);
+  recordStudyProgress(idx, rating);   // report to the presenter's live mastery dashboard
   if (rating === 'again') studyQueue.push(idx); // re-show later this session
   else studyReviewed++;
   showStudyCard();
+}
+
+// Per-studier mastery → powers the presenter's live Study Mastery dashboard.
+// Best-effort: study still works client-side even if this write is denied.
+function recordStudyProgress(idx, rating) {
+  if (!participantId || !SESSION) return;
+  try {
+    db.ref(`sessions/${SESSION}/study/${participantId}`).update({
+      name: participantName || 'Anon',
+      updated: Date.now(),
+      [`cards/${idx}`]: rating          // again | hard | good | easy
+    });
+  } catch (e) {}
 }
 
 function speakCard() {
