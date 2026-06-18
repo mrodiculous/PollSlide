@@ -3,10 +3,12 @@
 //
 // Uses Stripe price LOOKUP KEYS instead of hardcoded price IDs.
 // In your Stripe dashboard, set lookup keys on each price:
-//   Pro Monthly:   pollslide_pro_monthly
-//   Pro Annual:    pollslide_pro_annual
-//   Team Monthly:  pollslide_team_monthly
-//   Team Annual:   pollslide_team_annual
+//   Pro Monthly:         pollslide_pro_monthly
+//   Pro Annual:          pollslide_pro_annual
+//   Team Small Monthly:  pollslide_team_small_monthly
+//   Team Small Annual:   pollslide_team_small_annual
+//   Team Large Monthly:  pollslide_team_large_monthly
+//   Team Large Annual:   pollslide_team_large_annual
 //
 // Vercel Environment Variables needed (only 3):
 //   STRIPE_SECRET_KEY     = sk_test_... (sandbox) or sk_live_... (production)
@@ -38,8 +40,8 @@ module.exports = async function handler(req, res) {
   if (!email || !uid || !plan) {
     return res.status(400).json({ error: 'Missing required fields: email, uid, plan' });
   }
-  if (!['pro', 'team'].includes(plan)) {
-    return res.status(400).json({ error: 'plan must be "pro" or "team"' });
+  if (!['pro', 'team_small', 'team_large'].includes(plan)) {
+    return res.status(400).json({ error: 'plan must be "pro", "team_small" or "team_large"' });
   }
 
   const cycle = billing === 'annual' ? 'annual' : 'monthly';

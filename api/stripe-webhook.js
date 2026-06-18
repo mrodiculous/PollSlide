@@ -41,13 +41,17 @@ function getFirebaseApp() {
   });
 }
 
-// Map Stripe price IDs to PollSlide plan tier names
+// Map Stripe price IDs to PollSlide plan tier names (fallback only — the primary
+// source of truth is the `plan` we stash in subscription metadata at checkout).
 const PRICE_TO_TIER = {
   [process.env.STRIPE_PRICE_PRO_MONTHLY]: 'pro',
   [process.env.STRIPE_PRICE_PRO_ANNUAL]: 'pro',
-  [process.env.STRIPE_PRICE_TEAM_MONTHLY]: 'team',
-  [process.env.STRIPE_PRICE_TEAM_ANNUAL]: 'team',
+  [process.env.STRIPE_PRICE_TEAM_SMALL_MONTHLY]: 'team_small',
+  [process.env.STRIPE_PRICE_TEAM_SMALL_ANNUAL]: 'team_small',
+  [process.env.STRIPE_PRICE_TEAM_LARGE_MONTHLY]: 'team_large',
+  [process.env.STRIPE_PRICE_TEAM_LARGE_ANNUAL]: 'team_large',
 };
+const VALID_TIERS = ['pro', 'team_small', 'team_large'];
 
 function getTierFromPriceId(priceId) {
   return PRICE_TO_TIER[priceId] || 'pro'; // default to pro if unknown
@@ -148,7 +152,9 @@ module.exports = async function handler(req, res) {
         const sub = event.data.object;
         const uid = sub.metadata?.firebase_uid;
         const priceId = sub.items?.data[0]?.price?.id;
-        const tier = getTierFromPriceId(priceId);
+        // Prefer the plan we stamped at checkout; fall back to the price-ID map.
+        const metaPlan = sub.metadata?.plan;
+        const tier = VALID_TIERS.includes(metaPlan) ? metaPlan : getTierFromPriceId(priceId);
         const status = sub.status; // active, past_due, canceled, etc.
 
         if (uid) {
