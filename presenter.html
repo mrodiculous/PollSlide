@@ -524,6 +524,7 @@
       <span style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Live Results</span>
       <div style="display:flex;align-items:center;gap:8px;">
         <span id="respCounter" style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent);font-size:12px;">—</span>
+        <button onclick="toggleSfx()" id="sfxBtn" title="Sound effects on/off" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">🔊</button>
         <button onclick="toggleMaximize()" id="maxBtn" title="Maximize results (great for projecting)" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">⛶</button>
       </div>
     </div>
@@ -1793,6 +1794,7 @@ function selectPresentation(id) {
   questions = toQArr(pres.questions);
   selIdx = null;
   if (respListener) { respListener(); respListener = null; }
+  if (_dashListener) { _dashListener(); _dashListener = null; }   // drop survey dashboard listener when switching presentations
   // Restore live state from localStorage
   const savedLiveIdx = localStorage.getItem('ql_liveQIdx_' + pres.sessionCode);
   const savedLiveId  = localStorage.getItem('ql_liveQId_' + pres.sessionCode);
@@ -1820,6 +1822,9 @@ function selectPresentation(id) {
   } else {
     showSetup();
   }
+
+  // SurveySlide: right panel becomes a live response dashboard. Gated — poll/quiz/study untouched.
+  if (presType(pres) === 'survey') attachSurveyDashboard(pres);
 }
 
 // ─── DELETE / RENAME PRESENTATIONS ───────────────────────────────────────────
@@ -2289,9 +2294,57 @@ function setRightPanelIdle() {
   if (rs) rs.innerHTML = `<div style="padding-top:28px;text-align:center;color:var(--muted);font-size:13px;line-height:1.6;">${r.body}</div>`;
 }
 
+// ─── SURVEY LIVE DASHBOARD ───────────────────────────────────────────────────
+// Async response feed for SurveySlide. Fully additive + product-gated: uses its own
+// listener (_dashListener), never touches the poll/companion live path or renderRightPanel.
+let _dashListener = null;
+function attachSurveyDashboard(pres) {
+  if (_dashListener) { _dashListener(); _dashListener = null; }
+  const code = pres.sessionCode;
+  const hd = document.querySelector('#rightPanel .right-hd span');
+  if (hd) hd.textContent = 'Survey responses';
+  const ref = db.ref(`sessions/${code}/responses`);
+  const cb  = ref.on('value', snap => renderSurveyDashboard(pres, snap.exists() ? snap.val() : {}));
+  _dashListener = () => ref.off('value', cb);
+}
+function renderSurveyDashboard(pres, all) {
+  const rs = document.getElementById('rightScroll');
+  if (!rs) return;
+  const qs = toQArr(pres.questions);
+  const code = pres.sessionCode;
+  const people = new Set();
+  Object.values(all || {}).forEach(byPid => Object.keys(byPid || {}).forEach(pid => people.add(pid)));
+  const rc = document.getElementById('respCounter'); if (rc) rc.textContent = people.size;
+  const rows = qs.map((q, i) => {
+    const resp = all[`q${i}_stable_${code}`] ? Object.values(all[`q${i}_stable_${code}`]) : [];
+    const n = resp.length;
+    let summary = '<span style="color:var(--muted);">No responses yet</span>';
+    if (n > 0 && q.type === 'rating') {
+      let sum = 0, c = 0; resp.forEach(r => { const v = parseInt(safeJ(r.answer)); if (v) { sum += v; c++; } });
+      summary = c ? `Avg ${(sum / c).toFixed(1)} ★` : summary;
+    } else if (n > 0 && q.type === 'free_text') {
+      summary = `${n} text response${n !== 1 ? 's' : ''}`;
+    } else if (n > 0) {
+      const counts = {};
+      resp.forEach(r => { try { const a = JSON.parse(r.answer); (Array.isArray(a) ? a : [a]).forEach(v => counts[v] = (counts[v] || 0) + 1); } catch (e) {} });
+      const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+      if (top) { const opt = (q.options || [])[top[0]]; summary = `${escapeHtml((opt && opt.text) || '—')} leads · ${Math.round(top[1] / n * 100)}%`; }
+    }
+    return `<div style="padding:10px 12px;border-bottom:1px solid var(--border);">
+      <div style="font-size:12px;font-weight:600;margin-bottom:3px;">${i + 1}. ${escapeHtml(q.text || q.front || '')}</div>
+      <div style="font-size:11px;color:var(--muted);display:flex;justify-content:space-between;gap:8px;align-items:center;">
+        <span>${summary}</span><span style="font-family:Syne,sans-serif;color:var(--accent);font-weight:700;">${n}</span>
+      </div>
+    </div>`;
+  }).join('');
+  rs.innerHTML = `<div class="resp-big" style="padding:14px;">${people.size} <span>respondent${people.size !== 1 ? 's' : ''}</span></div>` +
+    (rows || '<div style="padding:14px;color:var(--muted);font-size:13px;">Add questions, then share your survey.</div>');
+}
+
 function clearRightPanel() {
   // Detach ALL response listeners — both the current one and any per-question ones
   if (respListener) { respListener(); respListener = null; }
+  if (_dashListener) { _dashListener(); _dashListener = null; }   // survey dashboard listener
   Object.values(respListeners).forEach(off => off());
   respListeners = {};
   liveQIdx = null; liveQId = null;
@@ -2779,6 +2832,36 @@ function beginRevealCountdown() {
 }
 
 // ── CONFETTI: celebratory burst on the live results when answer is revealed ──
+// ─── SOUND EFFECTS (synthesized via Web Audio — no audio files) ──────────────
+let _sfxMuted = localStorage.getItem('ql_sfx') === 'off';
+let _audioCtx = null;
+function _beep(freq, start, dur, type, gain) {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return;
+  const ctx = _audioCtx || (_audioCtx = new Ctx());
+  if (ctx.state === 'suspended') ctx.resume();
+  const o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type || 'triangle'; o.frequency.value = freq;
+  o.connect(g); g.connect(ctx.destination);
+  const t = ctx.currentTime + start;
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(gain || 0.14, t + 0.02);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.start(t); o.stop(t + dur + 0.03);
+}
+const sfx = {
+  reveal() { if (_sfxMuted) return; try { _beep(523.25,0,0.18); _beep(659.25,0.10,0.18); _beep(783.99,0.20,0.32); } catch(e){} }, // C–E–G rise
+  pop()    { if (_sfxMuted) return; try { _beep(660,0,0.08,'square',0.06); } catch(e){} }
+};
+function toggleSfx() {
+  _sfxMuted = !_sfxMuted;
+  localStorage.setItem('ql_sfx', _sfxMuted ? 'off' : 'on');
+  const b = document.getElementById('sfxBtn');
+  if (b) b.textContent = _sfxMuted ? '🔇' : '🔊';
+  if (!_sfxMuted) sfx.pop();   // little confirmation blip when turning sound on
+}
+{ const _sb = document.getElementById('sfxBtn'); if (_sb) _sb.textContent = _sfxMuted ? '🔇' : '🔊'; }
+
 let _confettiCanvas = null, _confettiCtx = null, _confettiRAF = null;
 function fireConfetti() {
   if (!_confettiCanvas) {
@@ -2830,6 +2913,7 @@ function doReveal() {
   const _presLbl = document.getElementById('presentRevealBadge');
   if (_presLbl && _presentIdx !== null) _presLbl.innerHTML = buildRevealBadgeHtml(questions[_presentIdx]);
   fireConfetti();
+  sfx.reveal();
 
   // If post-reveal is enabled with a timer, start the countdown now.
   // The timer fires doPostReveal() — transitioning to the post-reveal display,
