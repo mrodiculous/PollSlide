@@ -596,9 +596,24 @@
   <div class="modal" style="max-width:400px;">
     <h2>Reset Presentation Tally?</h2>
     <p>This clears all scores and responses for <strong id="resetPresModalName" style="color:var(--text);"></strong>. All questions stay live and QR codes keep working.</p>
+    <p style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--muted);">🗄 A dated copy is saved to <strong style="color:var(--text);">History</strong> first — you can download or recover it anytime.</p>
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closeResetPres()">Cancel</button>
       <button class="btn btn-danger" onclick="doResetPres()">Yes, Reset Tally</button>
+    </div>
+  </div>
+</div>
+
+<!-- History / Recoverable Data Modal -->
+<div class="overlay hidden" id="historyModal" onclick="if(event.target===this)document.getElementById('historyModal').classList.add('hidden')">
+  <div class="modal" style="max-width:520px;padding:0;overflow:hidden;">
+    <div style="padding:18px 20px 14px;border-bottom:1px solid var(--border);">
+      <h2 style="margin:0 0 2px;">🗄 History — saved sessions</h2>
+      <p style="margin:0;font-size:12px;color:var(--muted);">Every reset is saved here with its date. Download the CSV or keep it for your records.</p>
+    </div>
+    <div id="historyBody" style="max-height:60vh;overflow-y:auto;"></div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);text-align:right;">
+      <button class="btn btn-ghost" onclick="document.getElementById('historyModal').classList.add('hidden')">Close</button>
     </div>
   </div>
 </div>
@@ -1116,14 +1131,20 @@ async function submitChatTicket() {
   if (errEl) errEl.style.display='none';
   var ticketId='ticket_'+Date.now();
   var data={uid:userId||'',email:currentUser?.email||'',subject:subj,message:msg,category:cat,status:'open',createdAt:Date.now(),replies:{}};
-  try {
-    await db.ref('admin/tickets/'+ticketId).set(data);
-    await db.ref('users/'+userId+'/tickets/'+ticketId).set(data);
+  // Save to the user's OWN node first \u2014 that's the write they're guaranteed to own.
+  // The admin mirror is best-effort so locked-down rules can't break submission.
+  var saved=false;
+  try { if(userId){ await db.ref('users/'+userId+'/tickets/'+ticketId).set(data); saved=true; } } catch(e){}
+  try { await db.ref('admin/tickets/'+ticketId).set(data); } catch(e){ /* admin path may be read-only for users */ }
+  if (saved) {
     _chatView='list'; renderChatPanel();
     toast('Request submitted \u2713', 'success');
-  } catch(e) {
+  } else {
+    // Never a dead end: hand off to their mail client so they can always reach support.
+    var mailto='mailto:help@pollslide.com?subject='+encodeURIComponent('['+cat+'] '+subj)+'&body='+encodeURIComponent(msg);
+    window.location.href=mailto;
     if(btn){btn.textContent='Submit request';btn.disabled=false;}
-    if(errEl){errEl.textContent='Failed. Email help@pollslide.com';errEl.style.display='block';}
+    if(errEl){errEl.textContent='Opening your email app to reach support\u2026';errEl.style.display='block';}
   }
 }
 
@@ -1446,6 +1467,7 @@ function toggleUserMenu() {
   if (itemsEl) {
     const menuItems = [
       { icon:'🔗', label:'Connect Mac App',      fn:'generatePairingCode()' },
+      { icon:'🗄', label:'History (saved data)',  fn:'openHistory()' },
       { icon:'✨', label:'See plans & upgrade',   fn:'openPlanPicker()' },
       { icon:'📊', label:'PowerPoint live results', fn:'openPPTGuide()' },
       { icon:'📖', label:'Setup guide',           fn:"window.open('https://pollslide.com/setup','_blank')" },
@@ -2179,6 +2201,10 @@ async function doResetAll() {
   clearRightPanel();
 
   try {
+    // Snapshot every presentation to dated history FIRST (recoverable), then delete.
+    for (const pres of Object.values(presentations)) {
+      if (pres.sessionCode) { try { await archiveResponses(pres); } catch(e) {} }
+    }
     const jobs = [];
     for (const [presId, pres] of Object.entries(presentations)) {
       const code = pres.sessionCode;
@@ -2256,7 +2282,8 @@ async function doResetPres() {
     localStorage.removeItem('ql_liveQIdx_' + code);
     localStorage.removeItem('ql_liveQId_' + code);
 
-    // Step 2: Delete from Firebase BEFORE updating UI
+    // Step 2: Snapshot to dated history FIRST (recoverable), then delete.
+    await archiveResponses(pres);
     await db.ref(`sessions/${code}/responses`).remove();
     if (qs.length > 0) {
       await db.ref(`quiz_builder/${code}/questions`).set(qs);
@@ -4617,6 +4644,107 @@ async function openBillingPortal() {
 
 // ─── RESPONSE REPORTS ────────────────────────────────────────────────────────
 let _reportData = null; // cached for CSV export
+
+// ─── DATA RECOVERY (dated archives) ──────────────────────────────────────────
+// Before any "reset tally" wipes responses, we snapshot them (with a timestamp,
+// the question texts, and answers) to users/<uid>/archives/<presId>/<ts>. The
+// educator can later view every past session by date, download CSV, or delete.
+function responsesToCSV(qs, allData, code) {
+  const rows = [['Participant','Question #','Question Text','Question Type','Answer','Correct?','Time (ms)','Submitted']];
+  toQArr(qs).forEach((q, idx) => {
+    const qId = 'q' + idx + '_stable_' + code;
+    const raw = allData[qId] ? Object.values(allData[qId]) : [];
+    raw.forEach(resp => {
+      let ans = resp.answer;
+      try { const p = JSON.parse(ans); ans = Array.isArray(p) ? p.map(i => (q.options && q.options[i]?.text) || i).join('; ') : (q.options && q.options[p]?.text) || String(p); } catch(e) {}
+      rows.push([
+        resp.name || 'Anonymous', 'Q' + (idx+1), q.text || '', q.type || '',
+        ans, resp.isCorrect === true ? 'Yes' : resp.isCorrect === false ? 'No' : '',
+        resp.elapsed || '', resp.submittedAt ? new Date(resp.submittedAt).toLocaleString() : ''
+      ]);
+    });
+  });
+  return rows.map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('\n');
+}
+function downloadCSV(csv, filename) {
+  const blob = new Blob([csv], { type:'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// Snapshot a presentation's current responses to a dated archive. Returns true if
+// anything was saved. Called right before a reset clears the live responses.
+async function archiveResponses(pres) {
+  if (!userId || !pres || !pres.sessionCode) return false;
+  const code = pres.sessionCode;
+  let allData = {};
+  try { const s = await db.ref('sessions/' + code + '/responses').get(); allData = s.exists() ? (s.val()||{}) : {}; } catch(e) { return false; }
+  const pids = new Set();
+  let respCount = 0;
+  Object.values(allData).forEach(b => { if (b && typeof b === 'object') { Object.keys(b).forEach(p => pids.add(p)); respCount += Object.keys(b).length; } });
+  if (respCount === 0) return false; // nothing worth keeping
+  const ts = Date.now();
+  const archive = {
+    name: pres.name || 'Untitled', sessionCode: code, productType: presType(pres), archivedAt: ts,
+    questions: toQArr(pres.questions).map(q => ({ text:q.text||'', type:q.type||'', options:q.options||null, correctAnswer:(q.correctAnswer!==undefined?q.correctAnswer:null) })),
+    responses: allData, responseCount: respCount, participantCount: pids.size
+  };
+  try { await db.ref('users/' + userId + '/archives/' + pres.id + '/' + ts).set(archive); return true; }
+  catch(e) { return false; }
+}
+
+// ── History viewer: every archived session, by date, with download + delete ──
+let _archivesCache = {};
+async function openHistory() {
+  closeUserMenu && closeUserMenu();
+  const modal = document.getElementById('historyModal');
+  const body  = document.getElementById('historyBody');
+  modal.classList.remove('hidden');
+  body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;">Loading saved sessions…</div>';
+  let data = {};
+  try { const s = await db.ref('users/' + userId + '/archives').get(); data = s.exists() ? (s.val()||{}) : {}; } catch(e) {}
+  _archivesCache = data;
+  // Flatten { presId: { ts: archive } } → sorted list (newest first)
+  const items = [];
+  Object.entries(data).forEach(([presId, byTs]) => Object.entries(byTs||{}).forEach(([ts, a]) => items.push({ presId, ts, a })));
+  items.sort((x,y) => (y.a.archivedAt||0) - (x.a.archivedAt||0));
+  if (items.length === 0) {
+    body.innerHTML = `<div style="padding:36px 20px;text-align:center;">
+      <div style="font-size:34px;margin-bottom:10px;">🗄</div>
+      <div style="color:var(--muted);font-size:13px;line-height:1.6;">No saved sessions yet.<br>When you reset a tally, a dated copy is saved here first so you can always recover or download it.</div>
+    </div>`;
+    return;
+  }
+  body.innerHTML = items.map(({presId, ts, a}) => {
+    const d = new Date(a.archivedAt || Number(ts));
+    const icon = (PRODUCTS[a.productType]||PRODUCTS.poll).icon;
+    return `<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--border2);">
+      <span style="font-size:18px;flex-shrink:0;">${icon}</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.name||'Untitled'}</div>
+        <div style="font-size:11px;color:var(--muted);">${d.toLocaleString()} · ${a.participantCount||0} participant${a.participantCount!==1?'s':''} · ${a.responseCount||0} response${a.responseCount!==1?'s':''}</div>
+      </div>
+      <button class="btn btn-ghost" style="padding:6px 10px;font-size:11px;" onclick="downloadArchive('${presId}','${ts}')" title="Download CSV">⬇ CSV</button>
+      <button class="icon-btn del" onclick="deleteArchive('${presId}','${ts}')" title="Delete this saved copy">🗑</button>
+    </div>`;
+  }).join('');
+}
+function downloadArchive(presId, ts) {
+  const a = _archivesCache[presId] && _archivesCache[presId][ts];
+  if (!a) { toast('Archive not found.','danger'); return; }
+  const csv = responsesToCSV(a.questions, a.responses || {}, a.sessionCode);
+  const fname = (a.name||'session').replace(/[^a-zA-Z0-9]/g,'-') + '-' + new Date(a.archivedAt||Number(ts)).toISOString().slice(0,10) + '.csv';
+  downloadCSV(csv, fname);
+  toast('CSV downloaded!','success');
+}
+async function deleteArchive(presId, ts) {
+  if (!confirm('Delete this saved session permanently? This cannot be undone.')) return;
+  try { await db.ref('users/' + userId + '/archives/' + presId + '/' + ts).remove(); } catch(e) {}
+  openHistory(); // refresh
+}
 
 async function openReport() {
   if (!activePresId) return;
