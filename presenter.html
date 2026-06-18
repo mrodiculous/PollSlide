@@ -1348,14 +1348,14 @@ function selectPlanOption(plan) {
   if (proPill) proPill.style.borderColor = plan === 'pro' ? 'var(--accent)' : 'var(--border2)';
   if (teamPill) teamPill.style.borderColor = plan === 'team' ? 'var(--accent3)' : 'var(--border2)';
   const annual = document.getElementById('ppAnnual')?.checked;
-  const prices = { pro: { m: 12, a: 10 }, team: { m: 39, a: 32 } };
-  const p = prices[plan];
+  const prices = { pro: { m: 12, a: 10 }, team_small: { m: 39, a: 32 }, team_large: { m: 199, a: 165 } };
+  const p = prices[plan] || prices.pro;
   const price = annual ? p.a : p.m;
   const period = annual ? '/mo (billed annually)' : '/mo';
   const info = document.getElementById('ppSelectedInfo');
   const btn = document.getElementById('ppCheckoutBtn');
   if (info) {
-    const planName = plan.charAt(0).toUpperCase() + plan.slice(1);
+    const planName = (TIERS[plan] && TIERS[plan].name) || (plan.charAt(0).toUpperCase() + plan.slice(1));
     info.style.display = 'block';
     info.innerHTML = '<strong>' + planName + ':</strong> $' + price + period + (annual ? ' · Save $' + ((p.m - p.a) * 12) + '/year' : '');
   }
