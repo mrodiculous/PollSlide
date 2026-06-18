@@ -841,12 +841,19 @@ let authMode = 'signin';
 // All enforcement below reads from this single config, so flipping a tier on is
 // the only change needed at that point.
 const TIERS = {
-  free: { name: 'Free',  maxPresentations: 3,        maxParticipants: 25 },
-  pro:  { name: 'Pro',   maxPresentations: Infinity, maxParticipants: Infinity },
-  team: { name: 'Team',  maxPresentations: Infinity, maxParticipants: Infinity },
+  free:       { name: 'Free',       maxPresentations: 3,        maxParticipants: 25,       maxMembers: 1  },
+  pro:        { name: 'Pro',        maxPresentations: Infinity, maxParticipants: Infinity, maxMembers: 1  },
+  team_small: { name: 'Team Small', maxPresentations: Infinity, maxParticipants: Infinity, maxMembers: 5  },
+  team_large: { name: 'Team Large', maxPresentations: Infinity, maxParticipants: Infinity, maxMembers: 25 },
 };
+// Map legacy tier keys to current ones (old 'team' = 5-seat; old 'white' = largest).
+function normalizeTier(t) {
+  if (t === 'team') return 'team_small';
+  if (t === 'white') return 'team_large';
+  return TIERS[t] ? t : 'free';
+}
 let userTier = 'free';
-function tierLimits() { return TIERS[userTier] || TIERS.free; }
+function tierLimits() { return TIERS[normalizeTier(userTier)] || TIERS.free; }
 
 // Safari ITP (Intelligent Tracking Prevention) aggressively clears indexedDB and
 // localStorage, which Firebase LOCAL persistence uses. This causes random sign-outs.
@@ -909,7 +916,7 @@ auth.onAuthStateChanged(user => {
     // Load the user's plan tier (including white label)
     db.ref(`users/${userId}/tier`).once('value').then(snap => {
       const t = snap.val();
-      userTier = (t === 'pro' || t === 'team' || t === 'white') ? t : 'free';
+      userTier = ['pro','team','white','team_small','team_large'].includes(t) ? t : 'free';
       loadPresentations();
     }).catch(() => { userTier = 'free'; loadPresentations(); });
 
@@ -1198,20 +1205,20 @@ function openPlanPicker() {
   if (existing) existing.remove();
 
   const lim = tierLimits();
-  const currentTier = userTier || 'free';
+  const currentTier = normalizeTier(userTier);
   let pickerBilling = 'monthly';
 
   const plans = [
     { key:'free',  name:'Free',        mo:0,    yr:0,    color:'var(--muted)',
-      features:['25 participants per poll','3 presentations','All question types','Live results','Keynote app'],
-      missing:['Unlimited participants','Unlimited presentations','AI question designer','Reports & export'] },
+      features:['Polls, Surveys, Quizzes & Study','25 participants per poll','3 presentations','Live results + QR / link sharing','Mac companion app'],
+      missing:['Unlimited participants','Unlimited presentations','Async assignments & study sets','Reports, CSV & data history'] },
     { key:'pro',   name:'Pro',         mo:12,   yr:10,   color:'var(--accent)', popular:true,
-      features:['Unlimited participants','Unlimited presentations','All question types','Live results','Keynote app','PowerPoint & Slides (soon)','Response reports & CSV','Polly AI (20/month)'],
-      missing:['Team workspace'] },
-    { key:'team',  name:'Team',        mo:39,   yr:32,   color:'var(--accent3)',
-      features:['Everything in Pro','Up to 10 members','Shared library','Team billing','Polly AI (100/month)','Priority support','Admin controls','Usage analytics'] },
-    { key:'white', name:'White Label', mo:null, yr:null, color:'var(--accent4)',
-      features:['Everything in Team','Custom domain','Remove branding','Dedicated AI','Custom SLA','Reseller options','Custom integrations','Volume pricing'] },
+      features:['All 4 products: Poll · Survey · Quiz · Study','Unlimited participants & presentations','Mac companion on ANY platform — live (Windows soon)','Async quiz assignments & study sets','Email + QR / link distribution','Reports, CSV export & dated data history','Polly AI (20/month)'],
+      missing:['Team workspace & shared library'] },
+    { key:'team_small', name:'Team Small', mo:39, yr:32, color:'var(--accent3)',
+      features:['Everything in Pro','Up to 5 members','Shared question & deck library','Team admin panel & roles','Centralised billing','Polly AI (100/month)','Priority support'] },
+    { key:'team_large', name:'Team Large', mo:199, yr:165, color:'var(--accent4)',
+      features:['Everything in Team Small','Up to 25 members','Org-wide usage analytics','Bulk member management','SSO (coming soon)','Dedicated onboarding','Polly AI (300/month)'] },
   ];
 
   const overlay = document.createElement('div');
@@ -1270,7 +1277,7 @@ function openPlanPicker() {
         : p.key === 'white'
         ? 'background:transparent;border:1.5px solid '+D.accent4+';color:'+D.accent4+';cursor:pointer;'
         : 'background:' + (p.popular ? D.accent : 'transparent') + ';border:1.5px solid ' + (p.popular ? D.accent : D.border2) + ';color:' + (p.popular ? '#fff' : D.text) + ';cursor:pointer;';
-      const isPaidUser = currentTier === 'pro' || currentTier === 'team';
+      const isPaidUser = currentTier === 'pro' || currentTier === 'team_small' || currentTier === 'team_large';
       const ctaText = isCurrent 
         ? (isPaidUser ? 'Manage billing' : 'Current plan') 
         : p.key === 'white' ? 'Contact us' 
