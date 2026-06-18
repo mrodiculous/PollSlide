@@ -1,0 +1,52 @@
+{
+  "__README__": [
+    "SERVER-SIDE TEAM RULES for PollSlide workspaces.",
+    "These run on Firebase's servers, so seat limits and roles cannot be bypassed by",
+    "a tampered client. MERGE the 'workspaces' and 'team_invites' blocks below into your",
+    "EXISTING Realtime Database rules — do NOT paste this file as your whole ruleset, or",
+    "you'll lock out sessions/quiz_builder/users.",
+    "",
+    "HOW TO APPLY:",
+    "1. Firebase Console -> Realtime Database -> Rules.",
+    "2. Add the 'workspaces' and 'team_invites' keys inside your top-level 'rules' object.",
+    "3. Use the Rules Playground (Simulator) to test: a 6th member write to a 5-seat",
+    "   workspace must be DENIED; owner/admin writes ALLOWED; member self-join ALLOWED.",
+    "4. Publish.",
+    "",
+    "WHAT IT ENFORCES:",
+    "- Seat cap: a NEW member is rejected once members >= the tier limit (team_large=25, else 5).",
+    "- Role-gated writes: only the owner or an admin can add/remove others or manage invites.",
+    "- Read access limited to the workspace owner and its members.",
+    "",
+    "KNOWN LIMITATION (for airtight invite acceptance): RTDB rules can't recompute an",
+    "email->key hash, so the self-join rule allows a signed-in user to add THEMSELVES",
+    "(still bounded by the seat cap). To make acceptance verify the invite belongs to the",
+    "user's email, move accept/invite into a Firebase-Admin Vercel function (api/team.js) —",
+    "ask Claude to add it; then tighten members/$uid .write to owner/admin only."
+  ],
+  "rules": {
+    "workspaces": {
+      "$wsId": {
+        ".read": "auth != null && (data.child('ownerUid').val() === auth.uid || data.child('members').child(auth.uid).exists())",
+        ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid) || data.child('ownerUid').val() === auth.uid)",
+        "members": {
+          "$uid": {
+            ".write": "auth != null && (data.parent().parent().child('ownerUid').val() === auth.uid || data.parent().parent().child('members').child(auth.uid).child('role').val() === 'admin' || $uid === auth.uid) && (data.exists() || !newData.exists() || data.parent().numChildren() < (data.parent().parent().child('tier').val() === 'team_large' ? 25 : 5))",
+            ".validate": "!newData.exists() || newData.hasChildren(['email','role'])"
+          }
+        },
+        "invites": {
+          "$emailKey": {
+            ".write": "auth != null && (data.parent().parent().child('ownerUid').val() === auth.uid || data.parent().parent().child('members').child(auth.uid).child('role').val() === 'admin') && (data.exists() || !newData.exists() || (data.parent().parent().child('members').numChildren() + data.parent().numChildren()) < (data.parent().parent().child('tier').val() === 'team_large' ? 25 : 5))"
+          }
+        }
+      }
+    },
+    "team_invites": {
+      "$emailKey": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    }
+  }
+}
