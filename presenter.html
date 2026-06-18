@@ -604,6 +604,25 @@
   </div>
 </div>
 
+<!-- Team Admin Panel -->
+<div class="overlay hidden" id="teamModal" onclick="if(event.target===this)document.getElementById('teamModal').classList.add('hidden')">
+  <div class="modal" style="max-width:560px;padding:0;overflow:hidden;">
+    <div style="padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;">
+      <div style="min-width:0;">
+        <h2 style="margin:0 0 2px;">👥 Team admin</h2>
+        <p style="margin:0;font-size:12px;color:var(--muted);" id="teamSub">Manage members and invites for your workspace.</p>
+      </div>
+      <div id="teamSeats" style="flex-shrink:0;font-family:Syne,sans-serif;font-weight:800;font-size:13px;background:var(--surface2);border:1px solid var(--border2);border-radius:100px;padding:6px 12px;">—</div>
+    </div>
+    <div id="teamBody" style="max-height:62vh;overflow-y:auto;padding:6px 0;">
+      <div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;">Loading workspace…</div>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);text-align:right;">
+      <button class="btn btn-ghost" onclick="document.getElementById('teamModal').classList.add('hidden')">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- History / Recoverable Data Modal -->
 <div class="overlay hidden" id="historyModal" onclick="if(event.target===this)document.getElementById('historyModal').classList.add('hidden')">
   <div class="modal" style="max-width:520px;padding:0;overflow:hidden;">
@@ -913,10 +932,12 @@ auth.onAuthStateChanged(user => {
         }, 1800);
       }
     } catch(e) {}
-    // Load the user's plan tier (including white label)
-    db.ref(`users/${userId}/tier`).once('value').then(snap => {
+    // Load the user's plan tier, then reconcile team membership (accept any pending
+    // invite for this email; downgrade if removed from a workspace) before loading.
+    db.ref(`users/${userId}/tier`).once('value').then(async snap => {
       const t = snap.val();
       userTier = ['pro','team','white','team_small','team_large'].includes(t) ? t : 'free';
+      try { await acceptPendingInvite(); await validateMembership(); } catch(e) {}
       loadPresentations();
     }).catch(() => { userTier = 'free'; loadPresentations(); });
 
@@ -1472,8 +1493,10 @@ function toggleUserMenu() {
   // Populate menu action items
   const itemsEl = document.getElementById('userMenuItems');
   if (itemsEl) {
+    const isTeamTier = ['team_small','team_large'].includes(normalizeTier(userTier));
     const menuItems = [
       { icon:'🔗', label:'Connect Mac App',      fn:'generatePairingCode()' },
+      ...(isTeamTier ? [{ icon:'👥', label:'Team admin',        fn:'openTeamPanel()' }] : []),
       { icon:'🗄', label:'History (saved data)',  fn:'openHistory()' },
       { icon:'✨', label:'See plans & upgrade',   fn:'openPlanPicker()' },
       { icon:'📊', label:'PowerPoint live results', fn:'openPPTGuide()' },
@@ -4751,6 +4774,178 @@ async function deleteArchive(presId, ts) {
   if (!confirm('Delete this saved session permanently? This cannot be undone.')) return;
   try { await db.ref('users/' + userId + '/archives/' + presId + '/' + ts).remove(); } catch(e) {}
   openHistory(); // refresh
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// TEAM ADMIN — workspaces, roles (owner/admin/member), email invites, seats.
+// Data model:
+//   workspaces/<wsId> = { name, ownerUid, tier, members:{uid:{email,role,joinedAt}}, invites:{emailKey:{email,role,...}} }
+//   users/<uid>/workspaceId = <wsId>
+//   team_invites/<emailKey> = { wsId, wsName, role, ... }   ← index so an invitee finds their invite on login
+// Members inherit the workspace tier (owner pays). Removal self-heals on next login.
+// ════════════════════════════════════════════════════════════════════════════
+function emailKey(e){ return (e||'').toLowerCase().trim().replace(/[.#$/\[\]@]/g,'_'); }
+let currentWorkspace = null; // { id, data }
+
+async function loadOrCreateWorkspace() {
+  let wsId = null;
+  try { const s = await db.ref('users/'+userId+'/workspaceId').get(); wsId = s.exists()? s.val(): null; } catch(e){}
+  if (wsId) {
+    const s = await db.ref('workspaces/'+wsId).get();
+    if (s.exists()) { currentWorkspace = { id:wsId, data:s.val() }; return currentWorkspace; }
+    await db.ref('users/'+userId+'/workspaceId').remove().catch(()=>{});
+  }
+  // None → create one; this user becomes the owner.
+  const tier = normalizeTier(userTier);
+  const id = 'ws_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
+  const data = { name:(currentUser?.email||'My')+"’s Team", ownerUid:userId, tier, createdAt:Date.now(),
+                 members:{ [userId]:{ email:currentUser?.email||'', role:'owner', joinedAt:Date.now() } }, invites:{} };
+  await db.ref('workspaces/'+id).set(data);
+  await db.ref('users/'+userId+'/workspaceId').set(id);
+  currentWorkspace = { id, data };
+  return currentWorkspace;
+}
+
+function teamMyRole(){ const m = currentWorkspace?.data?.members?.[userId]; return m ? m.role : 'member'; }
+function teamCanManage(){ return ['owner','admin'].includes(teamMyRole()); }
+
+async function openTeamPanel(){
+  if (typeof closeUserMenu === 'function') closeUserMenu();
+  document.getElementById('teamModal').classList.remove('hidden');
+  document.getElementById('teamBody').innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;">Loading workspace…</div>';
+  await loadOrCreateWorkspace();
+  renderTeamPanel();
+}
+
+function renderTeamPanel(){
+  const ws = currentWorkspace; if(!ws) return;
+  const limit   = (TIERS[ws.data.tier]||TIERS.team_small).maxMembers;
+  const members = ws.data.members||{};
+  const invites = ws.data.invites||{};
+  const used    = Object.keys(members).length + Object.keys(invites).length;
+  const manage  = teamCanManage();
+  document.getElementById('teamSeats').textContent = used+' / '+limit+' seats';
+  document.getElementById('teamSub').textContent = ws.data.name;
+  const badge = r => `<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;padding:2px 8px;border-radius:100px;background:${r==='owner'?'rgba(108,99,255,0.18)':r==='admin'?'rgba(247,183,49,0.16)':'var(--surface3)'};color:${r==='owner'?'var(--accent)':r==='admin'?'var(--accent4)':'var(--muted)'};">${r}</span>`;
+  const memHtml = Object.entries(members).map(([uid,m])=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:11px 18px;border-bottom:1px solid var(--border2);">
+      <span style="width:30px;height:30px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0;">${(m.email||'?')[0].toUpperCase()}</span>
+      <div style="flex:1;min-width:0;"><div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.email}${uid===userId?' <span style="color:var(--muted);font-weight:400;">(you)</span>':''}</div></div>
+      ${manage && m.role==='member' && uid!==userId ? `<button class="btn btn-ghost" style="padding:4px 8px;font-size:11px;" onclick="teamSetRole('${uid}','admin')">Make admin</button>` : ''}
+      ${teamMyRole()==='owner' && m.role==='admin' ? `<button class="btn btn-ghost" style="padding:4px 8px;font-size:11px;" onclick="teamSetRole('${uid}','member')">Make member</button>` : ''}
+      ${badge(m.role)}
+      ${manage && m.role!=='owner' && uid!==userId ? `<button class="icon-btn del" onclick="teamRemove('${uid}')" title="Remove">🗑</button>` : ''}
+    </div>`).join('');
+  const invHtml = Object.entries(invites).map(([k,inv])=>`
+    <div style="display:flex;align-items:center;gap:10px;padding:11px 18px;border-bottom:1px solid var(--border2);opacity:0.85;">
+      <span style="width:30px;height:30px;border-radius:50%;background:var(--surface3);display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;">✉️</span>
+      <div style="flex:1;min-width:0;"><div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${inv.email}</div><div style="font-size:11px;color:var(--muted);">Invited · pending</div></div>
+      ${badge(inv.role)}
+      ${manage ? `<button class="icon-btn del" onclick="teamRevoke('${k}')" title="Revoke">✕</button>` : ''}
+    </div>`).join('');
+  const full = used >= limit;
+  const inviteForm = manage ? `
+    <div style="padding:14px 18px;">
+      <div style="font-size:11px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;">Invite a member</div>
+      ${full ? `<div style="font-size:12px;color:var(--accent4);background:rgba(247,183,49,0.1);border:1px solid rgba(247,183,49,0.25);border-radius:8px;padding:9px 12px;">All ${limit} seats are in use. Remove someone or upgrade to add more.</div>` : `
+      <div style="display:flex;gap:8px;">
+        <input type="email" id="teamInviteEmail" placeholder="name@email.com" style="flex:1;margin:0;">
+        <select id="teamInviteRole" style="margin:0;width:auto;flex-shrink:0;"><option value="member">Member</option><option value="admin">Admin</option></select>
+        <button class="btn btn-primary" onclick="teamInvite()" style="white-space:nowrap;flex-shrink:0;">Send</button>
+      </div>
+      <div id="teamInviteErr" style="font-size:12px;color:var(--accent2);margin-top:6px;min-height:14px;"></div>
+      <div style="font-size:11px;color:var(--muted);margin-top:4px;">They’ll join automatically the next time they sign in with this email.</div>`}
+    </div>` : `<div style="padding:14px 18px;font-size:12px;color:var(--muted);">Only owners and admins can manage members.</div>`;
+  document.getElementById('teamBody').innerHTML =
+    `<div style="font-size:11px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);padding:10px 18px 6px;">Members</div>`
+    + memHtml
+    + (invHtml ? `<div style="font-size:11px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);padding:12px 18px 6px;">Pending invites</div>`+invHtml : '')
+    + inviteForm;
+}
+
+async function teamInvite(){
+  const ws = currentWorkspace; if(!ws||!teamCanManage()) return;
+  const errEl = document.getElementById('teamInviteErr');
+  const email = (document.getElementById('teamInviteEmail').value||'').toLowerCase().trim();
+  const role  = document.getElementById('teamInviteRole').value==='admin'?'admin':'member';
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { errEl.textContent='Enter a valid email.'; return; }
+  const k = emailKey(email);
+  const members = ws.data.members||{}, invites = ws.data.invites||{};
+  if (Object.values(members).some(m=>(m.email||'').toLowerCase()===email)) { errEl.textContent='Already a member.'; return; }
+  if (invites[k]) { errEl.textContent='Already invited.'; return; }
+  if (Object.keys(members).length + Object.keys(invites).length >= (TIERS[ws.data.tier]||TIERS.team_small).maxMembers) { errEl.textContent='No seats left.'; return; }
+  const inv = { email, role, invitedBy:currentUser?.email||'', createdAt:Date.now() };
+  ws.data.invites = ws.data.invites||{}; ws.data.invites[k]=inv;
+  try {
+    await db.ref('workspaces/'+ws.id+'/invites/'+k).set(inv);
+    await db.ref('team_invites/'+k).set({ wsId:ws.id, wsName:ws.data.name, role, invitedBy:inv.invitedBy, createdAt:inv.createdAt });
+    toast('Invite sent to '+email,'success');
+  } catch(e){ errEl.textContent='Could not send invite.'; }
+  renderTeamPanel();
+}
+
+async function teamRevoke(k){
+  const ws=currentWorkspace; if(!ws||!teamCanManage()) return;
+  if (ws.data.invites) delete ws.data.invites[k];
+  await db.ref('workspaces/'+ws.id+'/invites/'+k).remove().catch(()=>{});
+  await db.ref('team_invites/'+k).remove().catch(()=>{});
+  renderTeamPanel();
+}
+
+async function teamRemove(uid){
+  const ws=currentWorkspace; if(!ws||!teamCanManage()) return;
+  if (uid===ws.data.ownerUid) return;
+  if (!confirm('Remove this member from the team? They lose team access on their next sign-in.')) return;
+  if (ws.data.members) delete ws.data.members[uid];
+  await db.ref('workspaces/'+ws.id+'/members/'+uid).remove().catch(()=>{});
+  renderTeamPanel();
+}
+
+async function teamSetRole(uid, role){
+  const ws=currentWorkspace; if(!ws||!teamCanManage()) return;
+  if (uid===ws.data.ownerUid) return;
+  if (role==='member' && teamMyRole()!=='owner') return; // only owner can demote
+  if (ws.data.members && ws.data.members[uid]) ws.data.members[uid].role = role;
+  await db.ref('workspaces/'+ws.id+'/members/'+uid+'/role').set(role).catch(()=>{});
+  renderTeamPanel();
+}
+
+// On login: if this email was invited, join the workspace (respecting seats).
+async function acceptPendingInvite(){
+  if (!userId || !currentUser || !currentUser.email) return;
+  const k = emailKey(currentUser.email);
+  let inv=null;
+  try { const s=await db.ref('team_invites/'+k).get(); inv = s.exists()? s.val():null; } catch(e){ return; }
+  if (!inv || !inv.wsId) return;
+  try {
+    const wsSnap = await db.ref('workspaces/'+inv.wsId).get();
+    if (!wsSnap.exists()) { await db.ref('team_invites/'+k).remove().catch(()=>{}); return; }
+    const ws = wsSnap.val();
+    const limit = (TIERS[ws.tier]||TIERS.team_small).maxMembers;
+    if (Object.keys(ws.members||{}).length >= limit) return; // full → leave pending
+    await db.ref('workspaces/'+inv.wsId+'/members/'+userId).set({ email:currentUser.email, role:inv.role||'member', joinedAt:Date.now() });
+    await db.ref('workspaces/'+inv.wsId+'/invites/'+k).remove().catch(()=>{});
+    await db.ref('team_invites/'+k).remove().catch(()=>{});
+    await db.ref('users/'+userId+'/workspaceId').set(inv.wsId);
+    await db.ref('users/'+userId+'/tier').set(ws.tier).catch(()=>{}); // inherit team access
+    userTier = ws.tier;
+    toast('You joined '+(ws.name||'the team')+'!','success');
+  } catch(e){}
+}
+
+// On login: if I believe I'm in a workspace but was removed, downgrade gracefully.
+async function validateMembership(){
+  if (!userId) return;
+  let wsId; try { const s=await db.ref('users/'+userId+'/workspaceId').get(); wsId=s.exists()?s.val():null; } catch(e){ return; }
+  if (!wsId) return;
+  try {
+    const s=await db.ref('workspaces/'+wsId+'/members/'+userId).get();
+    if (!s.exists()) {
+      await db.ref('users/'+userId+'/workspaceId').remove().catch(()=>{});
+      await db.ref('users/'+userId+'/tier').set('free').catch(()=>{});
+      userTier='free';
+    }
+  } catch(e){}
 }
 
 async function openReport() {
