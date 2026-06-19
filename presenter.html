@@ -4906,6 +4906,23 @@ function renderTeamPanel(){
     + inviteForm;
 }
 
+// Call the server-authoritative team API. Returns {ok}, {error} (deployed
+// validation error to show), or {notDeployed} (fall back to a direct write).
+async function teamApi(action, payload){
+  try {
+    const token = await currentUser.getIdToken();
+    const r = await fetch('/api/team', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+token }, body: JSON.stringify(Object.assign({ action }, payload||{})) });
+    if (r.ok) { return { ok:true, data: await r.json().catch(()=>({})) }; }
+    let msg=''; try { msg=(await r.json()).error||''; } catch(e){}
+    if (r.status>=400 && r.status<500 && msg) return { error: msg }; // real, deployed validation error
+    return { notDeployed:true };
+  } catch(e){ return { notDeployed:true }; }
+}
+async function reloadWorkspace(){
+  if (!currentWorkspace) return;
+  try { const s=await db.ref('workspaces/'+currentWorkspace.id).get(); if (s.exists()) currentWorkspace.data=s.val(); } catch(e){}
+}
+
 async function teamInvite(){
   const ws = currentWorkspace; if(!ws||!teamCanManage()) return;
   const errEl = document.getElementById('teamInviteErr');
@@ -4917,6 +4934,10 @@ async function teamInvite(){
   if (Object.values(members).some(m=>(m.email||'').toLowerCase()===email)) { errEl.textContent='Already a member.'; return; }
   if (invites[k]) { errEl.textContent='Already invited.'; return; }
   if (Object.keys(members).length + Object.keys(invites).length >= (TIERS[ws.data.tier]||TIERS.team_small).maxMembers) { errEl.textContent='No seats left.'; return; }
+  const res = await teamApi('invite', { wsId:ws.id, email, role });
+  if (res.ok)    { await reloadWorkspace(); renderTeamPanel(); toast('Invite sent to '+email,'success'); return; }
+  if (res.error) { errEl.textContent = res.error; return; }
+  // Fallback: direct write (API not deployed yet)
   const inv = { email, role, invitedBy:currentUser?.email||'', createdAt:Date.now() };
   ws.data.invites = ws.data.invites||{}; ws.data.invites[k]=inv;
   try {
@@ -4929,6 +4950,9 @@ async function teamInvite(){
 
 async function teamRevoke(k){
   const ws=currentWorkspace; if(!ws||!teamCanManage()) return;
+  const res = await teamApi('revoke', { wsId:ws.id, emailKey:k });
+  if (res.ok) { await reloadWorkspace(); renderTeamPanel(); return; }
+  if (res.error) { toast(res.error,'danger'); return; }
   if (ws.data.invites) delete ws.data.invites[k];
   await db.ref('workspaces/'+ws.id+'/invites/'+k).remove().catch(()=>{});
   await db.ref('team_invites/'+k).remove().catch(()=>{});
@@ -4939,6 +4963,9 @@ async function teamRemove(uid){
   const ws=currentWorkspace; if(!ws||!teamCanManage()) return;
   if (uid===ws.data.ownerUid) return;
   if (!confirm('Remove this member from the team? They lose team access on their next sign-in.')) return;
+  const res = await teamApi('remove', { wsId:ws.id, uid });
+  if (res.ok) { await reloadWorkspace(); renderTeamPanel(); return; }
+  if (res.error) { toast(res.error,'danger'); return; }
   if (ws.data.members) delete ws.data.members[uid];
   await db.ref('workspaces/'+ws.id+'/members/'+uid).remove().catch(()=>{});
   renderTeamPanel();
@@ -4948,6 +4975,9 @@ async function teamSetRole(uid, role){
   const ws=currentWorkspace; if(!ws||!teamCanManage()) return;
   if (uid===ws.data.ownerUid) return;
   if (role==='member' && teamMyRole()!=='owner') return; // only owner can demote
+  const res = await teamApi('setRole', { wsId:ws.id, uid, role });
+  if (res.ok) { await reloadWorkspace(); renderTeamPanel(); return; }
+  if (res.error) { toast(res.error,'danger'); return; }
   if (ws.data.members && ws.data.members[uid]) ws.data.members[uid].role = role;
   await db.ref('workspaces/'+ws.id+'/members/'+uid+'/role').set(role).catch(()=>{});
   renderTeamPanel();
