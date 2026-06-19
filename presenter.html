@@ -4163,6 +4163,7 @@ function renderEditor(idx) {
           <label>Question Media <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(optional image, GIF or video — shows above the question)</span></label>
           <div style="display:flex;gap:8px;align-items:center;">
             <input type="text" placeholder="Paste URL or upload →" value="${(q.image||'').replace(/"/g,'&quot;')}" oninput="updateQ(${idx},'image',this.value)" style="font-size:13px;">
+            <button class="btn btn-ghost btn-sm" id="aiImgBtn_${idx}" onclick="generateQImage(${idx})" title="Generate an image with AI from this question" style="flex-shrink:0;padding:7px 12px;color:var(--accent);">✨ AI image</button>
             <button class="btn btn-ghost btn-sm" onclick="uploadQImg(${idx})" title="Upload image, GIF or video" style="flex-shrink:0;padding:7px 12px;">⬆ Upload</button>
             <button class="btn btn-ghost btn-sm" onclick="openGifPicker(function(url){updateQ(${idx},'image',url);renderEditor(${idx});})" title="Search GIFs" style="flex-shrink:0;padding:7px 12px;">🔍 GIF</button>
             ${q.image&&q.image.trim()?(isVideoUrl(q.image)?`<video src="${q.image}" style="width:40px;height:40px;border-radius:7px;object-fit:cover;flex-shrink:0;" muted></video>`:`<img src="${q.image}" style="width:40px;height:40px;border-radius:7px;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">`):''}
@@ -4368,6 +4369,31 @@ function checkVideoDuration(file, maxSeconds) {
 
 function uploadQImg(idx) {
   uploadFile(url => { questions[idx].image = url; saveBack(); renderEditor(idx); });
+}
+
+// ✨ AI image — generate a slide image from the question text (fal.ai FLUX via
+// /api/polly-image), host it, and attach it. Cheap + fast + good.
+async function generateQImage(idx) {
+  const q = questions[idx];
+  const base = (q.type === 'flashcard' ? (q.front || '') : (q.text || '')).trim();
+  if (!base) { toast('Add the question text first, then generate.', 'warn'); return; }
+  const btn = document.getElementById('aiImgBtn_' + idx);
+  if (btn) { btn.disabled = true; btn.textContent = '✨ Generating…'; }
+  try {
+    const prompt = base + ' — clean modern vibrant illustration for a presentation slide, simple background, no text, no watermark';
+    const r = await fetch('/api/polly-image', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ prompt, size:'1536x1024' }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.image) throw new Error(d.error || 'Generation failed');
+    const url = await uploadDataUrl(d.image);   // host it → small, stable URL
+    questions[idx].image = url; saveBack(); renderEditor(idx);
+    toast('Image generated! ✨', 'success');
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = '✨ AI image'; }
+    const msg = /config|not set|FAL_KEY|No image/i.test(e.message)
+      ? 'Image AI isn’t set up yet — add FAL_KEY in Vercel (see MANUAL-CHECKLIST).'
+      : 'Could not generate image: ' + e.message;
+    toast(msg, 'danger');
+  }
 }
 
 function uploadOptImg(idx, oi) {
