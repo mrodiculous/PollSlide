@@ -4159,6 +4159,12 @@ function renderEditor(idx) {
           </select>
         </div>
 
+        ${q.type==='free_text' ? `
+        <div class="form-row" style="margin:0">
+          <label>Expected answer <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(optional — enables ✨ AI grading of written answers in the report)</span></label>
+          <textarea placeholder="The model answer the AI grades responses against…" oninput="updateQ(${idx},'expected',this.value)">${q.expected||''}</textarea>
+        </div>` : ''}
+
         <div class="form-row" style="margin:0">
           <label>Question Media <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(optional image, GIF or video — shows above the question)</span></label>
           <div style="display:flex;gap:8px;align-items:center;">
@@ -5159,7 +5165,10 @@ async function openReport() {
       '</div></div>' +
       barsHtml +
       ((q.type === 'free_text' && r.raw.length > 0) ?
-        '<div style="margin-top:10px;"><button class="btn btn-ghost btn-sm" id="aiSumBtn_' + r.idx + '" onclick="aiSummarizeQuestion(' + r.idx + ')" style="color:var(--accent);">✨ AI summary</button><div id="aiSummary_' + r.idx + '" style="margin-top:8px;"></div></div>' : '') +
+        '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">' +
+          '<button class="btn btn-ghost btn-sm" id="aiSumBtn_' + r.idx + '" onclick="aiSummarizeQuestion(' + r.idx + ')" style="color:var(--accent);">✨ AI summary</button>' +
+          ((q.expected && String(q.expected).trim()) ? '<button class="btn btn-ghost btn-sm" id="aiGradeBtn_' + r.idx + '" onclick="aiGradeQuestion(' + r.idx + ')" style="color:var(--accent3);">✨ AI grade</button>' : '') +
+        '</div><div id="aiSummary_' + r.idx + '" style="margin-top:8px;"></div><div id="aiGrades_' + r.idx + '" style="margin-top:8px;"></div>' : '') +
       '</div>';
   }).join('');
 
@@ -5266,6 +5275,66 @@ function renderAiSummary(d){
       '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:3px;"><span>'+(s.positive||0)+' positive</span><span>'+(s.neutral||0)+' neutral</span><span>'+(s.negative||0)+' negative</span></div>') : '')+
     (d.standout ? ('<div style="font-size:12px;font-style:italic;color:var(--muted);margin-top:10px;border-left:2px solid var(--accent);padding-left:8px;">“'+escapeHtml(d.standout)+'”</div>') : '')+
     '<div style="font-size:9px;color:var(--muted);margin-top:8px;">AI-generated · '+(d.source==='claude'?'Claude':'OpenAI')+' · review for accuracy</div>'+
+    '</div>';
+}
+
+// ── ✨ AI grading of free-text answers vs the question's expected answer ──
+async function aiGradeQuestion(idx){
+  if (!_reportData || !_reportData.report) return;
+  const r = _reportData.report.find(x => x.idx === idx); if (!r) return;
+  const code = _reportData.pres && _reportData.pres.sessionCode;
+  const expected = (r.q.expected || '').trim();
+  if (!expected) { toast('Add an expected answer in the editor first.','warn'); return; }
+  const responses = r.raw.map(resp => {
+    let a = resp.answer; try { a = JSON.parse(a); if (typeof a !== 'string') a = resp.answer; } catch(e){}
+    return { id: resp.participantId || resp.name, answer: String(a) };
+  }).filter(x => x.answer && x.answer !== '__none__');
+  if (!responses.length) { toast('No answers to grade.','warn'); return; }
+  const btn = document.getElementById('aiGradeBtn_'+idx);
+  const box = document.getElementById('aiGrades_'+idx);
+  if (btn) { btn.disabled = true; btn.textContent = '✨ Grading…'; }
+  try {
+    const resp = await fetch('/api/ai', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ task:'grade', question: r.q.text||'', expected, responses }) });
+    const d = await resp.json().catch(() => ({}));
+    if (!resp.ok || !d.ok || !Array.isArray(d.grades)) throw new Error(d.error || 'Failed');
+    const byId = {}; d.grades.forEach(g => { byId[g.id] = g; });
+    const qId = 'q'+idx+'_stable_'+code; let correct = 0;
+    for (const resp2 of r.raw) {
+      const g = byId[resp2.participantId || resp2.name]; if (!g) continue;
+      const isC = g.correct === true ? true : (typeof g.score === 'number' ? g.score >= 0.6 : false);
+      resp2.isCorrect = isC;
+      if (isC) correct++;
+      // Persist so the CSV, accuracy stat, and leaderboards reflect the grade.
+      if (code) db.ref('sessions/'+code+'/responses/'+qId+'/'+(resp2.participantId||resp2.name)+'/isCorrect').set(isC).catch(()=>{});
+    }
+    r.correctCount = correct;
+    if (box) box.innerHTML = renderAiGrades(r, byId);
+    if (btn) { btn.disabled = false; btn.textContent = '✓ Graded — re-run'; }
+    toast('AI graded '+responses.length+' answers · '+correct+' correct · saved.','success');
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '✨ AI grade'; }
+    const msg = /config|not set|ANTHROPIC|OPENAI|No AI/i.test(e.message)
+      ? 'AI isn’t set up yet — add ANTHROPIC_API_KEY in Vercel (see MANUAL-CHECKLIST).'
+      : 'Could not grade: ' + e.message;
+    if (box) box.innerHTML = '<div style="font-size:12px;color:var(--accent2);">'+msg+'</div>';
+  }
+}
+function renderAiGrades(r, byId){
+  const rows = r.raw.map(resp => {
+    const g = byId[resp.participantId || resp.name]; if (!g) return '';
+    let a = resp.answer; try { a = JSON.parse(a); if (typeof a !== 'string') a = resp.answer; } catch(e){}
+    const ok = g.correct === true || (typeof g.score === 'number' && g.score >= 0.6);
+    const pct = typeof g.score === 'number' ? Math.round(g.score*100)+'%' : '';
+    return '<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;">'+
+      '<span style="flex-shrink:0;color:'+(ok?'var(--accent3)':'var(--accent2)')+';font-weight:700;min-width:48px;">'+(ok?'✓':'✗')+' '+pct+'</span>'+
+      '<div style="flex:1;min-width:0;"><div>'+escapeHtml(String(a))+' <span style="color:var(--muted);">— '+escapeHtml(resp.name||'?')+'</span></div>'+
+      (g.feedback ? '<div style="color:var(--muted);font-style:italic;font-size:11px;margin-top:2px;">'+escapeHtml(g.feedback)+'</div>' : '')+'</div></div>';
+  }).join('');
+  const total = r.raw.length || 1;
+  return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;">'+
+    '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--accent3);margin-bottom:6px;">✨ AI GRADING — '+r.correctCount+'/'+total+' correct</div>'+
+    rows+
+    '<div style="font-size:9px;color:var(--muted);margin-top:8px;">AI-graded · saved to responses · review for accuracy</div>'+
     '</div>';
 }
 
