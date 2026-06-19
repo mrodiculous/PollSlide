@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PollSlide for PowerPoint — Office Add-in manifest.
+  This ONE add-in runs in PowerPoint on Windows, Mac, and the web (Office.js is
+  cross-platform), so it is the universal in-app fallback: a presenter on any
+  computer can show live PollSlide results inside PowerPoint without installing
+  the companion app.
+
+  SIDELOAD (testing):
+    Windows:  PowerPoint → Home → Add-ins → More Add-ins → My Add-ins →
+              Upload My Add-in → choose this file.
+    Mac:      copy this file to ~/Library/Containers/com.microsoft.Powerpoint/Data/
+              Documents/wef/ then PowerPoint → Insert → My Add-ins.
+    Web:      Insert → Office Add-ins → Upload My Add-in.
+
+  SUBMIT (AppSource): Partner Center → Office Store → new Office Add-in → upload
+  this manifest. Replace the Id GUID with one you keep stable across versions.
+-->
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+           xsi:type="TaskPaneApp">
+
+  <Id>7b3f9a14-2c5e-4d8a-9f1b-6a2e4c0d8e10</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>PollSlide</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="PollSlide — Live Polls, Quizzes &amp; Surveys" />
+  <Description DefaultValue="Show live poll, quiz and survey results right inside your PowerPoint slides. Your audience scans a QR code or opens a link to respond from any phone — results update live on the slide. Works on Windows, Mac and the web." />
+
+  <IconUrl DefaultValue="https://pollslide.com/icon-64.png" />
+  <HighResolutionIconUrl DefaultValue="https://pollslide.com/icon-512.png" />
+  <SupportUrl DefaultValue="https://pollslide.com/setup" />
+
+  <!-- Domains the add-in is allowed to navigate to -->
+  <AppDomains>
+    <AppDomain>https://app.pollslide.com</AppDomain>
+    <AppDomain>https://pollslide.com</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Presentation" />
+  </Hosts>
+
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://app.pollslide.com/powerpoint" />
+  </DefaultSettings>
+
+  <Permissions>ReadWriteDocument</Permissions>
+
+  <!-- Ribbon button + modern task pane (Windows, Mac, Web) -->
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Presentation">
+        <DesktopFormFactor>
+          <GetStarted>
+            <Title resid="GetStarted.Title" />
+            <Description resid="GetStarted.Description" />
+            <LearnMoreUrl resid="GetStarted.LearnMoreUrl" />
+          </GetStarted>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="PollSlide.Group">
+                <Label resid="Group.Label" />
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16x16" />
+                  <bt:Image size="32" resid="Icon.32x32" />
+                  <bt:Image size="80" resid="Icon.80x80" />
+                </Icon>
+                <Control xsi:type="Button" id="PollSlide.OpenButton">
+                  <Label resid="OpenButton.Label" />
+                  <Supertip>
+                    <Title resid="OpenButton.Label" />
+                    <Description resid="OpenButton.Tooltip" />
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16" />
+                    <bt:Image size="32" resid="Icon.32x32" />
+                    <bt:Image size="80" resid="Icon.80x80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>PollSlideTaskpane</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url" />
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16x16" DefaultValue="https://pollslide.com/icon-16.png" />
+        <bt:Image id="Icon.32x32" DefaultValue="https://pollslide.com/icon-32.png" />
+        <bt:Image id="Icon.80x80" DefaultValue="https://pollslide.com/icon-80.png" />
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://app.pollslide.com/powerpoint" />
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://pollslide.com/setup" />
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="GetStarted.Title" DefaultValue="PollSlide is ready" />
+        <bt:String id="Group.Label" DefaultValue="PollSlide" />
+        <bt:String id="OpenButton.Label" DefaultValue="Live Results" />
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="GetStarted.Description" DefaultValue="Click 'Live Results' on the Home tab to show poll, quiz and survey results inside your slides." />
+        <bt:String id="OpenButton.Tooltip" DefaultValue="Open the PollSlide panel to show live audience results on your slides." />
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>
