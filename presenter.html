@@ -4956,6 +4956,15 @@ async function teamSetRole(uid, role){
 // On login: if this email was invited, join the workspace (respecting seats).
 async function acceptPendingInvite(){
   if (!userId || !currentUser || !currentUser.email) return;
+  // Preferred path: the server-authoritative API verifies the invite matches our
+  // verified email (airtight). Falls back to a direct write if it isn't deployed yet.
+  try {
+    const token = await currentUser.getIdToken();
+    const r = await fetch('/api/team', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+token }, body: JSON.stringify({ action:'accept' }) });
+    if (r.ok) { const d = await r.json(); if (d && d.ok) { userTier = d.tier || userTier; toast('You joined '+(d.wsName||'the team')+'!','success'); return; } }
+    else if (r.status === 404) { return; } // no pending invite — nothing to do
+    // any other status (incl. API not deployed) → fall through to direct path
+  } catch(e) { /* network/not-deployed → fall through */ }
   const k = emailKey(currentUser.email);
   let inv=null;
   try { const s=await db.ref('team_invites/'+k).get(); inv = s.exists()? s.val():null; } catch(e){ return; }
