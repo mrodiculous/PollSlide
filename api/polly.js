@@ -55,7 +55,7 @@ const TYPE_GUIDE = {
   presentation: 'engaging audience questions to punctuate a live presentation on the topic',
 };
 
-function buildMessages({ topic, type, count, difficulty, audience }) {
+function buildMessages({ topic, type, count, difficulty, audience, source }) {
   const guide = TYPE_GUIDE[type] || TYPE_GUIDE.quiz;
   const schema = `{
   "questions": [
@@ -77,11 +77,18 @@ function buildMessages({ topic, type, count, difficulty, audience }) {
     `"answer" MUST be one of the options copied word-for-word (use "" when there is no correct answer). ` +
     `Return ONLY valid JSON in exactly this shape — no markdown, no commentary:\n${schema}`;
 
-  const user =
-    `Topic: ${topic}\n` +
-    `Create ${count} ${type} question(s).` +
-    (difficulty ? ` Difficulty: ${difficulty}.` : '') +
-    (audience ? ` Audience: ${audience}.` : '');
+  const user = source
+    ? // Grounded generation: questions must come from the supplied material (PDF / notes).
+      `Create ${count} ${type} question(s) based ONLY on the source material below. ` +
+      `Do not invent facts that aren't supported by it.` +
+      (topic ? ` Focus on: ${topic}.` : '') +
+      (difficulty ? ` Difficulty: ${difficulty}.` : '') +
+      (audience ? ` Audience: ${audience}.` : '') +
+      `\n\nSOURCE MATERIAL:\n"""\n${source}\n"""`
+    : `Topic: ${topic}\n` +
+      `Create ${count} ${type} question(s).` +
+      (difficulty ? ` Difficulty: ${difficulty}.` : '') +
+      (audience ? ` Audience: ${audience}.` : '');
 
   return [
     { role: 'system', content: system },
@@ -189,14 +196,16 @@ module.exports = async function handler(req, res) {
   const count      = Math.min(Math.max(parseInt(body.count, 10) || 1, 1), 30);   // clamp 1–10
   const difficulty = body.difficulty ? String(body.difficulty).slice(0, 40) : '';
   const audience   = body.audience   ? String(body.audience).slice(0, 80)   : '';
+  // Optional source material (PDF text / pasted notes) — ground questions in it.
+  const source     = body.source ? String(body.source).slice(0, 12000) : '';
 
-  if (!topic) return res.status(400).json({ error: 'Missing "topic".' });
+  if (!topic && !source) return res.status(400).json({ error: 'Provide a topic or source material.' });
 
   // FORWARD-FEATURE HOOK: before generating, this is where you'd check the user's
   // Polly AI monthly quota (Free/Pro = 20, Team = 100) against their Firebase plan
   // and return 429 if exceeded. Wire in once auth context is passed from the client.
 
-  const messages = buildMessages({ topic, type, count, difficulty, audience });
+  const messages = buildMessages({ topic, type, count, difficulty, audience, source });
 
   let raw = '';
   let source = '';
