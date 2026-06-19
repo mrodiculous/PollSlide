@@ -5158,6 +5158,8 @@ async function openReport() {
       (r.correctCount > 0 ? '<div style="font-size:10px;color:var(--accent3);">' + r.correctCount + ' correct (' + Math.round(r.correctCount/total*100) + '%)</div>' : '') +
       '</div></div>' +
       barsHtml +
+      ((q.type === 'free_text' && r.raw.length > 0) ?
+        '<div style="margin-top:10px;"><button class="btn btn-ghost btn-sm" id="aiSumBtn_' + r.idx + '" onclick="aiSummarizeQuestion(' + r.idx + ')" style="color:var(--accent);">✨ AI summary</button><div id="aiSummary_' + r.idx + '" style="margin-top:8px;"></div></div>' : '') +
       '</div>';
   }).join('');
 
@@ -5219,6 +5221,52 @@ function exportCSV() {
 
 function printReport() {
   window.print();
+}
+
+// ── ✨ AI summary of open-ended responses (themes + sentiment) via /api/ai ──
+async function aiSummarizeQuestion(idx){
+  if (!_reportData || !_reportData.report) return;
+  const r = _reportData.report.find(x => x.idx === idx); if (!r) return;
+  const responses = r.raw.map(resp => {
+    let a = resp.answer;
+    try { a = JSON.parse(a); if (typeof a !== 'string') a = resp.answer; } catch(e){}
+    return String(a);
+  }).filter(s => s && s !== '__none__');
+  const btn = document.getElementById('aiSumBtn_'+idx);
+  const box = document.getElementById('aiSummary_'+idx);
+  if (btn) { btn.disabled = true; btn.textContent = '✨ Summarizing…'; }
+  try {
+    const resp = await fetch('/api/ai', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ task:'summarize_responses', question: r.q.text||'', responses }) });
+    const d = await resp.json().catch(() => ({}));
+    if (!resp.ok || !d.ok) throw new Error(d.error || 'Failed');
+    if (box) box.innerHTML = renderAiSummary(d);
+    if (btn) btn.style.display = 'none';
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '✨ AI summary'; }
+    const msg = /config|not set|ANTHROPIC|OPENAI|No AI/i.test(e.message)
+      ? 'AI isn’t set up yet — add ANTHROPIC_API_KEY in Vercel (see MANUAL-CHECKLIST).'
+      : 'Could not summarize: ' + e.message;
+    if (box) box.innerHTML = '<div style="font-size:12px;color:var(--accent2);">'+msg+'</div>';
+  }
+}
+function renderAiSummary(d){
+  const themes = (d.themes||[]).slice(0,6);
+  const maxC = Math.max(1, ...themes.map(t => t.count||0));
+  const s = d.sentiment || {};
+  const totS = (s.positive||0)+(s.neutral||0)+(s.negative||0) || 1;
+  const seg = (n,c) => n>0 ? '<div style="height:100%;width:'+Math.round(n/totS*100)+'%;background:'+c+';"></div>' : '';
+  return '<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;">'+
+    '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;color:var(--accent);margin-bottom:6px;">✨ AI SUMMARY</div>'+
+    '<div style="font-size:13px;line-height:1.5;margin-bottom:10px;">'+escapeHtml(d.summary||'')+'</div>'+
+    (themes.length ? ('<div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin-bottom:4px;">Themes</div>'+
+      themes.map(t => '<div style="margin-bottom:5px;"><div style="display:flex;justify-content:space-between;font-size:12px;"><span>'+escapeHtml(t.label||'')+'</span><span style="color:var(--muted);">'+(t.count||0)+'</span></div>'+
+        '<div style="height:6px;background:var(--surface);border-radius:100px;overflow:hidden;"><div style="height:100%;width:'+Math.round((t.count||0)/maxC*100)+'%;background:linear-gradient(90deg,var(--accent),#a78bfa);border-radius:100px;"></div></div></div>').join('')) : '')+
+    ((s.positive||s.neutral||s.negative) ? ('<div style="font-size:10px;color:var(--muted);text-transform:uppercase;margin:8px 0 4px;">Sentiment</div>'+
+      '<div style="display:flex;height:8px;border-radius:100px;overflow:hidden;background:var(--surface);">'+seg(s.positive,'var(--accent3)')+seg(s.neutral,'#9aa0b5')+seg(s.negative,'var(--accent2)')+'</div>'+
+      '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-top:3px;"><span>'+(s.positive||0)+' positive</span><span>'+(s.neutral||0)+' neutral</span><span>'+(s.negative||0)+' negative</span></div>') : '')+
+    (d.standout ? ('<div style="font-size:12px;font-style:italic;color:var(--muted);margin-top:10px;border-left:2px solid var(--accent);padding-left:8px;">“'+escapeHtml(d.standout)+'”</div>') : '')+
+    '<div style="font-size:9px;color:var(--muted);margin-top:8px;">AI-generated · '+(d.source==='claude'?'Claude':'OpenAI')+' · review for accuracy</div>'+
+    '</div>';
 }
 
 // ─── WORD CLOUD ───────────────────────────────────────────────────────────────

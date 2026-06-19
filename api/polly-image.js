@@ -5,15 +5,12 @@
 //
 // PROVIDER PRIORITY (best price/quality first):
 //   1) fal.ai FLUX (FAL_KEY)  — ~$0.003/image on flux/schnell, near-instant, great quality
-//   2) Draw Things (DRAWTHINGS_URL) — your Mac's local Stable Diffusion, if running
-//   3) OpenAI gpt-image-1 (OPENAI_API_KEY) — last-resort cloud fallback (~$0.04/image)
+//   2) OpenAI gpt-image-1 (OPENAI_API_KEY) — fallback (~$0.04/image)
 //
 // VERCEL ENVIRONMENT VARIABLES:
 //   FAL_KEY          = <fal.ai key>            (RECOMMENDED primary — cheapest + best)
 //   FAL_IMAGE_MODEL  = fal-ai/flux/schnell     (optional; use fal-ai/flux/dev for higher quality)
-//   OPENAI_API_KEY   = sk-...                   (optional cloud backup)
-//   DRAWTHINGS_URL   = https://img.yourdomain.com   (optional local SD)
-//   CF_ACCESS_CLIENT_ID / CF_ACCESS_CLIENT_SECRET   (locks the Mac tunnel via Cloudflare Access)
+//   OPENAI_API_KEY   = sk-...                   (optional cloud fallback)
 //   NEXT_PUBLIC_APP_URL = https://app.pollslide.com  (optional, for CORS)
 //
 // Returns: { source, image: "data:image/...;base64,...." } — a base64 data URI so it
@@ -21,7 +18,6 @@
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_IMAGE_URL = 'https://api.openai.com/v1/images/generations';
-const DRAWTHINGS_URL = process.env.DRAWTHINGS_URL || '';
 const FAL_KEY   = process.env.FAL_KEY || '';
 const FAL_MODEL = process.env.FAL_IMAGE_MODEL || 'fal-ai/flux/schnell';
 
@@ -44,37 +40,6 @@ async function falImage(prompt, size) {
   return `data:${ct};base64,${buf.toString('base64')}`;
 }
 
-// Cloudflare Access service-token headers (see api/polly.js) — locks the Mac tunnel
-// so only PollSlide's server can reach Draw Things.
-const CF_ACCESS_HEADERS = (process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACCESS_CLIENT_SECRET)
-  ? {
-      'CF-Access-Client-Id':     process.env.CF_ACCESS_CLIENT_ID,
-      'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET,
-    }
-  : {};
-
-const DRAWTHINGS_TIMEOUT_MS = 35000;   // leave room inside the 60s function budget for an OpenAI fallback
-
-async function drawThings(prompt, { width, height, steps }) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), DRAWTHINGS_TIMEOUT_MS);
-  try {
-    const r = await fetch(`${DRAWTHINGS_URL}/sdapi/v1/txt2img`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', ...CF_ACCESS_HEADERS },
-      body: JSON.stringify({ prompt, width, height, steps }),
-      signal:  controller.signal,
-    });
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const data = await r.json();
-    const b64 = data.images && data.images[0];
-    if (!b64) throw new Error('Draw Things returned no image');
-    return `data:image/png;base64,${b64}`;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
 async function openaiImage(prompt, size) {
   const r = await fetch(OPENAI_IMAGE_URL, {
     method:  'POST',
@@ -95,7 +60,7 @@ module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST')    return res.status(405).json({ error: 'POST only' });
 
-  if (!FAL_KEY && !OPENAI_API_KEY && !DRAWTHINGS_URL) {
+  if (!FAL_KEY && !OPENAI_API_KEY) {
     return res.status(500).json({ error: 'No image generator configured. Add FAL_KEY (recommended) or OPENAI_API_KEY in Vercel → Settings → Environment Variables.' });
   }
 
@@ -104,31 +69,18 @@ module.exports = async function handler(req, res) {
   const size   = ['1024x1024', '1024x1536', '1536x1024', 'auto'].includes(body.size) ? body.size : '1024x1024';
   if (!prompt) return res.status(400).json({ error: 'Missing "prompt".' });
 
-  // map OpenAI size → Draw Things width/height
-  const [w, h] = size === 'auto' ? [1024, 1024] : size.split('x').map(Number);
-
   // 1) Try fal.ai FLUX first — cheapest + best quality.
   if (FAL_KEY) {
     try {
       const image = await falImage(prompt, size);
       return res.status(200).json({ source: 'fal', image });
     } catch (err) {
-      console.warn('Polly image: fal.ai failed → next provider:', err.message);
+      console.warn('Polly image: fal.ai failed → OpenAI fallback:', err.message);
     }
   }
 
-  // 2) Try the user's own Mac (Draw Things) next.
-  if (DRAWTHINGS_URL) {
-    try {
-      const image = await drawThings(prompt, { width: w, height: h, steps: 25 });
-      return res.status(200).json({ source: 'local', image });
-    } catch (err) {
-      console.warn('Polly image: Draw Things unreachable → OpenAI fallback:', err.message);
-    }
-  }
-
-  // 3) Fall back to OpenAI.
-  if (!OPENAI_API_KEY) return res.status(502).json({ error: 'Primary generators unavailable and no OpenAI key set.' });
+  // 2) Fall back to OpenAI.
+  if (!OPENAI_API_KEY) return res.status(502).json({ error: 'fal.ai unavailable and no OpenAI key set.' });
   try {
     const image = await openaiImage(prompt, size);
     return res.status(200).json({ source: 'openai', image });
