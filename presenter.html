@@ -3763,7 +3763,12 @@ async function showQuestionTally(qIdx) {
 // ─── QUESTION EDITOR ─────────────────────────────────────────────────────────
 function addQuestion() {
   if (!activePresId) return;
-  questions.push({ text:'', type:'multiple_choice', options:[{text:'',img:''},{text:'',img:''},{text:'',img:''},{text:'',img:''}], correctAnswer:0, image:'', timer:0, displayMode:'bars', revealDelay:30, postReveal:{ enabled:false, type:'leaderboard', explainerText:'', advanceDelay:'manual' } });
+  // Study sets default to a flashcard (front/back); other products to a poll/quiz question.
+  if (presType(presentations[activePresId]) === 'study') {
+    questions.push({ type:'flashcard', front:'', back:'' });
+  } else {
+    questions.push({ text:'', type:'multiple_choice', options:[{text:'',img:''},{text:'',img:''},{text:'',img:''},{text:'',img:''}], correctAnswer:0, image:'', timer:0, displayMode:'bars', revealDelay:30, postReveal:{ enabled:false, type:'leaderboard', explainerText:'', advanceDelay:'manual' } });
+  }
   presentations[activePresId].questions = questions;
   const newIdx = questions.length - 1;
   selIdx = newIdx;          // Set BEFORE renderQList so the new question is highlighted
@@ -3853,7 +3858,7 @@ function pollyToQuestion(gq) {
 
 function renderQList() {
   document.getElementById('qCount').textContent = questions.length;
-  const icons = { multiple_choice:'⊙', multiple_choice_multi:'☑', free_text:'✎', rating:'★' };
+  const icons = { multiple_choice:'⊙', multiple_choice_multi:'☑', free_text:'✎', rating:'★', flashcard:'🃏' };
   const list  = document.getElementById('qList');
 
   if (!activePresId) {
@@ -3868,7 +3873,7 @@ function renderQList() {
     <div class="q-item ${i===selIdx?'sel':''}" onclick="selectQ(${i})">
       <div class="q-num">${i+1}</div>
       <div style="flex:1;">
-        <div class="q-label">${q.text||'<span style="color:var(--muted);font-style:italic;">Untitled</span>'}</div>
+        <div class="q-label">${(q.type==='flashcard'?q.front:q.text)||'<span style="color:var(--muted);font-style:italic;">Untitled</span>'}</div>
         <div class="q-type-tag">${icons[q.type]||'?'} ${(q.type||'').replace(/_/g,' ')}</div>
       </div>
       <button class="icon-btn" onclick="event.stopPropagation();openCopyQuestion(${i})" title="Copy to another presentation" style="opacity:0;transition:opacity 0.15s;">📋</button>
@@ -3893,7 +3898,8 @@ function selectQ(idx) {
 // time a question is treated as offline (for that user's editing session).
 function showLiveOrEdit(idx) {
   const code = presentations[activePresId]?.sessionCode || '';
-  if (editMode || !code || !questions[idx]) {
+  // Study sets / flashcards have no live-poll view — always open the editor.
+  if (editMode || !code || !questions[idx] || questions[idx].type === 'flashcard' || presType(presentations[activePresId]) === 'study') {
     renderEditor(idx);
     return;
   }
@@ -4055,6 +4061,36 @@ function renderEditor(idx) {
   const q       = questions[idx];
   const letters = ['A','B','C','D','E','F'];
   const qUrl    = getQuestionURL(idx);
+
+  // ── Flashcard editor (StudySlide) — simple front/back, no poll machinery ──
+  if (q.type === 'flashcard') {
+    document.getElementById('centerPanel').innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span style="font-family:Syne,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Card ${idx+1}</span>
+        <button class="btn btn-ghost btn-sm" style="color:var(--accent2);" onclick="deleteQ(${idx})">Delete</button>
+      </div>
+      <div class="card"><div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
+        <div class="form-row" style="margin:0">
+          <label>Front <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(the prompt or term)</span></label>
+          <textarea placeholder="e.g. What is the powerhouse of the cell?" oninput="updateQ(${idx},'front',this.value)">${q.front||''}</textarea>
+        </div>
+        <div class="form-row" style="margin:0">
+          <label>Back <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(the answer or definition)</span></label>
+          <textarea placeholder="e.g. The mitochondria" oninput="updateQ(${idx},'back',this.value)">${q.back||''}</textarea>
+        </div>
+        <div class="form-row" style="margin:0">
+          <label>Card Type</label>
+          <select onchange="changeType(${idx},this.value)" style="width:100%;">
+            <option value="flashcard" selected>Flashcard (front / back)</option>
+            <option value="multiple_choice">Single Choice</option>
+            <option value="free_text">Free Text</option>
+          </select>
+        </div>
+        <div style="font-size:11px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;">📚 Learners flip this card and rate how well they knew it — spaced repetition schedules the next review automatically.</div>
+      </div></div>
+    `;
+    return;
+  }
 
   const optHtml = (q.type==='multiple_choice'||q.type==='multiple_choice_multi') ? `
     <div class="form-row">
@@ -4353,10 +4389,17 @@ function saveBack(){
 }
 
 function changeType(idx,type){
+  const prev = questions[idx].type;
+  // Leaving a flashcard → keep its front text as the question text.
+  if (prev==='flashcard' && type!=='flashcard') questions[idx].text = questions[idx].text || questions[idx].front || '';
+  // Derive the flashcard back from the question BEFORE we change its type (deriveBack
+  // short-circuits once type is 'flashcard').
+  const derivedBack = (type==='flashcard') ? deriveBack(questions[idx]) : '';
   questions[idx].type=type;
   if(type==='multiple_choice'){if(!questions[idx].options?.length)questions[idx].options=[{text:'',img:''},{text:'',img:''},{text:'',img:''},{text:'',img:''}];if(Array.isArray(questions[idx].correctAnswer))questions[idx].correctAnswer=0;}
   else if(type==='multiple_choice_multi'){if(!questions[idx].options?.length)questions[idx].options=[{text:'',img:''},{text:'',img:''},{text:'',img:''},{text:'',img:''}];questions[idx].correctAnswer=[];}
   else if(type==='rating'){questions[idx].ratingMax=5;questions[idx].ratingLabels={low:'',high:''};delete questions[idx].options;delete questions[idx].correctAnswer;}
+  else if(type==='flashcard'){questions[idx].front=questions[idx].front||questions[idx].text||'';questions[idx].back=questions[idx].back||derivedBack;delete questions[idx].options;delete questions[idx].correctAnswer;}
   else{delete questions[idx].options;delete questions[idx].correctAnswer;}
   saveBack(); renderEditor(idx);
 }
