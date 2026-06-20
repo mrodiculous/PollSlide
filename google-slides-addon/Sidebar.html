@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root{ --bg:#0d0d18; --surface:#16162a; --surface2:#1f1f38; --border:rgba(255,255,255,.1);
+         --text:#fff; --muted:#9aa0b5; --accent:#6c63ff; --accent2:#ff6584; --accent3:#43e97b; --accent4:#f7b731; }
+  *{box-sizing:border-box;} html,body{margin:0;}
+  body{ background:var(--bg); color:var(--text); font-family:'DM Sans',sans-serif; font-size:13px; padding:12px; }
+  .logo{ display:flex; align-items:center; gap:7px; font-family:'Syne',sans-serif; font-weight:800; font-size:15px; margin-bottom:12px; }
+  .logo svg{flex-shrink:0;}
+  h2{ font-family:'Syne',sans-serif; font-size:14px; margin:0 0 4px; }
+  .sub{ color:var(--muted); font-size:12px; margin:0 0 12px; }
+  label{ display:block; font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin-bottom:4px; }
+  input{ width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:13px; padding:9px 10px; margin-bottom:10px; font-family:inherit; }
+  .btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; border:1px solid var(--border); background:var(--surface2); color:var(--text); border-radius:8px; padding:8px 12px; font-size:12px; font-weight:600; cursor:pointer; font-family:inherit; }
+  .btn-primary{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn-full{ width:100%; }
+  .btn-sm{ padding:6px 9px; font-size:11px; }
+  .row{ display:flex; gap:6px; }
+  .card{ background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:11px; margin-bottom:8px; }
+  .pres{ cursor:pointer; } .pres:hover{ border-color:var(--accent); }
+  .pres-name{ font-weight:700; font-size:13px; } .pres-meta{ color:var(--muted); font-size:11px; margin-top:2px; }
+  .qtext{ font-weight:600; font-size:13px; margin-bottom:8px; }
+  .muted{ color:var(--muted); } .err{ color:var(--accent2); font-size:12px; min-height:14px; }
+  .hidden{ display:none; }
+  .bar-wrap{ margin-bottom:7px; }
+  .bar-row{ display:flex; justify-content:space-between; font-size:12px; margin-bottom:3px; }
+  .bar{ height:8px; background:var(--surface2); border-radius:100px; overflow:hidden; }
+  .bar-fill{ height:100%; border-radius:100px; background:linear-gradient(90deg,var(--accent),#a78bfa); }
+  .bar-fill.correct{ background:linear-gradient(90deg,var(--accent3),#6effb0); }
+  .back{ color:var(--muted); cursor:pointer; font-size:12px; margin-bottom:8px; display:inline-block; }
+  .spin{ width:22px;height:22px;border:3px solid var(--surface2);border-top-color:var(--accent);border-radius:50%;animation:s 1s linear infinite;margin:24px auto;}
+  @keyframes s{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="logo">
+  <svg viewBox="0 0 100 100" width="20" height="20"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/></svg>
+  PollSlide
+</div>
+<div id="app"></div>
+<div id="qrStage" style="position:absolute;left:-9999px;top:-9999px;"></div>
+
+<script>
+const FB_CONFIG = {
+  apiKey: "AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME",
+  authDomain: "echonest-live-survey.firebaseapp.com",
+  databaseURL: "https://echonest-live-survey-default-rtdb.firebaseio.com",
+  projectId: "echonest-live-survey",
+  storageBucket: "echonest-live-survey.firebasestorage.app",
+  messagingSenderId: "285529140046",
+  appId: "1:285529140046:web:983c1ee8000a2ca8f80c1f"
+};
+const ANSWER_BASE = "https://app.pollslide.com/answer";
+let db, auth, userId=null, presentations={}, activePres=null, liveRef=null, respRef=null;
+
+function el(id){ return document.getElementById(id); }
+function render(html){ el('app').innerHTML = html; }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function qArr(q){ return Array.isArray(q)?q.filter(Boolean):(q&&typeof q==='object'?Object.values(q).filter(Boolean):[]); }
+
+// Insert QR via the Apps Script server (google.script.run). A harness shim lets the
+// UI be tested outside Slides.
+function callInsertQr(dataUrl){
+  return new Promise(function(res,rej){
+    if (window.google && google.script && google.script.run) {
+      google.script.run.withSuccessHandler(res).withFailureHandler(function(e){rej(new Error(e&&e.message||'Insert failed'));}).insertQrOnSlide(dataUrl);
+    } else if (window.__mockInsertQr) { window.__mockInsertQr(dataUrl); res(true); }
+    else { rej(new Error('Open this from Google Slides → Extensions → PollSlide.')); }
+  });
+}
+
+firebase.initializeApp(FB_CONFIG);
+db = firebase.database(); auth = firebase.auth();
+auth.onAuthStateChanged(function(user){
+  if (user){ userId = user.uid; loadPresentations(); }
+  else { userId = null; showSignIn(); }
+});
+
+function showSignIn(){
+  render(
+    '<h2>Sign in</h2><p class="sub">Use your PollSlide account.</p>'+
+    '<label>Email</label><input type="email" id="em" placeholder="you@example.com">'+
+    '<label>Password</label><input type="password" id="pw" placeholder="••••••••">'+
+    '<button class="btn btn-primary btn-full" onclick="doSignIn()">Sign in</button>'+
+    '<p class="err" id="err"></p>'+
+    '<p class="sub" style="margin-top:8px;">No account? Create one at <a href="https://app.pollslide.com/presenter" target="_blank" style="color:var(--accent);">pollslide.com</a></p>'
+  );
+}
+function doSignIn(){
+  const e=el('em').value.trim(), p=el('pw').value;
+  if(!e||!p){ el('err').textContent='Email and password required.'; return; }
+  auth.signInWithEmailAndPassword(e,p).catch(x=>{ el('err').textContent=x.message; });
+}
+
+async function loadPresentations(){
+  render('<div class="spin"></div>');
+  try { const s=await db.ref('users/'+userId+'/presentations').get(); presentations = s.exists()? (s.val()||{}) : {}; }
+  catch(e){ presentations={}; }
+  renderPresList();
+}
+function renderPresList(){
+  const arr = Object.values(presentations).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  if(!arr.length){ render('<h2>Your presentations</h2><p class="sub">None yet. Create one at <a href="https://app.pollslide.com/presenter" target="_blank" style="color:var(--accent);">pollslide.com</a>.</p><button class="btn btn-sm btn-full" onclick="auth.signOut()">Sign out</button>'); return; }
+  render('<h2>Your presentations</h2><p class="sub">Pick one, then drop a QR on a slide.</p>'+
+    arr.map(p=>'<div class="card pres" onclick="selectPres(\''+p.id+'\')"><div class="pres-name">'+esc(p.name||'Untitled')+'</div><div class="pres-meta">'+qArr(p.questions).length+' Q · '+esc(p.sessionCode||'—')+'</div></div>').join('')+
+    '<button class="btn btn-sm btn-full" style="margin-top:6px;" onclick="auth.signOut()">Sign out</button>');
+}
+function selectPres(id){
+  activePres = presentations[id]; if(!activePres) return;
+  detach();
+  const qs = qArr(activePres.questions);
+  render('<span class="back" onclick="renderPresList()">← Presentations</span><h2>'+esc(activePres.name)+'</h2><p class="sub">'+esc(activePres.sessionCode)+'</p>'+
+    (qs.length? qs.map((q,i)=>'<div class="card"><div class="qtext">Q'+(i+1)+'. '+esc(q.text||q.front||'Untitled')+'</div><div class="row"><button class="btn btn-sm" onclick="viewLive('+i+')">▶ View live</button><button class="btn btn-sm" onclick="insertQr('+i+',this)">▦ Insert QR</button></div></div>').join('')
+       : '<p class="sub">No questions yet.</p>'));
+}
+
+function detach(){ if(respRef){respRef.off();respRef=null;} if(liveRef){liveRef.off();liveRef=null;} }
+
+function viewLive(idx){
+  detach();
+  const code = activePres.sessionCode;
+  const q = qArr(activePres.questions)[idx]; if(!q) return;
+  const qId = 'q'+idx+'_stable_'+code;
+  render('<span class="back" onclick="selectPres(\''+activePres.id+'\')">← Questions</span><div class="qtext">'+esc(q.text||q.front||'')+'</div><div id="live"><div class="spin"></div></div>');
+  respRef = db.ref('sessions/'+code+'/responses/'+qId);
+  respRef.on('value', function(snap){
+    const responses = snap.exists()? Object.values(snap.val()||{}) : [];
+    el('live').innerHTML = renderLive(q, responses);
+  });
+}
+function renderLive(q, responses){
+  const total = responses.length;
+  const isChoice = q.type==='multiple_choice'||q.type==='multiple_choice_multi';
+  if(!isChoice){
+    return '<div style="font-family:Syne;font-weight:800;font-size:20px;">'+total+' <span class="muted" style="font-size:12px;">responses</span></div>'+
+      responses.slice(0,15).map(r=>{ let a=r.answer; try{a=JSON.parse(a);if(typeof a!=='string')a=r.answer;}catch(e){} return '<div class="card" style="padding:7px 9px;font-size:12px;">'+esc(String(a))+' <span class="muted">— '+esc(r.name||'?')+'</span></div>'; }).join('');
+  }
+  const opts = q.options||[];
+  const counts = opts.map(()=>0);
+  responses.forEach(r=>{ try{ const a=JSON.parse(r.answer); (Array.isArray(a)?a:[a]).forEach(v=>{ if(counts[v]!=null) counts[v]++; }); }catch(e){} });
+  const ca = q.correctAnswer; const correct = (ca!=null)?(Array.isArray(ca)?ca.map(Number):[Number(ca)]):[];
+  const letters=['A','B','C','D','E','F'];
+  return '<div style="font-family:Syne;font-weight:800;font-size:20px;margin-bottom:8px;">'+total+' <span class="muted" style="font-size:12px;">responses</span></div>'+
+    opts.map((o,i)=>{ const pct = total? Math.round(counts[i]/total*100):0; const c = correct.includes(i);
+      return '<div class="bar-wrap"><div class="bar-row"><span>'+letters[i]+'. '+esc(o.text||'')+(c?' ✓':'')+'</span><span class="muted">'+counts[i]+' ('+pct+'%)</span></div><div class="bar"><div class="bar-fill'+(c?' correct':'')+'" style="width:'+pct+'%;"></div></div></div>';
+    }).join('');
+}
+
+async function insertQr(idx, btn){
+  const code = activePres.sessionCode;
+  const url = ANSWER_BASE+'#'+code+'/'+idx;
+  if(btn){ btn.disabled=true; btn.textContent='…'; }
+  try{
+    const stage = el('qrStage'); stage.innerHTML='';
+    new QRCode(stage, { text:url, width:300, height:300, colorDark:'#000000', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M });
+    await new Promise(r=>setTimeout(r,120)); // let qrcodejs paint
+    const canvas = stage.querySelector('canvas');
+    const img = stage.querySelector('img');
+    const dataUrl = canvas ? canvas.toDataURL('image/png') : (img? img.src : null);
+    if(!dataUrl) throw new Error('Could not render QR.');
+    await callInsertQr(dataUrl);
+    if(btn){ btn.textContent='✓ Added'; setTimeout(()=>{btn.disabled=false;btn.textContent='▦ Insert QR';},1500); }
+  }catch(e){
+    if(btn){ btn.disabled=false; btn.textContent='▦ Insert QR'; }
+    alert(e.message);
+  }
+}
+</script>
+</body>
+</html>

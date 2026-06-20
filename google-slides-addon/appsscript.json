@@ -1,0 +1,20 @@
+{
+  "timeZone": "America/New_York",
+  "dependencies": {},
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/presentations.currentonly",
+    "https://www.googleapis.com/auth/script.container.ui"
+  ],
+  "addOns": {
+    "common": {
+      "name": "PollSlide",
+      "logoUrl": "https://pollslide.com/icon-64.png",
+      "useLocaleFromApp": true
+    },
+    "slides": {
+      "homepageTrigger": { "runFunction": "onHomepage" }
+    }
+  }
+}
