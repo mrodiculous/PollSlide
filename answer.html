@@ -177,19 +177,22 @@ const db = firebase.database();
 function parseLocation() {
   const hash = window.location.hash.replace('#','').trim();
   if (hash) {
-    // "#SESSION/0" → single question (poll/quiz live).  "#SESSION" → whole-form (survey).
+    // "#SESSION/0" → single question.  "#SESSION/qa" → audience Q&A.  "#SESSION" → whole-form.
     const parts = hash.split('/');
+    if (parts.length > 1 && String(parts[1]).toLowerCase() === 'qa') return { session: parts[0].toUpperCase(), qIndex:-1, qa:true };
     return { session: parts[0].toUpperCase(), qIndex: parts.length > 1 ? parseInt(parts[1] || '-1') : -1 };
   }
   const params = new URLSearchParams(window.location.search);
   return {
     session: (params.get('session') || '').toUpperCase().trim(),
-    qIndex:  parseInt(params.get('q') || '-1')
+    qIndex:  parseInt(params.get('q') || '-1'),
+    qa: params.get('qa') === '1'
   };
 }
-const { session: SESSION, qIndex: Q_INDEX } = parseLocation();
-// No question index → answer the whole set as one async form (SurveySlide / quiz homework).
-const SURVEY_MODE = !!SESSION && (isNaN(Q_INDEX) || Q_INDEX < 0);
+const { session: SESSION, qIndex: Q_INDEX, qa: QA_FLAG } = parseLocation();
+const QA_MODE = !!SESSION && !!QA_FLAG;
+// No question index (and not Q&A) → answer the whole set as one async form.
+const SURVEY_MODE = !!SESSION && !QA_MODE && (isNaN(Q_INDEX) || Q_INDEX < 0);
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 // participantId is unique per person per SESSION (stored in sessionStorage)
@@ -226,7 +229,7 @@ function bootApp() {
   if (storedId && storedName && storedName !== 'null' && storedName !== 'undefined') {
     participantId   = storedId;
     participantName = storedName;
-    SURVEY_MODE ? loadSurvey() : loadQuestion();
+    QA_MODE ? loadQA() : SURVEY_MODE ? loadSurvey() : loadQuestion();
   } else {
     showNameEntry();
   }
@@ -259,7 +262,7 @@ function joinSession() {
   localStorage.setItem(`ql_pid_${SESSION}`,  participantId);
   localStorage.setItem(`ql_pname_${SESSION}`, participantName);
 
-  SURVEY_MODE ? loadSurvey() : loadQuestion();
+  QA_MODE ? loadQA() : SURVEY_MODE ? loadSurvey() : loadQuestion();
 }
 
 // ─── LOAD QUESTION ────────────────────────────────────────────────────────────
@@ -1044,6 +1047,66 @@ function showStudyDone(nothingDue) {
     <button class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:8px;" onclick="addStudyToCalendar()">📅 Remind me to review</button>
     <button class="btn btn-ghost" style="width:100%;justify-content:center;" onclick="startStudySession(true)">🔁 Study all again</button>
   `);
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// AUDIENCE Q&A — ask questions + upvote (Slido-style). Lives at #SESSION/qa.
+// Stored at sessions/SESSION/qa/<id> = {text,name,votes,voters,createdAt,answered}.
+// ════════════════════════════════════════════════════════════════════════════
+let qaRef = null;
+function escapeQa(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function loadQA(){
+  render(`
+    ${logoMarkup()}
+    <h1 style="margin-bottom:4px;">Audience Q&amp;A</h1>
+    <p class="subtitle">Ask the speaker a question — or upvote the ones you most want answered.</p>
+    <textarea id="qaText" maxlength="280" placeholder="Type your question…" style="min-height:70px;"></textarea>
+    <button class="btn btn-primary" onclick="submitQuestion()" style="margin-bottom:6px;">Ask</button>
+    <p id="qaErr" style="color:var(--accent2);font-size:13px;min-height:16px;margin:0 0 8px;"></p>
+    <div id="qaList"></div>
+  `);
+  if (qaRef) qaRef.off();
+  qaRef = db.ref('sessions/' + SESSION + '/qa');
+  qaRef.on('value', snap => renderQAList(snap.exists() ? (snap.val()||{}) : {}));
+}
+function renderQAList(data){
+  const list = document.getElementById('qaList'); if (!list) return;
+  const items = Object.entries(data).map(([id,q]) => Object.assign({id}, q)).filter(q => !q.hidden);
+  items.sort((a,b) => (b.votes||0)-(a.votes||0) || (a.createdAt||0)-(b.createdAt||0));
+  if (!items.length) { list.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:14px;">No questions yet — be the first!</div>'; return; }
+  list.innerHTML = items.map(q => {
+    const voted = q.voters && q.voters[participantId];
+    return `<div style="display:flex;gap:10px;align-items:flex-start;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 12px;margin-bottom:8px;${q.answered?'opacity:0.55;':''}">
+      <button onclick="upvoteQuestion('${q.id}')" ${voted?'disabled':''} style="flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:0;background:${voted?'var(--accent)':'var(--surface)'};border:1px solid ${voted?'var(--accent)':'var(--border)'};border-radius:8px;padding:5px 10px;cursor:${voted?'default':'pointer'};color:${voted?'#fff':'var(--text)'};font-family:inherit;">
+        <span style="font-size:12px;line-height:1;">▲</span><span style="font-size:13px;font-weight:700;line-height:1.3;">${q.votes||0}</span></button>
+      <div style="flex:1;min-width:0;"><div style="font-size:14px;line-height:1.4;">${escapeQa(q.text)}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px;">${escapeQa(q.name||'Anonymous')}${q.answered?' · ✓ answered':''}</div></div>
+    </div>`;
+  }).join('');
+}
+async function submitQuestion(){
+  const ta = document.getElementById('qaText'); const text = (ta.value||'').trim();
+  const err = document.getElementById('qaErr');
+  if (text.length < 3) { err.textContent = 'Type a question first.'; return; }
+  err.textContent = '';
+  try {
+    const ref = db.ref('sessions/' + SESSION + '/qa').push();
+    await ref.set({ text: text.slice(0,280), name: participantName || 'Anonymous', votes: 1, voters: { [participantId]: true }, createdAt: Date.now(), answered: false });
+    ta.value = '';
+  } catch(e) { err.textContent = 'Could not post — check your connection.'; }
+}
+async function upvoteQuestion(id){
+  try {
+    await db.ref('sessions/' + SESSION + '/qa/' + id).transaction(q => {
+      if (!q) return q;
+      q.voters = q.voters || {};
+      if (q.voters[participantId]) return; // one vote per person
+      q.voters[participantId] = true;
+      q.votes = (q.votes||0) + 1;
+      return q;
+    });
+  } catch(e) {}
 }
 
 // ─── BOOT (called last, after all functions defined) ─────────────────────────

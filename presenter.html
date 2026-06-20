@@ -434,6 +434,7 @@
     </div>
     <button class="btn btn-ghost" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark">🌙</button>
     <button class="btn btn-primary" id="shareBtn" onclick="openShareModal()" style="display:none;" title="Share link / QR for this survey">🔗 Share</button>
+    <button class="btn btn-ghost" id="qaBtn" onclick="openQAPanel()" disabled title="Audience Q&amp;A — questions & upvotes">💬 Q&amp;A</button>
     <button class="btn btn-ghost" id="reportBtn" onclick="openReport()" disabled title="View response report">📊 Report</button>
     <button class="btn btn-reset" id="resetBtn" onclick="confirmResetAll()" disabled>↺ Reset All Tallies</button>
   </div>
@@ -626,6 +627,25 @@
     </div>
     <div style="padding:12px 20px;border-top:1px solid var(--border);text-align:right;">
       <button class="btn btn-ghost" onclick="document.getElementById('teamModal').classList.add('hidden')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Audience Q&A moderation panel -->
+<div class="overlay hidden" id="qaPanelModal" onclick="if(event.target===this)document.getElementById('qaPanelModal').classList.add('hidden')">
+  <div class="modal" style="max-width:560px;padding:0;overflow:hidden;">
+    <div style="padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;">
+      <div style="min-width:0;">
+        <h2 style="margin:0 0 2px;">💬 Audience Q&amp;A</h2>
+        <p style="margin:0;font-size:12px;color:var(--muted);" id="qaPanelSub">Questions from your audience, ranked by upvotes.</p>
+      </div>
+      <button class="btn btn-primary" onclick="openQAShare()" style="flex-shrink:0;" title="Share the Q&amp;A link / QR">🔗 Share Q&amp;A</button>
+    </div>
+    <div id="qaPanelBody" style="max-height:62vh;overflow-y:auto;padding:6px 0;">
+      <div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;">Loading…</div>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);text-align:right;">
+      <button class="btn btn-ghost" onclick="closeQAPanel()">Close</button>
     </div>
   </div>
 </div>
@@ -1870,6 +1890,7 @@ function selectPresentation(id) {
   document.getElementById('addQBtn2').disabled = false;
   document.getElementById('resetBtn').disabled = false;
   document.getElementById('reportBtn').disabled = false;
+  document.getElementById('qaBtn').disabled = false;
   updateShareButton();
 
   renderPresList();
@@ -1910,6 +1931,7 @@ async function doDeletePres() {
     document.getElementById('addQBtn2').disabled = true;
     document.getElementById('resetBtn').disabled = true;
     document.getElementById('reportBtn').disabled = true;
+    document.getElementById('qaBtn').disabled = true;
     showSetup();
     renderQList();
   }
@@ -2160,6 +2182,7 @@ function switchProduct(key) {
     document.getElementById('addQBtn2').disabled = true;
     document.getElementById('resetBtn').disabled = true;
     document.getElementById('reportBtn').disabled = true;
+    document.getElementById('qaBtn').disabled = true;
   }
   // Always repaint BOTH panels so they match the product you switched to
   // (fixes stale center/right panels, incl. StudySlide showing Quiz content).
@@ -4537,6 +4560,66 @@ function getQuestionURL(idx) {
 function getSurveyURL() {
   const code = presentations[activePresId]?.sessionCode || '';
   return `${BASE_URL}#${code}`;
+}
+
+// ── Audience Q&A (Slido-style) — moderation panel + share ──
+function getQAUrl() {
+  const code = presentations[activePresId]?.sessionCode || '';
+  return `${BASE_URL}#${code}/qa`;
+}
+let _qaListener = null;
+function openQAPanel() {
+  if (!activePresId) return;
+  document.getElementById('qaPanelModal').classList.remove('hidden');
+  const code = presentations[activePresId].sessionCode;
+  const body = document.getElementById('qaPanelBody');
+  body.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;">Loading…</div>';
+  if (_qaListener) { db.ref(_qaListener.path).off('value', _qaListener.fn); _qaListener = null; }
+  const path = 'sessions/' + code + '/qa';
+  const fn = db.ref(path).on('value', snap => renderQAModeration(snap.exists() ? (snap.val()||{}) : {}));
+  _qaListener = { path, fn };
+}
+function closeQAPanel() {
+  document.getElementById('qaPanelModal').classList.add('hidden');
+  if (_qaListener) { db.ref(_qaListener.path).off('value', _qaListener.fn); _qaListener = null; }
+}
+function renderQAModeration(data) {
+  const body = document.getElementById('qaPanelBody'); if (!body) return;
+  const items = Object.entries(data).map(([id,q]) => Object.assign({id}, q));
+  items.sort((a,b) => (a.answered?1:0)-(b.answered?1:0) || (b.votes||0)-(a.votes||0) || (a.createdAt||0)-(b.createdAt||0));
+  const visible = items.filter(q => !q.hidden);
+  document.getElementById('qaPanelSub').textContent = visible.length ? (visible.length + ' question' + (visible.length!==1?'s':'') + ' · ranked by upvotes') : 'Share the Q&A link so your audience can ask.';
+  if (!visible.length) {
+    body.innerHTML = '<div style="padding:34px 20px;text-align:center;"><div style="font-size:30px;margin-bottom:8px;">💬</div><div style="color:var(--muted);font-size:13px;line-height:1.6;">No questions yet.<br>Click <b>Share Q&amp;A</b> and put the QR on a slide — questions appear here live, ranked by votes.</div></div>';
+    return;
+  }
+  body.innerHTML = visible.map(q => `
+    <div style="display:flex;gap:11px;align-items:flex-start;padding:12px 18px;border-bottom:1px solid var(--border2);${q.answered?'opacity:0.55;':''}">
+      <div style="flex-shrink:0;text-align:center;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:5px 10px;min-width:42px;">
+        <div style="font-size:11px;color:var(--muted);line-height:1;">▲</div><div style="font-family:Syne,sans-serif;font-weight:800;font-size:15px;">${q.votes||0}</div></div>
+      <div style="flex:1;min-width:0;"><div style="font-size:14px;line-height:1.4;${q.answered?'text-decoration:line-through;':''}">${escapeHtml(q.text||'')}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:3px;">${escapeHtml(q.name||'Anonymous')}${q.answered?' · ✓ answered':''}</div></div>
+      <button class="btn btn-ghost btn-sm" onclick="qaSetAnswered('${q.id}',${q.answered?'false':'true'})" title="${q.answered?'Mark unanswered':'Mark answered'}" style="flex-shrink:0;${q.answered?'':'color:var(--accent3);'}">${q.answered?'↩':'✓'}</button>
+      <button class="icon-btn del" onclick="qaHide('${q.id}')" title="Hide" style="flex-shrink:0;">✕</button>
+    </div>`).join('');
+}
+async function qaSetAnswered(id, val) {
+  const code = presentations[activePresId].sessionCode;
+  await db.ref('sessions/' + code + '/qa/' + id + '/answered').set(val).catch(()=>{});
+}
+async function qaHide(id) {
+  const code = presentations[activePresId].sessionCode;
+  await db.ref('sessions/' + code + '/qa/' + id + '/hidden').set(true).catch(()=>{});
+}
+function openQAShare() {
+  const url = getQAUrl(); currentQRURL = url;
+  document.getElementById('qrModalTitle').textContent = 'Audience Q&A';
+  document.getElementById('qrModalDesc').textContent  = 'Scan or share — your audience can ask questions and upvote.';
+  document.getElementById('qrModalURL').textContent   = url;
+  const el = document.getElementById('qrModalCode'); el.innerHTML = '';
+  new QRCode(el, { text:url, width:210, height:210, colorDark:'#ffffff', colorLight:'#10101a', correctLevel:QRCode.CorrectLevel.M });
+  const eb = document.getElementById('qrEmailBtn'); if (eb) eb.style.display = 'none';
+  document.getElementById('qrModal').classList.remove('hidden');
 }
 
 // One share link + QR for the entire survey/study set (not per-question).
