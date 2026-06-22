@@ -14,15 +14,17 @@
     "4. Publish.",
     "",
     "WHAT IT ENFORCES:",
-    "- Seat cap: a NEW member is rejected once members >= the tier limit (team_large=25, else 5).",
     "- Role-gated writes: only the owner or an admin can add/remove others or manage invites.",
     "- Read access limited to the workspace owner and its members.",
     "",
-    "KNOWN LIMITATION (for airtight invite acceptance): RTDB rules can't recompute an",
-    "email->key hash, so the self-join rule allows a signed-in user to add THEMSELVES",
-    "(still bounded by the seat cap). To make acceptance verify the invite belongs to the",
-    "user's email, move accept/invite into a Firebase-Admin Vercel function (api/team.js) —",
-    "ask Claude to add it; then tighten members/$uid .write to owner/admin only."
+    "SEAT CAP is enforced SERVER-SIDE in api/team.js (the Admin SDK can count members;",
+    "RTDB rules CANNOT count children — numChildren() is not a Rules method). Since the",
+    "client routes every team mutation through /api/team, the 5/25 cap holds there.",
+    "",
+    "KNOWN LIMITATION: the self-join clause ($uid === auth.uid) lets a signed-in user add",
+    "themselves (needed only as a fallback before api/team.js is deployed). Once the API is",
+    "live, remove that clause so only owners/admins can write members — acceptance then goes",
+    "through the API (Admin SDK, which bypasses these rules anyway)."
   ],
   "rules": {
     "workspaces": {
@@ -31,13 +33,13 @@
         ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid) || data.child('ownerUid').val() === auth.uid)",
         "members": {
           "$uid": {
-            ".write": "auth != null && (data.parent().parent().child('ownerUid').val() === auth.uid || data.parent().parent().child('members').child(auth.uid).child('role').val() === 'admin' || $uid === auth.uid) && (data.exists() || !newData.exists() || data.parent().numChildren() < (data.parent().parent().child('tier').val() === 'team_large' ? 25 : 5))",
+            ".write": "auth != null && (data.parent().parent().child('ownerUid').val() === auth.uid || data.parent().parent().child('members').child(auth.uid).child('role').val() === 'admin' || $uid === auth.uid)",
             ".validate": "!newData.exists() || newData.hasChildren(['email','role'])"
           }
         },
         "invites": {
           "$emailKey": {
-            ".write": "auth != null && (data.parent().parent().child('ownerUid').val() === auth.uid || data.parent().parent().child('members').child(auth.uid).child('role').val() === 'admin') && (data.exists() || !newData.exists() || (data.parent().parent().child('members').numChildren() + data.parent().numChildren()) < (data.parent().parent().child('tier').val() === 'team_large' ? 25 : 5))"
+            ".write": "auth != null && (data.parent().parent().child('ownerUid').val() === auth.uid || data.parent().parent().child('members').child(auth.uid).child('role').val() === 'admin')"
           }
         }
       }
