@@ -3944,7 +3944,7 @@ async function runPolly() {
         : 'Polly hit a server error (' + r.status + '). Check the AI key in Vercel.');
     }
     if (!r.ok || !Array.isArray(data.questions) || !data.questions.length) {
-      throw new Error(data.error || 'No questions came back');
+      throw new Error((data.error || 'No questions came back') + (data.detail ? ' — ' + data.detail : ''));
     }
     let added = 0;
     for (const gq of data.questions) {

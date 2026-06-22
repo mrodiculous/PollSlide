@@ -189,6 +189,7 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'No AI configured. Add OPENAI_API_KEY in Vercel → Settings → Environment Variables.' });
   }
 
+  try { // top-level guard — guarantees a JSON response (never a non-JSON 502 crash)
   // ── Inputs (all optional except topic) ─────────────────────────────────────
   const body       = req.body || {};
   const topic      = String(body.topic || '').trim();
@@ -238,7 +239,12 @@ module.exports = async function handler(req, res) {
     const questions = normalizeQuestions(raw);
     return res.status(200).json({ source, type, topic, questions });
   } catch (err) {
-    console.error('Polly: parse error:', err.message, '\nRaw:', raw.slice(0, 300));
+    console.error('Polly: parse error:', err.message, '\nRaw:', String(raw || '').slice(0, 300));
     return res.status(502).json({ error: 'Could not read AI output', detail: err.message });
+  }
+  } catch (fatal) {
+    // Anything unhandled (e.g. a provider hang/crash) → JSON, not a non-JSON 502.
+    console.error('Polly fatal:', fatal && fatal.message);
+    return res.status(502).json({ error: 'Polly failed', detail: String((fatal && fatal.message) || fatal) });
   }
 };
