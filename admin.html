@@ -256,10 +256,10 @@ const ADMIN_EMAILS=['help@pollslide.com'];
 
 // ─── TIER CONFIG (single source of truth — mirrors presenter.html) ────────────
 const TIER_CONFIG = {
-  free:  { name:'Free',       maxPres:3,  maxPart:25,  aiMonthly:0,   price:0  },
-  pro:   { name:'Pro',        maxPres:-1, maxPart:-1,  aiMonthly:20,  price:12 },
-  team:  { name:'Team',       maxPres:-1, maxPart:-1,  aiMonthly:100, price:39 },
-  white: { name:'White Label',maxPres:-1, maxPart:-1,  aiMonthly:-1,  price:0  },
+  free:       { name:'Free',       maxPres:3,  maxPart:25,  aiMonthly:0,   price:0   },
+  pro:        { name:'Pro',        maxPres:-1, maxPart:-1,  aiMonthly:20,  price:12  },
+  team_small: { name:'Team Small', maxPres:-1, maxPart:-1,  aiMonthly:100, price:39  },
+  team_large: { name:'Team Large', maxPres:-1, maxPart:-1,  aiMonthly:300, price:199 },
 };
 
 let allUsers={}, currentAdminUid='', currentAdminEmail='', currentPage='dashboard', openTicketCount=0;
@@ -349,26 +349,27 @@ function renderDashboard(){
   const active7=users.filter(u=>(u.lastSeen||0)>now-week).length;
   const totalPres=users.reduce((n,u)=>n+Object.keys(u.presentations||{}).length,0);
   const pro=users.filter(u=>u.tier==='pro').length;
-  const team=users.filter(u=>u.tier==='team').length;
-  const white=users.filter(u=>u.tier==='white').length;
+  const teamS=users.filter(u=>u.tier==='team_small').length;
+  const teamL=users.filter(u=>u.tier==='team_large').length;
+  const paid=pro+teamS+teamL;
   const flagged=users.filter(u=>u.flagged).length;
-  const mrr=(pro*12)+(team*39);
+  const mrr=(pro*12)+(teamS*39)+(teamL*199);
   document.getElementById('content').innerHTML=`
   <div class="stat-grid">
     <div class="stat"><div class="stat-val">${total}</div><div class="stat-label">Total users</div></div>
     <div class="stat"><div class="stat-val">${active7}</div><div class="stat-label">Active this week</div><div class="stat-sub">${total?Math.round(active7/total*100):0}% retention</div></div>
     <div class="stat"><div class="stat-val">${totalPres}</div><div class="stat-label">Presentations</div></div>
-    <div class="stat"><div class="stat-val">${pro+team+white}</div><div class="stat-label">Paid accounts</div></div>
-    <div class="stat"><div class="stat-val">$${mrr}</div><div class="stat-label">MRR (est.)</div><div class="stat-sub">${white} white label</div></div>
+    <div class="stat"><div class="stat-val">${paid}</div><div class="stat-label">Paid accounts</div></div>
+    <div class="stat"><div class="stat-val">$${mrr}</div><div class="stat-label">MRR (est.)</div></div>
     <div class="stat"><div class="stat-val">${openTicketCount}</div><div class="stat-label">Open tickets</div></div>
   </div>
   <div class="card">
     <div class="card-hd"><h2>Plan breakdown</h2><button class="btn btn-sm btn-ghost" onclick="showPage('tiers')">Manage tiers →</button></div>
     <table><thead><tr><th>Plan</th><th>Users</th><th>Est. MRR</th></tr></thead><tbody>
-      <tr><td><span class="pill pill-free">Free</span></td><td>${total-pro-team-white}</td><td>—</td></tr>
+      <tr><td><span class="pill pill-free">Free</span></td><td>${total-paid}</td><td>—</td></tr>
       <tr><td><span class="pill pill-pro">Pro</span></td><td>${pro}</td><td>$${pro*12}/mo</td></tr>
-      <tr><td><span class="pill pill-team">Team</span></td><td>${team}</td><td>$${team*39}/mo</td></tr>
-      <tr><td><span class="pill pill-white">White Label</span></td><td>${white}</td><td>Custom</td></tr>
+      <tr><td><span class="pill pill-team">Team Small</span></td><td>${teamS}</td><td>$${teamS*39}/mo</td></tr>
+      <tr><td><span class="pill pill-team">Team Large</span></td><td>${teamL}</td><td>$${teamL*199}/mo</td></tr>
     </tbody></table>
   </div>
   <div class="card">
@@ -404,8 +405,8 @@ function renderUsers(q,f){
           <option value="all" ${userFilter==='all'?'selected':''}>All</option>
           <option value="free" ${userFilter==='free'?'selected':''}>Free</option>
           <option value="pro" ${userFilter==='pro'?'selected':''}>Pro</option>
-          <option value="team" ${userFilter==='team'?'selected':''}>Team</option>
-          <option value="white" ${userFilter==='white'?'selected':''}>White Label</option>
+          <option value="team_small" ${userFilter==='team_small'?'selected':''}>Team Small</option>
+          <option value="team_large" ${userFilter==='team_large'?'selected':''}>Team Large</option>
           <option value="flagged" ${userFilter==='flagged'?'selected':''}>Flagged</option>
         </select>
       </div>
@@ -433,7 +434,7 @@ function openDetail(uid){
 function renderDetailBody(uid){
   const u=allUsers[uid];if(!u)return;
   const pres=u.presentations||{},presCount=Object.keys(pres).length;
-  const tc=u.tier==='pro'?'pill-pro':u.tier==='team'?'pill-team':u.tier==='white'?'pill-white':'pill-free';
+  const tc=u.tier==='pro'?'pill-pro':(u.tier==='team_small'||u.tier==='team_large')?'pill-team':'pill-free';
   const tier=TIER_CONFIG[u.tier||'free']||TIER_CONFIG.free;
   const aiUsed=u.aiUsedThisMonth||0;
   const aiPct=tier.aiMonthly>0?Math.min(100,Math.round(aiUsed/tier.aiMonthly*100)):0;
@@ -453,8 +454,8 @@ function renderDetailBody(uid){
     <div class="tier-btns">
       <button class="btn btn-xs btn-ghost" onclick="setTier('${uid}','free')">Free</button>
       <button class="btn btn-xs btn-ghost" style="border-color:var(--accent);color:var(--accent)" onclick="setTier('${uid}','pro')">Pro</button>
-      <button class="btn btn-xs btn-ghost" style="border-color:var(--accent3);color:var(--accent3)" onclick="setTier('${uid}','team')">Team</button>
-      <button class="btn btn-xs btn-ghost" style="border-color:var(--accent4);color:var(--accent4)" onclick="setTier('${uid}','white')">White</button>
+      <button class="btn btn-xs btn-ghost" style="border-color:var(--accent3);color:var(--accent3)" onclick="setTier('${uid}','team_small')">Team S</button>
+      <button class="btn btn-xs btn-ghost" style="border-color:var(--accent4);color:var(--accent4)" onclick="setTier('${uid}','team_large')">Team L</button>
     </div>
   </div>
   <div class="dp-sec">
@@ -491,10 +492,24 @@ function closeDetail(){document.getElementById('detailPanel').classList.remove('
 // ─── TIER OVERRIDE ────────────────────────────────────────────────────────────
 async function setTier(uid,tier){
   try{
+    const prev=allUsers[uid].tier||'free';
+    const email=allUsers[uid].email||'';
     await db.ref(`users/${uid}/tier`).set(tier);
     await db.ref(`admin/users_index/${uid}/tier`).set(tier);
     allUsers[uid].tier=tier;
-    toast('Plan set to '+tier,'success');renderDetailBody(uid);renderPage();
+    // Admin tier changes bypass Stripe, so the webhook never emails the user —
+    // send the upgrade/downgrade notice ourselves (best-effort).
+    let emailed=false;
+    if(email && tier!==prev){
+      const rank={free:0,pro:1,team_small:2,team_large:3};
+      const isDown=(rank[tier]??0)<(rank[prev]??0);
+      const nice=(TIER_CONFIG[tier]||{}).name||tier, niceOld=(TIER_CONFIG[prev]||{}).name||prev;
+      fetch('/api/send-email',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(isDown?{type:'downgrade',to:email,data:{oldPlan:niceOld,plan:nice}}
+                                  :{type:'upgrade',  to:email,data:{plan:nice}})}).catch(()=>{});
+      emailed=true;
+    }
+    toast('Plan set to '+tier+(emailed?' · user emailed':''),'success');renderDetailBody(uid);renderPage();
   }catch(e){toast('Failed: '+e.message,'danger');}
 }
 
