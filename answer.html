@@ -194,6 +194,13 @@ const QA_MODE = !!SESSION && !!QA_FLAG;
 // No question index (and not Q&A) → answer the whole set as one async form.
 const SURVEY_MODE = !!SESSION && !QA_MODE && (isNaN(Q_INDEX) || Q_INDEX < 0);
 
+// ── Always-on profanity mask for open text (free-text answers + Q&A) ──
+// Curated, word-boundary matched (avoids the "Scunthorpe" problem), masked with
+// asterisks. Keeps every open-text surface classroom-safe with zero API cost.
+const _BADWORDS = ['fuck','shit','bitch','asshole','arsehole','bastard','cunt','slut','whore','dick','piss','cock','pussy','nigger','faggot','retard','wanker','bollocks','prick','douche','motherfucker','jackass'];
+const _BAD_RE = new RegExp('\\b(' + _BADWORDS.join('|') + ')(s|es|ing|ed|er|in|ah)?\\b', 'gi');
+function moderateText(s){ return String(s==null?'':s).replace(_BAD_RE, m => '*'.repeat(m.length)); }
+
 // ─── STATE ────────────────────────────────────────────────────────────────────
 // participantId is unique per person per SESSION (stored in sessionStorage)
 // It is NOT stored in Firebase participants node — only in per-question responses
@@ -467,7 +474,7 @@ function submitAnswer() {
   answered = true;
   let answer;
   const q = questionData;
-  if (q.type === 'free_text')            answer = document.getElementById('txtAns')?.value?.trim() || '';
+  if (q.type === 'free_text')            answer = moderateText(document.getElementById('txtAns')?.value?.trim() || '');
   else if (q.type === 'rating')          answer = window._rating || null;
   else if (q.type === 'multiple_choice_multi') answer = Array.from(selectedOptions);
   submitToDb(answer);
@@ -743,7 +750,8 @@ async function submitSurvey() {
   const writes = [];
   surveyQuestions.forEach((q, idx) => {
     if (!surveyIsAnswered(idx)) return; // skip blanks
-    const answer    = surveyAnswers[idx];
+    let answer      = surveyAnswers[idx];
+    if (q.type === 'free_text' && typeof answer === 'string') answer = moderateText(answer);
     const stableQId = `q${idx}_stable_${SESSION}`;
     const isCorrect = surveyComputeCorrect(q, answer);
     writes.push(
@@ -1092,7 +1100,7 @@ async function submitQuestion(){
   err.textContent = '';
   try {
     const ref = db.ref('sessions/' + SESSION + '/qa').push();
-    await ref.set({ text: text.slice(0,280), name: participantName || 'Anonymous', votes: 1, voters: { [participantId]: true }, createdAt: Date.now(), answered: false });
+    await ref.set({ text: moderateText(text.slice(0,280)), name: participantName || 'Anonymous', votes: 1, voters: { [participantId]: true }, createdAt: Date.now(), answered: false });
     ta.value = '';
   } catch(e) { err.textContent = 'Could not post — check your connection.'; }
 }
