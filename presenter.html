@@ -3966,18 +3966,31 @@ async function runPolly() {
   }
 }
 
-// Map Polly's JSON output into PollSlide's question schema.
+// Map Polly's JSON output into PollSlide's question schema — PRODUCT-AWARE:
+//   study  → flashcard (front/back)
+//   survey → multiple choice, NO correct answer (data collection)
+//   poll/quiz → multiple choice with the correct answer(s) marked (single or multi)
 function pollyToQuestion(gq) {
-  const opinion = activeProduct === 'poll' || activeProduct === 'survey'; // no graded answer
+  // StudySlide: flashcards.
+  if (activeProduct === 'study') {
+    return { type: 'flashcard',
+             front: (gq.emoji ? gq.emoji + ' ' : '') + (gq.front || gq.text || ''),
+             back: gq.back || '' };
+  }
   const opts = (Array.isArray(gq.options) ? gq.options : []).map(t => ({ text: String(t || ''), img: '' }));
   while (opts.length < 2) opts.push({ text: '', img: '' });
-  let correct = Number.isInteger(gq.correctAnswer) ? gq.correctAnswer : 0;
-  if (correct < 0 || correct >= opts.length) correct = 0;
+  const trimmed = opts.slice(0, 6);
+  const isSurvey = activeProduct === 'survey';
+  // Server sends correctAnswers as an array of indices ([] for surveys). Fall back to
+  // a legacy single correctAnswer if present.
+  let ca = Array.isArray(gq.correctAnswers) ? gq.correctAnswers.filter(i => Number.isInteger(i) && i >= 0 && i < trimmed.length)
+         : (Number.isInteger(gq.correctAnswer) ? [gq.correctAnswer] : []);
+  const isMulti = !isSurvey && (gq.kind === 'multi' || ca.length > 1);
   return {
     text: (gq.emoji ? gq.emoji + ' ' : '') + (gq.text || ''),
-    type: 'multiple_choice',
-    options: opts.slice(0, 6),
-    correctAnswer: opinion ? null : correct,   // poll/survey = opinion → mark NO answer correct
+    type: isMulti ? 'multiple_choice_multi' : 'multiple_choice',
+    options: trimmed,
+    correctAnswer: isSurvey ? null : (isMulti ? (ca.length ? ca : [0]) : (ca.length ? ca[0] : 0)),
     image: '', timer: 0, displayMode: 'bars', revealDelay: 30,
     postReveal: { enabled: false, type: 'leaderboard', explainerText: gq.explanation || '', advanceDelay: 'manual' }
   };
