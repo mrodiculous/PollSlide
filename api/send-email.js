@@ -69,6 +69,14 @@ function baseLayout(title, body, ctaUrl, ctaText) {
 }
 
 const TEMPLATES = {
+  // Generic notification (used by the legal/compliance watcher and other internal alerts).
+  notify: (data) => ({
+    subject: data.subject || 'PollSlide notification',
+    html: baseLayout(data.subject || 'Notification',
+      `<h1 style="font-size:22px;font-weight:800;margin:0 0 12px;color:#15152a;">${data.heading || 'Heads up'}</h1>
+       <div style="font-size:15px;color:#5a5a78;line-height:1.6;">${data.body || ''}</div>`,
+      data.ctaUrl || 'https://app.pollslide.com/admin', data.ctaText || 'Open admin')
+  }),
   welcome: (data) => ({
     subject: 'Welcome to PollSlide!',
     html: baseLayout('Welcome to PollSlide', `
