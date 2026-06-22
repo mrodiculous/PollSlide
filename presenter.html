@@ -3884,7 +3884,14 @@ async function runPolly() {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ topic: focus, type: activeProduct, count, difficulty, source })
     });
-    const data = await r.json();
+    // Parse defensively: a crashed/undeployed function returns non-JSON, which would
+    // otherwise throw a cryptic "string did not match the expected pattern".
+    const text = await r.text();
+    let data; try { data = JSON.parse(text); } catch(_) { data = null; }
+    if (!data) {
+      throw new Error(r.status === 404 ? 'Polly isn’t deployed yet (api/polly.js).'
+        : 'Polly hit a server error (' + r.status + '). Check the AI key in Vercel.');
+    }
     if (!r.ok || !Array.isArray(data.questions) || !data.questions.length) {
       throw new Error(data.error || 'No questions came back');
     }

@@ -197,15 +197,16 @@ module.exports = async function handler(req, res) {
   const difficulty = body.difficulty ? String(body.difficulty).slice(0, 40) : '';
   const audience   = body.audience   ? String(body.audience).slice(0, 80)   : '';
   // Optional source material (PDF text / pasted notes) — ground questions in it.
-  const source     = body.source ? String(body.source).slice(0, 12000) : '';
+  // NOTE: named sourceMaterial to avoid colliding with the provider `source` below.
+  const sourceMaterial = body.source ? String(body.source).slice(0, 12000) : '';
 
-  if (!topic && !source) return res.status(400).json({ error: 'Provide a topic or source material.' });
+  if (!topic && !sourceMaterial) return res.status(400).json({ error: 'Provide a topic or source material.' });
 
   // FORWARD-FEATURE HOOK: before generating, this is where you'd check the user's
   // Polly AI monthly quota (Free/Pro = 20, Team = 100) against their Firebase plan
   // and return 429 if exceeded. Wire in once auth context is passed from the client.
 
-  const messages = buildMessages({ topic, type, count, difficulty, audience, source });
+  const messages = buildMessages({ topic, type, count, difficulty, audience, source: sourceMaterial });
 
   let raw = '';
   let source = '';
