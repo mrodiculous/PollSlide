@@ -581,6 +581,8 @@
     </div>
     <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Style</label>
     <select id="pollyStyle" style="width:100%;margin-bottom:12px;"><option value="">Auto</option><option>Fun &amp; casual</option><option>Professional</option><option>Trivia challenge</option><option>Thought-provoking</option><option>Quick &amp; punchy</option></select>
+    <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Language <span style="font-weight:400;text-transform:none;letter-spacing:0;">(questions are written in this language; your audience’s answer page matches it)</span></label>
+    <select id="pollyLang" onchange="setPresLanguage(this.value)" style="width:100%;margin-bottom:12px;"></select>
     <div id="pollyStatus" style="display:none;margin-top:12px;padding:9px 12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border2);font-size:13px;color:var(--text);"></div>
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closePolly()">Cancel</button>
@@ -1762,6 +1764,11 @@ const PRODUCTS = {
             qTypes:['flashcard','multiple_choice','free_text'] }
 };
 const PRODUCT_ORDER = ['poll','survey','quiz','study'];
+
+// Presentation languages — the deck's base language. Polly generates in it and the
+// audience answer page localizes its labels to match. (Code → native name.)
+const LANGUAGES = { en:'English', es:'Español', de:'Deutsch', fr:'Français', pt:'Português', it:'Italiano', nl:'Nederlands', ja:'日本語', zh:'中文', ar:'العربية', hi:'हिन्दी' };
+
 // Active product surface in the UI. Persisted so the user lands where they left off.
 let activeProduct = localStorage.getItem('ql_active_product') || 'poll';
 if (!PRODUCTS[activeProduct]) activeProduct = 'poll';
@@ -1850,6 +1857,7 @@ async function saveCurrentPresentation() {
     if (pres.sessionCode && pres.questions) {
       await db.ref(`quiz_builder/${pres.sessionCode}/questions`).set(pres.questions);
       await db.ref(`quiz_builder/${pres.sessionCode}/productType`).set(presType(pres));
+      await db.ref(`quiz_builder/${pres.sessionCode}/language`).set(pres.language || 'en');
     }
     markSaved();
   } catch(e) { document.getElementById('saveText').textContent='Save failed'; }
@@ -3877,8 +3885,25 @@ function openPolly() {
   const notes = document.getElementById('pollyNotes'); if (notes) notes.value = '';
   const pdf = document.getElementById('pollyPdf'); if (pdf) pdf.value = '';
   const info = document.getElementById('pollyMatInfo'); if (info) info.textContent = '';
+  // Populate the language picker from the presentation's saved language.
+  const langSel = document.getElementById('pollyLang');
+  if (langSel) {
+    const cur = presentations[activePresId]?.language || 'en';
+    langSel.innerHTML = Object.entries(LANGUAGES).map(([code,name]) => `<option value="${code}" ${code===cur?'selected':''}>${name}</option>`).join('');
+  }
   document.getElementById('pollyModal').classList.remove('hidden');
   setTimeout(() => document.getElementById('pollyTopic').focus(), 50);
+}
+
+// Persist the deck's language; it's published to quiz_builder on save so the
+// audience answer page localizes to match.
+function setPresLanguage(code) {
+  if (!activePresId || !LANGUAGES[code]) return;
+  presentations[activePresId].language = code;
+  scheduleSave();
+  if (presentations[activePresId].sessionCode) {
+    db.ref(`quiz_builder/${presentations[activePresId].sessionCode}/language`).set(code).catch(()=>{});
+  }
 }
 
 // Lazy-load pdf.js (only when a PDF is actually dropped) and extract its text so
@@ -3933,7 +3958,7 @@ async function runPolly() {
     const focus = [topic, style ? `style: ${style}` : ''].filter(Boolean).join(' — ');
     const r = await fetch('/api/polly', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic: focus, type: activeProduct, count, difficulty, source })
+      body: JSON.stringify({ topic: focus, type: activeProduct, count, difficulty, source, language: (presentations[activePresId]?.language || 'en') })
     });
     // Parse defensively: a crashed/undeployed function returns non-JSON, which would
     // otherwise throw a cryptic "string did not match the expected pattern".

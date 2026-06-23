@@ -219,8 +219,19 @@ const STABLE_QID = `q${Q_INDEX}_stable_${SESSION}`;
 // ─── RENDER ───────────────────────────────────────────────────────────────────
 function render(html) { document.getElementById('app').innerHTML = html; }
 
+// ── i18n: the audience page matches the deck's language (set by the presenter) ──
+let LANG = 'en';
+const I18N = {
+  es:{enterName:'Escribe tu nombre',nameOnce:'Solo necesitas hacerlo una vez por sesión.',yourName:'Tu nombre',continue:'Continuar →',enterNamePlease:'Por favor, escribe tu nombre.',submitAnswer:'Enviar respuesta',submitRating:'Enviar valoración',submitAnswers:'Enviar respuestas',submitted:'✓ ¡Enviado!',alreadyAnswered:'¡Ya respondiste esta pregunta!',selectAll:'✓ Marca todas las que correspondan',submitSurvey:'Enviar encuesta',submitQuiz:'Enviar y ver puntuación',thankYou:'¡Gracias!',recorded:'Tus respuestas se han guardado.',qaTitle:'Preguntas del público',qaSub:'Haz una pregunta — o vota las que quieras que respondan.',ask:'Preguntar',typeQuestion:'Escribe tu pregunta…',loading:'Cargando…',responses:'respuestas',question:'Pregunta'},
+  de:{enterName:'Gib deinen Namen ein',nameOnce:'Nur einmal pro Sitzung nötig.',yourName:'Dein Name',continue:'Weiter →',enterNamePlease:'Bitte gib deinen Namen ein.',submitAnswer:'Antwort senden',submitRating:'Bewertung senden',submitAnswers:'Antworten senden',submitted:'✓ Gesendet!',alreadyAnswered:'Du hast diese Frage bereits beantwortet!',selectAll:'✓ Alle Zutreffenden auswählen',submitSurvey:'Umfrage senden',submitQuiz:'Senden & Punktzahl ansehen',thankYou:'Danke!',recorded:'Deine Antworten wurden gespeichert.',qaTitle:'Publikumsfragen',qaSub:'Stelle eine Frage — oder stimme für andere ab.',ask:'Fragen',typeQuestion:'Schreibe deine Frage…',loading:'Lädt…',responses:'Antworten',question:'Frage'},
+  fr:{enterName:'Entrez votre nom',nameOnce:'À faire une seule fois par session.',yourName:'Votre nom',continue:'Continuer →',enterNamePlease:'Veuillez entrer votre nom.',submitAnswer:'Envoyer la réponse',submitRating:'Envoyer la note',submitAnswers:'Envoyer les réponses',submitted:'✓ Envoyé !',alreadyAnswered:'Vous avez déjà répondu à cette question !',selectAll:'✓ Sélectionnez tout ce qui s’applique',submitSurvey:'Envoyer le sondage',submitQuiz:'Envoyer et voir le score',thankYou:'Merci !',recorded:'Vos réponses ont été enregistrées.',qaTitle:'Questions du public',qaSub:'Posez une question — ou votez pour celles à traiter.',ask:'Demander',typeQuestion:'Écrivez votre question…',loading:'Chargement…',responses:'réponses',question:'Question'},
+  pt:{enterName:'Digite seu nome',nameOnce:'Só precisa fazer isso uma vez por sessão.',yourName:'Seu nome',continue:'Continuar →',enterNamePlease:'Por favor, digite seu nome.',submitAnswer:'Enviar resposta',submitRating:'Enviar avaliação',submitAnswers:'Enviar respostas',submitted:'✓ Enviado!',alreadyAnswered:'Você já respondeu a esta pergunta!',selectAll:'✓ Marque todas as aplicáveis',submitSurvey:'Enviar pesquisa',submitQuiz:'Enviar e ver pontuação',thankYou:'Obrigado!',recorded:'Suas respostas foram registradas.',qaTitle:'Perguntas do público',qaSub:'Faça uma pergunta — ou vote nas que quer ver respondidas.',ask:'Perguntar',typeQuestion:'Escreva sua pergunta…',loading:'Carregando…',responses:'respostas',question:'Pergunta'},
+  it:{enterName:'Inserisci il tuo nome',nameOnce:'Da fare una sola volta per sessione.',yourName:'Il tuo nome',continue:'Continua →',enterNamePlease:'Inserisci il tuo nome.',submitAnswer:'Invia risposta',submitRating:'Invia valutazione',submitAnswers:'Invia risposte',submitted:'✓ Inviato!',alreadyAnswered:'Hai già risposto a questa domanda!',selectAll:'✓ Seleziona tutte quelle pertinenti',submitSurvey:'Invia sondaggio',submitQuiz:'Invia e vedi punteggio',thankYou:'Grazie!',recorded:'Le tue risposte sono state registrate.',qaTitle:'Domande del pubblico',qaSub:'Fai una domanda — o vota quelle da trattare.',ask:'Chiedi',typeQuestion:'Scrivi la tua domanda…',loading:'Caricamento…',responses:'risposte',question:'Domanda'},
+};
+function t(key, fallback){ return (I18N[LANG] && I18N[LANG][key]) || fallback; }
+
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
-function bootApp() {
+async function bootApp() {
   if (!SESSION) {
     render(`
       <a href="https://pollslide.com" class="logo" style="text-decoration:none;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</a>
@@ -229,6 +240,9 @@ function bootApp() {
     `);
     return;
   }
+
+  // Load the deck's language first so even the name screen is localized.
+  try { const s = await db.ref(`quiz_builder/${SESSION}/language`).get(); if (s.exists() && s.val()) LANG = s.val(); } catch(e) {}
 
   // Restore identity from localStorage (persists across tabs / fresh QR scans within the same presentation)
   const storedId   = localStorage.getItem(`ql_pid_${SESSION}`);
@@ -246,11 +260,11 @@ function bootApp() {
 function showNameEntry() {
   render(`
     <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</div>
-    <h1>Enter Your Name</h1>
-    <p class="subtitle">You only need to do this once per session.</p>
-    <label>Your Name</label>
-    <input type="text" id="nameInput" maxlength="60" placeholder="Your name" maxlength="30" autofocus>
-    <button class="btn btn-primary" onclick="joinSession()">Continue →</button>
+    <h1>${t('enterName','Enter Your Name')}</h1>
+    <p class="subtitle">${t('nameOnce','You only need to do this once per session.')}</p>
+    <label>${t('yourName','Your Name')}</label>
+    <input type="text" id="nameInput" maxlength="60" placeholder="${t('yourName','Your name')}" autofocus>
+    <button class="btn btn-primary" onclick="joinSession()">${t('continue','Continue →')}</button>
     <p id="nameErr" style="color:var(--accent2);font-size:13px;margin-top:10px;text-align:center;"></p>
   `);
   document.getElementById('nameInput').addEventListener('keydown', e => { if(e.key==='Enter') joinSession(); });
@@ -258,7 +272,7 @@ function showNameEntry() {
 
 function joinSession() {
   const name = document.getElementById('nameInput').value.trim();
-  if (!name) { document.getElementById('nameErr').textContent = 'Please enter your name.'; return; }
+  if (!name) { document.getElementById('nameErr').textContent = t('enterNamePlease','Please enter your name.'); return; }
 
   participantName = name.slice(0, 60); // cap at 60 chars — prevents DB abuse
   // Generate a unique ID for this person in this session
@@ -346,7 +360,7 @@ function showQuestion(q) {
   if (isText) {
     body = `
       <textarea id="txtAns" placeholder="Type your answer here..."></textarea>
-      <button class="btn btn-primary" onclick="submitAnswer()">Submit Answer</button>`;
+      <button class="btn btn-primary" onclick="submitAnswer()">${t('submitAnswer','Submit Answer')}</button>`;
   } else if (isRating) {
     const max = q.ratingMax || 5;
     const labels = q.ratingLabels || {};
@@ -355,7 +369,7 @@ function showQuestion(q) {
         ${Array.from({length:max},(_,i)=>`<button class="r-btn" id="rb${i+1}" onclick="selectRating(${i+1})">${i+1}</button>`).join('')}
       </div>
       ${labels.low||labels.high ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:14px;"><span>${labels.low||''}</span><span>${labels.high||''}</span></div>` : ''}
-      <button class="btn btn-primary" id="submitBtn" onclick="submitAnswer()" disabled>Submit Rating</button>`;
+      <button class="btn btn-primary" id="submitBtn" onclick="submitAnswer()" disabled>${t('submitRating','Submit Rating')}</button>`;
   } else {
     body = `
       ${isMulti ? '<p class="multi-hint">✓ Select all that apply</p>' : ''}
@@ -370,7 +384,7 @@ function showQuestion(q) {
           </button>`;
         }).join('')}
       </div>
-      ${isMulti ? `<button class="btn btn-primary" id="submitBtn" onclick="submitAnswer()" disabled>Submit Answers</button>` : ''}`;
+      ${isMulti ? `<button class="btn btn-primary" id="submitBtn" onclick="submitAnswer()" disabled>${t('submitAnswers','Submit Answers')}</button>` : ''}`;
   }
 
   const qImage = mediaTag(q.image, q.videoOpts, 'q-image');
@@ -391,7 +405,7 @@ function showQuestion(q) {
 
   render(`
     <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</div>
-    <div class="q-badge">Question ${Q_INDEX+1}</div>
+    <div class="q-badge">${t('question','Question')} ${Q_INDEX+1}</div>
     ${timerHtml}
     ${qImage}
     <div class="q-text">${q.text}</div>
@@ -453,7 +467,7 @@ function toggleOpt(i) {
     answered = true;
     submitToDb([i]);
     document.getElementById('qBody').insertAdjacentHTML('beforeend',
-      '<div class="status-box submitted" style="margin-top:14px;">✓ Submitted!</div>');
+      '<div class="status-box submitted" style="margin-top:14px;">' + t('submitted','✓ Submitted!') + '</div>');
   } else {
     if (selectedOptions.has(i)) { selectedOptions.delete(i); document.getElementById(`opt${i}`).classList.remove('selected'); }
     else { selectedOptions.add(i); document.getElementById(`opt${i}`).classList.add('selected'); }
@@ -479,7 +493,7 @@ function submitAnswer() {
   else if (q.type === 'multiple_choice_multi') answer = Array.from(selectedOptions);
   submitToDb(answer);
   document.getElementById('qBody').innerHTML =
-    '<div class="status-box submitted">✓ Submitted!</div>';
+    '<div class="status-box submitted">' + t('submitted','✓ Submitted!') + '</div>';
 }
 
 async function submitToDb(answer) {
@@ -685,7 +699,7 @@ function showSurveyForm() {
       ? 'Answer all you can, then submit to see your score.'
       : 'Answer at your own pace, then submit. You can skip any question.'}</p>
     <div id="surveyForm">${cards}</div>
-    <button class="btn btn-primary" id="surveySubmitBtn" onclick="submitSurvey()" style="margin-top:6px;">${formIsQuiz ? 'Submit & See Score' : 'Submit Survey'}</button>
+    <button class="btn btn-primary" id="surveySubmitBtn" onclick="submitSurvey()" style="margin-top:6px;">${formIsQuiz ? t('submitQuiz','Submit & See Score') : t('submitSurvey','Submit Survey')}</button>
     <p id="surveyErr" style="color:var(--accent2);font-size:13px;margin-top:10px;text-align:center;"></p>
   `);
 }
@@ -771,7 +785,7 @@ async function submitSurvey() {
     if (formIsQuiz) showQuizScore(); else showSurveyDone(false);
   } catch(e) {
     submitting = false;
-    if (btn) { btn.disabled = false; btn.textContent = formIsQuiz ? 'Submit & See Score' : 'Submit Survey'; }
+    if (btn) { btn.disabled = false; btn.textContent = formIsQuiz ? t('submitQuiz','Submit & See Score') : t('submitSurvey','Submit Survey'); }
     document.getElementById('surveyErr').textContent = 'Could not submit — check your connection and try again.';
   }
 }
@@ -781,8 +795,8 @@ function showSurveyDone(already) {
     ${logoMarkup()}
     <div style="text-align:center;padding:14px 0 20px;">
       <div style="font-size:46px;margin-bottom:12px;">✓</div>
-      <h1 style="margin-bottom:8px;">${already ? 'Already submitted' : 'Thank you!'}</h1>
-      <p class="subtitle">${already ? 'You\'ve already completed this ' + (formIsQuiz?'quiz':'survey') + '.' : 'Your responses have been recorded.'}</p>
+      <h1 style="margin-bottom:8px;">${already ? 'Already submitted' : t('thankYou','Thank you!')}</h1>
+      <p class="subtitle">${already ? 'You\'ve already completed this ' + (formIsQuiz?'quiz':'survey') + '.' : t('recorded','Your responses have been recorded.')}</p>
     </div>
   `);
 }
@@ -1067,10 +1081,10 @@ function escapeQa(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':
 function loadQA(){
   render(`
     ${logoMarkup()}
-    <h1 style="margin-bottom:4px;">Audience Q&amp;A</h1>
-    <p class="subtitle">Ask the speaker a question — or upvote the ones you most want answered.</p>
-    <textarea id="qaText" maxlength="280" placeholder="Type your question…" style="min-height:70px;"></textarea>
-    <button class="btn btn-primary" onclick="submitQuestion()" style="margin-bottom:6px;">Ask</button>
+    <h1 style="margin-bottom:4px;">${t('qaTitle','Audience Q&amp;A')}</h1>
+    <p class="subtitle">${t('qaSub','Ask the speaker a question — or upvote the ones you most want answered.')}</p>
+    <textarea id="qaText" maxlength="280" placeholder="${t('typeQuestion','Type your question…')}" style="min-height:70px;"></textarea>
+    <button class="btn btn-primary" onclick="submitQuestion()" style="margin-bottom:6px;">${t('ask','Ask')}</button>
     <p id="qaErr" style="color:var(--accent2);font-size:13px;min-height:16px;margin:0 0 8px;"></p>
     <div id="qaList"></div>
   `);

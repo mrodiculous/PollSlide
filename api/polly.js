@@ -55,10 +55,17 @@ const TYPE_GUIDE = {
   presentation: 'engaging audience questions to punctuate a live presentation, each with the correct answer marked',
 };
 
-function buildMessages({ topic, type, count, difficulty, audience, source }) {
+const LANG_NAMES = { en:'English', es:'Spanish', de:'German', fr:'French', pt:'Portuguese', it:'Italian', nl:'Dutch', ja:'Japanese', zh:'Chinese (Simplified)', ar:'Arabic', hi:'Hindi' };
+
+function buildMessages({ topic, type, count, difficulty, audience, source, language }) {
   const isStudy  = type === 'study';
   const isSurvey = type === 'survey';
   const guide = TYPE_GUIDE[type] || TYPE_GUIDE.quiz;
+  const langName = LANG_NAMES[language] || '';
+  // Write everything in the deck's language (questions, options, answers, explanations).
+  const langRule = (langName && language !== 'en')
+    ? ` Write ALL content — every question, option, answer, and explanation — in ${langName}. Use only valid JSON keys in English; the VALUES must be in ${langName}.`
+    : '';
 
   // StudySlide = flashcards (front/back). Everything else = multiple choice with
   // the correct answer(s) marked — except surveys, which have no correct answer.
@@ -84,10 +91,10 @@ function buildMessages({ topic, type, count, difficulty, audience, source }) {
     : `Mark the correct answer(s): list each correct option (word-for-word) in "answers". Use "kind":"single" when exactly one option is correct, "kind":"multi" when two or more are. Most questions are single. Never leave "answers" empty.`;
 
   const system = isStudy
-    ? `You are Polly, PollSlide's AI study-card designer. Write clear, memorable flashcards: a concise prompt ("front") and its answer ("back"), each with one fitting emoji on the front. Return ONLY valid JSON in exactly this shape — no markdown, no commentary:\n${schema}`
+    ? `You are Polly, PollSlide's AI study-card designer. Write clear, memorable flashcards: a concise prompt ("front") and its answer ("back"), each with one fitting emoji on the front.${langRule} Return ONLY valid JSON in exactly this shape — no markdown, no commentary:\n${schema}`
     : `You are Polly, PollSlide's AI question designer. You write lively, audience-friendly ${guide}. ` +
       `Always weave in relevant emojis so the content pops. Every question must have exactly 4 options. ` +
-      `${answerRule} Every value in "answers" must match one of the options word-for-word. ` +
+      `${answerRule} Every value in "answers" must match one of the options word-for-word.${langRule} ` +
       `Return ONLY valid JSON in exactly this shape — no markdown, no commentary:\n${schema}`;
 
   const user = source
@@ -243,6 +250,7 @@ module.exports = async function handler(req, res) {
   const count      = Math.min(Math.max(parseInt(body.count, 10) || 1, 1), 30);   // clamp 1–10
   const difficulty = body.difficulty ? String(body.difficulty).slice(0, 40) : '';
   const audience   = body.audience   ? String(body.audience).slice(0, 80)   : '';
+  const language   = body.language   ? String(body.language).slice(0, 8)    : 'en';
   // Optional source material (PDF text / pasted notes) — ground questions in it.
   // NOTE: named sourceMaterial to avoid colliding with the provider `source` below.
   const sourceMaterial = body.source ? String(body.source).slice(0, 12000) : '';
@@ -253,7 +261,7 @@ module.exports = async function handler(req, res) {
   // Polly AI monthly quota (Free/Pro = 20, Team = 100) against their Firebase plan
   // and return 429 if exceeded. Wire in once auth context is passed from the client.
 
-  const messages = buildMessages({ topic, type, count, difficulty, audience, source: sourceMaterial });
+  const messages = buildMessages({ topic, type, count, difficulty, audience, source: sourceMaterial, language });
 
   let raw = '';
   let source = '';
