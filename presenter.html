@@ -4334,6 +4334,7 @@ function renderEditor(idx) {
           <label>Question Media <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(optional image, GIF or video — shows above the question)</span></label>
           <div style="display:flex;gap:8px;align-items:center;">
             <input type="text" placeholder="Paste URL or upload →" value="${(q.image||'').replace(/"/g,'&quot;')}" oninput="updateQ(${idx},'image',this.value)" style="font-size:13px;">
+            <select id="aiImgStyle_${idx}" title="AI image style" style="flex-shrink:0;font-size:12px;padding:7px 6px;border-radius:7px;">${aiStyleOptions()}</select>
             <button class="btn btn-ghost btn-sm" id="aiImgBtn_${idx}" onclick="generateQImage(${idx})" title="Generate an image with AI from this question" style="flex-shrink:0;padding:7px 12px;color:var(--accent);">✨ AI image</button>
             <button class="btn btn-ghost btn-sm" onclick="uploadQImg(${idx})" title="Upload image, GIF or video" style="flex-shrink:0;padding:7px 12px;">⬆ Upload</button>
             <button class="btn btn-ghost btn-sm" onclick="openGifPicker(function(url){updateQ(${idx},'image',url);renderEditor(${idx});})" title="Search GIFs" style="flex-shrink:0;padding:7px 12px;">🔍 GIF</button>
@@ -4542,17 +4543,35 @@ function uploadQImg(idx) {
   uploadFile(url => { questions[idx].image = url; saveBack(); renderEditor(idx); });
 }
 
-// ✨ AI image — generate a slide image from the question text (fal.ai FLUX via
-// /api/polly-image), host it, and attach it. Cheap + fast + good.
+// ✨ AI image — generate a slide image from the question text (local FLUX → fal.ai →
+// OpenAI via /api/polly-image), host it, and attach it.
+// Style picker so images aren't all the same look. Modifiers are appended to the prompt
+// (provider-agnostic — works for local FLUX, fal, and OpenAI alike).
+const AI_IMAGE_STYLES = {
+  illustration: { label:'🎨 Illustration', mod:'clean modern vibrant illustration, flat design' },
+  realistic:    { label:'📷 Realistic photo', mod:'photorealistic high-detail photograph, natural lighting, shallow depth of field' },
+  render3d:     { label:'🧊 3D render', mod:'glossy 3D render, soft studio lighting, octane render, subtle reflections' },
+  cartoon:      { label:'😄 Cartoon', mod:'playful cartoon, bold clean outlines, bright cheerful colors' },
+  minimal:      { label:'⬜ Minimal / flat', mod:'minimal flat vector icon, simple geometric shapes, lots of negative space' },
+  watercolor:   { label:'🖌️ Watercolor', mod:'soft watercolor painting, gentle artistic brush strokes, paper texture' },
+};
+function aiStyleOptions() {
+  const sel = localStorage.getItem('ps_ai_img_style') || 'illustration';
+  return Object.entries(AI_IMAGE_STYLES).map(([k,v]) =>
+    `<option value="${k}"${k===sel?' selected':''}>${v.label}</option>`).join('');
+}
 async function generateQImage(idx) {
   const q = questions[idx];
   const base = (q.type === 'flashcard' ? (q.front || '') : (q.text || '')).trim();
   if (!base) { toast('Add the question text first, then generate.', 'warn'); return; }
+  const styleKey = (document.getElementById('aiImgStyle_' + idx) || {}).value || 'illustration';
+  const style = AI_IMAGE_STYLES[styleKey] || AI_IMAGE_STYLES.illustration;
+  localStorage.setItem('ps_ai_img_style', styleKey);   // remember the choice
   const btn = document.getElementById('aiImgBtn_' + idx);
   if (btn) { btn.disabled = true; btn.textContent = '✨ Generating…'; }
   try {
-    const prompt = base + ' — clean modern vibrant illustration for a presentation slide, simple background, no text, no watermark';
-    const r = await fetch('/api/polly-image', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ prompt, size:'1536x1024' }) });
+    const prompt = base + ' — ' + style.mod + ', for a presentation slide, simple background, no text, no watermark';
+    const r = await fetch('/api/polly-image', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ prompt, size:'1536x1024', style: styleKey }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok || !d.image) throw new Error(d.error || 'Generation failed');
     const url = await uploadDataUrl(d.image);   // host it → small, stable URL
