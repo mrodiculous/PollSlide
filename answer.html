@@ -230,6 +230,72 @@ const I18N = {
 };
 function t(key, fallback){ return (I18N[LANG] && I18N[LANG][key]) || fallback; }
 
+// ── Live audience translation ───────────────────────────────────────────────
+// LANG = the language THIS viewer reads in (chrome + content). DECK_LANG = the
+// language the presenter authored in (the source). When they differ, question
+// text + options are translated on the fly via /api/translate. Display-only —
+// answers are submitted by option INDEX, so translation never changes the data.
+let DECK_LANG = 'en';
+const LANGUAGES = { en:'English', es:'Español', de:'Deutsch', fr:'Français', pt:'Português', it:'Italiano', nl:'Nederlands', ja:'日本語', zh:'中文', ar:'العربية', hi:'हिन्दी' };
+let _currentRenderer = null;       // re-runs the active screen when the viewer switches language
+const _transCache = {};            // key: "src>tgt:text" -> translation (reused across questions)
+
+async function translateTexts(texts){
+  if (!Array.isArray(texts) || !texts.length || LANG === DECK_LANG) return (texts||[]).slice();
+  const out = texts.slice();
+  const need = [], needIdx = [];
+  texts.forEach((s,i) => {
+    const str = String(s == null ? '' : s);
+    if (!str.trim()) { out[i] = str; return; }
+    const k = DECK_LANG+'>'+LANG+':'+str;
+    if (_transCache[k] != null) out[i] = _transCache[k];
+    else { need.push(str); needIdx.push(i); }
+  });
+  if (need.length){
+    try {
+      const r = await fetch('/api/translate', { method:'POST', headers:{'content-type':'application/json'},
+        body: JSON.stringify({ texts: need, target: LANG, source: DECK_LANG }) });
+      const d = await r.json().catch(()=>null);
+      const tr = (d && Array.isArray(d.translations)) ? d.translations : need;
+      need.forEach((s,j) => { const v = (tr[j] != null) ? String(tr[j]) : s; _transCache[DECK_LANG+'>'+LANG+':'+s] = v; out[needIdx[j]] = v; });
+    } catch(e){ need.forEach((s,j)=>{ out[needIdx[j]] = s; }); }  // never block the audience on a translation failure
+  }
+  return out;
+}
+
+// Translate a question's visible text + option labels in place (safe: indices unchanged).
+async function translateQuestion(q){
+  if (!q || LANG === DECK_LANG) return q;
+  const opts = q.options || [];
+  const tr = await translateTexts([ q.text || q.front || '', ...opts.map(o => o.text || '') ]);
+  if (q.front != null) q.front = tr[0]; else q.text = tr[0];
+  opts.forEach((o,i) => { o.text = tr[i+1]; });
+  return q;
+}
+
+// Fixed globe selector — lives outside #app so render() never wipes it.
+function mountLangSelector(){
+  if (document.getElementById('viewerLangWrap')) { const s=document.getElementById('viewerLangSel'); if(s) s.value=LANG; return; }
+  const wrap = document.createElement('div');
+  wrap.id = 'viewerLangWrap';
+  wrap.style.cssText = 'position:fixed;top:10px;right:10px;z-index:9999;';
+  const sel = document.createElement('select');
+  sel.id = 'viewerLangSel';
+  sel.setAttribute('aria-label','Choose your language');
+  sel.style.cssText = 'background:rgba(13,13,24,0.92);color:#fff;border:1px solid rgba(255,255,255,0.22);border-radius:9px;padding:6px 9px;font-size:13px;font-family:inherit;cursor:pointer;-webkit-appearance:none;appearance:none;';
+  Object.keys(LANGUAGES).forEach(code => {
+    const o = document.createElement('option'); o.value = code; o.textContent = '🌐 ' + LANGUAGES[code];
+    if (code === LANG) o.selected = true; sel.appendChild(o);
+  });
+  sel.addEventListener('change', () => setViewerLang(sel.value));
+  wrap.appendChild(sel); document.body.appendChild(wrap);
+}
+function setViewerLang(code){
+  if (!LANGUAGES[code]) return;
+  LANG = code; try { localStorage.setItem('ql_viewer_lang', code); } catch(e){}
+  if (typeof _currentRenderer === 'function') _currentRenderer();
+}
+
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
 async function bootApp() {
   if (!SESSION) {
@@ -241,8 +307,14 @@ async function bootApp() {
     return;
   }
 
-  // Load the deck's language first so even the name screen is localized.
-  try { const s = await db.ref(`quiz_builder/${SESSION}/language`).get(); if (s.exists() && s.val()) LANG = s.val(); } catch(e) {}
+  // Load the deck's (source) language first.
+  try { const s = await db.ref(`quiz_builder/${SESSION}/language`).get(); if (s.exists() && s.val()) DECK_LANG = String(s.val()); } catch(e) {}
+
+  // The viewer reads in: their saved choice → their browser language (if supported) → the deck language.
+  let saved = null; try { saved = localStorage.getItem('ql_viewer_lang'); } catch(e){}
+  const navL = (navigator.language || 'en').slice(0,2).toLowerCase();
+  LANG = (saved && LANGUAGES[saved]) ? saved : (LANGUAGES[navL] ? navL : DECK_LANG);
+  mountLangSelector();
 
   // Restore identity from localStorage (persists across tabs / fresh QR scans within the same presentation)
   const storedId   = localStorage.getItem(`ql_pid_${SESSION}`);
@@ -258,6 +330,7 @@ async function bootApp() {
 
 // ─── NAME ENTRY ───────────────────────────────────────────────────────────────
 function showNameEntry() {
+  _currentRenderer = showNameEntry;
   render(`
     <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</div>
     <h1>${t('enterName','Enter Your Name')}</h1>
@@ -288,7 +361,8 @@ function joinSession() {
 
 // ─── LOAD QUESTION ────────────────────────────────────────────────────────────
 async function loadQuestion() {
-  render(`<div class="spinner"></div><p class="center" style="color:var(--muted);font-size:13px;">Loading...</p>`);
+  _currentRenderer = loadQuestion;
+  render(`<div class="spinner"></div><p class="center" style="color:var(--muted);font-size:13px;">${t('loading','Loading...')}</p>`);
 
   // Load question definition from quiz_builder
   const qSnap = await db.ref(`quiz_builder/${SESSION}/questions/${Q_INDEX}`).get();
@@ -322,6 +396,7 @@ async function loadQuestion() {
 
   answered = false;
   answerStartTime = Date.now();
+  if (LANG !== DECK_LANG) await translateQuestion(questionData);  // viewer reads in their own language
   showQuestion(questionData);
 }
 
@@ -359,7 +434,7 @@ function showQuestion(q) {
   let body = '';
   if (isText) {
     body = `
-      <textarea id="txtAns" placeholder="Type your answer here..."></textarea>
+      <textarea id="txtAns" placeholder="${t('typeAnswer','Type your answer here...')}"></textarea>
       <button class="btn btn-primary" onclick="submitAnswer()">${t('submitAnswer','Submit Answer')}</button>`;
   } else if (isRating) {
     const max = q.ratingMax || 5;
@@ -372,7 +447,7 @@ function showQuestion(q) {
       <button class="btn btn-primary" id="submitBtn" onclick="submitAnswer()" disabled>${t('submitRating','Submit Rating')}</button>`;
   } else {
     body = `
-      ${isMulti ? '<p class="multi-hint">✓ Select all that apply</p>' : ''}
+      ${isMulti ? `<p class="multi-hint">${t('selectAll','✓ Select all that apply')}</p>` : ''}
       <div class="options-grid">
         ${(q.options||[]).map((opt,i) => {
           const hasImg = opt.img && opt.img.trim();
@@ -603,7 +678,8 @@ let formProduct     = 'survey'; // survey | quiz | study (from quiz_builder/<cod
 const SURVEY_LETTERS = ['A','B','C','D','E','F','G','H'];
 
 async function loadSurvey() {
-  render(`<div class="spinner"></div><p class="center" style="color:var(--muted);font-size:13px;">Loading…</p>`);
+  _currentRenderer = loadSurvey;
+  render(`<div class="spinner"></div><p class="center" style="color:var(--muted);font-size:13px;">${t('loading','Loading…')}</p>`);
   let qs = [];
   try {
     const snap = await db.ref(`quiz_builder/${SESSION}/questions`).get();
@@ -618,6 +694,9 @@ async function loadSurvey() {
     formProduct = ptSnap.exists() ? ptSnap.val() : 'survey';
   } catch(e) { formProduct = 'survey'; }
   formIsQuiz = formProduct === 'quiz';
+
+  // Translate the whole set into the viewer's language (display-only; indices unchanged).
+  if (LANG !== DECK_LANG) { for (const q of surveyQuestions) { await translateQuestion(q); } }
 
   if (surveyQuestions.length === 0) {
     const noun = formProduct === 'study' ? 'study set' : formProduct;
@@ -1079,6 +1158,7 @@ let qaRef = null;
 function escapeQa(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 function loadQA(){
+  _currentRenderer = loadQA;
   render(`
     ${logoMarkup()}
     <h1 style="margin-bottom:4px;">${t('qaTitle','Audience Q&amp;A')}</h1>
