@@ -3,15 +3,21 @@
 //
 // Turns an imagePrompt (from /api/polly) into a picture for the question slide.
 //
-// PROVIDER PRIORITY (best price/quality first):
-//   1) fal.ai FLUX (FAL_KEY)  — ~$0.003/image on flux/schnell, near-instant, great quality
-//   2) OpenAI gpt-image-1 (OPENAI_API_KEY) — fallback (~$0.04/image)
+// PROVIDER PRIORITY (local first — same philosophy as Polly's text engine):
+//   1) LOCAL image server (LOCAL_IMAGE_URL) — your own Mac, $0 marginal cost. Must
+//      speak the OpenAI images format (POST {url}/images/generations). FLUX.1-dev
+//      run locally is on par with OpenAI. See the setup note at the bottom.
+//   2) fal.ai FLUX (FAL_KEY) — cheap cloud (~$0.003 schnell / ~$0.025 dev), great quality
+//   3) OpenAI gpt-image-1 (OPENAI_API_KEY) — last-resort fallback (~$0.04+/image)
 //
 // VERCEL ENVIRONMENT VARIABLES:
-//   FAL_KEY          = <fal.ai key>            (RECOMMENDED primary — cheapest + best)
-//   FAL_IMAGE_MODEL  = fal-ai/flux/schnell     (optional; use fal-ai/flux/dev for higher quality)
-//   OPENAI_API_KEY   = sk-...                   (optional cloud fallback)
-//   NEXT_PUBLIC_APP_URL = https://app.pollslide.com  (optional, for CORS)
+//   LOCAL_IMAGE_URL   = https://img.yourdomain.com/v1  (optional — your Mac tunnel; OpenAI-images compatible)
+//   LOCAL_IMAGE_MODEL = flux.1-dev                     (optional)
+//   FAL_KEY           = <fal.ai key>                   (recommended cloud primary — cheap + excellent)
+//   FAL_IMAGE_MODEL   = fal-ai/flux/schnell            (optional; use fal-ai/flux/dev for higher quality)
+//   OPENAI_API_KEY    = sk-...                          (optional cloud fallback)
+//   CF_ACCESS_CLIENT_ID / CF_ACCESS_CLIENT_SECRET       (locks the Mac tunnel, like Polly)
+//   NEXT_PUBLIC_APP_URL = https://app.pollslide.com    (optional, for CORS)
 //
 // Returns: { source, image: "data:image/...;base64,...." } — a base64 data URI so it
 // renders instantly; the client uploads it to Firebase Storage for a small, stable URL.
@@ -20,6 +26,43 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_IMAGE_URL = 'https://api.openai.com/v1/images/generations';
 const FAL_KEY   = process.env.FAL_KEY || '';
 const FAL_MODEL = process.env.FAL_IMAGE_MODEL || 'fal-ai/flux/schnell';
+
+const LOCAL_IMAGE_URL   = process.env.LOCAL_IMAGE_URL || '';   // empty = skip local, go to fal/OpenAI
+const LOCAL_IMAGE_MODEL = process.env.LOCAL_IMAGE_MODEL || 'flux.1-dev';
+const LOCAL_IMAGE_TIMEOUT_MS = 45000;  // local FLUX can take a while; still under the function budget
+
+// Cloudflare Access service-token headers — same as Polly, so the Mac tunnel
+// only answers PollSlide's own server.
+const CF_ACCESS_HEADERS = (process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACCESS_CLIENT_SECRET)
+  ? { 'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID, 'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET }
+  : {};
+
+// Local FLUX (or any OpenAI-images-compatible server, e.g. LocalAI) on your Mac.
+async function localImage(prompt, size) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LOCAL_IMAGE_TIMEOUT_MS);
+  try {
+    const r = await fetch(`${LOCAL_IMAGE_URL}/images/generations`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer local', ...CF_ACCESS_HEADERS },
+      body: JSON.stringify({ model: LOCAL_IMAGE_MODEL, prompt, size, n: 1, response_format: 'b64_json' }),
+      signal: controller.signal,
+    });
+    if (!r.ok) { const d = await r.text().catch(()=> ''); throw new Error(`HTTP ${r.status} ${d.slice(0,160)}`); }
+    const data = await r.json();
+    const item = data.data && data.data[0];
+    if (item && item.b64_json) return `data:image/png;base64,${item.b64_json}`;
+    if (item && item.url) {                                  // some servers return a URL instead
+      const img = await fetch(item.url);
+      const buf = Buffer.from(await img.arrayBuffer());
+      const ct  = img.headers.get('content-type') || 'image/png';
+      return `data:${ct};base64,${buf.toString('base64')}`;
+    }
+    throw new Error('local image server returned no image');
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 // fal.ai FLUX — primary generator. Fetches the result and returns a data URI so the
 // response format stays identical regardless of provider.
@@ -60,8 +103,8 @@ module.exports = async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST')    return res.status(405).json({ error: 'POST only' });
 
-  if (!FAL_KEY && !OPENAI_API_KEY) {
-    return res.status(500).json({ error: 'No image generator configured. Add FAL_KEY (recommended) or OPENAI_API_KEY in Vercel → Settings → Environment Variables.' });
+  if (!LOCAL_IMAGE_URL && !FAL_KEY && !OPENAI_API_KEY) {
+    return res.status(500).json({ error: 'No image generator configured. Add LOCAL_IMAGE_URL (your Mac), FAL_KEY (cheap cloud), or OPENAI_API_KEY in Vercel → Settings → Environment Variables.' });
   }
 
   const body   = req.body || {};
@@ -69,7 +112,17 @@ module.exports = async function handler(req, res) {
   const size   = ['1024x1024', '1024x1536', '1536x1024', 'auto'].includes(body.size) ? body.size : '1024x1024';
   if (!prompt) return res.status(400).json({ error: 'Missing "prompt".' });
 
-  // 1) Try fal.ai FLUX first — cheapest + best quality.
+  // 1) Try the local Mac first — $0 marginal cost (like Polly's text engine).
+  if (LOCAL_IMAGE_URL) {
+    try {
+      const image = await localImage(prompt, size);
+      return res.status(200).json({ source: 'local', image });
+    } catch (err) {
+      console.warn('Polly image: local server failed → fal/OpenAI fallback:', err.message);
+    }
+  }
+
+  // 2) Try fal.ai FLUX — cheap cloud, excellent quality.
   if (FAL_KEY) {
     try {
       const image = await falImage(prompt, size);
@@ -79,8 +132,8 @@ module.exports = async function handler(req, res) {
     }
   }
 
-  // 2) Fall back to OpenAI.
-  if (!OPENAI_API_KEY) return res.status(502).json({ error: 'fal.ai unavailable and no OpenAI key set.' });
+  // 3) Fall back to OpenAI.
+  if (!OPENAI_API_KEY) return res.status(502).json({ error: 'No working image provider (local + fal unavailable and no OpenAI key set).' });
   try {
     const image = await openaiImage(prompt, size);
     return res.status(200).json({ source: 'openai', image });

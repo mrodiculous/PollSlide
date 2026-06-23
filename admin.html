@@ -927,16 +927,17 @@ async function loadLegalLog(){
 function renderAI(){
   const users=Object.values(allUsers);
   const totalAIUsed=users.reduce((n,u)=>n+(u.aiUsedThisMonth||0),0);
-  const proUsers=users.filter(u=>u.tier==='pro');
-  const teamUsers=users.filter(u=>u.tier==='team');
-  const proUsed=proUsers.reduce((n,u)=>n+(u.aiUsedThisMonth||0),0);
-  const teamUsed=teamUsers.reduce((n,u)=>n+(u.aiUsedThisMonth||0),0);
-  const proMax=proUsers.length*20, teamMax=teamUsers.length*100;
+  const nearQuota=users.filter(u=>{const t=TIER_CONFIG[u.tier||'free']||TIER_CONFIG.free;return t.aiMonthly>0&&(u.aiUsedThisMonth||0)/t.aiMonthly>=0.8;}).length;
   document.getElementById('content').innerHTML=`
   <div class="stat-grid" style="margin-bottom:16px;">
     <div class="stat"><div class="stat-val">${totalAIUsed}</div><div class="stat-label">AI uses this month</div></div>
-    <div class="stat"><div class="stat-val">${proUsed}</div><div class="stat-label">Pro AI uses</div><div class="stat-sub">${proMax?Math.round(proUsed/proMax*100):0}% of quota</div></div>
-    <div class="stat"><div class="stat-val">${teamUsed}</div><div class="stat-label">Team AI uses</div><div class="stat-sub">${teamMax?Math.round(teamUsed/teamMax*100):0}% of quota</div></div>
+    <div class="stat"><div class="stat-val">${nearQuota}</div><div class="stat-label">Users ≥80% quota</div></div>
+    <div class="stat"><div class="stat-val">~$${(totalAIUsed*0.02).toFixed(2)}</div><div class="stat-label">Max cloud cost</div><div class="stat-sub">$0 when local serves</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px;">
+    <div class="card-hd"><h2>AI providers &amp; live status</h2><button class="btn btn-xs btn-ghost" onclick="loadAIStatus()">↻ Refresh</button></div>
+    <div id="aiStatus" style="padding:14px;"><div class="loader">Checking providers…</div></div>
   </div>
 
   <div class="card" style="margin-bottom:14px;">
@@ -951,12 +952,11 @@ function renderAI(){
   </div>
 
   <div class="card" style="margin-bottom:14px;">
-    <div class="card-hd"><h2>Self-hosting AI — decision log</h2></div>
+    <div class="card-hd"><h2>How AI is routed (cost model)</h2></div>
     <div style="padding:14px;font-size:13px;line-height:1.7;color:var(--muted);">
-      <p style="margin-bottom:10px;"><strong style="color:var(--text);">Current approach:</strong> Anthropic API (Claude) with per-tier monthly quotas. API cost per generation: ~$0.01–0.03.</p>
-      <p style="margin-bottom:10px;"><strong style="color:var(--text);">Self-hosting break-even:</strong> GPU server (A10G 24GB): ~$350–600/month. Break-even: ~1,500–2,000 Pro subscribers at current prices.</p>
-      <p style="margin-bottom:10px;"><strong style="color:var(--text);">Recommendation:</strong> API until ~1,500 paying users, then evaluate. Quotas below keep costs predictable now.</p>
-      <p><strong style="color:var(--accent3);">Estimated API cost this month:</strong> ~$${(totalAIUsed * 0.02).toFixed(2)} (at $0.02 avg/call)</p>
+      <p style="margin-bottom:10px;"><strong style="color:var(--text);">Current approach:</strong> your own Mac (Ollama / local FLUX, via the Cloudflare tunnel) serves first at <strong style="color:var(--accent3);">$0 marginal cost</strong>; the cloud is only a fallback when the Mac is asleep/unreachable. Polly text &amp; live translation use the local LLM → OpenAI; images use local FLUX → fal.ai → OpenAI; summaries/grading use Claude → OpenAI.</p>
+      <p style="margin-bottom:10px;"><strong style="color:var(--text);">Cloud fallback cost:</strong> text ~$0.01–0.02/call (OpenAI gpt-4o-mini); images ~$0.003 (fal.ai schnell) to ~$0.04+ (OpenAI). The figure above is the <em>worst case</em> if every call went cloud.</p>
+      <p><strong style="color:var(--text);">Keep local serving:</strong> if the status above shows the Mac "asleep", wake the tunnel (see MANUAL-CHECKLIST §7b) — otherwise you pay cloud rates. Per-tier quotas below still cap usage regardless of provider.</p>
     </div>
   </div>
 
@@ -973,6 +973,36 @@ function renderAI(){
       }).join('')||'<tr><td colspan="5" class="empty">No AI usage yet</td></tr>'}
     </tbody></table>
   </div>`;
+  loadAIStatus();
+}
+
+// Live provider health — calls the secret-free /api/ai-status endpoint.
+async function loadAIStatus(){
+  const el=document.getElementById('aiStatus'); if(!el) return;
+  el.innerHTML='<div class="loader">Checking providers…</div>';
+  let s;
+  try { const r=await fetch('/api/ai-status'); s=await r.json(); if(!s||!s.text) throw new Error('bad'); }
+  catch(e){ el.innerHTML='<p style="color:var(--accent2);font-size:13px;">Could not reach <code>/api/ai-status</code>. Deploy the latest build, then click Refresh.</p>'; return; }
+  const pill=(bg,fg,txt)=>`<span style="display:inline-block;padding:2px 9px;border-radius:100px;font-size:11px;font-weight:600;background:${bg};color:${fg};">${txt}</span>`;
+  const stat=(p)=>{
+    if(!p.configured) return pill('rgba(148,163,184,.15)','#94a3b8','not set');
+    if(p.reachable===undefined) return pill('rgba(34,197,94,.15)','#22c55e','configured');
+    return p.reachable
+      ? pill('rgba(34,197,94,.15)','#22c55e','● awake'+(p.ms?(' '+p.ms+'ms'):''))
+      : pill('rgba(239,68,68,.15)','#ef4444','● '+(p.error==='timeout'?'asleep (timeout)':'unreachable'));
+  };
+  const row=(name,p,desc)=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);">
+    <div style="min-width:0;"><strong style="color:var(--text);">${name}</strong> <span style="color:var(--muted);font-size:12px;">${desc}${p.model?(' · '+p.model):''}</span></div>${stat(p)}</div>`;
+  const grp=(emoji,title,chain,rows)=>`<div style="margin-bottom:14px;">
+    <div style="font-weight:600;color:var(--text);margin-bottom:2px;">${emoji} ${title} <span style="color:var(--muted);font-size:12px;font-weight:400;">(${chain})</span></div>${rows}</div>`;
+  el.innerHTML=
+    grp('📝','Polly text + live translation','local → OpenAI',
+      row('Local LLM (your Mac)',s.text.local,'tries first')+row('OpenAI',s.text.openai,'fallback'))+
+    grp('🧠','AI summaries + grading','Claude → OpenAI',
+      row('Claude (Anthropic)',s.summaries.claude,'tries first')+row('OpenAI',s.summaries.openai,'fallback'))+
+    grp('🖼️','Question images','local → fal.ai → OpenAI',
+      row('Local FLUX (your Mac)',s.images.local,'tries first')+row('fal.ai FLUX',s.images.fal,'cheap cloud')+row('OpenAI gpt-image-1',s.images.openai,'last resort'))+
+    `<p style="margin-top:4px;font-size:12px;color:var(--muted);">Cloudflare Access lock: <strong style="color:${s.cfAccess?'#22c55e':'#ef4444'};">${s.cfAccess?'on':'off'}</strong> · checked ${new Date(s.checkedAt).toLocaleTimeString()}</p>`;
 }
 
 function editAIQuota(tier,current){
