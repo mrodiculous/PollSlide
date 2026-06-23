@@ -5,43 +5,62 @@
 //   • summarize_responses — turn open-ended answers into themes + sentiment + a blurb
 //   • grade              — score free-text answers against an expected answer
 //
-// PROVIDER (best-for-the-job first):
-//   1) Claude  (ANTHROPIC_API_KEY) — recommended; great at summarizing/grading nuance
-//   2) OpenAI  (OPENAI_API_KEY)    — fallback
+// PROVIDER (local-first — same scheme as Polly + translation):
+//   1) LOCAL LLM (LOCAL_LLM_URL) — your Mac (Ollama via the Cloudflare tunnel), $0
+//   2) OpenAI    (OPENAI_API_KEY) — fallback when the Mac is asleep/unreachable
 //
-// VERCEL ENV: ANTHROPIC_API_KEY (recommended) or OPENAI_API_KEY; optional
-//   ANTHROPIC_MODEL (default claude-haiku-4-5-20251001), OPENAI_TEXT_MODEL (gpt-4o-mini),
-//   NEXT_PUBLIC_APP_URL (CORS).
+// VERCEL ENV: LOCAL_LLM_URL (+ CF_ACCESS_CLIENT_ID/SECRET) and/or OPENAI_API_KEY; optional
+//   LOCAL_LLM_MODEL (default qwen3:14b), OPENAI_TEXT_MODEL (gpt-4o-mini), NEXT_PUBLIC_APP_URL (CORS).
 
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const ANTHROPIC_MODEL   = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001';
-const OPENAI_API_KEY    = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL      = process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini';
+const OPENAI_API_KEY  = process.env.OPENAI_API_KEY;
+const OPENAI_MODEL    = process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini';
+const OPENAI_BASE     = 'https://api.openai.com/v1';
 
-async function callClaude(system, user, maxTokens) {
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'content-type':'application/json', 'x-api-key':ANTHROPIC_API_KEY, 'anthropic-version':'2023-06-01' },
-    body: JSON.stringify({ model: ANTHROPIC_MODEL, max_tokens: maxTokens, system, messages: [{ role:'user', content: user }] }),
-  });
-  const d = await r.json();
-  if (!r.ok) throw new Error(d.error?.message || `HTTP ${r.status}`);
-  return (d.content && d.content[0] && d.content[0].text) || '';
-}
-async function callOpenAI(system, user, maxTokens) {
-  const r = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'content-type':'application/json', 'authorization':'Bearer '+OPENAI_API_KEY },
-    body: JSON.stringify({ model: OPENAI_MODEL, max_tokens: maxTokens, messages: [{ role:'system', content: system }, { role:'user', content: user }] }),
-  });
-  const d = await r.json();
-  if (!r.ok) throw new Error(d.error?.message || `HTTP ${r.status}`);
-  return (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || '';
+const LOCAL_LLM_URL   = process.env.LOCAL_LLM_URL || '';
+const LOCAL_LLM_MODEL = process.env.LOCAL_LLM_MODEL || 'qwen3:14b';
+
+const CF_ACCESS_HEADERS = (process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACCESS_CLIENT_SECRET)
+  ? { 'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID, 'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET }
+  : {};
+
+const LOCAL_TIMEOUT_MS = 30000;  // summaries/grading can be long; give the Mac room
+const CLOUD_TIMEOUT_MS = 20000;
+
+// One helper for BOTH local Ollama and OpenAI — identical request shape (mirrors Polly).
+async function callChat({ baseURL, apiKey, model, system, user, maxTokens, timeoutMs, extraHeaders = {} }) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const r = await fetch(`${baseURL}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'Authorization':`Bearer ${apiKey}`, ...extraHeaders },
+      body: JSON.stringify({
+        model,
+        max_tokens: maxTokens,
+        temperature: 0.4,
+        response_format: { type: 'json_object' },
+        messages: [{ role:'system', content: system }, { role:'user', content: user }],
+      }),
+      signal: controller.signal,
+    });
+    if (!r.ok) { const d = await r.text().catch(()=> ''); throw new Error(`HTTP ${r.status} ${d.slice(0,160)}`); }
+    const d = await r.json();
+    return d.choices?.[0]?.message?.content || '';
+  } finally {
+    clearTimeout(timer);
+  }
 }
 async function callLLM(system, user, maxTokens) {
-  if (ANTHROPIC_API_KEY) return { text: await callClaude(system, user, maxTokens), source:'claude' };
-  if (OPENAI_API_KEY)    return { text: await callOpenAI(system, user, maxTokens), source:'openai' };
-  throw { code:500, msg:'No AI configured. Add ANTHROPIC_API_KEY (recommended) or OPENAI_API_KEY in Vercel → Settings → Environment Variables.' };
+  // 1) Local Mac first.
+  if (LOCAL_LLM_URL) {
+    try {
+      const text = await callChat({ baseURL: LOCAL_LLM_URL, apiKey:'ollama', model: LOCAL_LLM_MODEL, system, user, maxTokens, timeoutMs: LOCAL_TIMEOUT_MS, extraHeaders: CF_ACCESS_HEADERS });
+      if (text) return { text, source:'local' };
+    } catch (err) { console.warn('ai.js: local LLM unreachable → OpenAI fallback:', err.message); }
+  }
+  // 2) OpenAI fallback.
+  if (OPENAI_API_KEY) return { text: await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_MODEL, system, user, maxTokens, timeoutMs: CLOUD_TIMEOUT_MS }), source:'openai' };
+  throw { code:500, msg:'No AI configured. Add LOCAL_LLM_URL (your Mac) or OPENAI_API_KEY in Vercel → Settings → Environment Variables.' };
 }
 function extractJSON(t) {
   if (!t) return null;

@@ -954,7 +954,7 @@ function renderAI(){
   <div class="card" style="margin-bottom:14px;">
     <div class="card-hd"><h2>How AI is routed (cost model)</h2></div>
     <div style="padding:14px;font-size:13px;line-height:1.7;color:var(--muted);">
-      <p style="margin-bottom:10px;"><strong style="color:var(--text);">Current approach:</strong> your own Mac (Ollama / local FLUX, via the Cloudflare tunnel) serves first at <strong style="color:var(--accent3);">$0 marginal cost</strong>; the cloud is only a fallback when the Mac is asleep/unreachable. Polly text &amp; live translation use the local LLM → OpenAI; images use local FLUX → fal.ai → OpenAI; summaries/grading use Claude → OpenAI.</p>
+      <p style="margin-bottom:10px;"><strong style="color:var(--text);">Current approach:</strong> your own Mac (Ollama / local FLUX, via the Cloudflare tunnel) serves first at <strong style="color:var(--accent3);">$0 marginal cost</strong>; the cloud is only a fallback when the Mac is asleep/unreachable. everything uses the same scheme: Polly text, live translation, and summaries/grading all run local LLM → OpenAI; images run local FLUX → fal.ai → OpenAI.</p>
       <p style="margin-bottom:10px;"><strong style="color:var(--text);">Cloud fallback cost:</strong> text ~$0.01–0.02/call (OpenAI gpt-4o-mini); images ~$0.003 (fal.ai schnell) to ~$0.04+ (OpenAI). The figure above is the <em>worst case</em> if every call went cloud.</p>
       <p><strong style="color:var(--text);">Keep local serving:</strong> if the status above shows the Mac "asleep", wake the tunnel (see MANUAL-CHECKLIST §7b) — otherwise you pay cloud rates. Per-tier quotas below still cap usage regardless of provider.</p>
     </div>
@@ -998,8 +998,8 @@ async function loadAIStatus(){
   el.innerHTML=
     grp('📝','Polly text + live translation','local → OpenAI',
       row('Local LLM (your Mac)',s.text.local,'tries first')+row('OpenAI',s.text.openai,'fallback'))+
-    grp('🧠','AI summaries + grading','Claude → OpenAI',
-      row('Claude (Anthropic)',s.summaries.claude,'tries first')+row('OpenAI',s.summaries.openai,'fallback'))+
+    grp('🧠','AI summaries + grading','local → OpenAI',
+      row('Local LLM (your Mac)',s.summaries.local,'tries first')+row('OpenAI',s.summaries.openai,'fallback'))+
     grp('🖼️','Question images','local → fal.ai → OpenAI',
       row('Local FLUX (your Mac)',s.images.local,'tries first')+row('fal.ai FLUX',s.images.fal,'cheap cloud')+row('OpenAI gpt-image-1',s.images.openai,'last resort'))+
     `<p style="margin-top:4px;font-size:12px;color:var(--muted);">Cloudflare Access lock: <strong style="color:${s.cfAccess?'#22c55e':'#ef4444'};">${s.cfAccess?'on':'off'}</strong> · checked ${new Date(s.checkedAt).toLocaleTimeString()}</p>`;

@@ -10,8 +10,6 @@
 
 const OPENAI_API_KEY    = process.env.OPENAI_API_KEY;
 const OPENAI_TEXT_MODEL = process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini';
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-const ANTHROPIC_MODEL   = process.env.ANTHROPIC_MODEL || 'claude-haiku-4-5-20251001';
 
 const LOCAL_LLM_URL     = process.env.LOCAL_LLM_URL || '';
 const LOCAL_LLM_MODEL   = process.env.LOCAL_LLM_MODEL || 'qwen3:14b';
@@ -58,10 +56,10 @@ module.exports = async function handler(req, res) {
       local:  { configured: !!LOCAL_LLM_URL, model: LOCAL_LLM_MODEL, ...localLLM },
       openai: { configured: !!OPENAI_API_KEY, model: OPENAI_TEXT_MODEL },
     },
-    // AI response summaries + free-text grading (api/ai.js).
+    // AI response summaries + free-text grading (api/ai.js) — now local-first too.
     summaries: {
-      order: ['claude', 'openai'],
-      claude: { configured: !!ANTHROPIC_API_KEY, model: ANTHROPIC_MODEL },
+      order: ['local', 'openai'],
+      local:  { configured: !!LOCAL_LLM_URL, model: LOCAL_LLM_MODEL, ...localLLM },
       openai: { configured: !!OPENAI_API_KEY, model: OPENAI_TEXT_MODEL },
     },
     // Question images (api/polly-image.js).
