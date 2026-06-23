@@ -583,7 +583,9 @@ async function submitToDb(answer) {
       q.correctAnswer !== null && q.correctAnswer !== undefined) {
     if (q.type === 'multiple_choice') {
       const a = Array.isArray(answer) ? answer[0] : answer;
-      isCorrect = a === q.correctAnswer;
+      // Coerce both sides — correctAnswer can round-trip through Firebase as a string
+      // (e.g. "0"), and strict === would then score a correct answer as wrong.
+      isCorrect = Number(a) === Number(q.correctAnswer);
     } else {
       // Partial credit: each correct selection earns a fraction; no bonus for wrong picks
       const correctSet = new Set(Array.isArray(q.correctAnswer) ? q.correctAnswer.map(Number) : [Number(q.correctAnswer)]);
@@ -807,7 +809,7 @@ function surveyComputeCorrect(q, answer) {
   if (q.correctAnswer === null || q.correctAnswer === undefined) return null; // ungraded (survey)
   if (q.type === 'multiple_choice') {
     const a = Array.isArray(answer) ? answer[0] : answer;
-    return a === q.correctAnswer;
+    return Number(a) === Number(q.correctAnswer);   // coerce: correctAnswer may be a string from Firebase
   }
   const correctSet = new Set(Array.isArray(q.correctAnswer) ? q.correctAnswer.map(Number) : [Number(q.correctAnswer)]);
   const givenArr   = Array.isArray(answer) ? answer.map(Number) : [];

@@ -4332,13 +4332,18 @@ function renderEditor(idx) {
 
         <div class="form-row" style="margin:0">
           <label>Question Media <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(optional image, GIF or video — shows above the question)</span></label>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <input type="text" placeholder="Paste URL or upload →" value="${(q.image||'').replace(/"/g,'&quot;')}" oninput="updateQ(${idx},'image',this.value)" style="font-size:13px;">
-            <select id="aiImgStyle_${idx}" title="AI image style" style="flex-shrink:0;font-size:12px;padding:7px 6px;border-radius:7px;">${aiStyleOptions()}</select>
-            <button class="btn btn-ghost btn-sm" id="aiImgBtn_${idx}" onclick="generateQImage(${idx})" title="Generate an image with AI from this question" style="flex-shrink:0;padding:7px 12px;color:var(--accent);">✨ AI image</button>
+          <!-- Row 1: bring your own — URL / upload / GIF -->
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input type="text" placeholder="Paste an image, GIF or video URL" value="${(q.image||'').replace(/"/g,'&quot;')}" oninput="updateQ(${idx},'image',this.value)" style="font-size:13px;flex:1;min-width:180px;">
             <button class="btn btn-ghost btn-sm" onclick="uploadQImg(${idx})" title="Upload image, GIF or video" style="flex-shrink:0;padding:7px 12px;">⬆ Upload</button>
             <button class="btn btn-ghost btn-sm" onclick="openGifPicker(function(url){updateQ(${idx},'image',url);renderEditor(${idx});})" title="Search GIFs" style="flex-shrink:0;padding:7px 12px;">🔍 GIF</button>
             ${q.image&&q.image.trim()?(isVideoUrl(q.image)?`<video src="${q.image}" style="width:40px;height:40px;border-radius:7px;object-fit:cover;flex-shrink:0;" muted></video>`:`<img src="${q.image}" style="width:40px;height:40px;border-radius:7px;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">`):''}
+          </div>
+          <!-- Row 2: or generate one with AI (style picker) -->
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+            <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;">✨ Generate with AI</span>
+            <select id="aiImgStyle_${idx}" title="AI image style" style="flex-shrink:0;font-size:12px;padding:7px 6px;border-radius:7px;">${aiStyleOptions()}</select>
+            <button class="btn btn-ghost btn-sm" id="aiImgBtn_${idx}" onclick="generateQImage(${idx})" title="Generate an image with AI from this question" style="flex-shrink:0;padding:7px 12px;color:var(--accent);">Generate image</button>
           </div>
           ${q.image&&isVideoUrl(q.image)?renderVideoOpts(idx,'q')+'':''}
         </div>
@@ -4578,7 +4583,7 @@ async function generateQImage(idx) {
     questions[idx].image = url; saveBack(); renderEditor(idx);
     toast('Image generated! ✨', 'success');
   } catch (e) {
-    if (btn) { btn.disabled = false; btn.textContent = '✨ AI image'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Generate image'; }
     const msg = /config|not set|FAL_KEY|No image/i.test(e.message)
       ? 'Image AI isn’t set up yet — add FAL_KEY in Vercel (see MANUAL-CHECKLIST).'
       : 'Could not generate image: ' + e.message;
