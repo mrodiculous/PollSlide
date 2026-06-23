@@ -992,7 +992,7 @@ async function loadAIStatus(){
       : pill('rgba(239,68,68,.15)','#ef4444','● '+(p.error==='timeout'?'asleep (timeout)':'unreachable'));
   };
   const row=(name,p,desc)=>`<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);">
-    <div style="min-width:0;"><strong style="color:var(--text);">${name}</strong> <span style="color:var(--muted);font-size:12px;">${desc}${p.model?(' · '+p.model):''}</span></div>${stat(p)}</div>`;
+    <div style="min-width:0;"><strong style="color:var(--text);">${name}</strong> <span style="color:var(--muted);font-size:12px;">${desc}${p.model?(' · '+p.model):''}</span>${p.warning?`<div style="color:#ef4444;font-size:11px;margin-top:2px;">⚠️ ${p.warning}</div>`:''}</div>${stat(p)}</div>`;
   const grp=(emoji,title,chain,rows)=>`<div style="margin-bottom:14px;">
     <div style="font-weight:600;color:var(--text);margin-bottom:2px;">${emoji} ${title} <span style="color:var(--muted);font-size:12px;font-weight:400;">(${chain})</span></div>${rows}</div>`;
   el.innerHTML=

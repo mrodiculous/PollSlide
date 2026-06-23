@@ -17,7 +17,9 @@ const LOCAL_LLM_MODEL   = process.env.LOCAL_LLM_MODEL || 'qwen3:14b';
 const LOCAL_IMAGE_URL   = process.env.LOCAL_IMAGE_URL || '';
 const LOCAL_IMAGE_MODEL = process.env.LOCAL_IMAGE_MODEL || 'flux.1-dev';
 const FAL_KEY           = process.env.FAL_KEY || '';
-const FAL_MODEL         = process.env.FAL_IMAGE_MODEL || 'fal-ai/flux/schnell';
+const FAL_MODEL_RAW     = (process.env.FAL_IMAGE_MODEL || '').trim();
+const FAL_MODEL_OK      = !FAL_MODEL_RAW || FAL_MODEL_RAW.startsWith('fal-ai/');
+const FAL_MODEL         = FAL_MODEL_RAW.startsWith('fal-ai/') ? FAL_MODEL_RAW : 'fal-ai/flux/schnell';
 
 const CF_ACCESS_HEADERS = (process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACCESS_CLIENT_SECRET)
   ? { 'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID, 'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET }
@@ -66,7 +68,7 @@ module.exports = async function handler(req, res) {
     images: {
       order: ['local', 'fal', 'openai'],
       local:  { configured: !!LOCAL_IMAGE_URL, model: LOCAL_IMAGE_MODEL, ...localImage },
-      fal:    { configured: !!FAL_KEY, model: FAL_MODEL },
+      fal:    { configured: !!FAL_KEY, model: FAL_MODEL, ...(FAL_MODEL_OK ? {} : { warning: `FAL_IMAGE_MODEL value "${FAL_MODEL_RAW}" is invalid (must start with "fal-ai/") — using ${FAL_MODEL}. Fix it in Vercel.` }) },
       openai: { configured: !!OPENAI_API_KEY, model: 'gpt-image-1' },
     },
     cfAccess: !!(process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACCESS_CLIENT_SECRET),

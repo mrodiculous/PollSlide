@@ -25,7 +25,12 @@
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const OPENAI_IMAGE_URL = 'https://api.openai.com/v1/images/generations';
 const FAL_KEY   = process.env.FAL_KEY || '';
-const FAL_MODEL = process.env.FAL_IMAGE_MODEL || 'fal-ai/flux/schnell';
+// Guard against a misconfigured value (e.g. the env Name/Value swapped). A fal model id
+// must look like "fal-ai/..."; anything else would 404 and silently fall back to OpenAI.
+const FAL_MODEL = (() => {
+  const m = (process.env.FAL_IMAGE_MODEL || '').trim();
+  return m.startsWith('fal-ai/') ? m : 'fal-ai/flux/schnell';
+})();
 
 const LOCAL_IMAGE_URL   = process.env.LOCAL_IMAGE_URL || '';   // empty = skip local, go to fal/OpenAI
 const LOCAL_IMAGE_MODEL = process.env.LOCAL_IMAGE_MODEL || 'flux.1-dev';
@@ -112,12 +117,15 @@ module.exports = async function handler(req, res) {
   const size   = ['1024x1024', '1024x1536', '1536x1024', 'auto'].includes(body.size) ? body.size : '1024x1024';
   if (!prompt) return res.status(400).json({ error: 'Missing "prompt".' });
 
+  const fellBack = {}; // why each provider was skipped — returned so silent fallbacks are debuggable
+
   // 1) Try the local Mac first — $0 marginal cost (like Polly's text engine).
   if (LOCAL_IMAGE_URL) {
     try {
       const image = await localImage(prompt, size);
       return res.status(200).json({ source: 'local', image });
     } catch (err) {
+      fellBack.local = err.message;
       console.warn('Polly image: local server failed → fal/OpenAI fallback:', err.message);
     }
   }
@@ -126,19 +134,21 @@ module.exports = async function handler(req, res) {
   if (FAL_KEY) {
     try {
       const image = await falImage(prompt, size);
-      return res.status(200).json({ source: 'fal', image });
+      return res.status(200).json({ source: 'fal', image, model: FAL_MODEL });
     } catch (err) {
+      fellBack.fal = err.message;
       console.warn('Polly image: fal.ai failed → OpenAI fallback:', err.message);
     }
   }
 
   // 3) Fall back to OpenAI.
-  if (!OPENAI_API_KEY) return res.status(502).json({ error: 'No working image provider (local + fal unavailable and no OpenAI key set).' });
+  if (!OPENAI_API_KEY) return res.status(502).json({ error: 'No working image provider (local + fal unavailable and no OpenAI key set).', fellBack });
   try {
     const image = await openaiImage(prompt, size);
-    return res.status(200).json({ source: 'openai', image });
+    // Include why we didn't use the cheaper providers, so "why is this still OpenAI?" is answerable.
+    return res.status(200).json({ source: 'openai', image, ...(Object.keys(fellBack).length ? { fellBack } : {}) });
   } catch (err) {
     console.error('Polly image: OpenAI error:', err.message);
-    return res.status(502).json({ error: 'Image generation failed', detail: err.message });
+    return res.status(502).json({ error: 'Image generation failed', detail: err.message, fellBack });
   }
 };
