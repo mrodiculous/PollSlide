@@ -199,7 +199,19 @@ const SURVEY_MODE = !!SESSION && !QA_MODE && (isNaN(Q_INDEX) || Q_INDEX < 0);
 // asterisks. Keeps every open-text surface classroom-safe with zero API cost.
 const _BADWORDS = ['fuck','shit','bitch','asshole','arsehole','bastard','cunt','slut','whore','dick','piss','cock','pussy','nigger','faggot','retard','wanker','bollocks','prick','douche','motherfucker','jackass'];
 const _BAD_RE = new RegExp('\\b(' + _BADWORDS.join('|') + ')(s|es|ing|ed|er|in|ah)?\\b', 'gi');
-function moderateText(s){ return String(s==null?'':s).replace(_BAD_RE, m => '*'.repeat(m.length)); }
+// Safety: mask profanity AND strip links (spam/phishing) from anything the audience
+// submits and we may project on a big screen.
+const _URL_RE = /\b(?:https?:\/\/|www\.)\S+/gi;
+function moderateText(s){
+  return String(s==null?'':s)
+    .replace(_URL_RE, '[link removed]')
+    .replace(_BAD_RE, m => '*'.repeat(m.length));
+}
+// Lighter pass for display names: mask profanity, drop URLs, collapse whitespace.
+function moderateName(s){
+  return String(s==null?'':s).replace(_URL_RE, '').replace(_BAD_RE, m => '*'.repeat(m.length))
+    .replace(/\s+/g,' ').trim().slice(0,60);
+}
 
 // ─── STATE ────────────────────────────────────────────────────────────────────
 // participantId is unique per person per SESSION (stored in sessionStorage)
@@ -347,7 +359,8 @@ function joinSession() {
   const name = document.getElementById('nameInput').value.trim();
   if (!name) { document.getElementById('nameErr').textContent = t('enterNamePlease','Please enter your name.'); return; }
 
-  participantName = name.slice(0, 60); // cap at 60 chars — prevents DB abuse
+  participantName = moderateName(name); // cap at 60 + mask profanity / strip links in the display name
+  if (!participantName) { document.getElementById('nameErr').textContent = t('enterNamePlease','Please enter your name.'); return; }
   // Generate a unique ID for this person in this session
   participantId = 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2,5);
 
@@ -1189,14 +1202,24 @@ function renderQAList(data){
     </div>`;
   }).join('');
 }
+// Q&A flood protection — a short cooldown + a per-session cap, so one person can't
+// spam the live board. (Client-side deterrent; pair with DB rules for hard limits.)
+const QA_COOLDOWN_MS = 8000, QA_MAX_PER_SESSION = 8;
 async function submitQuestion(){
   const ta = document.getElementById('qaText'); const text = (ta.value||'').trim();
   const err = document.getElementById('qaErr');
   if (text.length < 3) { err.textContent = 'Type a question first.'; return; }
+  const lastKey = 'ql_qa_last_' + SESSION, cntKey = 'ql_qa_count_' + SESSION;
+  const last = +(localStorage.getItem(lastKey) || 0), cnt = +(localStorage.getItem(cntKey) || 0);
+  const wait = QA_COOLDOWN_MS - (Date.now() - last);
+  if (wait > 0) { err.textContent = 'Please wait ' + Math.ceil(wait/1000) + 's before asking again.'; return; }
+  if (cnt >= QA_MAX_PER_SESSION) { err.textContent = "You've reached the question limit for this session."; return; }
   err.textContent = '';
   try {
     const ref = db.ref('sessions/' + SESSION + '/qa').push();
     await ref.set({ text: moderateText(text.slice(0,280)), name: participantName || 'Anonymous', votes: 1, voters: { [participantId]: true }, createdAt: Date.now(), answered: false });
+    localStorage.setItem(lastKey, String(Date.now()));
+    localStorage.setItem(cntKey, String(cnt + 1));
     ta.value = '';
   } catch(e) { err.textContent = 'Could not post — check your connection.'; }
 }
