@@ -32,6 +32,8 @@ const FAL_MODEL = (() => {
   return m.startsWith('fal-ai/') ? m : 'fal-ai/flux/schnell';
 })();
 
+const { checkQuota, consumeQuota } = require('../lib/quota');   // server-enforced Polly quota (images count too)
+
 const LOCAL_IMAGE_URL   = process.env.LOCAL_IMAGE_URL || '';   // empty = skip local, go to fal/OpenAI
 const LOCAL_IMAGE_MODEL = process.env.LOCAL_IMAGE_MODEL || 'flux.1-dev';
 const LOCAL_IMAGE_TIMEOUT_MS = 45000;  // local FLUX can take a while; still under the function budget
@@ -129,12 +131,18 @@ module.exports = async function handler(req, res) {
   const size   = ['1024x1024', '1024x1536', '1536x1024', 'auto'].includes(body.size) ? body.size : '1024x1024';
   if (!prompt) return res.status(400).json({ error: 'Missing "prompt".' });
 
+  // ── Enforce the monthly Polly quota BEFORE generating (an image counts as one) ──
+  let quota = null;
+  try { quota = await checkQuota(req); }
+  catch (e) { if (e && e.code) return res.status(e.code).json({ error: e.error, overLimit: !!e.overLimit, limit: e.limit, used: e.used }); throw e; }
+
   const fellBack = {}; // why each provider was skipped — returned so silent fallbacks are debuggable
 
   // 1) Try the local Mac first — $0 marginal cost (like Polly's text engine).
   if (LOCAL_IMAGE_URL) {
     try {
       const image = await localImage(prompt, size);
+      await consumeQuota(quota).catch(()=>{});
       return res.status(200).json({ source: 'local', image });
     } catch (err) {
       fellBack.local = err.message;
@@ -146,6 +154,7 @@ module.exports = async function handler(req, res) {
   if (FAL_KEY) {
     try {
       const image = await falImage(prompt, size);
+      await consumeQuota(quota).catch(()=>{});
       return res.status(200).json({ source: 'fal', image, model: FAL_MODEL });
     } catch (err) {
       fellBack.fal = err.message;
@@ -157,6 +166,7 @@ module.exports = async function handler(req, res) {
   if (!OPENAI_API_KEY) return res.status(502).json({ error: 'No working image provider (local + fal unavailable and no OpenAI key set).', fellBack });
   try {
     const image = await openaiImage(prompt, size);
+    await consumeQuota(quota).catch(()=>{});
     // Include why we didn't use the cheaper providers, so "why is this still OpenAI?" is answerable.
     return res.status(200).json({ source: 'openai', image, ...(Object.keys(fellBack).length ? { fellBack } : {}) });
   } catch (err) {

@@ -530,10 +530,15 @@ function resetSessions(uid){
 
 // ─── AI QUOTA RESET ───────────────────────────────────────────────────────────
 async function resetAIQuota(uid){
-  await db.ref(`users/${uid}/aiUsedThisMonth`).set(0);
-  await db.ref(`admin/users_index/${uid}/aiUsedThisMonth`).set(0);
-  allUsers[uid].aiUsedThisMonth=0;
-  toast('AI quota reset.','success');renderDetailBody(uid);
+  // The counter is locked from client writes (tamper-proof), so reset via the admin endpoint.
+  try{
+    const tok = await auth.currentUser.getIdToken();
+    const r = await fetch('/api/admin-quota', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tok }, body: JSON.stringify({ uid, action:'reset' }) });
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.error || ('HTTP '+r.status));
+    if(allUsers[uid]) allUsers[uid].aiUsedThisMonth=0;
+    toast('AI quota reset.','success'); renderDetailBody(uid);
+  }catch(e){ toast('Reset failed: '+e.message,'danger'); }
 }
 
 // ─── FLAG ─────────────────────────────────────────────────────────────────────

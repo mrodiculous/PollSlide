@@ -976,19 +976,9 @@ async function aiQuotaOK() {
   }
   return true;
 }
-async function aiBump() { // count one generation (text or image)
-  if (!userId) return;
-  const month = aiMonthKey();
-  try {
-    const ref = db.ref('users/' + userId);
-    const s = await ref.child('aiQuotaMonth').get();
-    if ((s.exists() ? s.val() : null) !== month) {
-      await ref.update({ aiQuotaMonth: month, aiUsedThisMonth: 1 });
-    } else {
-      await ref.child('aiUsedThisMonth').transaction(n => (n || 0) + 1);
-    }
-  } catch (e) {}
-}
+// NOTE: the counter is incremented SERVER-SIDE (api/polly* via lib/quota) and the fields
+// are locked from client writes by DB rules — so there is intentionally no client aiBump().
+// aiUsage()/aiQuotaOK() above only READ the counter for an instant pre-check.
 
 // Safari ITP (Intelligent Tracking Prevention) aggressively clears indexedDB and
 // localStorage, which Firebase LOCAL persistence uses. This causes random sign-outs.
@@ -3997,8 +3987,9 @@ async function runPolly() {
   status.textContent = source ? '✨ Polly is reading your material…' : '✨ Polly is thinking…';
   try {
     const focus = [topic, style ? `style: ${style}` : ''].filter(Boolean).join(' — ');
+    const idToken = currentUser ? await currentUser.getIdToken().catch(()=>null) : null; // server verifies + enforces the quota
     const r = await fetch('/api/polly', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, idToken ? { 'Authorization': 'Bearer ' + idToken } : {}),
       body: JSON.stringify({ topic: focus, type: activeProduct, count, difficulty, source, language: (presentations[activePresId]?.language || 'en') })
     });
     // Parse defensively: a crashed/undeployed function returns non-JSON, which would
@@ -4008,6 +3999,12 @@ async function runPolly() {
     if (!data) {
       throw new Error(r.status === 404 ? 'Polly isn’t deployed yet (api/polly.js).'
         : 'Polly hit a server error (' + r.status + '). Check the AI key in Vercel.');
+    }
+    if (r.status === 429 || data.overLimit) {   // monthly quota reached (server-enforced)
+      goBtn.disabled = false; status.style.display = 'none';
+      toast(data.error || 'Monthly Polly limit reached.', 'warn');
+      try { closePolly(); openPlanPicker(); } catch(e) {}
+      return;
     }
     if (!r.ok || !Array.isArray(data.questions) || !data.questions.length) {
       throw new Error((data.error || 'No questions came back') + (data.detail ? ' — ' + data.detail : ''));
@@ -4019,8 +4016,7 @@ async function runPolly() {
       added++;
     }
     presentations[activePresId].questions = questions;
-    selIdx = questions.length - 1;
-    aiBump();   // count this generation toward the monthly quota
+    selIdx = questions.length - 1;   // the server counts this generation toward the quota
     renderQList();
     renderEditor(selIdx);
     scheduleSave();
@@ -4622,11 +4618,18 @@ async function generateQImage(idx) {
   if (btn) { btn.disabled = true; btn.textContent = '✨ Generating…'; }
   try {
     const prompt = base + ' — ' + style.mod + '. The main subject is large, centered, and fills most of the frame. Simple uncluttered background, no text, no watermark, high quality';
-    const r = await fetch('/api/polly-image', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ prompt, size:'1536x1024', style: styleKey }) });
+    const idToken = currentUser ? await currentUser.getIdToken().catch(()=>null) : null; // server verifies + enforces the quota
+    const r = await fetch('/api/polly-image', { method:'POST', headers: Object.assign({ 'Content-Type':'application/json' }, idToken ? { 'Authorization':'Bearer ' + idToken } : {}), body: JSON.stringify({ prompt, size:'1536x1024', style: styleKey }) });
     const d = await r.json().catch(() => ({}));
+    if (r.status === 429 || d.overLimit) {   // monthly quota reached (server-enforced)
+      if (btn) { btn.disabled = false; btn.textContent = 'Generate image'; }
+      toast(d.error || 'Monthly Polly limit reached.', 'warn');
+      try { openPlanPicker(); } catch(e) {}
+      return;
+    }
     if (!r.ok || !d.image) throw new Error(d.error || 'Generation failed');
     const url = await uploadDataUrl(d.image);   // host it → small, stable URL
-    questions[idx].image = url; saveBack(); aiBump(); renderEditor(idx);
+    questions[idx].image = url; saveBack(); renderEditor(idx);   // the server counts this toward the quota
     toast('Image generated! ✨', 'success');
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = 'Generate image'; }
@@ -6190,7 +6193,7 @@ function renderPresentSlide(idx) {
 <div id="presentOverlay" style="display:none;position:fixed;inset:0;z-index:99990;background:var(--p-bg);flex-direction:column;padding:18px 22px 14px;">
   <button onclick="closePresentMode()" style="position:absolute;top:12px;left:50%;transform:translateX(-50%);background:var(--p-card-05);border:1px solid var(--p-line-10);border-radius:20px;color:var(--p-30);font-size:11px;font-family:'DM Sans',sans-serif;padding:4px 14px;cursor:pointer;z-index:1;letter-spacing:0.04em;">✕ Exit <kbd style="font-size:9px;opacity:0.6;">ESC</kbd></button>
   <button id="presentThemeBtn" onclick="togglePresentTheme()" title="Light / dark mode" style="position:absolute;bottom:14px;right:16px;background:var(--p-card-05);border:1px solid var(--p-line-10);border-radius:20px;font-size:15px;line-height:1;padding:5px 10px;cursor:pointer;z-index:3;">☀️</button>
-  <button id="presentQaBtn" onclick="togglePresentQA()" title="Show audience questions (Q)" style="position:absolute;bottom:14px;left:16px;background:var(--p-card-05);border:1px solid var(--p-line-10);border-radius:20px;font-size:13px;font-family:Syne,sans-serif;font-weight:700;color:var(--p-text);line-height:1;padding:7px 14px;cursor:pointer;z-index:3;">💬 Questions</button>
+  <button id="presentQaBtn" onclick="togglePresentQA()" title="Show audience questions (Q)" style="position:absolute;top:10px;right:calc(50% + 70px);background:var(--p-card-05);border:1px solid var(--p-line-10);border-radius:20px;font-size:13px;font-family:Syne,sans-serif;font-weight:700;color:var(--p-text);line-height:1;padding:7px 14px;cursor:pointer;z-index:3;">💬 Questions</button>
   <!-- Audience Q&A — projected, ranked by votes, with a scan-to-ask QR -->
   <div id="presentQaPanel" style="display:none;position:absolute;inset:0;background:var(--p-bg);z-index:2;flex-direction:column;padding:46px 7vw 72px;">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:22px;">

@@ -32,6 +32,8 @@ const OPENAI_BASE       = 'https://api.openai.com/v1';
 const LOCAL_LLM_URL     = process.env.LOCAL_LLM_URL || '';      // empty = skip local, go straight to OpenAI
 const LOCAL_LLM_MODEL   = process.env.LOCAL_LLM_MODEL || 'qwen3:14b';
 
+const { checkQuota, consumeQuota } = require('../lib/quota');   // server-enforced Polly quota
+
 // Cloudflare Access service-token headers — proves to Cloudflare's edge that this
 // request is really PollSlide's server, so the Mac tunnel can reject everyone else.
 // Empty until you set the token in Vercel; the tunnel + Access policy does the blocking.
@@ -257,9 +259,10 @@ module.exports = async function handler(req, res) {
 
   if (!topic && !sourceMaterial) return res.status(400).json({ error: 'Provide a topic or source material.' });
 
-  // FORWARD-FEATURE HOOK: before generating, this is where you'd check the user's
-  // Polly AI monthly quota (Free/Pro = 20, Team = 100) against their Firebase plan
-  // and return 429 if exceeded. Wire in once auth context is passed from the client.
+  // ── Enforce the monthly Polly quota BEFORE generating (tamper-proof, server-side) ──
+  let quota = null;
+  try { quota = await checkQuota(req); }
+  catch (e) { if (e && e.code) return res.status(e.code).json({ error: e.error, overLimit: !!e.overLimit, limit: e.limit, used: e.used }); throw e; }
 
   const messages = buildMessages({ topic, type, count, difficulty, audience, source: sourceMaterial, language });
 
@@ -291,6 +294,7 @@ module.exports = async function handler(req, res) {
   // 3) Shape the result.
   try {
     const questions = normalizeQuestions(raw, type);
+    try { await consumeQuota(quota); } catch (e) { /* never fail the response over the counter */ }
     return res.status(200).json({ source, type, topic, questions });
   } catch (err) {
     console.error('Polly: parse error:', err.message, '\nRaw:', String(raw || '').slice(0, 300));
