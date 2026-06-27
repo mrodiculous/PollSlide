@@ -4594,13 +4594,16 @@ function uploadQImg(idx) {
 // OpenAI via /api/polly-image), host it, and attach it.
 // Style picker so images aren't all the same look. Modifiers are appended to the prompt
 // (provider-agnostic — works for local FLUX, fal, and OpenAI alike).
+// Modifiers tuned + tested live across topics so every style yields a clean, full-frame
+// subject (the old "minimal/negative space" and soft-watercolor wording produced near-empty
+// frames — fixed). Paired with the COMPOSITION anchor in generateQImage.
 const AI_IMAGE_STYLES = {
-  illustration: { label:'🎨 Illustration', mod:'clean modern vibrant illustration, flat design' },
-  realistic:    { label:'📷 Realistic photo', mod:'photorealistic high-detail photograph, natural lighting, shallow depth of field' },
-  render3d:     { label:'🧊 3D render', mod:'glossy 3D render, soft studio lighting, octane render, subtle reflections' },
+  illustration: { label:'🎨 Illustration', mod:'clean modern vector illustration, flat bold shapes, vibrant colors' },
+  realistic:    { label:'📷 Realistic photo', mod:'photorealistic photograph, sharp focus, natural lighting, fine detail' },
+  render3d:     { label:'🧊 3D render', mod:'detailed 3D render, isometric, soft studio lighting, glossy octane style' },
   cartoon:      { label:'😄 Cartoon', mod:'playful cartoon, bold clean outlines, bright cheerful colors' },
-  minimal:      { label:'⬜ Minimal / flat', mod:'minimal flat vector icon, simple geometric shapes, lots of negative space' },
-  watercolor:   { label:'🖌️ Watercolor', mod:'soft watercolor painting, gentle artistic brush strokes, paper texture' },
+  minimal:      { label:'⬜ Minimal / flat', mod:'bold flat vector graphic, simple geometric shapes, bright flat colors, thick clean outlines' },
+  watercolor:   { label:'🖌️ Watercolor', mod:'vivid watercolor painting, rich saturated pigments, painterly brush strokes, light paper texture' },
 };
 function aiStyleOptions() {
   const sel = localStorage.getItem('ps_ai_img_style') || 'illustration';
@@ -4618,7 +4621,7 @@ async function generateQImage(idx) {
   const btn = document.getElementById('aiImgBtn_' + idx);
   if (btn) { btn.disabled = true; btn.textContent = '✨ Generating…'; }
   try {
-    const prompt = base + ' — ' + style.mod + ', for a presentation slide, simple background, no text, no watermark';
+    const prompt = base + ' — ' + style.mod + '. The main subject is large, centered, and fills most of the frame. Simple uncluttered background, no text, no watermark, high quality';
     const r = await fetch('/api/polly-image', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ prompt, size:'1536x1024', style: styleKey }) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok || !d.image) throw new Error(d.error || 'Generation failed');
