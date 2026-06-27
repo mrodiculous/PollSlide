@@ -73,10 +73,22 @@ async function localImage(prompt, size) {
 // response format stays identical regardless of provider.
 async function falImage(prompt, size) {
   const sizeMap = { '1024x1024':'square_hd', '1536x1024':'landscape_4_3', '1024x1536':'portrait_4_3', 'auto':'square_hd' };
+  // CRITICAL: step count must match the model. flux/schnell is distilled for ~4 steps;
+  // flux/dev (and most other models) need ~28 — running dev at 4 steps yields an
+  // under-denoised "gradient blob", which is the bug we're fixing here.
+  const isSchnell = /schnell/i.test(FAL_MODEL);
+  const body = {
+    prompt,
+    image_size: sizeMap[size] || 'square_hd',
+    num_inference_steps: isSchnell ? 4 : 28,
+    num_images: 1,
+    enable_safety_checker: true,
+  };
+  if (!isSchnell) body.guidance_scale = 3.5;   // dev uses guidance; schnell ignores it
   const r = await fetch('https://fal.run/' + FAL_MODEL, {
     method:'POST',
     headers:{ 'Content-Type':'application/json', 'Authorization':'Key ' + FAL_KEY },
-    body: JSON.stringify({ prompt, image_size: sizeMap[size] || 'square_hd', num_inference_steps: 4, num_images: 1, enable_safety_checker: true }),
+    body: JSON.stringify(body),
   });
   const data = await r.json();
   if (!r.ok) throw new Error(data.detail || data.error || `HTTP ${r.status}`);

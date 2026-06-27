@@ -936,10 +936,10 @@ let authMode = 'signin';
 // All enforcement below reads from this single config, so flipping a tier on is
 // the only change needed at that point.
 const TIERS = {
-  free:       { name: 'Free',       maxPresentations: 3,        maxParticipants: 25,       maxMembers: 1  },
-  pro:        { name: 'Pro',        maxPresentations: Infinity, maxParticipants: Infinity, maxMembers: 1  },
-  team_small: { name: 'Team Small', maxPresentations: Infinity, maxParticipants: Infinity, maxMembers: 5  },
-  team_large: { name: 'Team Large', maxPresentations: Infinity, maxParticipants: Infinity, maxMembers: 25 },
+  free:       { name: 'Free',       maxPresentations: 3,        maxParticipants: 25,       maxMembers: 1,  aiMonthly: 5   },
+  pro:        { name: 'Pro',        maxPresentations: Infinity, maxParticipants: Infinity, maxMembers: 1,  aiMonthly: 20  },
+  team_small: { name: 'Team Small', maxPresentations: Infinity, maxParticipants: Infinity, maxMembers: 5,  aiMonthly: 100 },
+  team_large: { name: 'Team Large', maxPresentations: Infinity, maxParticipants: Infinity, maxMembers: 25, aiMonthly: 300 },
 };
 // Map legacy tier keys to current ones (old 'team' = 5-seat; old 'white' = largest).
 function normalizeTier(t) {
@@ -949,6 +949,46 @@ function normalizeTier(t) {
 }
 let userTier = 'free';
 function tierLimits() { return TIERS[normalizeTier(userTier)] || TIERS.free; }
+
+// ── Polly AI monthly quota ──────────────────────────────────────────────────
+// Free = 5 generations/month; text AND images each count as one. Tracked on the
+// user as aiUsedThisMonth (+ aiQuotaMonth for auto-reset). Client-side gate; the
+// admin panel reads aiUsedThisMonth, and a Firebase rule can harden it later.
+function aiQuotaLimit() { const t = TIERS[normalizeTier(userTier)] || TIERS.free; return (typeof t.aiMonthly === 'number') ? t.aiMonthly : 5; }
+function aiMonthKey()   { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1); }
+async function aiUsage() {
+  if (!userId) return { used: 0, limit: aiQuotaLimit() };
+  try {
+    const s = await db.ref('users/' + userId).get();
+    const v = s.exists() ? s.val() : {};
+    const used = (v.aiQuotaMonth === aiMonthKey()) ? (v.aiUsedThisMonth || 0) : 0; // new month → 0
+    return { used, limit: aiQuotaLimit() };
+  } catch (e) { return { used: 0, limit: aiQuotaLimit() }; }
+}
+// Returns true if the user may generate; otherwise toasts + opens the upgrade picker.
+async function aiQuotaOK() {
+  const { used, limit } = await aiUsage();
+  if (limit < 0) return true; // unlimited
+  if (used >= limit) {
+    toast(`You've used all ${limit} Polly generations on your ${ (TIERS[normalizeTier(userTier)]||TIERS.free).name } plan this month. Upgrade for more.`, 'warn');
+    try { openPlanPicker(); } catch (e) {}
+    return false;
+  }
+  return true;
+}
+async function aiBump() { // count one generation (text or image)
+  if (!userId) return;
+  const month = aiMonthKey();
+  try {
+    const ref = db.ref('users/' + userId);
+    const s = await ref.child('aiQuotaMonth').get();
+    if ((s.exists() ? s.val() : null) !== month) {
+      await ref.update({ aiQuotaMonth: month, aiUsedThisMonth: 1 });
+    } else {
+      await ref.child('aiUsedThisMonth').transaction(n => (n || 0) + 1);
+    }
+  } catch (e) {}
+}
 
 // Safari ITP (Intelligent Tracking Prevention) aggressively clears indexedDB and
 // localStorage, which Firebase LOCAL persistence uses. This causes random sign-outs.
@@ -1307,7 +1347,7 @@ function openPlanPicker() {
 
   const plans = [
     { key:'free',  name:'Free',        mo:0,    yr:0,    color:'var(--muted)',
-      features:['Polls, Surveys, Quizzes & Study','25 participants per poll','3 presentations','Live results + QR / link sharing','Mac companion app'],
+      features:['Polls, Surveys, Quizzes & Study','25 participants per poll','3 presentations','Polly AI (5/month, incl. images)','Live results + QR / link sharing','Mac companion app'],
       missing:['Unlimited participants','Unlimited presentations','Async assignments & study sets','Reports, CSV & data history'] },
     { key:'pro',   name:'Pro',         mo:12,   yr:10,   color:'var(--accent)', popular:true,
       features:['All 4 products: Poll · Survey · Quiz · Study','Unlimited participants & presentations','Mac companion on ANY platform — live (Windows soon)','Async quiz assignments & study sets','Email + QR / link distribution','Reports, CSV export & dated data history','Polly AI (20/month)'],
@@ -3945,6 +3985,7 @@ async function runPolly() {
   const topic = document.getElementById('pollyTopic').value.trim();
   const source = (document.getElementById('pollyNotes').value || '').trim();
   if (!topic && !source) { toast('Give Polly a topic or some material to work with.', 'danger'); return; }
+  if (!(await aiQuotaOK())) return;   // enforce the monthly Polly limit (free = 5, incl. images)
   const count      = parseInt(document.getElementById('pollyCount').value, 10) || 3;
   const difficulty = document.getElementById('pollyDiff').value;
   const styleEl    = document.getElementById('pollyStyle');
@@ -3979,6 +4020,7 @@ async function runPolly() {
     }
     presentations[activePresId].questions = questions;
     selIdx = questions.length - 1;
+    aiBump();   // count this generation toward the monthly quota
     renderQList();
     renderEditor(selIdx);
     scheduleSave();
@@ -4569,6 +4611,7 @@ async function generateQImage(idx) {
   const q = questions[idx];
   const base = (q.type === 'flashcard' ? (q.front || '') : (q.text || '')).trim();
   if (!base) { toast('Add the question text first, then generate.', 'warn'); return; }
+  if (!(await aiQuotaOK())) return;   // images count toward the monthly Polly limit too
   const styleKey = (document.getElementById('aiImgStyle_' + idx) || {}).value || 'illustration';
   const style = AI_IMAGE_STYLES[styleKey] || AI_IMAGE_STYLES.illustration;
   localStorage.setItem('ps_ai_img_style', styleKey);   // remember the choice
@@ -4580,7 +4623,7 @@ async function generateQImage(idx) {
     const d = await r.json().catch(() => ({}));
     if (!r.ok || !d.image) throw new Error(d.error || 'Generation failed');
     const url = await uploadDataUrl(d.image);   // host it → small, stable URL
-    questions[idx].image = url; saveBack(); renderEditor(idx);
+    questions[idx].image = url; saveBack(); aiBump(); renderEditor(idx);
     toast('Image generated! ✨', 'success');
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = 'Generate image'; }
