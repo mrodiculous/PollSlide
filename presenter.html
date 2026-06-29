@@ -42,6 +42,16 @@
   /* ── TOP BAR ── */
   .topbar { height:56px; background:var(--surface); border-bottom:1px solid var(--border); display:flex; align-items:center; padding:0 18px; gap:12px; flex-shrink:0; z-index:100; }
   .logo { font-family:'Syne',sans-serif; font-weight:800; font-size:16px; color:var(--accent); display:flex; align-items:center; gap:7px; flex-shrink:0; }
+  .brand-switch .logo:hover { background:var(--surface2); }
+  .brand-item { display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:9px; cursor:pointer; }
+  .brand-item:hover { background:var(--surface2); }
+  .brand-item.active { background:rgba(108,99,255,.12); }
+  .brand-item .bi-icon { font-size:18px; width:24px; text-align:center; flex-shrink:0; }
+  .brand-item .bi-text { display:flex; flex-direction:column; line-height:1.2; }
+  .brand-item .bi-text b { font-family:'Syne',sans-serif; font-size:13px; color:var(--text); }
+  .brand-item .bi-text span { font-size:11px; color:var(--muted); }
+  .brand-item .bi-arrow { margin-left:auto; color:var(--muted); font-size:13px; }
+  .brand-sep { height:1px; background:var(--border); margin:6px 4px; }
   .logo-dot { width:7px; height:7px; background:var(--accent); border-radius:50%; animation:pulse 2s infinite; }
   @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(1.4)} }
   .active-pres { font-size:13px; font-weight:500; color:var(--muted); display:flex; align-items:center; gap:6px; }
@@ -403,7 +413,10 @@
 
 <!-- ── TOP BAR ── -->
 <div class="topbar">
-  <a href="https://pollslide.com" class="logo" target="_blank" style="text-decoration:none;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg><span id="brandName">PollSlide</span></a>
+  <div class="brand-switch" id="brandSwitcher" style="position:relative;flex-shrink:0;">
+    <button class="logo" onclick="toggleBrandMenu()" title="Switch product" style="background:none;border:none;cursor:pointer;padding:4px 8px 4px 4px;border-radius:9px;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg><span id="brandName">PollSlide</span><span style="color:var(--muted);font-size:10px;margin-left:3px;">▾</span></button>
+    <div id="brandMenu" style="display:none;position:absolute;top:calc(100% + 6px);left:0;background:var(--surface);border:1px solid var(--border2);border-radius:12px;min-width:248px;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,0.4);padding:6px;"></div>
+  </div>
   <div class="active-pres" id="activePres">Select a presentation</div>
   <div class="save-status">
     <span class="save-dot" id="saveDot"></span>
@@ -468,7 +481,7 @@
     <!-- PRESENTATIONS panel -->
     <div class="pres-panel">
       <!-- Product switcher: Polls / Surveys / Quizzes / Study -->
-      <div class="product-tabs" id="productTabs"></div>
+      <div class="product-tabs" id="productTabs" style="display:none;"></div>
       <div class="panel-hd" style="border-top:1px solid var(--border);">
         <span class="panel-hd-title" id="presPanelTitle">Presentations</span>
       </div>
@@ -2236,6 +2249,32 @@ async function doCopyQuestion(targetPresId) {
 }
 
 // ─── PRODUCT SWITCHER ─────────────────────────────────────────────────────────
+/* ─── Brand / product dropdown (top-left) — the suite switcher ─────────────────
+   Poll/Survey/Quiz/Study switch the builder surface (existing switchProduct);
+   PresentSlide is a separate product → navigates to /present. PresentSlide is NOT
+   a PRODUCTS entry, so switchProduct never receives a non-builder type.          */
+function buildBrandMenu() {
+  const el = document.getElementById('brandMenu'); if (!el) return;
+  const items = PRODUCT_ORDER.map(key => { const p = PRODUCTS[key];
+    return `<div class="brand-item ${key===activeProduct?'active':''}" onclick="pickProduct('${key}')">
+      <span class="bi-icon">${p.icon}</span><span class="bi-text"><b>${p.name}</b><span>${p.tagline}</span></span></div>`; }).join('');
+  const present = `<div class="brand-item present" onclick="goPresentSlide()">
+    <span class="bi-icon">🎬</span><span class="bi-text"><b>PresentSlide</b><span>Import &amp; present a full deck</span></span><span class="bi-arrow">↗</span></div>`;
+  el.innerHTML = items + '<div class="brand-sep"></div>' + present;
+}
+function toggleBrandMenu() {
+  const el = document.getElementById('brandMenu'); if (!el) return;
+  const open = el.style.display === 'block';
+  if (!open) buildBrandMenu();
+  el.style.display = open ? 'none' : 'block';
+}
+function pickProduct(key) { const el = document.getElementById('brandMenu'); if (el) el.style.display = 'none'; switchProduct(key); }
+function goPresentSlide() { window.location.href = '/present'; }
+document.addEventListener('click', function(e) {
+  const sw = document.getElementById('brandSwitcher'); const m = document.getElementById('brandMenu');
+  if (sw && m && m.style.display === 'block' && !sw.contains(e.target)) m.style.display = 'none';
+});
+
 function renderProductTabs() {
   const bar = document.getElementById('productTabs');
   if (!bar) return;
