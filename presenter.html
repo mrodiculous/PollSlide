@@ -448,7 +448,7 @@
     <button class="btn btn-ghost" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark">🌙</button>
     <button class="btn btn-primary" id="shareBtn" onclick="openShareModal()" style="display:none;" title="Share link / QR for this survey">🔗 Share</button>
     <button class="btn btn-ghost" id="qaBtn" onclick="openQAPanel()" disabled title="Audience Q&amp;A — questions & upvotes">💬 Q&amp;A</button>
-    <button class="btn btn-ghost" id="reportBtn" onclick="openReport()" disabled title="View response report">📊 Report</button>
+    <button class="btn btn-ghost" id="reportBtn" onclick="window.open('/report'+(activePresId?('?pres='+encodeURIComponent(activePresId)):''),'_blank')" disabled title="Open the full report">📊 Report</button>
     <button class="btn btn-reset" id="resetBtn" onclick="confirmResetAll()" disabled>↺ Reset All Tallies</button>
   </div>
 </div>

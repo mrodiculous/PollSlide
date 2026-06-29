@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PollSlide — Reports</title>
+<!--
+  PollSlide Reports — dedicated, filterable metrics page (/report).
+
+  WHAT: per-presentation, per-question, and per-respondent metrics — who answered,
+  what they answered, accuracy, timing — across LIVE sessions and dated ARCHIVES.
+
+  DESIGN / SCALABILITY:
+   • Everything is flattened into one records[] array (one row per answer). Filters
+     and all three views are simple array ops over it → cheap to extend.
+   • Pulls live `sessions/$code/responses` AND `users/$uid/archives` (dated), so
+     date filtering and post-reset history both work. Reuses the exact data shapes
+     from presenter.html (verified).
+   • Harness-testable: window.__REPORT_FIXTURE injects {presentations,live,archives}
+     so views/filters run without Firebase.
+-->
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<style>
+  :root{ --bg:#07070f; --surface:#13131f; --surface2:#1a1a2c; --surface3:#22223a;
+    --border:rgba(255,255,255,.08); --border2:rgba(255,255,255,.14);
+    --accent:#6c63ff; --accent2:#ff6584; --accent3:#43e97b; --accent4:#f7b731;
+    --text:#f4f4fc; --muted:#9090b8; }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1200px;margin:0 auto;padding:18px;}
+  .topbar{display:flex;align-items:center;gap:12px;margin-bottom:16px;}
+  .logo{font-family:'Syne';font-weight:800;font-size:19px;display:flex;align-items:center;gap:8px;flex:1;}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 14px;border-radius:9px;font-family:'Syne';font-weight:700;font-size:12px;border:none;cursor:pointer;}
+  .btn-primary{background:var(--accent);color:#fff;} .btn-ghost{background:var(--surface2);border:1px solid var(--border2);color:var(--text);}
+  .btn:disabled{opacity:.4;cursor:default;}
+  select,input{background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;font-size:13px;font-family:'DM Sans';}
+  .filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:14px;}
+  .fld{display:flex;flex-direction:column;gap:4px;}
+  .fld label{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);}
+  .stats{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;}
+  .stat{background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:12px 16px;min-width:120px;}
+  .stat .v{font-family:'Syne';font-weight:800;font-size:24px;}
+  .stat .l{font-size:11px;color:var(--muted);margin-top:2px;}
+  .tabs{display:flex;gap:6px;margin-bottom:12px;}
+  .tab{padding:8px 14px;border-radius:9px;background:var(--surface2);border:1px solid var(--border2);cursor:pointer;font-weight:600;font-size:13px;color:var(--muted);}
+  .tab.active{color:var(--text);border-color:var(--accent);background:rgba(108,99,255,.1);}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:10px;}
+  .card h3{font-family:'Syne';font-size:14px;margin-bottom:8px;}
+  .bar{margin-bottom:8px;} .bar-top{display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;}
+  .bar-track{height:8px;background:var(--surface2);border-radius:100px;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:100px;background:linear-gradient(90deg,var(--accent),#a78bfa);}
+  .bar-fill.correct{background:linear-gradient(90deg,var(--accent3),#6effb0);}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--border);}
+  th{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700;}
+  tr:hover td{background:var(--surface2);}
+  .pill{font-size:10px;font-weight:700;padding:1px 7px;border-radius:100px;}
+  .pill.ok{background:rgba(67,233,123,.16);color:var(--accent3);} .pill.no{background:rgba(255,101,132,.16);color:var(--accent2);}
+  .muted{color:var(--muted);} .empty{color:var(--muted);text-align:center;padding:36px;}
+  .overlay{position:fixed;inset:0;background:rgba(7,7,15,.92);z-index:1500;display:flex;align-items:center;justify-content:center;}
+  @media print{ .filters,.tabs,.topbar .btn,#authOverlay{display:none!important;} body{background:#fff;color:#000;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="logo">
+      <svg viewBox="0 0 100 100" width="24" height="24" style="border-radius:7px;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/></svg>
+      PollSlide Reports
+    </div>
+    <span id="acct" class="muted" style="font-size:12px;"></span>
+    <button class="btn btn-ghost" onclick="exportCSV()" id="csvBtn" disabled>⤓ CSV</button>
+    <button class="btn btn-ghost" onclick="window.print()">🖨 Print</button>
+    <button class="btn btn-ghost" id="signOutBtn" onclick="ppSignOut()" style="display:none;">Sign out</button>
+  </div>
+
+  <div class="filters" id="filters">
+    <div class="fld"><label>Presentation</label><select id="fPres" onchange="onPresChange()"><option value="">All</option></select></div>
+    <div class="fld"><label>Question</label><select id="fQ" onchange="render()"><option value="">All</option></select></div>
+    <div class="fld"><label>Respondent</label><input id="fResp" type="search" placeholder="name…" oninput="render()" style="width:150px;"></div>
+    <div class="fld"><label>From</label><input id="fFrom" type="date" onchange="render()"></div>
+    <div class="fld"><label>To</label><input id="fTo" type="date" onchange="render()"></div>
+    <div class="fld"><label>Source</label><select id="fSrc" onchange="render()"><option value="">Live + History</option><option value="live">Live only</option><option value="archive">History only</option></select></div>
+  </div>
+
+  <div class="stats" id="stats"></div>
+  <div class="tabs">
+    <div class="tab active" id="tab-summary" onclick="setView('summary')">Summary</div>
+    <div class="tab" id="tab-question" onclick="setView('question')">By question</div>
+    <div class="tab" id="tab-respondent" onclick="setView('respondent')">By respondent</div>
+  </div>
+  <div id="content"><div class="empty" id="loadingMsg">Sign in to load your reports.</div></div>
+</div>
+
+<!-- Sign-in overlay -->
+<div id="authOverlay" class="overlay" style="display:none;">
+  <div class="card" style="width:min(380px,92vw);">
+    <h3>Sign in to PollSlide</h3>
+    <p class="muted" style="font-size:12px;margin-bottom:12px;">Use the same account as app.pollslide.com</p>
+    <input id="authEmail" type="email" placeholder="you@example.com" style="width:100%;margin-bottom:8px;">
+    <input id="authPass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')ppSignIn()" style="width:100%;margin-bottom:10px;">
+    <button class="btn btn-primary" style="width:100%;" onclick="ppSignIn()">Sign in</button>
+    <div id="authErr" style="color:var(--accent2);font-size:12px;min-height:16px;margin-top:8px;"></div>
+  </div>
+</div>
+
+<script>
+/* ─── Firebase (same project + paths as presenter.html) ──────────────────────── */
+const FB_CONFIG = { apiKey:"AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME", authDomain:"echonest-live-survey.firebaseapp.com",
+  databaseURL:"https://echonest-live-survey-default-rtdb.firebaseio.com", projectId:"echonest-live-survey",
+  storageBucket:"echonest-live-survey.firebasestorage.app", messagingSenderId:"285529140046", appId:"1:285529140046:web:983c1ee8000a2ca8f80c1f" };
+let fbAuth=null, fbDb=null, userId=null;
+let RECORDS = [];           // one row per answer (flattened — see buildRecords)
+let PRES = {};              // presId -> { name, questions[] } (for the question filter)
+let view = 'summary';
+
+function qArr(q){ return Array.isArray(q)?q.filter(Boolean):(q&&typeof q==='object'?Object.values(q).filter(Boolean):[]); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function el(id){ return document.getElementById(id); }
+
+// Decode a raw answer into human text using the question's options.
+function answerText(q, raw){
+  if (raw === '__none__' || raw == null) return '—';
+  try { const p = JSON.parse(raw);
+    if (Array.isArray(p)) return p.map(i => (q.options && q.options[i] && q.options[i].text) || i).join(', ');
+    if (typeof p === 'number') return (q.options && q.options[p] && q.options[p].text) || String(p);
+    return String(p);
+  } catch(e){ return String(raw); }
+}
+
+/* ─── Flatten everything into records[] (one row per answer) ───────────────────
+   record = { presId, presName, date(ms|null), source, qIdx, qText, qType, options,
+              correctAnswer, pid, name, answer, isCorrect, elapsed } */
+function pushDataset(out, presId, presName, source, date, questions, responses){
+  // responses is { qId: { pid: resp } } where qId = `q<idx>_stable_<code>`.
+  Object.entries(responses||{}).forEach(([qId, byPid]) => {
+    const m = /^q(\d+)_stable_/.exec(qId); if (!m) return;
+    const qIdx = +m[1]; const q = qArr(questions)[qIdx] || { text:'', type:'', options:null, correctAnswer:null };
+    Object.entries(byPid||{}).forEach(([pid, r]) => {
+      out.push({ presId, presName, source, date: r.submittedAt || date || null,
+        qIdx, qText:q.text||'', qType:q.type||'', options:q.options||null, correctAnswer:(q.correctAnswer!=null?q.correctAnswer:null),
+        pid: r.participantId || pid, name: r.name || 'Anonymous', answer: r.answer, isCorrect: r.isCorrect, elapsed: r.elapsed||0 });
+    });
+  });
+}
+
+async function loadAll(){
+  el('loadingMsg').textContent = 'Loading…';
+  const out = []; PRES = {};
+  const fx = window.__REPORT_FIXTURE;
+  if (fx){
+    (fx.presentations||[]).forEach(p => { PRES[p.id]={name:p.name,questions:qArr(p.questions)};
+      pushDataset(out, p.id, p.name, 'live', null, p.questions, (fx.live&&fx.live[p.id])||{}); });
+    Object.entries(fx.archives||{}).forEach(([presId, byTs]) => Object.entries(byTs).forEach(([ts,a]) => {
+      if(!PRES[presId]) PRES[presId]={name:a.name,questions:qArr(a.questions)};
+      pushDataset(out, presId, a.name, 'archive', a.archivedAt||+ts, a.questions, a.responses); }));
+  } else {
+    // Presentations + their live responses
+    let presList = {};
+    try { const s = await fbDb.ref('users/'+userId+'/presentations').get(); presList = s.exists()?(s.val()||{}):{}; } catch(e){}
+    for (const p of Object.values(presList)){
+      PRES[p.id] = { name:p.name||'Untitled', questions:qArr(p.questions) };
+      if (!p.sessionCode) continue;
+      let live = {}; try { const s = await fbDb.ref('sessions/'+p.sessionCode+'/responses').get(); live = s.exists()?(s.val()||{}):{}; } catch(e){}
+      pushDataset(out, p.id, p.name||'Untitled', 'live', null, p.questions, live);
+    }
+    // Dated archives
+    let arch = {}; try { const s = await fbDb.ref('users/'+userId+'/archives').get(); arch = s.exists()?(s.val()||{}):{}; } catch(e){}
+    Object.entries(arch).forEach(([presId, byTs]) => Object.entries(byTs).forEach(([ts,a]) => {
+      if(!PRES[presId]) PRES[presId]={name:a.name||'Untitled',questions:qArr(a.questions)};
+      pushDataset(out, presId, a.name||'Untitled', 'archive', a.archivedAt||+ts, a.questions, a.responses||{}); }));
+  }
+  RECORDS = out;
+  populateFilters();
+  // Deep-link: /report?pres=<presId> preselects that presentation (from the builder).
+  const pre = new URLSearchParams(location.search).get('pres');
+  if (pre && PRES[pre]) { el('fPres').value = pre; onPresChange(); }
+  el('csvBtn').disabled = RECORDS.length===0;
+  render();
+}
+
+function populateFilters(){
+  const sel = el('fPres'); const cur = sel.value;
+  const presIds = [...new Set(RECORDS.map(r=>r.presId))];
+  sel.innerHTML = '<option value="">All presentations</option>' +
+    presIds.map(id=>`<option value="${esc(id)}">${esc((PRES[id]&&PRES[id].name)||id)}</option>`).join('');
+  if (presIds.includes(cur)) sel.value = cur;
+  onPresChange(true);
+}
+function onPresChange(keep){
+  const presId = el('fPres').value; const qsel = el('fQ');
+  let opts = '<option value="">All questions</option>';
+  if (presId && PRES[presId]) opts += PRES[presId].questions.map((q,i)=>`<option value="${i}">Q${i+1}: ${esc(String(q.text||q.front||'Untitled').slice(0,50))}</option>`).join('');
+  qsel.innerHTML = opts;
+  if (!keep) render(); else render();
+}
+
+/* ─── Filtering ────────────────────────────────────────────────────────────── */
+function filtered(){
+  const presId=el('fPres').value, q=el('fQ').value, resp=el('fResp').value.trim().toLowerCase(),
+        from=el('fFrom').value?new Date(el('fFrom').value).getTime():null,
+        to=el('fTo').value?new Date(el('fTo').value).getTime()+86400000:null, src=el('fSrc').value;
+  return RECORDS.filter(r=>{
+    if (presId && r.presId!==presId) return false;
+    if (q!=='' && String(r.qIdx)!==q) return false;
+    if (resp && !(r.name||'').toLowerCase().includes(resp)) return false;
+    if (src && r.source!==src) return false;
+    if (from && (!r.date || r.date<from)) return false;
+    if (to && (!r.date || r.date>=to)) return false;
+    return true;
+  });
+}
+
+/* ─── Views ────────────────────────────────────────────────────────────────── */
+function setView(v){ view=v; ['summary','question','respondent'].forEach(t=>el('tab-'+t).classList.toggle('active',t===v)); render(); }
+function render(){
+  if (!userId && !window.__REPORT_FIXTURE){ return; }
+  const data = filtered();
+  renderStats(data);
+  el('content').innerHTML = data.length===0 ? '<div class="empty">No responses match these filters.</div>'
+    : view==='summary' ? renderSummary(data) : view==='question' ? renderByQuestion(data) : renderByRespondent(data);
+}
+function renderStats(data){
+  const people = new Set(data.map(r=>r.pid)).size;
+  const graded = data.filter(r=>r.isCorrect===true||r.isCorrect===false);
+  const acc = graded.length ? Math.round(data.filter(r=>r.isCorrect===true).length/graded.length*100)+'%' : '—';
+  const times = data.filter(r=>r.elapsed>0).map(r=>r.elapsed);
+  const avg = times.length ? (times.reduce((a,b)=>a+b,0)/times.length/1000).toFixed(1)+'s' : '—';
+  const stat=(v,l)=>`<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+  el('stats').innerHTML = stat(people,'Respondents')+stat(data.length,'Responses')+stat(new Set(data.map(r=>r.presId+'/'+r.qIdx)).size,'Questions')+stat(acc,'Accuracy')+stat(avg,'Avg time');
+}
+function renderSummary(data){
+  const byPres = {};
+  data.forEach(r=>{ (byPres[r.presId]=byPres[r.presId]||{name:r.presName,recs:[]}).recs.push(r); });
+  return Object.values(byPres).map(p=>{
+    const people=new Set(p.recs.map(r=>r.pid)).size;
+    const graded=p.recs.filter(r=>r.isCorrect===true||r.isCorrect===false);
+    const acc=graded.length?Math.round(p.recs.filter(r=>r.isCorrect===true).length/graded.length*100)+'%':'—';
+    const qn=new Set(p.recs.map(r=>r.qIdx)).size;
+    return `<div class="card"><h3>${esc(p.name)}</h3>
+      <div class="muted" style="font-size:12px;">${people} respondents · ${p.recs.length} responses · ${qn} questions · accuracy ${acc}</div></div>`;
+  }).join('');
+}
+function renderByQuestion(data){
+  const groups={};
+  data.forEach(r=>{ const k=r.presId+'/'+r.qIdx; (groups[k]=groups[k]||{r0:r,recs:[]}).recs.push(r); });
+  return Object.values(groups).sort((a,b)=>a.r0.qIdx-b.r0.qIdx).map(g=>{
+    const q=g.r0; const total=g.recs.length;
+    let body='';
+    if (q.options && q.options.length){
+      const counts=q.options.map(()=>0);
+      g.recs.forEach(r=>{ try{ const a=JSON.parse(r.answer); (Array.isArray(a)?a:[a]).forEach(v=>{ if(counts[v]!=null)counts[v]++; }); }catch(e){} });
+      const correct=(q.correctAnswer!=null)?(Array.isArray(q.correctAnswer)?q.correctAnswer.map(Number):[Number(q.correctAnswer)]):[];
+      body=q.options.map((o,i)=>{ const pct=total?Math.round(counts[i]/total*100):0; const c=correct.includes(i);
+        return `<div class="bar"><div class="bar-top"><span>${'ABCDEFGH'[i]}. ${esc(o.text||'')}${c?' ✓':''}</span><span>${counts[i]} (${pct}%)</span></div>
+          <div class="bar-track"><div class="bar-fill ${c?'correct':''}" style="width:${pct}%"></div></div></div>`; }).join('');
+    }
+    const rows=g.recs.slice(0,200).map(r=>`<tr><td>${esc(r.name)}</td><td>${esc(answerText(q,r.answer))}</td>
+      <td>${r.isCorrect===true?'<span class="pill ok">✓</span>':r.isCorrect===false?'<span class="pill no">✗</span>':'<span class="muted">·</span>'}</td>
+      <td class="muted">${r.elapsed?(r.elapsed/1000).toFixed(1)+'s':'—'}</td>
+      <td class="muted">${r.date?new Date(r.date).toLocaleDateString():'—'}</td></tr>`).join('');
+    return `<div class="card"><h3>Q${q.qIdx+1}: ${esc(q.qText||'Untitled')} <span class="muted" style="font-weight:400;font-size:12px;">· ${esc(q.presName)} · ${total} responses</span></h3>
+      ${body}
+      <table style="margin-top:10px;"><thead><tr><th>Who</th><th>Answered</th><th>Correct</th><th>Time</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }).join('');
+}
+function renderByRespondent(data){
+  const people={};
+  data.forEach(r=>{ (people[r.pid]=people[r.pid]||{name:r.name,recs:[]}).recs.push(r); });
+  return Object.values(people).sort((a,b)=>b.recs.length-a.recs.length).map(p=>{
+    const graded=p.recs.filter(r=>r.isCorrect===true||r.isCorrect===false);
+    const score=graded.length?Math.round(p.recs.filter(r=>r.isCorrect===true).length/graded.length*100)+'%':'—';
+    const rows=p.recs.map(r=>`<tr><td class="muted">${esc(r.presName)}</td><td>Q${r.qIdx+1}: ${esc(String(r.qText).slice(0,40))}</td>
+      <td>${esc(answerText(r,r.answer))}</td>
+      <td>${r.isCorrect===true?'<span class="pill ok">✓</span>':r.isCorrect===false?'<span class="pill no">✗</span>':'<span class="muted">·</span>'}</td></tr>`).join('');
+    return `<div class="card"><h3>${esc(p.name)} <span class="muted" style="font-weight:400;font-size:12px;">· ${p.recs.length} answers · score ${score}</span></h3>
+      <table><thead><tr><th>Presentation</th><th>Question</th><th>Answer</th><th>Correct</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  }).join('');
+}
+
+/* ─── CSV export of the current filtered view ─────────────────────────────────── */
+function exportCSV(){
+  const data=filtered(); if(!data.length) return;
+  const head=['Presentation','Question #','Question','Type','Respondent','Answer','Correct','Time (ms)','Date','Source'];
+  const rows=data.map(r=>[r.presName,'Q'+(r.qIdx+1),r.qText,r.qType,r.name,answerText(r,r.answer),
+    r.isCorrect===true?'Yes':r.isCorrect===false?'No':'',r.elapsed||'',r.date?new Date(r.date).toLocaleString():'',r.source]);
+  const csv=[head,...rows].map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='pollslide-report-'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+}
+
+/* ─── Auth ─────────────────────────────────────────────────────────────────── */
+function initFirebase(){
+  if (fbDb || typeof firebase==='undefined') return;
+  firebase.initializeApp(FB_CONFIG); fbAuth=firebase.auth(); fbDb=firebase.database();
+  fbAuth.onAuthStateChanged(u=>{
+    userId = u?u.uid:null;
+    el('signOutBtn').style.display = u?'':'none';
+    el('acct').textContent = u?(u.email||''):'';
+    el('authOverlay').style.display = u?'none':'flex';
+    if (u){ loadAll(); } else { el('loadingMsg').textContent='Sign in to load your reports.'; }
+  });
+}
+function ppSignIn(){ const e=el('authEmail').value.trim(),p=el('authPass').value; el('authErr').textContent='';
+  if(!e||!p){ el('authErr').textContent='Email and password required.'; return; }
+  fbAuth.signInWithEmailAndPassword(e,p).catch(x=>{ el('authErr').textContent=x.message; }); }
+function ppSignOut(){ if(fbAuth)fbAuth.signOut(); RECORDS=[]; render(); }
+
+function boot(){
+  if (window.__REPORT_FIXTURE){ loadAll(); return; }   // harness/demo mode
+  initFirebase();
+}
+document.addEventListener('DOMContentLoaded', boot);
+</script>
+</body>
+</html>
