@@ -93,6 +93,28 @@
   .results-overlay .bar-top{font-size:13px;}
   .results-overlay .bar-track{height:9px;}
   .tl-type .livedot{color:var(--accent3);}
+  /* Fluid-across-products result styles (survey/quiz/study) */
+  .metric{font-family:'Syne';font-weight:800;font-size:clamp(22px,3vw,34px);margin-bottom:14px;}
+  .metric span{font-size:14px;color:var(--muted);font-weight:400;}
+  .bar-fill.detractor{background:linear-gradient(90deg,#ff6584,#ff8fa3);}
+  .txt-wall{display:flex;flex-wrap:wrap;gap:10px;max-height:60vh;overflow:auto;}
+  .txt-resp{background:var(--surface);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;font-size:clamp(13px,1.4vw,16px);max-width:320px;}
+  .txt-resp .from{display:block;color:var(--muted);font-size:11px;margin-top:4px;}
+  .wordcloud{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:6px 16px;line-height:1.2;padding:10px;}
+  .wordcloud .wc-w{color:var(--accent);}
+  .wordcloud .wc-w:nth-child(3n){color:var(--accent2);} .wordcloud .wc-w:nth-child(3n+1){color:var(--accent3);}
+  .flashcard{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;width:min(900px,90vw);min-height:46vh;background:var(--surface);border:1px solid var(--border2);border-radius:20px;padding:40px;}
+  .fc-label{font-family:'Syne';font-weight:700;letter-spacing:.12em;font-size:13px;color:var(--muted);margin-bottom:18px;}
+  .fc-text{font-family:'Syne';font-weight:800;font-size:clamp(28px,4.5vw,56px);line-height:1.2;}
+  .flashcard.flipped{background:linear-gradient(135deg,#16162a,#1f1f38);border-color:var(--accent);}
+  .fc-hint{margin-top:24px;font-size:12px;color:var(--muted);}
+  /* Themed title/section slide */
+  .title-slide{text-align:center;max-width:80%;}
+  .ts-title{font-family:var(--theme-font,'Syne');font-weight:800;color:var(--text);font-size:clamp(34px,6vw,72px);line-height:1.1;}
+  .ts-sub{font-family:var(--theme-font,'DM Sans');color:var(--accent);font-size:clamp(18px,2.6vw,30px);margin-top:18px;font-weight:600;}
+  .live-q,.flashcard .fc-text{font-family:var(--theme-font,'Syne');}
+  .tl-edit{width:100%;background:transparent;border:1px solid var(--border2);border-radius:6px;color:var(--text);font:600 13px 'DM Sans',sans-serif;padding:4px 7px;}
+  .tl-edit:focus{outline:none;border-color:var(--accent);}
   .pbar{display:flex;align-items:center;gap:14px;padding:10px 18px;background:rgba(0,0,0,.6);border-top:1px solid var(--border);}
   .pbar .spacer{flex:1;}
   .pbar .pos{color:var(--muted);font-size:13px;}
@@ -108,6 +130,8 @@
     </div>
     <span id="acct" class="kbd"></span>
     <button class="btn btn-ghost" id="signOutBtn" onclick="ppSignOut()" style="display:none" data-i18n="auth.signout">Sign out</button>
+    <label class="kbd" data-i18n="theme.label">Theme</label>
+    <select id="themeSel" onchange="setTheme(this.value)"></select>
     <label class="kbd" data-i18n="lang.label">Language</label>
     <select id="langSel" onchange="setLang(this.value)"></select>
   </div>
@@ -131,7 +155,9 @@
     <h2 data-i18n="import.title">Import your deck</h2>
     <div class="import-row">
       <button class="btn btn-ghost" onclick="document.getElementById('deckInput').click()"><span data-i18n="import.slides">＋ Add slides</span></button>
+      <button class="btn btn-ghost" onclick="addTitleSlide()"><span data-i18n="title.add">＋ Title slide</span></button>
       <button class="btn btn-ghost" onclick="addSamplePoll()"><span data-i18n="timeline.addPoll">＋ Add poll slide</span></button>
+      <button class="btn btn-ghost" onclick="pollyDraft()"><span data-i18n="polly.add">✨ Draft with Polly</span></button>
       <input type="file" id="deckInput" accept=".pdf,.pptx,.ppt,.key,image/png,image/jpeg,image/gif,image/webp" multiple style="display:none" onchange="onImport(this.files); this.value='';">
     </div>
     <!-- Real poll picker (signed in) -->
@@ -342,6 +368,20 @@ Object.assign(I18N.de, { 'picker.addAll':'＋ Ganze Präsentation' });
 Object.assign(I18N.fr, { 'picker.addAll':'＋ Ajouter toute la présentation' });
 Object.assign(I18N.pt, { 'picker.addAll':'＋ Adicionar tudo' });
 Object.assign(I18N.it, { 'picker.addAll':'＋ Aggiungi tutta la presentazione' });
+// Fluid-across-products strings: rating average, flashcard flip, study card faces.
+Object.assign(I18N.en, { 'present.avgOf':'avg of {n}', 'present.flip':'Press R / Reveal to flip', 'study.front':'FRONT', 'study.back':'BACK' });
+Object.assign(I18N.es, { 'present.avgOf':'media de {n}', 'present.flip':'Pulsa R / Revelar para girar', 'study.front':'ANVERSO', 'study.back':'REVERSO' });
+Object.assign(I18N.de, { 'present.avgOf':'Ø von {n}', 'present.flip':'R / Auflösen zum Umdrehen', 'study.front':'VORDERSEITE', 'study.back':'RÜCKSEITE' });
+Object.assign(I18N.fr, { 'present.avgOf':'moyenne sur {n}', 'present.flip':'R / Révéler pour retourner', 'study.front':'RECTO', 'study.back':'VERSO' });
+Object.assign(I18N.pt, { 'present.avgOf':'média de {n}', 'present.flip':'R / Revelar para virar', 'study.front':'FRENTE', 'study.back':'VERSO' });
+Object.assign(I18N.it, { 'present.avgOf':'media di {n}', 'present.flip':'R / Rivela per girare', 'study.front':'FRONTE', 'study.back':'RETRO' });
+// PresentSlide Phase 1: themes, title slides, Polly draft.
+Object.assign(I18N.en, { 'theme.label':'Theme', 'title.add':'＋ Title slide', 'title.default':'New title', 'timeline.titleSlide':'Title', 'polly.add':'✨ Draft with Polly', 'polly.prompt':'What should Polly draft polls about?', 'polly.signin':'Sign in to use Polly.', 'polly.working':'Polly is drafting…', 'polly.error':'Polly could not draft right now.' });
+Object.assign(I18N.es, { 'theme.label':'Tema', 'title.add':'＋ Diapositiva de título', 'title.default':'Nuevo título', 'timeline.titleSlide':'Título', 'polly.add':'✨ Crear con Polly', 'polly.prompt':'¿Sobre qué tema debe crear Polly las encuestas?', 'polly.signin':'Inicia sesión para usar Polly.', 'polly.working':'Polly está creando…', 'polly.error':'Polly no pudo crear ahora.' });
+Object.assign(I18N.de, { 'theme.label':'Thema', 'title.add':'＋ Titelfolie', 'title.default':'Neuer Titel', 'timeline.titleSlide':'Titel', 'polly.add':'✨ Mit Polly erstellen', 'polly.prompt':'Worüber soll Polly Umfragen erstellen?', 'polly.signin':'Melde dich an, um Polly zu nutzen.', 'polly.working':'Polly erstellt…', 'polly.error':'Polly konnte gerade nichts erstellen.' });
+Object.assign(I18N.fr, { 'theme.label':'Thème', 'title.add':'＋ Diapo de titre', 'title.default':'Nouveau titre', 'timeline.titleSlide':'Titre', 'polly.add':'✨ Créer avec Polly', 'polly.prompt':'Sur quel sujet Polly doit-elle créer des sondages ?', 'polly.signin':'Connectez-vous pour utiliser Polly.', 'polly.working':'Polly crée…', 'polly.error':'Polly n’a pas pu créer pour le moment.' });
+Object.assign(I18N.pt, { 'theme.label':'Tema', 'title.add':'＋ Slide de título', 'title.default':'Novo título', 'timeline.titleSlide':'Título', 'polly.add':'✨ Criar com a Polly', 'polly.prompt':'Sobre o que a Polly deve criar enquetes?', 'polly.signin':'Entre para usar a Polly.', 'polly.working':'A Polly está criando…', 'polly.error':'A Polly não conseguiu criar agora.' });
+Object.assign(I18N.it, { 'theme.label':'Tema', 'title.add':'＋ Diapositiva titolo', 'title.default':'Nuovo titolo', 'timeline.titleSlide':'Titolo', 'polly.add':'✨ Crea con Polly', 'polly.prompt':'Su quale argomento deve creare sondaggi Polly?', 'polly.signin':'Accedi per usare Polly.', 'polly.working':'Polly sta creando…', 'polly.error':'Polly non è riuscita a creare ora.' });
 const LANG_NAMES = { en:'English', es:'Español', de:'Deutsch', fr:'Français', pt:'Português', it:'Italiano' };
 let LANG = localStorage.getItem('ps_user_lang') || 'en';
 if (!LANG_NAMES[LANG]) LANG = 'en';
@@ -371,8 +411,40 @@ function initLangPicker(){
 /* ─── Deck model ───────────────────────────────────────────────────────────────
    slide = { id, type:'content'|'interactive', img?, question? }
    question = { text, options:[{text}], correctAnswer, type, sessionCode, qIndex }  */
-let deck = { slides: [] };
+let deck = { slides: [], theme: 'gamified' };
 let _uid = 0; const nid = () => 'sl_' + (++_uid);
+
+/* ─── Themes — apply a look to the slides. Scalable: add a theme = one entry.
+   Themes are scoped to the present surface (#present) + slide previews, so the
+   builder chrome stays stable while slides adopt the chosen look.                */
+const THEMES = {
+  gamified:     { name:'Gamified',     font:"'Syne','DM Sans',sans-serif", slideBg:'linear-gradient(135deg,#1a1340,#0b0b16)',
+    vars:{ '--accent':'#6c63ff','--accent2':'#ff6584','--accent3':'#43e97b','--accent4':'#f7b731','--surface':'#16162a','--surface2':'#1f1f38','--text':'#f4f4fc','--muted':'#9090b8' } },
+  professional: { name:'Professional', font:"'DM Sans',sans-serif",        slideBg:'linear-gradient(135deg,#18222f,#0e151d)',
+    vars:{ '--accent':'#3b82f6','--accent2':'#64748b','--accent3':'#22c55e','--accent4':'#eab308','--surface':'#18222f','--surface2':'#222e3d','--text':'#eef3f8','--muted':'#90a0b5' } },
+  educational:  { name:'Educational',  font:"'DM Sans',sans-serif",        slideBg:'linear-gradient(135deg,#163a2f,#0e211b)',
+    vars:{ '--accent':'#2f9e6e','--accent2':'#f59e0b','--accent3':'#34d399','--accent4':'#fbbf24','--surface':'#163026','--surface2':'#1d3d31','--text':'#eef7f1','--muted':'#8fb3a3' } },
+  fun:          { name:'Fun',          font:"'Syne','DM Sans',sans-serif",  slideBg:'linear-gradient(135deg,#3a0ca3,#1a0b2e)',
+    vars:{ '--accent':'#ff5fa2','--accent2':'#00d4ff','--accent3':'#ffd23f','--accent4':'#7cff6b','--surface':'#2a1545','--surface2':'#371a59','--text':'#ffffff','--muted':'#c9a9e0' } }
+};
+function applyTheme(key){
+  const th = THEMES[key] || THEMES.gamified;
+  const el = document.getElementById('present'); if (!el) return;
+  Object.entries(th.vars).forEach(([k,v]) => el.style.setProperty(k,v));
+  el.style.setProperty('--slide-bg', th.slideBg);
+  el.style.setProperty('--theme-font', th.font);
+}
+function setTheme(key){
+  if (!THEMES[key]) return;
+  deck.theme = key; localStorage.setItem('ps_deck_theme', key);
+  const sel = document.getElementById('themeSel'); if (sel && sel.value !== key) sel.value = key;
+  if (isPresenting()) renderPresentSlide(presentIdx);
+}
+function initThemePicker(){
+  const sel = document.getElementById('themeSel'); if (!sel) return;
+  const cur = deck.theme || localStorage.getItem('ps_deck_theme') || 'gamified'; deck.theme = cur;
+  sel.innerHTML = Object.entries(THEMES).map(([k,th]) => `<option value="${k}" ${k===cur?'selected':''}>${th.name}</option>`).join('');
+}
 
 /* ─── Import: router + formats ─────────────────────────────────────────────────
    onImport routes each dropped/chosen file by type:
@@ -485,8 +557,7 @@ async function loadQuestionMeta(code, idx){
   if (typeof fbDb==='undefined' || !fbDb) return null;
   try{ const s = await fbDb.ref('quiz_builder/'+code+'/questions').get();
     const qs = s.exists()? qArr(s.val()) : []; const q = qs[idx]; if (!q) return null;
-    return { text:q.text||q.front||'', type:q.type||'multiple_choice', options:q.options||[],
-             correctAnswer:(q.correctAnswer!=null?q.correctAnswer:null), sessionCode:code, qIndex:idx };
+    return toSlideQuestion(q, code, idx);
   }catch(e){ return null; }
 }
 // Scan one imported slide; if it carries a PollSlide QR, attach the question so the
@@ -511,6 +582,27 @@ function addSamplePoll(){
   }});
   renderTimeline();
 }
+// Add a themed title/section slide (editable inline in the timeline).
+function addTitleSlide(){ deck.slides.push({ id:nid(), type:'title', title:t('title.default'), subtitle:'' }); renderTimeline(); }
+
+// Polly AI: draft poll question-slides from a topic (reuses /api/polly). Drafting
+// creates the slides; live response-collection requires publishing to a session
+// (Phase 2). Graceful when signed out / offline — never throws.
+async function pollyDraft(){
+  const topic = (prompt(t('polly.prompt'))||'').trim(); if (!topic) return;
+  if (typeof fbAuth==='undefined' || !fbAuth || !fbAuth.currentUser){ alert(t('polly.signin')); return; }
+  const hint = document.getElementById('importHint'); if (hint) hint.textContent = t('polly.working');
+  try{
+    const idToken = await fbAuth.currentUser.getIdToken();
+    const r = await fetch('/api/polly', { method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+idToken },
+      body: JSON.stringify({ topic, type:'poll', count:3, difficulty:'medium', source:'', language:LANG }) });
+    const data = await r.json(); const qs = (data && (data.questions||data)) || [];
+    (Array.isArray(qs)?qs:[]).forEach((q,i)=> deck.slides.push({ id:nid(), type:'interactive', question: toSlideQuestion(q, '', i) }));
+    renderTimeline();
+    if (hint) hint.textContent = t('import.done', { n:(Array.isArray(qs)?qs.length:0) });
+  }catch(e){ if (hint) hint.textContent=''; alert(t('polly.error')); }
+}
 
 /* ─── Timeline UI ──────────────────────────────────────────────────────────── */
 function renderTimeline(){
@@ -518,20 +610,28 @@ function renderTimeline(){
   document.getElementById('presentBtn').disabled = deck.slides.length === 0;
   if (!deck.slides.length){ el.innerHTML = `<div class="tl-empty">${t('timeline.empty')}</div>`; return; }
   el.innerHTML = deck.slides.map((s,i) => {
-    const isInt = s.type === 'interactive';
-    const thumb = isInt
-      ? `<div class="tl-thumb interactive">📊</div>`
-      : `<div class="tl-thumb"><img src="${s.img}" alt=""></div>`;
-    const hasQR = !isInt && !!s.question; // imported slide that carries a QR
-    const title = isInt ? (s.question?.text || 'Poll') : `${t('timeline.content')} ${i+1}`;
-    const typeLabel = isInt ? t('timeline.poll')
-      : t('timeline.content') + (hasQR ? ` · <span class="livedot">●</span> ${t('timeline.livePoll')}` : '');
+    const isInt = s.type === 'interactive', isTitle = s.type === 'title';
+    const hasQR = s.type==='content' && !!s.question; // imported slide that carries a QR
+    let thumb, typeLabel, metaBody;
+    if (isTitle){
+      thumb = `<div class="tl-thumb interactive">T</div>`;
+      typeLabel = t('timeline.titleSlide');
+      metaBody = `<input class="tl-edit" value="${escapeHtml(s.title||'')}" oninput="deck.slides[${i}].title=this.value" placeholder="${escapeHtml(t('title.default'))}">`;
+    } else if (isInt){
+      thumb = `<div class="tl-thumb interactive">📊</div>`;
+      typeLabel = t('timeline.poll');
+      metaBody = `<div class="tl-title">${escapeHtml(s.question?.text || 'Poll')}</div>`;
+    } else {
+      thumb = `<div class="tl-thumb"><img src="${s.img}" alt=""></div>`;
+      typeLabel = t('timeline.content') + (hasQR ? ` · <span class="livedot">●</span> ${t('timeline.livePoll')}` : '');
+      metaBody = `<div class="tl-title">${escapeHtml(t('timeline.content')+' '+(i+1))}</div>`;
+    }
     return `<div class="tl-item">
       <div class="tl-idx">${i+1}</div>
       ${thumb}
       <div class="tl-meta">
         <div class="tl-type ${isInt?'interactive':''}">${typeLabel}</div>
-        <div class="tl-title">${escapeHtml(title)}</div>
+        ${metaBody}
       </div>
       <div class="tl-actions">
         <button class="icbtn" onclick="startPresent(${i})" title="Present from here">▶</button>
@@ -601,10 +701,18 @@ function presentNav(d){ const j=presentIdx+d; if(j<0||j>=deck.slides.length)retu
 function slideHasPoll(s){ return !!(s && (s.type==='interactive' || (s.type==='content' && s.question))); }
 function renderPresentSlide(i){
   const s = deck.slides[i]; const stage = document.getElementById('stage');
+  applyTheme((s && s.theme) || deck.theme || 'gamified'); // per-slide override → deck theme
   document.getElementById('presentPos').textContent = `${i+1} / ${deck.slides.length}`;
   const prog = document.getElementById('presProg'); if (prog) prog.style.width = (deck.slides.length ? (i+1)/deck.slides.length*100 : 0) + '%';
   document.getElementById('revealBtn').style.display = slideHasPoll(s) ? '' : 'none';
+  stage.style.background = (s && s.type==='content') ? '#000' : 'var(--slide-bg)'; // themed bg except full-bleed images
   if (!s){ stage.innerHTML=''; return; }
+  if (s.type === 'title'){
+    stage.innerHTML = `<div class="title-slide">
+      <div class="ts-title">${escapeHtml(s.title||'')}</div>
+      ${s.subtitle ? `<div class="ts-sub">${escapeHtml(s.subtitle)}</div>` : ''}</div>`;
+    return;
+  }
   if (s.type === 'content'){
     // Plain content UNLESS the slide carries a QR — then overlay live results on it.
     stage.innerHTML = `<img class="content" src="${s.img}" alt="">` + (s.question ? `<div class="results-overlay" id="resOv"></div>` : '');
@@ -710,30 +818,47 @@ const RESULT_RENDERERS = {
 };
 function buildResult(q, responses){ return (RESULT_RENDERERS[q.type] || renderBars)(q, responses); }
 // Full-screen poll slide (explicitly added poll, no imported image).
+// Flashcard (Study product): no responses — a card you flip. _revealed = flipped.
+function isFlashcard(q){ return q && q.type === 'flashcard'; }
+function paintFlashcard(s, container){
+  const q = localizedQuestion(s);
+  container.innerHTML = `<div class="flashcard ${_revealed?'flipped':''}">
+    <div class="fc-label">${_revealed ? t('study.back') : t('study.front')}</div>
+    <div class="fc-text">${escapeHtml((_revealed ? (q.back||'') : (q.front||q.text||'')))}</div>
+    <div class="fc-hint">${t('present.flip')}</div>
+  </div>`;
+}
 function paintLive(s){
-  const q = localizedQuestion(s); const responses = responsesFor(s); const total = responses.length;
-  document.getElementById('stage').innerHTML = `
+  const q = localizedQuestion(s);
+  const stage = document.getElementById('stage');
+  if (isFlashcard(q)){ paintFlashcard(s, stage); return; }
+  const responses = responsesFor(s); const total = responses.length;
+  stage.innerHTML = `
     <div class="respcount">${total ? t('present.responses',{n:total}) : t('present.waiting')}</div>
     <div class="live">
       <div class="live-tag ${_revealed?'revealed':''}">${_revealed?t('present.revealed'):t('present.live')}</div>
       <div class="live-q">${escapeHtml(q.text||'')}</div>
-      ${buildBars(q, responses)}
+      ${buildResult(q, responses)}
     </div>`;
 }
 // Compact results overlaid on an imported slide that carries a QR.
 function paintResultsOverlay(s){
   const el = document.getElementById('resOv'); if (!el) return;
-  const q = localizedQuestion(s); const responses = responsesFor(s); const total = responses.length;
+  const q = localizedQuestion(s);
+  if (isFlashcard(q)){ paintFlashcard(s, el); return; }
+  const responses = responsesFor(s); const total = responses.length;
   el.innerHTML = `
     <div class="ov-head">
       <span class="live-tag ${_revealed?'revealed':''}">${_revealed?t('present.revealed'):t('present.live')}</span>
       <span class="ov-count">${total ? t('present.responses',{n:total}) : t('present.waiting')}</span>
     </div>
-    ${buildBars(q, responses)}`;
+    ${buildResult(q, responses)}`;
 }
 // Route a repaint to the right surface (overlay for QR-on-content, full for polls).
 function paintFor(s){ if (s.type==='content' && s.question) paintResultsOverlay(s); else paintLive(s); }
-function doReveal(){ const s = deck.slides[presentIdx]; if (!slideHasPoll(s)) return; _revealed = true; paintFor(s); }
+// Reveal: flips a flashcard (toggle) or reveals the correct answer (one-way) for polls/quizzes.
+function doReveal(){ const s = deck.slides[presentIdx]; if (!slideHasPoll(s)) return;
+  _revealed = isFlashcard(s.question) ? !_revealed : true; paintFor(s); }
 
 /* ─── Firebase (real flow: sign in → real questions → live responses) ──────────
    Same project + data paths as powerpoint.html (verified). Skipped entirely in
@@ -783,14 +908,19 @@ function onSelectPres(id){
   const qs=qArr(p.questions);
   qsel.innerHTML = qs.map((q,i)=>'<option value="'+i+'">Q'+(i+1)+': '+escapeHtml(String(q.text||q.front||'Untitled').slice(0,50))+'</option>').join('');
 }
+// Normalize a builder question into a present-deck question, carrying EVERY field
+// (ratingMax, front/back, displayMode, ratingLabels…) so all product types render.
+function toSlideQuestion(q, sessionCode, qIdx){
+  return Object.assign({}, q, {
+    text: q.text||q.front||'', type: q.type||'multiple_choice', options: q.options||[],
+    correctAnswer: (q.correctAnswer!=null ? q.correctAnswer : null), sessionCode: sessionCode, qIndex: qIdx
+  });
+}
 function addSelectedQuestion(){
   const id=document.getElementById('presSel').value, qi=parseInt(document.getElementById('qSel').value,10);
   const p=userPres[id]; if(!p||isNaN(qi)) return;
   const q=qArr(p.questions)[qi]; if(!q) return;
-  deck.slides.push({ id:nid(), type:'interactive', question:{
-    text:q.text||q.front||'', type:q.type||'multiple_choice', options:q.options||[],
-    correctAnswer:(q.correctAnswer!=null?q.correctAnswer:null), sessionCode:p.sessionCode, qIndex:qi
-  }});
+  deck.slides.push({ id:nid(), type:'interactive', question: toSlideQuestion(q, p.sessionCode, qi) });
   renderTimeline();
 }
 // Import the WHOLE selected PollSlide presentation — every question becomes a live
@@ -798,10 +928,7 @@ function addSelectedQuestion(){
 function addEntirePresentation(){
   const id = document.getElementById('presSel').value; const p = userPres[id]; if (!p) return;
   const qs = qArr(p.questions); if (!qs.length) return;
-  qs.forEach((q, qi) => deck.slides.push({ id:nid(), type:'interactive', question:{
-    text:q.text||q.front||'', type:q.type||'multiple_choice', options:q.options||[],
-    correctAnswer:(q.correctAnswer!=null?q.correctAnswer:null), sessionCode:p.sessionCode, qIndex:qi
-  }}));
+  qs.forEach((q, qi) => deck.slides.push({ id:nid(), type:'interactive', question: toSlideQuestion(q, p.sessionCode, qi) }));
   renderTimeline();
   if (LANG !== 'en') translateDeckContent(LANG);
 }
@@ -810,12 +937,13 @@ function addEntirePresentation(){
 function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 function boot(){
-  initLangPicker(); applyI18n(); renderTimeline();
-  // Harness hook: inject a deck (+ optional responses, lang) and auto-present.
+  if (!deck.theme) deck.theme = localStorage.getItem('ps_deck_theme') || 'gamified';
+  initLangPicker(); initThemePicker(); applyI18n(); applyTheme(deck.theme); renderTimeline();
+  // Harness hook: inject a deck (+ optional responses, lang, theme) and auto-present.
   const fx = window.__PRESENT_FIXTURE;
   if (fx){
     if (fx.lang) { LANG = fx.lang; initLangPicker(); applyI18n(); }
-    if (fx.deck) { deck = fx.deck; deck.slides.forEach(s=>{ if(!s.id)s.id=nid(); }); renderTimeline(); }
+    if (fx.deck) { deck = fx.deck; if (!deck.theme) deck.theme='gamified'; deck.slides.forEach(s=>{ if(!s.id)s.id=nid(); }); initThemePicker(); applyTheme(deck.theme); renderTimeline(); }
     if (fx.present != null) startPresent(fx.present);
     return; // demo/harness mode — skip the real Firebase flow
   }
