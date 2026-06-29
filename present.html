@@ -80,6 +80,9 @@
   .stage-tools .st-btn{background:var(--chrome2);border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:5px 10px;font-size:12px;}
   .stage-tools .st-btn:hover{border-color:var(--accent);}
   .canvas-pad{flex:1;display:flex;align-items:center;justify-content:center;padding:28px;overflow:auto;}
+  .notes-row{display:flex;gap:10px;align-items:flex-start;padding:8px 14px;border-top:1px solid var(--border);background:var(--panel);}
+  .notes-lbl{font-size:11px;color:var(--muted);padding-top:7px;flex-shrink:0;}
+  #notesArea{flex:1;background:var(--chrome2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:inherit;font-size:13px;padding:7px 10px;resize:vertical;min-height:38px;max-height:120px;}
   .slide{width:100%;max-width:840px;aspect-ratio:16/9;border-radius:10px;overflow:hidden;box-shadow:0 16px 50px rgba(0,0,0,.45);position:relative;background:var(--slide-bg);}
   .slide-inner{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;padding:6%;font-family:var(--theme-font);}
   .s-eyebrow{font:700 14px var(--theme-font);letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:14px;}
@@ -176,6 +179,7 @@
       <div class="menu-item" onclick="newDeck()"><span class="mi-ico">✨</span><span>New deck</span></div>
       <div class="menu-item" onclick="pdfInput.click()"><span class="mi-ico">📄</span><span>Import PDF<span class="mi-sub">Each page → a slide</span></span></div>
       <div class="menu-item" onclick="imgInput.click()"><span class="mi-ico">🖼️</span><span>Import images</span></div>
+      <div class="menu-item" onclick="deckInput.click()"><span class="mi-ico">📊</span><span>Import PowerPoint / Keynote<span class="mi-sub">.pptx · .ppt · .key → slides</span></span></div>
       <div class="menu-item" onclick="openOrganizer()"><span class="mi-ico">🗂️</span><span>Open my presentations<span class="mi-sub">Import your saved questions</span></span></div>
     </div>
   </div>
@@ -205,6 +209,7 @@
 
   <input type="file" id="pdfInput" accept="application/pdf" class="hidden" onchange="onPdf(this.files[0])">
   <input type="file" id="imgInput" accept="image/*" multiple class="hidden" onchange="onImages(this.files)">
+  <input type="file" id="deckInput" accept=".pptx,.ppt,.key,application/vnd.openxmlformats-officedocument.presentationml.presentation" class="hidden" onchange="onDeckFile(this.files[0])">
 </div>
 
 <!-- ── WORK AREA ────────────────────────────────────────────────────────────── -->
@@ -213,6 +218,7 @@
   <div class="stage-wrap">
     <div class="stage-tools" id="stageTools"></div>
     <div class="canvas-pad"><div class="slide" id="canvasSlide"></div></div>
+    <div class="notes-row"><span class="notes-lbl">🗒 Notes</span><textarea id="notesArea" placeholder="Speaker notes — only you see these" oninput="if(deck.slides[currentIdx]){deck.slides[currentIdx].notes=this.value;scheduleSave();}"></textarea></div>
   </div>
 </div>
 
@@ -368,6 +374,7 @@ function buildInsertMenu(){
 
 /* ─── Navigator ───────────────────────────────────────────────────────────────*/
 function renderNav(){
+  scheduleSave();
   const el=document.getElementById('nav');
   if(!deck.slides.length){ el.innerHTML=`<div class="nav-empty">No slides yet.<br>Use <b>Insert</b> or <b>✨ Polly AI</b> to add one — or <b>File ▸ Import</b> your deck.</div>
     <button class="nav-add" onclick="toggleMenu('insertMenu')">＋ Add slide</button>`; return; }
@@ -393,6 +400,7 @@ function duplicateSlide(){ if(currentIdx<0)return; const c=JSON.parse(JSON.strin
 function renderCanvas(){
   const slide=document.getElementById('canvasSlide'); const tools=document.getElementById('stageTools');
   applyThemeTo(slide, deck.theme);
+  const na=document.getElementById('notesArea'); if(na) na.value=(currentIdx>=0&&deck.slides[currentIdx])?(deck.slides[currentIdx].notes||''):'';
   if(currentIdx<0||!deck.slides[currentIdx]){ slide.innerHTML=`<div class="slide-inner placeholder-q">Select or add a slide to begin.</div>`; tools.innerHTML=''; return; }
   const s=deck.slides[currentIdx]; const d=SLIDE_TYPES[s.kind];
   tools.innerHTML = `<span style="font-weight:600;color:var(--text);">${d.ico} ${d.label}</span>
@@ -406,8 +414,8 @@ function renderCanvas(){
   // wire QR if interactive
   if(hasQR(s)){ const box=slide.querySelector('.qr-card .qrbox'); if(box) renderQR(box, answerUrl(s)); }
 }
-function bind(field, idx){ return `oninput="deck.slides[${idx}].${field}=this.innerText" `; }
-function bindQ(field, idx){ return `oninput="deck.slides[${idx}].question.${field}=this.innerText" `; }
+function bind(field, idx){ return `oninput="deck.slides[${idx}].${field}=this.innerText;scheduleSave()" `; }
+function bindQ(field, idx){ return `oninput="deck.slides[${idx}].question.${field}=this.innerText;scheduleSave()" `; }
 function editHtml(s){
   const i=currentIdx; const letters=['A','B','C','D','E','F'];
   if(s.kind==='title') return `<div class="slide-inner">
@@ -451,10 +459,22 @@ function renderQR(box, url){ box.innerHTML=''; try{ new QRCode(box,{text:url,wid
 /* ─── Import: PDF / images ────────────────────────────────────────────────────*/
 function _load(src){ return new Promise((res,rej)=>{const x=document.createElement('script');x.src=src;x.onload=res;x.onerror=()=>rej();document.head.appendChild(x);}); }
 async function ensurePdf(){ if(window.pdfjsLib)return window.pdfjsLib; await _load('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js'); window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'; return window.pdfjsLib; }
-async function onPdf(file){ if(!file)return; toast('Reading PDF…'); try{ const lib=await ensurePdf(); const pdf=await lib.getDocument({data:await file.arrayBuffer()}).promise;
+async function renderPdfData(blob){ const lib=await ensurePdf(); const pdf=await lib.getDocument({data:await blob.arrayBuffer()}).promise;
   for(let i=1;i<=pdf.numPages;i++){ const pg=await pdf.getPage(i); const vp=pg.getViewport({scale:1.5}); const c=document.createElement('canvas'); c.width=vp.width;c.height=vp.height; await pg.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
     deck.slides.push({id:nid(),kind:'image',img:c.toDataURL('image/jpeg',.82)}); }
-  currentIdx=deck.slides.length-1; renderNav(); renderCanvas(); toast(pdf.numPages+' slides imported'); }catch(e){ toast('Could not read that PDF'); } }
+  currentIdx=deck.slides.length-1; renderNav(); renderCanvas(); save(); return pdf.numPages; }
+async function onPdf(file){ if(!file)return; toast('Reading PDF…'); try{ const n=await renderPdfData(file); toast(n+' slides imported'); }catch(e){ toast('Could not read that PDF'); } }
+// PowerPoint/Keynote → server converts to PDF → render pixel-faithfully. Falls back
+// to a clear "export to PDF" message when conversion isn't configured/available.
+async function onDeckFile(file){ if(!file)return; toast('Converting '+file.name+'…');
+  try{
+    const r=await fetch('/api/convert-deck',{method:'POST',headers:{'x-filename':file.name,'x-target':'pdf','Content-Type':'application/octet-stream'},body:file});
+    const ct=(r.headers.get('content-type')||'');
+    if(r.ok && ct.indexOf('application/pdf')!==-1){ const blob=await r.blob(); const n=await renderPdfData(blob); toast(n+' slides imported'); return; }
+    let msg='Export your deck to PDF and import that.'; try{ const j=await r.json(); if(j&&j.message)msg=j.message; }catch(e){}
+    toast(msg);
+  }catch(e){ toast('Could not convert — export your deck to PDF and import that.'); }
+}
 function onImages(files){ [...files].forEach(f=>{ const r=new FileReader(); r.onload=e=>{ const s=deck.slides[currentIdx];
   if(s&&s.kind==='image'&&!s.img){ s.img=e.target.result; } else { deck.slides.push({id:nid(),kind:'image',img:e.target.result}); currentIdx=deck.slides.length-1; }
   renderNav(); renderCanvas(); }; r.readAsDataURL(f); }); }
@@ -599,14 +619,30 @@ function openModal(id){ document.getElementById(id).classList.add('show'); }
 function closeModal(id){ document.getElementById(id).classList.remove('show'); }
 function newDeck(){ closeMenus(); if(deck.slides.length && !confirm('Start a new deck? Unsaved slides will be cleared.'))return; deck={theme:deck.theme,slides:[]}; currentIdx=-1; renderNav(); renderCanvas(); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+/* Persistence — autosave the deck to localStorage so work survives a refresh.
+   (Image-heavy decks may exceed the quota; we fail silently — cloud save is next.) */
+function save(){ try{ localStorage.setItem('ps_present_deck', JSON.stringify(deck)); }catch(e){} }
+let _saveT; function scheduleSave(){ clearTimeout(_saveT); _saveT=setTimeout(save,700); }
+function loadSaved(){ try{ const s=localStorage.getItem('ps_present_deck'); if(s){ const d=JSON.parse(s); if(d&&Array.isArray(d.slides))return d; } }catch(e){} return null; }
+/* Editor keyboard shortcuts — only when not presenting and not typing in a field. */
+document.addEventListener('keydown',e=>{
+  if(isPresenting())return;
+  const ae=document.activeElement; if(ae&&(ae.isContentEditable||ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'))return;
+  if(e.key==='ArrowDown'){ if(currentIdx<deck.slides.length-1)selectSlide(currentIdx+1); e.preventDefault(); }
+  else if(e.key==='ArrowUp'){ if(currentIdx>0)selectSlide(currentIdx-1); e.preventDefault(); }
+  else if(e.key==='Delete'||e.key==='Backspace'){ if(currentIdx>=0){deleteSlide();e.preventDefault();} }
+  else if((e.metaKey||e.ctrlKey)&&(e.key==='d'||e.key==='D')){ if(currentIdx>=0){duplicateSlide();e.preventDefault();} }
+});
 let _tt; function toast(m){ const el=document.getElementById('toast'); el.textContent=m; el.classList.add('show'); clearTimeout(_tt); _tt=setTimeout(()=>el.classList.remove('show'),2600); }
 document.addEventListener('click',e=>{ if(!e.target.closest('.rib-group'))closeMenus(); });
 
 /* ─── Boot ────────────────────────────────────────────────────────────────────*/
 function boot(){
-  initLang(); buildInsertMenu(); buildThemeMenu(); applyThemeTo(document.documentElement,deck.theme);
-  renderNav(); renderCanvas();
+  initLang(); buildInsertMenu(); buildThemeMenu();
   const fx=window.__PRESENT_FIXTURE;
+  if(!fx){ const saved=loadSaved(); if(saved){ deck=saved; if(!deck.theme)deck.theme='gamified'; currentIdx=deck.slides.length?0:-1; } }
+  applyThemeTo(document.documentElement,deck.theme);
+  renderNav(); renderCanvas();
   if(fx){ if(fx.lang){LANG=fx.lang;initLang();} if(fx.deck){deck=fx.deck;deck.slides.forEach(s=>{if(!s.id)s.id=nid();}); currentIdx=0; renderNav(); renderCanvas();} if(fx.present!=null)startPresent(fx.present); return; }
   initFirebase();
 }
