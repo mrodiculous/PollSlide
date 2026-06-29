@@ -29,8 +29,9 @@
   <DisplayName DefaultValue="PollSlide — Live Polls, Quizzes &amp; Surveys" />
   <Description DefaultValue="Show live poll, quiz and survey results right inside your PowerPoint slides. Your audience scans a QR code or opens a link to respond from any phone — results update live on the slide. Works on Windows, Mac and the web." />
 
-  <IconUrl DefaultValue="https://pollslide.com/icon-64.png" />
-  <HighResolutionIconUrl DefaultValue="https://pollslide.com/icon-512.png" />
+  <!-- AppSource requires EXACT sizes: IconUrl=32x32, HighResolutionIconUrl=64x64 -->
+  <IconUrl DefaultValue="https://pollslide.com/icon-32.png" />
+  <HighResolutionIconUrl DefaultValue="https://pollslide.com/icon-64.png" />
   <SupportUrl DefaultValue="https://pollslide.com/setup" />
 
   <!-- Domains the add-in is allowed to navigate to -->

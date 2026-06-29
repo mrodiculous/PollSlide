@@ -154,18 +154,58 @@ function renderLive(q, responses){
     }).join('');
 }
 
+// Composite the QR onto a clean white "Scan to answer" card (matches the
+// PowerPoint add-in) so what lands on the slide reads as an intentional design
+// element, not a raw code. Returns a PNG data URL with a transparent margin so
+// the card's soft drop-shadow shows on any slide background.
+function buildQrCard(qrSrc, idx, qText){
+  const S = 2;                                   // 2x for crisp text on the slide
+  const card = { w:360, h:430, r:28 }, margin = 34;
+  const W = card.w + margin*2, H = card.h + margin*2;
+  const c = document.createElement('canvas');
+  c.width = W*S; c.height = H*S;
+  const x = c.getContext('2d'); x.scale(S,S);
+  function rr(px,py,w,h,r){ x.beginPath(); x.moveTo(px+r,py);
+    x.arcTo(px+w,py,px+w,py+h,r); x.arcTo(px+w,py+h,px,py+h,r);
+    x.arcTo(px,py+h,px,py,r); x.arcTo(px,py,px+w,py,r); x.closePath(); }
+  // soft drop-shadow + white rounded card (transparent margin carries the shadow)
+  x.save(); x.shadowColor='rgba(18,18,40,0.22)'; x.shadowBlur=26; x.shadowOffsetY=10;
+  x.fillStyle='#ffffff'; rr(margin,margin,card.w,card.h,card.r); x.fill(); x.restore();
+  x.strokeStyle='rgba(15,15,30,0.07)'; x.lineWidth=1; rr(margin,margin,card.w,card.h,card.r); x.stroke();
+  // QR (no smoothing so the modules stay sharp)
+  const qr=300, qx=margin+(card.w-qr)/2, qy=margin+30;
+  x.imageSmoothingEnabled=false; x.drawImage(qrSrc, qx, qy, qr, qr); x.imageSmoothingEnabled=true;
+  // heading
+  x.textAlign='center'; x.fillStyle='#0b0b15'; x.font='700 30px "DM Sans", Arial, sans-serif';
+  x.fillText('Scan to answer', margin+card.w/2, qy+qr+46);
+  // question label (truncated to fit one line)
+  x.fillStyle='#6b6b7a'; x.font='400 18px "DM Sans", Arial, sans-serif';
+  let label = 'Q'+(idx+1)+(qText? ': '+qText : ''); const maxW = card.w-44;
+  if (x.measureText(label).width > maxW){
+    while (label.length>5 && x.measureText(label+'…').width > maxW) label = label.slice(0,-1);
+    label = label.replace(/[\s:]+$/,'') + '…';
+  }
+  x.fillText(label, margin+card.w/2, qy+qr+74);
+  // brand line
+  x.fillStyle='#6c63ff'; x.font='700 15px "DM Sans", Arial, sans-serif';
+  x.fillText('pollslide.com', margin+card.w/2, margin+card.h-20);
+  return c.toDataURL('image/png');
+}
+
 async function insertQr(idx, btn){
   const code = activePres.sessionCode;
   const url = ANSWER_BASE+'#'+code+'/'+idx;
+  const q = qArr(activePres.questions)[idx];
+  const qText = (q && (q.text || q.front)) || '';
   if(btn){ btn.disabled=true; btn.textContent='…'; }
   try{
     const stage = el('qrStage'); stage.innerHTML='';
-    new QRCode(stage, { text:url, width:300, height:300, colorDark:'#000000', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M });
-    await new Promise(r=>setTimeout(r,120)); // let qrcodejs paint
-    const canvas = stage.querySelector('canvas');
-    const img = stage.querySelector('img');
-    const dataUrl = canvas ? canvas.toDataURL('image/png') : (img? img.src : null);
-    if(!dataUrl) throw new Error('Could not render QR.');
+    new QRCode(stage, { text:url, width:300, height:300, colorDark:'#0b0b15', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M });
+    await new Promise(r=>setTimeout(r,140)); // let qrcodejs paint
+    const qrSrc = stage.querySelector('canvas') || stage.querySelector('img');
+    if(!qrSrc) throw new Error('Could not render QR.');
+    if(qrSrc.tagName==='IMG' && !qrSrc.complete){ await new Promise(r=>{ qrSrc.onload=r; qrSrc.onerror=r; }); }
+    const dataUrl = buildQrCard(qrSrc, idx, qText);
     await callInsertQr(dataUrl);
     if(btn){ btn.textContent='✓ Added'; setTimeout(()=>{btn.disabled=false;btn.textContent='▦ Insert QR';},1500); }
   }catch(e){

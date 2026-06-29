@@ -52,10 +52,16 @@ function insertQrOnSlide(dataUrl) {
   if (!b64) throw new Error('Bad image data.');
   var blob = Utilities.newBlob(Utilities.base64Decode(b64), 'image/png', 'pollslide-qr.png');
 
-  var size = 110; // points
   var img = slide.insertImage(blob);
-  img.setWidth(size).setHeight(size);
-  img.setLeft(pres.getPageWidth() - size - 20);
-  img.setTop(pres.getPageHeight() - size - 20);
+  // The QR is now wrapped in a "Scan to answer" card (taller than wide), so scale
+  // to a target width while preserving the image's aspect ratio, then pin it to
+  // the bottom-right corner.
+  var targetW = 150; // points
+  var natW = img.getWidth(), natH = img.getHeight();
+  var h = (natW && natH) ? targetW * (natH / natW) : targetW;
+  img.setWidth(targetW).setHeight(h);
+  var margin = 20;
+  img.setLeft(pres.getPageWidth() - targetW - margin);
+  img.setTop(pres.getPageHeight() - h - margin);
   return true;
 }
