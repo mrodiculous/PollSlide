@@ -502,7 +502,7 @@ function renderQR(code, idx) {
   const qUrl  = `${BASE_URL}#${code}/${idx}`;
   const box   = document.getElementById('qrWrapper');
   box.innerHTML = '';
-  new QRCode(box, { text: qUrl, width: 80, height: 80, colorDark: '#0b0b15', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  new QRCode(box, { text: qUrl, width: 80, height: 80, colorDark: '#0b0b15', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H });
   document.getElementById('qrCodeText').textContent = code;
   document.getElementById('qrUrl').textContent      = qUrl;
 }

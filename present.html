@@ -542,7 +542,21 @@ function renderRank(q,r){ const sm=(q.options||[]).map(()=>0),cn=(q.options||[])
 function renderNps(q,r){ let pr=0,pa=0,de=0,tot=0; r.forEach(x=>{try{const v=Number(JSON.parse(x.answer));if(!isNaN(v)){tot++;if(v>=9)pr++;else if(v<=6)de++;else pa++;}}catch(e){}}); const nps=tot?Math.round((pr-de)/tot*100):'—';
   const row=(l,n,c)=>`<div class="bar"><div class="bar-top"><span>${l}</span><span>${n}</span></div><div class="bar-track"><div class="bar-fill ${c}" style="width:${tot?n/tot*100:0}%"></div></div></div>`;
   return `<div class="metric">NPS ${nps} <span>${tot} responses</span></div>`+row('Promoters (9–10)',pr,'correct')+row('Passives (7–8)',pa,'')+row('Detractors (0–6)',de,'detractor'); }
-const RESULT_RENDERERS={ multiple_choice:renderBars, multiple_choice_multi:renderBars, number:renderBars, rating:renderRating, free_text:renderFree, word_cloud:renderWC, ranking:renderRank, nps:renderNps };
+const _PAL=['#6c63ff','#ff6584','#38d9f5','#f7b731','#a78bfa','#43e97b','#ff8fa3','#00d4ff'];
+function renderDonut(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q); const R=42,C=2*Math.PI*R; let off=0;
+  const segs=(q.options||[]).map((o,i)=>{ const len=(tot?c[i]/tot:0)*C; const col=(_revealed&&cor.includes(i))?'#43e97b':_PAL[i%_PAL.length];
+    const s=`<circle r="${R}" cx="60" cy="60" fill="none" stroke="${col}" stroke-width="16" stroke-dasharray="${len.toFixed(2)} ${(C-len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 60 60)"></circle>`; off+=len; return s; }).join('');
+  const legend=(q.options||[]).map((o,i)=>{ const pct=tot?Math.round(c[i]/tot*100):0; const col=(_revealed&&cor.includes(i))?'#43e97b':_PAL[i%_PAL.length];
+    return `<div style="display:flex;align-items:center;gap:8px;font-size:clamp(13px,1.6vw,18px);margin-bottom:7px;"><span style="width:12px;height:12px;border-radius:3px;background:${col};flex-shrink:0;"></span><span style="flex:1;">${_LETTERS[i]}. ${esc(o.text||'')}</span><span>${c[i]} (${pct}%)</span></div>`; }).join('');
+  return `<div style="display:flex;gap:28px;align-items:center;flex-wrap:wrap;"><svg viewBox="0 0 120 120" width="190" height="190" style="flex-shrink:0;">${segs}<text x="60" y="67" text-anchor="middle" fill="#fff" font-size="22" font-family="Syne" font-weight="800">${tot}</text></svg><div style="flex:1;min-width:220px;">${legend}</div></div>`; }
+function renderColumn(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q); const mx=Math.max(1,...c);
+  return `<div style="display:flex;gap:16px;align-items:flex-end;height:min(44vh,320px);padding-top:22px;">`+(q.options||[]).map((o,i)=>{ const h=Math.round(c[i]/mx*100),pct=tot?Math.round(c[i]/tot*100):0,col=(_revealed&&cor.includes(i))?'#43e97b':_PAL[i%_PAL.length];
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;"><div style="font:700 clamp(13px,1.5vw,18px) 'DM Sans';margin-bottom:6px;">${pct}%</div><div style="width:68%;height:${h}%;min-height:4px;background:${col};border-radius:8px 8px 0 0;transition:height .5s;"></div><div style="margin-top:8px;font:600 clamp(12px,1.4vw,16px) 'DM Sans';text-align:center;">${_LETTERS[i]}<div style="color:var(--muted);font-size:.8em;">${esc((o.text||'').slice(0,16))}</div></div></div>`; }).join('')+`</div>`; }
+function renderBig(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q);
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:20px;">`+(q.options||[]).map((o,i)=>{ const pct=tot?Math.round(c[i]/tot*100):0,ok=_revealed&&cor.includes(i);
+    return `<div><div style="font:800 clamp(30px,6vw,64px) var(--theme-font);color:${ok?'#43e97b':'var(--accent)'};line-height:1;">${c[i]}</div><div style="font:600 clamp(13px,1.6vw,18px) 'DM Sans';margin-top:6px;">${_LETTERS[i]}. ${esc(o.text||'')}${ok?' ✓':''}</div><div style="color:var(--muted);font-size:13px;">${pct}%</div></div>`; }).join('')+`</div>`; }
+function renderMC(q,r){ switch(q.displayMode){ case 'donut':return renderDonut(q,r); case 'column':return renderColumn(q,r); case 'bignum':return renderBig(q,r); case 'wordcloud':return renderWC(q,r); default:return renderBars(q,r); } }
+const RESULT_RENDERERS={ multiple_choice:renderMC, multiple_choice_multi:renderMC, number:renderMC, rating:renderRating, free_text:renderFree, word_cloud:renderWC, ranking:renderRank, nps:renderNps };
 function buildResult(q,r){ return (RESULT_RENDERERS[q.type]||renderBars)(q,r); }
 
 /* ─── Present engine (logo bottom-center) ─────────────────────────────────────*/

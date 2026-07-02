@@ -273,7 +273,7 @@ function setContent(html) {
     const url  = qIdx !== null && !isNaN(qIdx)
       ? `${BASE_URL}#${sessionCode}/${qIdx}`
       : `${BASE_URL}#${sessionCode}/0`;
-    try { new QRCode(el, { text:url, width:60, height:60, colorDark:'#ffffff', colorLight:'rgba(0,0,0,0)', correctLevel:QRCode.CorrectLevel.M }); } catch(e) {}
+    try { new QRCode(el, { text:url, width:60, height:60, colorDark:'#ffffff', colorLight:'rgba(0,0,0,0)', correctLevel:QRCode.CorrectLevel.H }); } catch(e) {}
   }
 }
 

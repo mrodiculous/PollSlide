@@ -658,7 +658,7 @@ function renderAll() {
     const box = document.getElementById('qrBox');
     if (box && window.QRCode) {
       box.innerHTML = '';
-      new QRCode(box, { text: answerUrl, width: 96, height: 96, colorDark:'#0b0b15', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.M });
+      new QRCode(box, { text: answerUrl, width: 96, height: 96, colorDark:'#0b0b15', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.H });
     }
   }
 

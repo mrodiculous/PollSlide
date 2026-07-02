@@ -2884,7 +2884,7 @@ function renderLiveView(idx, qId, q) {
 
   setTimeout(() => {
     const el = document.getElementById(`qrInline_${idx}`);
-    if (el) { el.innerHTML=''; new QRCode(el,{text:qUrl,width:110,height:110,colorDark:'#ffffff',colorLight:'#18182a',correctLevel:QRCode.CorrectLevel.M}); }
+    if (el) { el.innerHTML=''; new QRCode(el,{text:qUrl,width:110,height:110,colorDark:'#ffffff',colorLight:'#18182a',correctLevel:QRCode.CorrectLevel.H}); }
   }, 50);
 }
 
@@ -2897,7 +2897,7 @@ function copyQRBox(idx) {
   document.body.appendChild(tmp);
   const qrDiv = document.createElement('div');
   tmp.appendChild(qrDiv);
-  new QRCode(qrDiv, { text:qUrl, width:300, height:300, colorDark:'#0b0b15', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.M });
+  new QRCode(qrDiv, { text:qUrl, width:300, height:300, colorDark:'#0b0b15', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.H });
 
   const buildCanvas = (src) => {
     const size = 300, pad = 40, textH = 90;
@@ -4503,7 +4503,7 @@ function renderEditor(idx) {
 
   setTimeout(()=>{
     const el=document.getElementById(`qrEditor_${idx}`);
-    if(el){el.innerHTML='';new QRCode(el,{text:qUrl,width:110,height:110,colorDark:'#ffffff',colorLight:'#18182a',correctLevel:QRCode.CorrectLevel.M});}
+    if(el){el.innerHTML='';new QRCode(el,{text:qUrl,width:110,height:110,colorDark:'#ffffff',colorLight:'#18182a',correctLevel:QRCode.CorrectLevel.H});}
   },50);
 }
 
@@ -4833,7 +4833,7 @@ function openQAShare() {
   document.getElementById('qrModalDesc').textContent  = 'Scan or share — your audience can ask questions and upvote.';
   document.getElementById('qrModalURL').textContent   = url;
   const el = document.getElementById('qrModalCode'); el.innerHTML = '';
-  new QRCode(el, { text:url, width:210, height:210, colorDark:'#ffffff', colorLight:'#10101a', correctLevel:QRCode.CorrectLevel.M });
+  new QRCode(el, { text:url, width:210, height:210, colorDark:'#ffffff', colorLight:'#10101a', correctLevel:QRCode.CorrectLevel.H });
   const eb = document.getElementById('qrEmailBtn'); if (eb) eb.style.display = 'none';
   document.getElementById('qrModal').classList.remove('hidden');
 }
@@ -4852,7 +4852,7 @@ function openShareModal() {
   document.getElementById('qrModalDesc').textContent  = `Anyone with this link can ${verb}: "${pres.name}".`;
   document.getElementById('qrModalURL').textContent   = url;
   const el = document.getElementById('qrModalCode'); el.innerHTML = '';
-  new QRCode(el, { text:url, width:210, height:210, colorDark:'#ffffff', colorLight:'#10101a', correctLevel:QRCode.CorrectLevel.M });
+  new QRCode(el, { text:url, width:210, height:210, colorDark:'#ffffff', colorLight:'#10101a', correctLevel:QRCode.CorrectLevel.H });
   // Email-it is for async products (people answer on their own time).
   const emailBtn = document.getElementById('qrEmailBtn');
   if (emailBtn) emailBtn.style.display = ['survey','study','quiz'].includes(pt) ? '' : 'none';
@@ -4918,7 +4918,7 @@ function showQRModal(idx){
   document.getElementById('qrModalDesc').textContent=`Scan to answer Question ${idx+1}`;
   document.getElementById('qrModalURL').textContent=url;
   const el=document.getElementById('qrModalCode');el.innerHTML='';
-  new QRCode(el,{text:url,width:210,height:210,colorDark:'#ffffff',colorLight:'#10101a',correctLevel:QRCode.CorrectLevel.M});
+  new QRCode(el,{text:url,width:210,height:210,colorDark:'#ffffff',colorLight:'#10101a',correctLevel:QRCode.CorrectLevel.H});
   document.getElementById('qrModal').classList.remove('hidden');
 }
 function closeQRModal(){document.getElementById('qrModal').classList.add('hidden');}
@@ -5899,7 +5899,7 @@ function startPresentQa() {
   // Scan-to-ask QR
   try {
     const qrEl = document.getElementById('presentQaQr');
-    if (qrEl) { qrEl.innerHTML = ''; new QRCode(qrEl, { text: getQAUrl(), width: 120, height: 120, colorDark:'#000000', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.M }); }
+    if (qrEl) { qrEl.innerHTML = ''; new QRCode(qrEl, { text: getQAUrl(), width: 120, height: 120, colorDark:'#000000', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.H }); }
   } catch(e) {}
   const ref = db.ref('sessions/' + code + '/qa');
   ref.on('value', snap => {
@@ -6222,7 +6222,7 @@ function renderPresentSlide(idx) {
   const qrEl = document.getElementById(qrId);
   if (qrEl && typeof QRCode !== 'undefined') {
     qrEl.innerHTML = '';
-    new QRCode(qrEl, { text: qUrl, width: 124, height: 124, colorDark:'#0d0d18', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    new QRCode(qrEl, { text: qUrl, width: 124, height: 124, colorDark:'#0d0d18', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.H });
   }
 }
 

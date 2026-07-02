@@ -522,7 +522,7 @@ function renderQRPane(idx, code) {
   setTimeout(() => {
     const box = document.getElementById('ppQRBox'); if (!box) return;
     box.innerHTML = '';
-    new QRCode(box, { text: qUrl, width: 90, height: 90, colorDark: '#0b0b15', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+    new QRCode(box, { text: qUrl, width: 90, height: 90, colorDark: '#0b0b15', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H });
   }, 50);
 }
 
@@ -538,7 +538,7 @@ function insertQR(idx) {
   const qrDiv = document.createElement('div');
   tmp.appendChild(qrDiv);
 
-  new QRCode(qrDiv, { text: qUrl, width: 300, height: 300, colorDark: '#0b0b15', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
+  new QRCode(qrDiv, { text: qUrl, width: 300, height: 300, colorDark: '#0b0b15', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H });
 
   setTimeout(() => {
     const qrCanvas = qrDiv.querySelector('canvas');
