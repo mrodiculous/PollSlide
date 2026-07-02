@@ -130,6 +130,7 @@
   .p-bar{display:flex;align-items:center;gap:12px;padding:9px 16px;background:rgba(0,0,0,.55);border-top:1px solid var(--border);}
   .p-bar .pos{color:var(--muted);font-size:12px;}
   .live{width:min(1000px,90vw);position:absolute;top:50%;left:50%;transform:translate(-50%,-52%);font-family:var(--theme-font);}
+  .live{padding-right:16cqw;} /* clearance so results never collide with the QR card */
   .live .lq{font-family:var(--theme-font);font-weight:800;font-size:5.4cqw;color:#fff;line-height:1.12;margin-bottom:1cqw;}
   .live .tag{font-family:'DM Sans',sans-serif;font-weight:700;font-size:1.6cqw;letter-spacing:.08em;color:var(--muted);margin-bottom:2cqw;}
   .live .tag.rev{color:var(--accent3);}
@@ -145,11 +146,11 @@
   .txt-resp{background:rgba(255,255,255,.07);border:1px solid var(--border);border-radius:1cqw;padding:1cqw 1.3cqw;font-size:1.8cqw;max-width:30cqw;}
   .txt-resp .from{display:block;font-size:1.4cqw;color:var(--muted);margin-top:.4cqw;}
   .wordcloud{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;justify-content:center;}
-  .respc{position:absolute;top:18px;right:26px;font:800 18px var(--theme-font);color:var(--muted);}
+  .respc{position:absolute;top:2.2cqw;right:3cqw;font-family:var(--theme-font);font-weight:800;font-size:2.1cqw;color:var(--muted);}
   .flashcard{text-align:center;}
-  .fc-front{font:800 clamp(24px,4vw,46px) var(--theme-font);color:#fff;}
-  .fc-back{font:600 clamp(18px,2.4vw,30px) 'DM Sans';color:var(--accent3);margin-top:22px;}
-  .fc-hint{font-size:13px;color:var(--muted);margin-top:18px;}
+  .fc-front{font-family:var(--theme-font);font-weight:800;font-size:5.8cqw;color:#fff;}
+  .fc-back{font-family:'DM Sans',sans-serif;font-weight:600;font-size:3.6cqw;color:var(--accent3);margin-top:2.6cqw;}
+  .fc-hint{font-size:1.7cqw;color:var(--muted);margin-top:2.2cqw;}
 
   /* ── Modal (Polly / generic) + auth ──────────────────────── */
   .overlay{position:fixed;inset:0;background:rgba(7,7,15,.86);z-index:1500;display:none;align-items:center;justify-content:center;padding:20px;}
@@ -221,7 +222,7 @@
   <span id="acct"></span>
   <button class="pill-btn ghost" id="authBtn" onclick="toggleAuth()" style="display:none;">Sign in</button>
   <select class="mini" id="langSel" onchange="setLang(this.value)" title="Language"></select>
-  <button class="pill-btn ghost" onclick="goLive()" title="Publish your polls so the QR codes work">📡 Go live</button>
+  <button class="pill-btn ghost" onclick="openReset()" title="Clear counts for a fresh run — answers are saved to your report history first">🧹 Reset tallies</button>
   <button class="pill-btn" onclick="startPresent(currentIdx<0?0:currentIdx)">▶ Present</button>
 
   <input type="file" id="pdfInput" accept="application/pdf" class="hidden" onchange="onPdf(this.files[0])">
@@ -296,6 +297,20 @@
       <button class="pill-btn ghost" onclick="closeModal('orgOverlay')">Cancel</button>
       <button class="pill-btn ghost" onclick="orgAddOne()">＋ Add question</button>
       <button class="pill-btn" onclick="orgAddAll()">＋ Add whole deck</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── RESET TALLIES MODAL ──────────────────────────────────────────────────── -->
+<div class="overlay" id="resetOverlay">
+  <div class="modal">
+    <h2>🧹 Reset tallies</h2>
+    <p class="sub">Counts are cleared for a fresh run. Every answer is archived to your <a href="/report" target="_blank" style="color:var(--accent);">report history</a> first — nothing is lost.</p>
+    <label style="display:flex;align-items:center;gap:9px;text-transform:none;font-size:14px;font-weight:500;color:var(--text);cursor:pointer;"><input type="radio" name="rsScope" value="question" id="rsQuestion" style="width:auto;"> <span>This question <span style="color:var(--muted);">(the selected slide)</span></span></label>
+    <label style="display:flex;align-items:center;gap:9px;text-transform:none;font-size:14px;font-weight:500;color:var(--text);cursor:pointer;"><input type="radio" name="rsScope" value="deck" id="rsDeck" style="width:auto;"> <span>Whole deck <span style="color:var(--muted);">(every question, including imported ones)</span></span></label>
+    <div class="modal-actions">
+      <button class="pill-btn ghost" onclick="closeModal('resetOverlay')">Cancel</button>
+      <button class="pill-btn" onclick="resetTallies()">Reset</button>
     </div>
   </div>
 </div>
@@ -381,7 +396,8 @@ function defaultSlide(kind){
     options:[{text:'Option A'},{text:'Option B'},{text:'Option C'}], correctAnswer:(kind==='quiz'?0:null), sessionCode:null, qIndex:0 } });
 }
 function addSlide(kind){ closeMenus(); const s=defaultSlide(kind); const at=currentIdx<0?deck.slides.length:currentIdx+1;
-  deck.slides.splice(at,0,s); currentIdx=at; renderNav(); renderCanvas(); }
+  deck.slides.splice(at,0,s); currentIdx=at; renderNav(); renderCanvas();
+  if(SLIDE_TYPES[kind].interactive) schedulePublish(); }   // auto-live: QR works the moment it exists
 
 /* ─── Insert menu (built from the registry) ───────────────────────────────────*/
 function buildInsertMenu(){
@@ -410,9 +426,9 @@ function thumbInner(s){
   return `<div class="tw"><div class="tt">${esc(label).slice(0,60)}</div></div>`;
 }
 function selectSlide(i){ currentIdx=i; renderNav(); renderCanvas(); }
-function moveSlide(d){ const j=currentIdx+d; if(j<0||j>=deck.slides.length)return; [deck.slides[currentIdx],deck.slides[j]]=[deck.slides[j],deck.slides[currentIdx]]; currentIdx=j; renderNav(); renderCanvas(); }
-function deleteSlide(){ if(currentIdx<0)return; deck.slides.splice(currentIdx,1); if(currentIdx>=deck.slides.length)currentIdx=deck.slides.length-1; renderNav(); renderCanvas(); }
-function duplicateSlide(){ if(currentIdx<0)return; const c=JSON.parse(JSON.stringify(deck.slides[currentIdx])); c.id=nid(); deck.slides.splice(currentIdx+1,0,c); currentIdx++; renderNav(); renderCanvas(); }
+function moveSlide(d){ const j=currentIdx+d; if(j<0||j>=deck.slides.length)return; [deck.slides[currentIdx],deck.slides[j]]=[deck.slides[j],deck.slides[currentIdx]]; currentIdx=j; renderNav(); renderCanvas(); schedulePublish(); }
+function deleteSlide(){ if(currentIdx<0)return; deck.slides.splice(currentIdx,1); if(currentIdx>=deck.slides.length)currentIdx=deck.slides.length-1; renderNav(); renderCanvas(); schedulePublish(); }
+function duplicateSlide(){ if(currentIdx<0)return; const c=JSON.parse(JSON.stringify(deck.slides[currentIdx])); c.id=nid(); if(c.question)delete c.question.imported; deck.slides.splice(currentIdx+1,0,c); currentIdx++; renderNav(); renderCanvas(); schedulePublish(); }
 
 /* ─── Edit canvas ─────────────────────────────────────────────────────────────*/
 function renderCanvas(){
@@ -425,6 +441,7 @@ function renderCanvas(){
     ${d.qr?'<span style="color:var(--accent3);">· QR auto-shown for audience</span>':'<span>· no QR (content slide)</span>'}
     <button class="st-btn" onclick="addText()">＋ Text</button>
     <button class="st-btn" onclick="addImageEl()">＋ Image</button>
+    <span id="fmtBar" style="display:none;align-items:center;gap:5px;"></span>
     ${((s.kind==='poll'||s.kind==='quiz')&&(s.question.type||'').indexOf('multiple_choice')===0)?`<select class="st-btn" onchange="setDisplay(this.value)" title="How results are shown"><option value="bars"${(s.question.displayMode||'bars')==='bars'?' selected':''}>▭ Bars</option><option value="column"${s.question.displayMode==='column'?' selected':''}>▮ Columns</option><option value="donut"${s.question.displayMode==='donut'?' selected':''}>◐ Donut</option><option value="bignum"${s.question.displayMode==='bignum'?' selected':''}># Big numbers</option></select>`:''}
     <select class="st-btn" onchange="setTransition(this.value)" title="Slide transition"><option value="fade"${(s.transition||'fade')==='fade'?' selected':''}>⇋ Fade</option><option value="none"${s.transition==='none'?' selected':''}>∅ None</option></select>
     <span class="spacer" style="flex:1;"></span>
@@ -435,11 +452,11 @@ function renderCanvas(){
   slide.innerHTML = editHtml(s);
   slide.classList.add('editing');
   slide.insertAdjacentHTML('beforeend', elLayer(s, true));  // free-form elements on top
-  wireElementDrag();
+  wireElementDrag(); renderFmtBar();
   if(hasQR(s)){ const box=slide.querySelector('.qr-card .qrbox'); if(box) renderQR(box, answerUrl(s)); }
 }
 function bind(field, idx){ return `oninput="deck.slides[${idx}].${field}=this.innerText;scheduleSave()" `; }
-function bindQ(field, idx){ return `oninput="deck.slides[${idx}].question.${field}=this.innerText;scheduleSave()" `; }
+function bindQ(field, idx){ return `oninput="deck.slides[${idx}].question.${field}=this.innerText;scheduleSave();schedulePublish()" `; }
 function editHtml(s){
   const i=currentIdx; const letters=['A','B','C','D','E','F'];
   if(s.kind==='title') return `<div class="slide-inner">
@@ -453,8 +470,8 @@ function editHtml(s){
     : `<div class="slide-inner placeholder-q" style="flex-direction:column;gap:10px;"><div>No image yet</div><button class="st-btn" onclick="imgInput.click()">Choose image…</button></div>`;
   if(s.kind==='study') return `<div class="slide-inner" style="align-items:center;text-align:center;">
     <div class="s-eyebrow">Flashcard</div>
-    <div class="s-title" contenteditable="true" oninput="deck.slides[${i}].question.front=this.innerText">${esc(s.question.front||'')}</div>
-    <div class="s-body" style="color:var(--accent3);" contenteditable="true" oninput="deck.slides[${i}].question.back=this.innerText">${esc(s.question.back||'')}</div>
+    <div class="s-title" contenteditable="true" oninput="deck.slides[${i}].question.front=this.innerText;scheduleSave();schedulePublish()">${esc(s.question.front||'')}</div>
+    <div class="s-body" style="color:var(--accent3);" contenteditable="true" oninput="deck.slides[${i}].question.back=this.innerText;scheduleSave();schedulePublish()">${esc(s.question.back||'')}</div>
     ${qrCard(s)}</div>`;
   if(s.kind==='qa') return `<div class="slide-inner">
     <div class="s-eyebrow">Audience Q&amp;A</div>
@@ -466,7 +483,7 @@ function editHtml(s){
     ? `<div class="s-sub">★ Rating 1–${s.question.ratingMax||5}</div>`
     : `<div class="s-opts">${opts.map((o,oi)=>`<div class="s-opt">
         <span class="ltr">${letters[oi]}</span>
-        <span contenteditable="true" oninput="deck.slides[${i}].question.options[${oi}].text=this.innerText" style="flex:1;">${esc(o.text||'')}</span>
+        <span contenteditable="true" oninput="deck.slides[${i}].question.options[${oi}].text=this.innerText;scheduleSave();schedulePublish()" style="flex:1;">${esc(o.text||'')}</span>
         ${(s.kind==='quiz')?`<span style="font-size:11px;color:${s.question.correctAnswer===oi?'var(--accent3)':'var(--muted)'};cursor:pointer;" onclick="setCorrect(${oi})">${s.question.correctAnswer===oi?'✓ correct':'mark'}</span>`:''}
       </div>`).join('')}</div>`;
   return `<div class="slide-inner">
@@ -474,13 +491,16 @@ function editHtml(s){
     <div class="s-title" contenteditable="true" ${bindQ('text',i)}>${esc(s.question.text||'')}</div>
     ${optsHtml}${qrCard(s)}</div>`;
 }
-function setCorrect(oi){ deck.slides[currentIdx].question.correctAnswer=oi; renderCanvas(); scheduleSave(); }
+function setCorrect(oi){ deck.slides[currentIdx].question.correctAnswer=oi; renderCanvas(); scheduleSave(); schedulePublish(); }
 function setDisplay(v){ const s=deck.slides[currentIdx]; if(s&&s.question){ s.question.displayMode=v; scheduleSave(); toast('Results shown as: '+v); } }
 function setTransition(v){ const s=deck.slides[currentIdx]; if(s){ s.transition=v; scheduleSave(); } }
-function qrCard(s){ return hasQR(s) ? `<div class="qr-card"><div class="qrbox"></div><div class="qrl">${t('present.scan')}</div></div>` : ''; }
+// QR caption tells the truth: live → "Scan to answer"; not yet published → why.
+function qrLabel(s){ if(s.question&&s.question.sessionCode) return t('present.scan');
+  return (typeof userId!=='undefined'&&userId) ? 'Activating…' : 'Sign in to activate'; }
+function qrCard(s){ return hasQR(s) ? `<div class="qr-card"><div class="qrbox"></div><div class="qrl">${qrLabel(s)}</div></div>` : ''; }
 function answerUrl(s){ const c=s.question&&s.question.sessionCode; const i=(s.question&&s.question.qIndex)||0;
   return c ? ('https://app.pollslide.com/answer#'+c+'/'+i) : 'https://app.pollslide.com/answer'; }
-function renderQR(box, url){ box.innerHTML=''; try{ new QRCode(box,{text:url,width:84,height:84,colorDark:'#0b0b15',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.H}); }catch(e){} }
+function renderQR(box, url){ box.innerHTML=''; try{ new QRCode(box,{text:url,width:300,height:300,colorDark:'#0b0b15',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.H}); }catch(e){} } // 300px render, CSS scales → crisp at any slide size
 
 /* ─── Free-form elements — add / drag / resize / delete (the Canva core).
    Positions x,y,w are % of the slide; text size is cqw so it scales in present.  */
@@ -493,18 +513,23 @@ function delElement(ev,i){ ev.stopPropagation(); const s=deck.slides[currentIdx]
 function elLayer(s, editable){ if(!s.elements||!s.elements.length)return '';
   return `<div class="el-layer">`+s.elements.map((e,i)=>{ const st=`left:${e.x}%;top:${e.y}%;width:${e.w}%;`;
     const body = e.type==='image' ? `<img src="${e.src||''}" alt="">`
-      : `<div class="el-txt" style="font-size:${e.size||6}cqw;color:${e.color||'#fff'};font-weight:700;font-family:var(--theme-font);" ${editable?`contenteditable="true" oninput="deck.slides[currentIdx].elements[${i}].text=this.innerText;scheduleSave()"`:''}>${esc(e.text||'')}</div>`;
+      : `<div class="el-txt" style="font-size:${e.size||6}cqw;color:${e.color||'#fff'};font-weight:${e.weight||700};font-style:${e.italic?'italic':'normal'};text-align:${e.align||'left'};font-family:var(--theme-font);" ${editable?`contenteditable="true" oninput="deck.slides[currentIdx].elements[${i}].text=this.innerText;scheduleSave()"`:''}>${esc(e.text||'')}</div>`;
     return `<div class="el ${e.type} ${(editable&&i===selEl)?'sel':''}" data-i="${i}" style="${st}">${body}${editable?`<span class="el-del" onclick="delElement(event,${i})">✕</span><span class="el-rz"></span>`:''}</div>`;
   }).join('')+`</div>`; }
 function wireElementDrag(){ const slide=document.getElementById('canvasSlide');
-  slide.onmousedown=function(ev){ const elDiv=ev.target.closest('.el'); if(!elDiv||ev.target.classList.contains('el-del'))return; if(ev.target.isContentEditable)return;
+  slide.onmousedown=function(ev){ const elDiv=ev.target.closest('.el');
+    if(!elDiv){ if(selEl!==-1){ selEl=-1; slide.querySelectorAll('.el.sel').forEach(n=>n.classList.remove('sel')); renderFmtBar(); } return; }
+    if(ev.target.classList.contains('el-del'))return;
     const i=+elDiv.dataset.i; const s=deck.slides[currentIdx]; if(!s||!s.elements[i])return; const e=s.elements[i];
-    slide.querySelectorAll('.el.sel').forEach(n=>n.classList.remove('sel')); elDiv.classList.add('sel'); selEl=i;
+    slide.querySelectorAll('.el.sel').forEach(n=>n.classList.remove('sel')); elDiv.classList.add('sel'); selEl=i; renderFmtBar();
+    if(ev.target.isContentEditable) return;                    // typing, not dragging
     const resizing=ev.target.classList.contains('el-rz'); const rect=slide.getBoundingClientRect();
     if(!rect.width||!rect.height) return; // slide not laid out — don't corrupt positions
-    const sx=ev.clientX,sy=ev.clientY,ox=e.x,oy=e.y,ow=e.w; ev.preventDefault();
+    const sx=ev.clientX,sy=ev.clientY,ox=e.x,oy=e.y,ow=e.w,os=e.size||6; ev.preventDefault();
     function mm(m){ const dx=(m.clientX-sx)/rect.width*100, dy=(m.clientY-sy)/rect.height*100;
-      if(resizing){ e.w=Math.max(6,Math.min(100,ow+dx)); }
+      if(resizing){ e.w=Math.max(5,Math.min(100,ow+dx));
+        // Canva-style: resizing a text box scales its type with it
+        if(e.type==='text'){ e.size=+(os*(e.w/ow)).toFixed(2); const t=elDiv.querySelector('.el-txt'); if(t)t.style.fontSize=e.size+'cqw'; } }
       else { e.x=Math.max(0,Math.min(97,ox+dx)); e.y=Math.max(0,Math.min(97,oy+dy));
         const cx=e.x+e.w/2; if(Math.abs(cx-50)<2.5)e.x=50-e.w/2; else if(Math.abs(e.x)<2)e.x=0; else if(Math.abs(e.x+e.w-100)<2)e.x=100-e.w; // snap x: center / edges
         if(Math.abs(e.y-46)<2.5)e.y=46; else if(Math.abs(e.y)<2)e.y=0; } // snap y: center-ish / top
@@ -512,6 +537,25 @@ function wireElementDrag(){ const slide=document.getElementById('canvasSlide');
     function mu(){ document.removeEventListener('mousemove',mm); document.removeEventListener('mouseup',mu); scheduleSave(); }
     document.addEventListener('mousemove',mm); document.addEventListener('mouseup',mu); };
 }
+/* Contextual format toolbar — appears when a text element is selected. */
+function _fmtEl(){ const s=deck.slides[currentIdx]; return s&&s.elements&&s.elements[selEl]; }
+function _selTxtNode(){ return document.querySelector(`#canvasSlide .el[data-i="${selEl}"] .el-txt`); }
+function renderFmtBar(){ const bar=document.getElementById('fmtBar'); if(!bar)return;
+  const e=_fmtEl();
+  if(!e||e.type!=='text'){ bar.style.display='none'; bar.innerHTML=''; return; }
+  bar.style.display='inline-flex';
+  bar.innerHTML=`<button class="st-btn" onclick="fmtSize(-0.6)" title="Smaller text">A−</button>
+    <button class="st-btn" onclick="fmtSize(0.6)" title="Bigger text">A+</button>
+    <button class="st-btn" onclick="fmtBold()" title="Bold" style="${(e.weight||700)>=700?'border-color:var(--accent);':''}"><b>B</b></button>
+    <button class="st-btn" onclick="fmtItalic()" title="Italic" style="${e.italic?'border-color:var(--accent);':''}"><i>I</i></button>
+    <input type="color" value="${e.color||'#ffffff'}" oninput="fmtColor(this.value)" title="Text color" style="width:30px;height:29px;padding:1px;border:1px solid var(--border2);border-radius:7px;background:var(--chrome2);cursor:pointer;">
+    <button class="st-btn" onclick="fmtAlign()" title="Alignment">${({left:'⯇',center:'≡',right:'⯈'})[e.align||'left']}</button>`;
+}
+function fmtSize(d){ const e=_fmtEl(); if(!e)return; e.size=Math.max(1.2,+((e.size||6)+d).toFixed(2)); const n=_selTxtNode(); if(n)n.style.fontSize=e.size+'cqw'; scheduleSave(); }
+function fmtBold(){ const e=_fmtEl(); if(!e)return; e.weight=(e.weight||700)>=700?400:700; const n=_selTxtNode(); if(n)n.style.fontWeight=e.weight; renderFmtBar(); scheduleSave(); }
+function fmtItalic(){ const e=_fmtEl(); if(!e)return; e.italic=!e.italic; const n=_selTxtNode(); if(n)n.style.fontStyle=e.italic?'italic':'normal'; renderFmtBar(); scheduleSave(); }
+function fmtColor(v){ const e=_fmtEl(); if(!e)return; e.color=v; const n=_selTxtNode(); if(n)n.style.color=v; scheduleSave(); }
+function fmtAlign(){ const e=_fmtEl(); if(!e)return; e.align=({left:'center',center:'right',right:'left'})[e.align||'left']; const n=_selTxtNode(); if(n)n.style.textAlign=e.align; renderFmtBar(); scheduleSave(); }
 
 /* ─── Import: PDF / images ────────────────────────────────────────────────────*/
 function _load(src){ return new Promise((res,rej)=>{const x=document.createElement('script');x.src=src;x.onload=res;x.onerror=()=>rej();document.head.appendChild(x);}); }
@@ -548,7 +592,7 @@ function renderRating(q,r){ const m=q.ratingMax||5,tot=r.length,c={}; for(let i=
 function renderFree(q,r){ if(q.displayMode==='word_cloud')return renderWC(q,r); const it=r.map(_txt).filter(a=>a&&a!=='__none__'); if(!it.length)return `<div style="color:var(--muted)">${t('present.waiting')}</div>`;
   return `<div class="txt-wall">`+r.slice(0,40).map(x=>{const a=_txt(x);if(!a||a==='__none__')return '';return `<div class="txt-resp">${esc(String(a))}<span class="from">— ${esc(x.name||'?')}</span></div>`;}).join('')+`</div>`; }
 function renderWC(q,r){ const f={}; r.forEach(x=>{const a=_txt(x);String(a||'').toLowerCase().split(/[^a-z0-9'’]+/i).filter(w=>w.length>2).forEach(w=>{f[w]=(f[w]||0)+1;});}); const w=Object.entries(f).sort((a,b)=>b[1]-a[1]).slice(0,40); if(!w.length)return `<div style="color:var(--muted)">${t('present.waiting')}</div>`; const mx=w[0][1];
-  return `<div class="wordcloud">`+w.map(([t2,c])=>`<span style="font-size:${16+Math.round(c/mx*44)}px;opacity:${(0.55+0.45*c/mx).toFixed(2)};font-weight:${c>mx/2?800:600};">${esc(t2)}</span>`).join('')+`</div>`; }
+  return `<div class="wordcloud">`+w.map(([t2,c])=>`<span style="font-size:${(1.8+(c/mx)*4.8).toFixed(2)}cqw;opacity:${(0.55+0.45*c/mx).toFixed(2)};font-weight:${c>mx/2?800:600};">${esc(t2)}</span>`).join('')+`</div>`; }
 function renderRank(q,r){ const sm=(q.options||[]).map(()=>0),cn=(q.options||[]).map(()=>0); r.forEach(x=>{try{const a=JSON.parse(x.answer);if(Array.isArray(a))a.forEach((oi,rk)=>{if(sm[oi]!=null){sm[oi]+=rk+1;cn[oi]++;}});}catch(e){}});
   return (q.options||[]).map((o,i)=>({i,a:cn[i]?sm[i]/cn[i]:Infinity})).sort((a,b)=>a.a-b.a).map((it,p)=>`<div class="bar"><div class="bar-top"><span>#${p+1} · ${esc((q.options[it.i]||{}).text||'')}</span><span>${cn[it.i]?'avg '+it.a.toFixed(1):'—'}</span></div></div>`).join(''); }
 function renderNps(q,r){ let pr=0,pa=0,de=0,tot=0; r.forEach(x=>{try{const v=Number(JSON.parse(x.answer));if(!isNaN(v)){tot++;if(v>=9)pr++;else if(v<=6)de++;else pa++;}}catch(e){}}); const nps=tot?Math.round((pr-de)/tot*100):'—';
@@ -559,14 +603,14 @@ function renderDonut(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q); const
   const segs=(q.options||[]).map((o,i)=>{ const len=(tot?c[i]/tot:0)*C; const col=(_revealed&&cor.includes(i))?'#43e97b':_PAL[i%_PAL.length];
     const s=`<circle r="${R}" cx="60" cy="60" fill="none" stroke="${col}" stroke-width="16" stroke-dasharray="${len.toFixed(2)} ${(C-len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 60 60)"></circle>`; off+=len; return s; }).join('');
   const legend=(q.options||[]).map((o,i)=>{ const pct=tot?Math.round(c[i]/tot*100):0; const col=(_revealed&&cor.includes(i))?'#43e97b':_PAL[i%_PAL.length];
-    return `<div style="display:flex;align-items:center;gap:8px;font-size:clamp(13px,1.6vw,18px);margin-bottom:7px;"><span style="width:12px;height:12px;border-radius:3px;background:${col};flex-shrink:0;"></span><span style="flex:1;">${LET[i]}. ${esc(o.text||'')}</span><span>${c[i]} (${pct}%)</span></div>`; }).join('');
-  return `<div style="display:flex;gap:28px;align-items:center;flex-wrap:wrap;"><svg viewBox="0 0 120 120" width="190" height="190" style="flex-shrink:0;">${segs}<text x="60" y="67" text-anchor="middle" fill="#fff" font-size="22" font-family="Syne" font-weight="800">${tot}</text></svg><div style="flex:1;min-width:220px;">${legend}</div></div>`; }
+    return `<div style="display:flex;align-items:center;gap:1cqw;font-size:2cqw;margin-bottom:.9cqw;"><span style="width:1.5cqw;height:1.5cqw;border-radius:.4cqw;background:${col};flex-shrink:0;"></span><span style="flex:1;">${LET[i]}. ${esc(o.text||'')}</span><span>${c[i]} (${pct}%)</span></div>`; }).join('');
+  return `<div style="display:flex;gap:3.4cqw;align-items:center;flex-wrap:wrap;"><svg viewBox="0 0 120 120" style="flex-shrink:0;width:24cqw;height:24cqw;">${segs}<text x="60" y="67" text-anchor="middle" fill="#fff" font-size="22" font-family="Syne" font-weight="800">${tot}</text></svg><div style="flex:1;min-width:26cqw;">${legend}</div></div>`; }
 function renderColumn(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q); const mx=Math.max(1,...c);
-  return `<div style="display:flex;gap:16px;align-items:flex-end;height:min(44vh,320px);padding-top:22px;">`+(q.options||[]).map((o,i)=>{ const h=Math.round(c[i]/mx*100),pct=tot?Math.round(c[i]/tot*100):0,col=(_revealed&&cor.includes(i))?'#43e97b':_PAL[i%_PAL.length];
-    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;"><div style="font:700 clamp(13px,1.5vw,18px) 'DM Sans';margin-bottom:6px;">${pct}%</div><div style="width:68%;height:${h}%;min-height:4px;background:${col};border-radius:8px 8px 0 0;transition:height .5s;"></div><div style="margin-top:8px;font:600 clamp(12px,1.4vw,16px) 'DM Sans';text-align:center;">${LET[i]}<div style="color:var(--muted);font-size:.8em;">${esc((o.text||'').slice(0,16))}</div></div></div>`; }).join('')+`</div>`; }
+  return `<div style="display:flex;gap:2cqw;align-items:flex-end;height:30cqw;padding-top:2.6cqw;">`+(q.options||[]).map((o,i)=>{ const h=Math.round(c[i]/mx*100),pct=tot?Math.round(c[i]/tot*100):0,col=(_revealed&&cor.includes(i))?'#43e97b':_PAL[i%_PAL.length];
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;"><div style="font-weight:700;font-size:1.9cqw;margin-bottom:.7cqw;">${pct}%</div><div style="width:68%;height:${h}%;min-height:.5cqw;background:${col};border-radius:1cqw 1cqw 0 0;transition:height .5s;"></div><div style="margin-top:1cqw;font-weight:600;font-size:1.8cqw;text-align:center;">${LET[i]}<div style="color:var(--muted);font-size:.8em;">${esc((o.text||'').slice(0,16))}</div></div></div>`; }).join('')+`</div>`; }
 function renderBig(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q);
-  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:20px;">`+(q.options||[]).map((o,i)=>{ const pct=tot?Math.round(c[i]/tot*100):0,ok=_revealed&&cor.includes(i);
-    return `<div><div style="font:800 clamp(30px,6vw,64px) var(--theme-font);color:${ok?'#43e97b':'var(--accent)'};line-height:1;">${c[i]}</div><div style="font:600 clamp(13px,1.6vw,18px) 'DM Sans';margin-top:6px;">${LET[i]}. ${esc(o.text||'')}${ok?' ✓':''}</div><div style="color:var(--muted);font-size:13px;">${pct}%</div></div>`; }).join('')+`</div>`; }
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(18cqw,1fr));gap:2.4cqw;">`+(q.options||[]).map((o,i)=>{ const pct=tot?Math.round(c[i]/tot*100):0,ok=_revealed&&cor.includes(i);
+    return `<div><div style="font-family:var(--theme-font);font-weight:800;font-size:7cqw;color:${ok?'#43e97b':'var(--accent)'};line-height:1;">${c[i]}</div><div style="font-weight:600;font-size:2.1cqw;margin-top:.7cqw;">${LET[i]}. ${esc(o.text||'')}${ok?' ✓':''}</div><div style="color:var(--muted);font-size:1.6cqw;">${pct}%</div></div>`; }).join('')+`</div>`; }
 function renderMC(q,r){ switch(q.displayMode){ case 'donut':return renderDonut(q,r); case 'column':return renderColumn(q,r); case 'bignum':return renderBig(q,r); case 'wordcloud':return renderWC(q,r); default:return renderBars(q,r); } }
 const RESULT_RENDERERS={ multiple_choice:renderMC, multiple_choice_multi:renderMC, number:renderMC, rating:renderRating, free_text:renderFree, word_cloud:renderWC, ranking:renderRank, nps:renderNps };
 function buildResult(q,r){ return (RESULT_RENDERERS[q.type]||renderBars)(q,r); }
@@ -575,7 +619,7 @@ function buildResult(q,r){ return (RESULT_RENDERERS[q.type]||renderBars)(q,r); }
 let presentIdx=0,_revealed=false,_kb=null,_liveUnsub=null,_liveSlide=null,_liveResp={};
 function isPresenting(){ return document.getElementById('present').classList.contains('show'); }
 async function startPresent(i){ if(!deck.slides.length){toast('Add a slide first.');return;}
-  if(typeof userId!=='undefined'&&userId&&unpublishedLive()){ toast('Going live…'); await publishDeck(); } // so QR codes scan
+  if(typeof userId!=='undefined'&&userId&&nativeLive().length){ await publishDeck(); } // publish the latest so QR codes scan
   presentIdx=Math.max(0,Math.min(i||0,deck.slides.length-1)); _revealed=false;
   const el=document.getElementById('present'); el.classList.add('show'); try{ el.requestFullscreen&&el.requestFullscreen().catch(()=>{}); }catch(e){}
   renderPresentSlide(presentIdx);
@@ -603,7 +647,7 @@ function renderPresentSlide(i){ const s=deck.slides[i]; const st=document.getEle
   // poll/quiz/survey → live results
   wrap.remove(); attachLive(s); paintLive(s);
 }
-function qrPresent(s){ return `<div class="qr-card" style="bottom:9%;"><div class="qrbox"></div><div class="qrl">${t('present.scan')}</div></div>`; }
+function qrPresent(s){ return `<div class="qr-card" style="bottom:9%;"><div class="qrbox"></div><div class="qrl">${qrLabel(s)}</div></div>`; }
 function afterPresentQR(s){ const box=document.querySelector('#pStage .qr-card .qrbox'); if(box)renderQR(box, answerUrl(s)); }
 function respFor(s){ const fx=window.__PRESENT_FIXTURE; if(fx&&fx.responses&&fx.responses[s.id])return fx.responses[s.id]; return _liveResp[s.id]||[]; }
 function attachLive(s){ const fx=window.__PRESENT_FIXTURE; if(fx&&fx.responses&&fx.responses[s.id])return; if(_liveSlide===s.id)return; detachLive(); _liveSlide=s.id;
@@ -631,7 +675,7 @@ async function runPolly(){ const topic=document.getElementById('pollyTopic').val
   const go=document.getElementById('pollyGo'); go.disabled=true; go.textContent='…';
   try{
     if(_pollyType==='slide'){ await pollySlides(topic,count); }
-    else { await pollyQuestions(topic,_pollyType,count); }
+    else { await pollyQuestions(topic,_pollyType,count); schedulePublish(); }
     closeModal('pollyOverlay'); renderNav(); renderCanvas();
   }catch(e){ document.getElementById('pollyErr').textContent = e.message||'Polly is unavailable right now.'; }
   finally{ go.disabled=false; go.textContent='✨ Generate'; }
@@ -675,7 +719,8 @@ const FB={ apiKey:"AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME",authDomain:"echonest
 let fbAuth=null,fbDb=null,userId=null,userPres={};
 function qArr(q){ return Array.isArray(q)?q.filter(Boolean):(q&&typeof q==='object'?Object.values(q).filter(Boolean):[]); }
 function initFirebase(){ if(fbDb||typeof firebase==='undefined')return; firebase.initializeApp(FB); fbAuth=firebase.auth(); fbDb=firebase.database();
-  fbAuth.onAuthStateChanged(u=>{ userId=u?u.uid:null; document.getElementById('acct').textContent=u?(u.email||''):''; document.getElementById('authBtn').style.display=u?'none':''; if(u)loadUserPres(); }); }
+  fbAuth.onAuthStateChanged(u=>{ userId=u?u.uid:null; document.getElementById('acct').textContent=u?(u.email||''):''; document.getElementById('authBtn').style.display=u?'none':'';
+    if(u){ loadUserPres(); schedulePublish(); if(!isPresenting())renderCanvas(); } }); }   // signing in activates pending QRs
 function toggleAuth(){ openModal('authOverlay'); setTimeout(()=>document.getElementById('authEmail').focus(),60); }
 function doSignIn(){ const e=document.getElementById('authEmail').value.trim(),p=document.getElementById('authPass').value; document.getElementById('authErr').textContent='';
   if(!e||!p){document.getElementById('authErr').textContent='Email and password required.';return;} fbAuth.signInWithEmailAndPassword(e,p).then(()=>closeModal('authOverlay')).catch(x=>document.getElementById('authErr').textContent=x.message); }
@@ -686,9 +731,12 @@ function openOrganizer(){ closeMenus(); if(!userId){ toast('Sign in to open your
   document.getElementById('orgQ').innerHTML=''; openModal('orgOverlay'); }
 function orgSelectPres(id){ const p=userPres[id]; const q=document.getElementById('orgQ'); if(!p){q.innerHTML='';return;}
   q.innerHTML=qArr(p.questions).map((qq,i)=>`<option value="${i}">Q${i+1}: ${esc(String(qq.text||qq.front||'Untitled').slice(0,48))}</option>`).join(''); }
+// Imported questions KEEP their source sessionCode → same QR, same shared tally
+// (by design). They're flagged `imported` so publishDeck never re-codes them;
+// use Reset tallies for a fresh count.
 function _qToSlide(p,qq,qi){ const type=qq.type||'multiple_choice'; const kind=(type==='flashcard')?'study':(p.productType&&SLIDE_TYPES[p.productType]?p.productType:'poll');
-  if(kind==='study') return {id:nid(),kind:'study',question:{type:'flashcard',front:qq.front||qq.text||'',back:qq.back||''}};
-  return {id:nid(),kind, question:Object.assign({},qq,{sessionCode:p.sessionCode,qIndex:qi})}; }
+  if(kind==='study') return {id:nid(),kind:'study',question:{type:'flashcard',front:qq.front||qq.text||'',back:qq.back||'',sessionCode:p.sessionCode,qIndex:qi,imported:true}};
+  return {id:nid(),kind, question:Object.assign({},qq,{sessionCode:p.sessionCode,qIndex:qi,imported:true})}; }
 function orgAddOne(){ const id=document.getElementById('orgPres').value,qi=parseInt(document.getElementById('orgQ').value,10); const p=userPres[id]; if(!p||isNaN(qi))return; deck.slides.push(_qToSlide(p,qArr(p.questions)[qi],qi)); currentIdx=deck.slides.length-1; closeModal('orgOverlay'); renderNav(); renderCanvas(); }
 function orgAddAll(){ const id=document.getElementById('orgPres').value; const p=userPres[id]; if(!p)return; qArr(p.questions).forEach((qq,qi)=>deck.slides.push(_qToSlide(p,qq,qi))); currentIdx=deck.slides.length-1; closeModal('orgOverlay'); renderNav(); renderCanvas(); }
 
@@ -696,11 +744,13 @@ function orgAddAll(){ const id=document.getElementById('orgPres').value; const p
    codes actually scan and app.pollslide.com/answer#CODE/idx works. ─────────────*/
 function genCode(){ return Math.random().toString(36).substr(2,7).toUpperCase().replace(/[01IO]/g,'X'); }
 const LIVE_KINDS=['poll','quiz','survey','study'];
-function unpublishedLive(){ return deck.slides.some(s=>LIVE_KINDS.includes(s.kind) && !(s.question&&s.question.sessionCode)); }
+// Deck-native live slides (imported ones keep the QR + tally of their source
+// product — same code, shared count, by design).
+function nativeLive(){ return deck.slides.filter(s=>LIVE_KINDS.includes(s.kind) && !(s.question&&s.question.imported)); }
 async function publishDeck(){
   if(typeof fbDb==='undefined'||!fbDb||!userId) return false;
   const code = deck.sessionCode || genCode();
-  const live = deck.slides.filter(s=>LIVE_KINDS.includes(s.kind));
+  const live = nativeLive();
   const questions = live.map((s,i)=>{ s.question=s.question||{}; s.question.sessionCode=code; s.question.qIndex=i;
     if(s.kind==='study') return { type:'flashcard', front:s.question.front||'', back:s.question.back||'', text:s.question.front||'' };
     return { text:s.question.text||'', type:s.question.type||'multiple_choice', options:s.question.options||[], correctAnswer:(s.question.correctAnswer!=null?s.question.correctAnswer:null) }; });
@@ -713,9 +763,52 @@ async function publishDeck(){
     deck.sessionCode=code; save(); return true;
   }catch(e){ return false; }
 }
-async function goLive(){ if(!userId){ toast('Sign in to make your polls live.'); toggleAuth(); return; }
-  const live=deck.slides.filter(s=>LIVE_KINDS.includes(s.kind)); if(!live.length){ toast('Add a poll, quiz, survey or study slide first.'); return; }
-  toast('Publishing…'); const ok=await publishDeck(); if(ok){ renderCanvas(); toast('Live! Your QR codes now work.'); } else toast('Could not publish — try again.'); }
+// AUTO-LIVE: any change to an interactive slide re-publishes (debounced), so the
+// moment a QR exists it works — no "Go live" step for the user.
+let _pubT=null;
+function schedulePublish(){ if(typeof userId==='undefined'||!userId) return; clearTimeout(_pubT);
+  _pubT=setTimeout(async()=>{ const had=!!deck.sessionCode; const ok=await publishDeck();
+    if(ok && !had && !isPresenting()) renderCanvas();   // first publish: repaint QR with the real URL
+  }, 900); }
+
+/* ─── Reset tallies — archive-first (reports keep everything), then clear ──────
+   Scope: the selected question, or every question in this deck (incl. imported).
+   Mirrors presenter.html's data-recovery pattern: snapshot to
+   users/<uid>/archives/<presId>/<ts> BEFORE any remove.                          */
+function openReset(){ closeMenus(); if(!userId){ toast('Sign in first.'); toggleAuth(); return; }
+  const s=deck.slides[currentIdx]; const qOk=s&&LIVE_KINDS.includes(s.kind)&&s.question&&s.question.sessionCode;
+  document.getElementById('rsQuestion').disabled=!qOk;
+  document.querySelector('#rsQuestion+span').style.opacity=qOk?1:.4;
+  (qOk?document.getElementById('rsQuestion'):document.getElementById('rsDeck')).checked=true;
+  openModal('resetOverlay'); }
+async function resetTallies(){
+  const scope=document.querySelector('input[name=rsScope]:checked').value;
+  let targets=[];
+  if(scope==='question'){ const s=deck.slides[currentIdx];
+    if(s&&s.question&&s.question.sessionCode) targets=[{code:s.question.sessionCode, idx:s.question.qIndex||0, q:s.question}]; }
+  else { deck.slides.forEach(s=>{ if(LIVE_KINDS.includes(s.kind)&&s.question&&s.question.sessionCode)
+    targets.push({code:s.question.sessionCode, idx:s.question.qIndex||0, q:s.question}); }); }
+  if(!targets.length){ toast('Nothing to reset yet.'); closeModal('resetOverlay'); return; }
+  closeModal('resetOverlay'); toast('Resetting…');
+  try{
+    const byCode={}; targets.forEach(t=>{ (byCode[t.code]=byCode[t.code]||[]).push(t); });
+    const ts=Date.now();
+    for(const [code,list] of Object.entries(byCode)){
+      const responses={}; let any=false;
+      for(const t of list){ const qId='q'+t.idx+'_stable_'+code;
+        const snap=await fbDb.ref('sessions/'+code+'/responses/'+qId).get();
+        if(snap.exists()){ responses[qId]=snap.val(); any=true; } }
+      if(any){ // archive first — the report's history keeps every answer
+        await fbDb.ref('users/'+userId+'/archives/presentslide_'+code+'/'+ts).set({
+          name:'PresentSlide deck', sessionCode:code, productType:'presentslide', archivedAt:ts,
+          questions:list.map(t=>({ text:t.q.text||t.q.front||'', type:t.q.type||'', options:t.q.options||null,
+            correctAnswer:(t.q.correctAnswer!=null?t.q.correctAnswer:null) })), responses });
+      }
+      for(const t of list){ await fbDb.ref('sessions/'+code+'/responses/q'+t.idx+'_stable_'+code).remove(); }
+    }
+    toast('✓ Tallies cleared — answers saved to your report history.');
+  }catch(e){ toast('Could not reset — try again.'); }
+}
 
 /* ─── Menus / modals / utils ──────────────────────────────────────────────────*/
 function closeMenus(){ document.querySelectorAll('.menu').forEach(m=>m.classList.add('hidden')); }
