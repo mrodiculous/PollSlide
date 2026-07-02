@@ -119,6 +119,8 @@
   .p-progress{height:3px;background:rgba(255,255,255,.08);flex-shrink:0;}
   #pProg{height:100%;width:0;background:linear-gradient(90deg,var(--accent),#a78bfa);transition:width .3s;}
   .p-stage{flex:1;position:relative;overflow:hidden;}
+  .p-stage.tr-fade > *:not(.p-logo){animation:pfade .4s ease;}
+  @keyframes pfade{from{opacity:0}to{opacity:1}}
   @keyframes pfade{from{opacity:0}to{opacity:1}}
   #pStage > .slide-inner, #pStage > .live, #pStage > .s-img, #pStage > .qr-card{animation:pfade .42s ease;}
   .p-logo{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:7px;opacity:.85;font-family:'Syne';font-weight:800;font-size:14px;color:#fff;z-index:5;pointer-events:none;}
@@ -420,6 +422,8 @@ function renderCanvas(){
     ${d.qr?'<span style="color:var(--accent3);">· QR auto-shown for audience</span>':'<span>· no QR (content slide)</span>'}
     <button class="st-btn" onclick="addText()">＋ Text</button>
     <button class="st-btn" onclick="addImageEl()">＋ Image</button>
+    ${((s.kind==='poll'||s.kind==='quiz')&&(s.question.type||'').indexOf('multiple_choice')===0)?`<select class="st-btn" onchange="setDisplay(this.value)" title="How results are shown"><option value="bars"${(s.question.displayMode||'bars')==='bars'?' selected':''}>▭ Bars</option><option value="column"${s.question.displayMode==='column'?' selected':''}>▮ Columns</option><option value="donut"${s.question.displayMode==='donut'?' selected':''}>◐ Donut</option><option value="bignum"${s.question.displayMode==='bignum'?' selected':''}># Big numbers</option></select>`:''}
+    <select class="st-btn" onchange="setTransition(this.value)" title="Slide transition"><option value="fade"${(s.transition||'fade')==='fade'?' selected':''}>⇋ Fade</option><option value="none"${s.transition==='none'?' selected':''}>∅ None</option></select>
     <span class="spacer" style="flex:1;"></span>
     <button class="st-btn" onclick="moveSlide(-1)">↑</button>
     <button class="st-btn" onclick="moveSlide(1)">↓</button>
@@ -467,7 +471,9 @@ function editHtml(s){
     <div class="s-title" contenteditable="true" ${bindQ('text',i)}>${esc(s.question.text||'')}</div>
     ${optsHtml}${qrCard(s)}</div>`;
 }
-function setCorrect(oi){ deck.slides[currentIdx].question.correctAnswer=oi; renderCanvas(); }
+function setCorrect(oi){ deck.slides[currentIdx].question.correctAnswer=oi; renderCanvas(); scheduleSave(); }
+function setDisplay(v){ const s=deck.slides[currentIdx]; if(s&&s.question){ s.question.displayMode=v; scheduleSave(); toast('Results shown as: '+v); } }
+function setTransition(v){ const s=deck.slides[currentIdx]; if(s){ s.transition=v; scheduleSave(); } }
 function qrCard(s){ return hasQR(s) ? `<div class="qr-card"><div class="qrbox"></div><div class="qrl">${t('present.scan')}</div></div>` : ''; }
 function answerUrl(s){ const c=s.question&&s.question.sessionCode; const i=(s.question&&s.question.qIndex)||0;
   return c ? ('https://app.pollslide.com/answer#'+c+'/'+i) : 'https://app.pollslide.com/answer'; }
@@ -495,7 +501,10 @@ function wireElementDrag(){ const slide=document.getElementById('canvasSlide');
     if(!rect.width||!rect.height) return; // slide not laid out — don't corrupt positions
     const sx=ev.clientX,sy=ev.clientY,ox=e.x,oy=e.y,ow=e.w; ev.preventDefault();
     function mm(m){ const dx=(m.clientX-sx)/rect.width*100, dy=(m.clientY-sy)/rect.height*100;
-      if(resizing){ e.w=Math.max(6,Math.min(100,ow+dx)); } else { e.x=Math.max(0,Math.min(97,ox+dx)); e.y=Math.max(0,Math.min(97,oy+dy)); }
+      if(resizing){ e.w=Math.max(6,Math.min(100,ow+dx)); }
+      else { e.x=Math.max(0,Math.min(97,ox+dx)); e.y=Math.max(0,Math.min(97,oy+dy));
+        const cx=e.x+e.w/2; if(Math.abs(cx-50)<2.5)e.x=50-e.w/2; else if(Math.abs(e.x)<2)e.x=0; else if(Math.abs(e.x+e.w-100)<2)e.x=100-e.w; // snap x: center / edges
+        if(Math.abs(e.y-46)<2.5)e.y=46; else if(Math.abs(e.y)<2)e.y=0; } // snap y: center-ish / top
       elDiv.style.left=e.x+'%'; elDiv.style.top=e.y+'%'; elDiv.style.width=e.w+'%'; }
     function mu(){ document.removeEventListener('mousemove',mm); document.removeEventListener('mouseup',mu); scheduleSave(); }
     document.addEventListener('mousemove',mm); document.addEventListener('mouseup',mu); };
@@ -547,14 +556,14 @@ function renderDonut(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q); const
   const segs=(q.options||[]).map((o,i)=>{ const len=(tot?c[i]/tot:0)*C; const col=(_revealed&&cor.includes(i))?'#43e97b':_PAL[i%_PAL.length];
     const s=`<circle r="${R}" cx="60" cy="60" fill="none" stroke="${col}" stroke-width="16" stroke-dasharray="${len.toFixed(2)} ${(C-len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 60 60)"></circle>`; off+=len; return s; }).join('');
   const legend=(q.options||[]).map((o,i)=>{ const pct=tot?Math.round(c[i]/tot*100):0; const col=(_revealed&&cor.includes(i))?'#43e97b':_PAL[i%_PAL.length];
-    return `<div style="display:flex;align-items:center;gap:8px;font-size:clamp(13px,1.6vw,18px);margin-bottom:7px;"><span style="width:12px;height:12px;border-radius:3px;background:${col};flex-shrink:0;"></span><span style="flex:1;">${_LETTERS[i]}. ${esc(o.text||'')}</span><span>${c[i]} (${pct}%)</span></div>`; }).join('');
+    return `<div style="display:flex;align-items:center;gap:8px;font-size:clamp(13px,1.6vw,18px);margin-bottom:7px;"><span style="width:12px;height:12px;border-radius:3px;background:${col};flex-shrink:0;"></span><span style="flex:1;">${LET[i]}. ${esc(o.text||'')}</span><span>${c[i]} (${pct}%)</span></div>`; }).join('');
   return `<div style="display:flex;gap:28px;align-items:center;flex-wrap:wrap;"><svg viewBox="0 0 120 120" width="190" height="190" style="flex-shrink:0;">${segs}<text x="60" y="67" text-anchor="middle" fill="#fff" font-size="22" font-family="Syne" font-weight="800">${tot}</text></svg><div style="flex:1;min-width:220px;">${legend}</div></div>`; }
 function renderColumn(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q); const mx=Math.max(1,...c);
   return `<div style="display:flex;gap:16px;align-items:flex-end;height:min(44vh,320px);padding-top:22px;">`+(q.options||[]).map((o,i)=>{ const h=Math.round(c[i]/mx*100),pct=tot?Math.round(c[i]/tot*100):0,col=(_revealed&&cor.includes(i))?'#43e97b':_PAL[i%_PAL.length];
-    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;"><div style="font:700 clamp(13px,1.5vw,18px) 'DM Sans';margin-bottom:6px;">${pct}%</div><div style="width:68%;height:${h}%;min-height:4px;background:${col};border-radius:8px 8px 0 0;transition:height .5s;"></div><div style="margin-top:8px;font:600 clamp(12px,1.4vw,16px) 'DM Sans';text-align:center;">${_LETTERS[i]}<div style="color:var(--muted);font-size:.8em;">${esc((o.text||'').slice(0,16))}</div></div></div>`; }).join('')+`</div>`; }
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;"><div style="font:700 clamp(13px,1.5vw,18px) 'DM Sans';margin-bottom:6px;">${pct}%</div><div style="width:68%;height:${h}%;min-height:4px;background:${col};border-radius:8px 8px 0 0;transition:height .5s;"></div><div style="margin-top:8px;font:600 clamp(12px,1.4vw,16px) 'DM Sans';text-align:center;">${LET[i]}<div style="color:var(--muted);font-size:.8em;">${esc((o.text||'').slice(0,16))}</div></div></div>`; }).join('')+`</div>`; }
 function renderBig(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q);
   return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:20px;">`+(q.options||[]).map((o,i)=>{ const pct=tot?Math.round(c[i]/tot*100):0,ok=_revealed&&cor.includes(i);
-    return `<div><div style="font:800 clamp(30px,6vw,64px) var(--theme-font);color:${ok?'#43e97b':'var(--accent)'};line-height:1;">${c[i]}</div><div style="font:600 clamp(13px,1.6vw,18px) 'DM Sans';margin-top:6px;">${_LETTERS[i]}. ${esc(o.text||'')}${ok?' ✓':''}</div><div style="color:var(--muted);font-size:13px;">${pct}%</div></div>`; }).join('')+`</div>`; }
+    return `<div><div style="font:800 clamp(30px,6vw,64px) var(--theme-font);color:${ok?'#43e97b':'var(--accent)'};line-height:1;">${c[i]}</div><div style="font:600 clamp(13px,1.6vw,18px) 'DM Sans';margin-top:6px;">${LET[i]}. ${esc(o.text||'')}${ok?' ✓':''}</div><div style="color:var(--muted);font-size:13px;">${pct}%</div></div>`; }).join('')+`</div>`; }
 function renderMC(q,r){ switch(q.displayMode){ case 'donut':return renderDonut(q,r); case 'column':return renderColumn(q,r); case 'bignum':return renderBig(q,r); case 'wordcloud':return renderWC(q,r); default:return renderBars(q,r); } }
 const RESULT_RENDERERS={ multiple_choice:renderMC, multiple_choice_multi:renderMC, number:renderMC, rating:renderRating, free_text:renderFree, word_cloud:renderWC, ranking:renderRank, nps:renderNps };
 function buildResult(q,r){ return (RESULT_RENDERERS[q.type]||renderBars)(q,r); }
@@ -574,6 +583,7 @@ function presentNav(d){ const j=presentIdx+d; if(j<0||j>=deck.slides.length)retu
 function slideHasPoll(s){ return s && isInteractive(s) && s.kind!=='qa'; }
 function renderPresentSlide(i){ const s=deck.slides[i]; const st=document.getElementById('pStage'); const el=document.getElementById('present');
   applyThemeTo(el, (s&&s.theme)||deck.theme||'gamified');
+  st.classList.toggle('tr-fade', !(s&&s.transition==='none')); // per-slide transition
   document.getElementById('pPos').textContent=(i+1)+' / '+deck.slides.length;
   const pr=document.getElementById('pProg'); if(pr)pr.style.width=(deck.slides.length?(i+1)/deck.slides.length*100:0)+'%';
   document.getElementById('revealBtn').style.display=slideHasPoll(s)?'':'none';
