@@ -261,21 +261,25 @@
 <div class="overlay" id="pollyOverlay">
   <div class="modal">
     <h2>✨ Build with Polly</h2>
-    <p class="sub">Tell Polly what you need. For slides she writes the content, speaker notes and adds images; for a poll / quiz / survey / study she drafts the questions.</p>
+    <p class="sub">Tell Polly what you need. <b>Full deck</b> builds the whole presentation — content, speaker notes, images, and polls placed where they belong. Or draft questions for one product.</p>
     <label>Type</label>
     <div class="seg" id="pollyType">
-      <div class="seg-item on" data-t="slide">🅣 Slide</div>
+      <div class="seg-item on" data-t="deck">🎬 Full deck</div>
       <div class="seg-item" data-t="poll">🗳️ Poll</div>
       <div class="seg-item" data-t="quiz">🏆 Quiz</div>
       <div class="seg-item" data-t="survey">📋 Survey</div>
       <div class="seg-item" data-t="study">📚 Study</div>
+    </div>
+    <div id="pollyDeckOpts" style="display:flex;gap:16px;margin-top:10px;">
+      <label style="display:flex;align-items:center;gap:7px;text-transform:none;font-size:13px;font-weight:500;color:var(--text);margin:0;cursor:pointer;"><input type="checkbox" id="pollyPolls" checked style="width:auto;"> Weave in polls</label>
+      <label style="display:flex;align-items:center;gap:7px;text-transform:none;font-size:13px;font-weight:500;color:var(--text);margin:0;cursor:pointer;"><input type="checkbox" id="pollyImgs" checked style="width:auto;"> Add images</label>
     </div>
     <label>Theme</label>
     <select id="pollyTheme"></select>
     <label>Tell Polly what to build</label>
     <textarea id="pollyTopic" rows="3" placeholder="e.g. A 5-slide intro to the water cycle — add speaker notes and an image on each slide"></textarea>
     <label id="pollyCountLabel">How many</label>
-    <input id="pollyCount" type="number" min="1" max="10" value="3">
+    <input id="pollyCount" type="number" min="1" max="15" value="10">
     <div class="err" id="pollyErr"></div>
     <div class="modal-actions">
       <button class="pill-btn ghost" onclick="closeModal('pollyOverlay')">Cancel</button>
@@ -506,14 +510,14 @@ function renderQR(box, url){ box.innerHTML=''; try{ new QRCode(box,{text:url,wid
    Positions x,y,w are % of the slide; text size is cqw so it scales in present.  */
 let selEl=-1;
 function ensureEls(s){ if(!s.elements)s.elements=[]; return s.elements; }
-function addText(){ const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;} ensureEls(s).push({type:'text',x:20,y:42,w:56,size:6,color:'#ffffff',text:'Your text'}); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); }
+function addText(){ const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;} ensureEls(s).push({type:'text',x:20,y:42,w:56,size:6,color:'#ffffff',text:'Your text'}); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); editElText(selEl); }
 function addImageEl(){ if(currentIdx<0){toast('Add a slide first.');return;} document.getElementById('elImgInput').click(); }
 function onElImg(file){ if(!file)return; const s=deck.slides[currentIdx]; if(!s)return; const r=new FileReader(); r.onload=e=>{ ensureEls(s).push({type:'image',x:32,y:22,w:36,src:e.target.result}); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); }; r.readAsDataURL(file); }
 function delElement(ev,i){ ev.stopPropagation(); const s=deck.slides[currentIdx]; if(!s||!s.elements)return; s.elements.splice(i,1); selEl=-1; renderCanvas(); scheduleSave(); }
 function elLayer(s, editable){ if(!s.elements||!s.elements.length)return '';
   return `<div class="el-layer">`+s.elements.map((e,i)=>{ const st=`left:${e.x}%;top:${e.y}%;width:${e.w}%;`;
     const body = e.type==='image' ? `<img src="${e.src||''}" alt="">`
-      : `<div class="el-txt" style="font-size:${e.size||6}cqw;color:${e.color||'#fff'};font-weight:${e.weight||700};font-style:${e.italic?'italic':'normal'};text-align:${e.align||'left'};font-family:var(--theme-font);" ${editable?`contenteditable="true" oninput="deck.slides[currentIdx].elements[${i}].text=this.innerText;scheduleSave()"`:''}>${esc(e.text||'')}</div>`;
+      : `<div class="el-txt" style="font-size:${e.size||6}cqw;color:${e.color||'#fff'};font-weight:${e.weight||700};font-style:${e.italic?'italic':'normal'};text-align:${e.align||'left'};font-family:var(--theme-font);" ${editable?`ondblclick="editElText(${i})"`:''}>${esc(e.text||'')}</div>`;
     return `<div class="el ${e.type} ${(editable&&i===selEl)?'sel':''}" data-i="${i}" style="${st}">${body}${editable?`<span class="el-del" onclick="delElement(event,${i})">✕</span><span class="el-rz"></span>`:''}</div>`;
   }).join('')+`</div>`; }
 function wireElementDrag(){ const slide=document.getElementById('canvasSlide');
@@ -537,20 +541,38 @@ function wireElementDrag(){ const slide=document.getElementById('canvasSlide');
     function mu(){ document.removeEventListener('mousemove',mm); document.removeEventListener('mouseup',mu); scheduleSave(); }
     document.addEventListener('mousemove',mm); document.addEventListener('mouseup',mu); };
 }
-/* Contextual format toolbar — appears when a text element is selected. */
+/* Double-click a text box to edit it (Canva/Keynote model): single click selects
+   and drags; double-click enters text editing; blur leaves it. */
+function editElText(i){
+  selEl=i;
+  const n=document.querySelector(`#canvasSlide .el[data-i="${i}"] .el-txt`); if(!n)return;
+  n.contentEditable='true'; n.focus();
+  try{ const sel=window.getSelection(); sel.selectAllChildren(n); }catch(e){}
+  n.oninput=()=>{ const e2=_fmtEl(); if(e2){ e2.text=n.innerText; scheduleSave(); } };
+  n.onblur =()=>{ n.contentEditable='false'; };
+}
+/* Contextual format toolbar — layer controls for every element; full text tools
+   for text elements. */
 function _fmtEl(){ const s=deck.slides[currentIdx]; return s&&s.elements&&s.elements[selEl]; }
 function _selTxtNode(){ return document.querySelector(`#canvasSlide .el[data-i="${selEl}"] .el-txt`); }
 function renderFmtBar(){ const bar=document.getElementById('fmtBar'); if(!bar)return;
   const e=_fmtEl();
-  if(!e||e.type!=='text'){ bar.style.display='none'; bar.innerHTML=''; return; }
+  if(!e){ bar.style.display='none'; bar.innerHTML=''; return; }
+  const layers=`<button class="st-btn" onclick="fmtLayer(1)" title="Bring forward">⬆</button>
+    <button class="st-btn" onclick="fmtLayer(-1)" title="Send back">⬇</button>`;
   bar.style.display='inline-flex';
+  if(e.type!=='text'){ bar.innerHTML=layers; return; }
   bar.innerHTML=`<button class="st-btn" onclick="fmtSize(-0.6)" title="Smaller text">A−</button>
     <button class="st-btn" onclick="fmtSize(0.6)" title="Bigger text">A+</button>
     <button class="st-btn" onclick="fmtBold()" title="Bold" style="${(e.weight||700)>=700?'border-color:var(--accent);':''}"><b>B</b></button>
     <button class="st-btn" onclick="fmtItalic()" title="Italic" style="${e.italic?'border-color:var(--accent);':''}"><i>I</i></button>
     <input type="color" value="${e.color||'#ffffff'}" oninput="fmtColor(this.value)" title="Text color" style="width:30px;height:29px;padding:1px;border:1px solid var(--border2);border-radius:7px;background:var(--chrome2);cursor:pointer;">
-    <button class="st-btn" onclick="fmtAlign()" title="Alignment">${({left:'⯇',center:'≡',right:'⯈'})[e.align||'left']}</button>`;
+    <button class="st-btn" onclick="fmtAlign()" title="Alignment">${({left:'⯇',center:'≡',right:'⯈'})[e.align||'left']}</button>
+    ${layers}`;
 }
+function fmtLayer(d){ const s=deck.slides[currentIdx]; if(!s||!s.elements)return; const j=selEl+d;
+  if(j<0||j>=s.elements.length)return; [s.elements[selEl],s.elements[j]]=[s.elements[j],s.elements[selEl]];
+  selEl=j; renderCanvas(); scheduleSave(); }
 function fmtSize(d){ const e=_fmtEl(); if(!e)return; e.size=Math.max(1.2,+((e.size||6)+d).toFixed(2)); const n=_selTxtNode(); if(n)n.style.fontSize=e.size+'cqw'; scheduleSave(); }
 function fmtBold(){ const e=_fmtEl(); if(!e)return; e.weight=(e.weight||700)>=700?400:700; const n=_selTxtNode(); if(n)n.style.fontWeight=e.weight; renderFmtBar(); scheduleSave(); }
 function fmtItalic(){ const e=_fmtEl(); if(!e)return; e.italic=!e.italic; const n=_selTxtNode(); if(n)n.style.fontStyle=e.italic?'italic':'normal'; renderFmtBar(); scheduleSave(); }
@@ -665,41 +687,72 @@ function paintLive(s){ const st=document.getElementById('pStage'); st.querySelec
 function doReveal(){ const s=deck.slides[presentIdx]; if(!s)return; if(s.kind==='study'){_revealed=!_revealed;} else if(slideHasPoll(s)){_revealed=true;} else return; renderPresentSlide(presentIdx); }
 
 /* ─── Polly modal (per-type) ──────────────────────────────────────────────────*/
-let _pollyType='slide';
+let _pollyType='deck';
 function openPolly(){ closeMenus(); document.getElementById('pollyTheme').innerHTML=Object.entries(THEMES).map(([k,th])=>`<option value="${k}" ${k===deck.theme?'selected':''}>${th.name}</option>`).join('');
-  document.querySelectorAll('#pollyType .seg-item').forEach(el=>el.onclick=()=>{ _pollyType=el.dataset.t; document.querySelectorAll('#pollyType .seg-item').forEach(x=>x.classList.toggle('on',x===el)); document.getElementById('pollyCountLabel').textContent=(_pollyType==='slide'?'How many slides':'How many questions'); });
+  document.querySelectorAll('#pollyType .seg-item').forEach(el=>el.onclick=()=>{ _pollyType=el.dataset.t; document.querySelectorAll('#pollyType .seg-item').forEach(x=>x.classList.toggle('on',x===el));
+    document.getElementById('pollyCountLabel').textContent=(_pollyType==='deck'?'How many slides (total)':'How many questions');
+    document.getElementById('pollyDeckOpts').style.display=(_pollyType==='deck')?'flex':'none'; });
+  document.getElementById('pollyDeckOpts').style.display=(_pollyType==='deck')?'flex':'none';
   document.getElementById('pollyErr').textContent=''; openModal('pollyOverlay'); setTimeout(()=>document.getElementById('pollyTopic').focus(),60); }
 async function runPolly(){ const topic=document.getElementById('pollyTopic').value.trim(); const theme=document.getElementById('pollyTheme').value; const count=Math.max(1,Math.min(10,parseInt(document.getElementById('pollyCount').value,10)||3));
   if(!topic){ document.getElementById('pollyErr').textContent='Give Polly a topic.'; return; }
   deck.theme=theme; applyThemeTo(document.documentElement,theme);
   const go=document.getElementById('pollyGo'); go.disabled=true; go.textContent='…';
   try{
-    if(_pollyType==='slide'){ await pollySlides(topic,count); }
+    if(_pollyType==='deck'){ await pollyDeck(topic,count); schedulePublish(); }
     else { await pollyQuestions(topic,_pollyType,count); schedulePublish(); }
     closeModal('pollyOverlay'); renderNav(); renderCanvas();
   }catch(e){ document.getElementById('pollyErr').textContent = e.message||'Polly is unavailable right now.'; }
   finally{ go.disabled=false; go.textContent='✨ Generate'; }
 }
 // Content slides via the AI endpoint (falls back to a simple titled slide if offline).
-async function pollySlides(topic,count){
-  let made=0;
-  try{
-    const tok = fbAuth&&fbAuth.currentUser ? await fbAuth.currentUser.getIdToken() : null;
-    const r=await fetch('/api/polly',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},tok?{'Authorization':'Bearer '+tok}:{}),body:JSON.stringify({topic,type:'slides',count,language:LANG,notes:true,images:true})});
-    const data=await r.json(); const items=data.slides||data.questions||[];
-    (Array.isArray(items)?items:[]).slice(0,count).forEach(it=>{
-      const sl={ id:nid(), kind:'content', title:it.title||it.text||topic,
-        body:it.body||it.explanation||(it.options?it.options.map(o=>o.text||o).join(' · '):''),
-        notes:it.notes||it.speakerNotes||'' };                 // Polly fills speaker notes
-      if(it.image||it.img){ sl.elements=[{type:'image',x:58,y:18,w:36,src:it.image||it.img}]; } // and an image when useful
-      deck.slides.push(sl); made++;
-    });
-  }catch(e){}
-  if(!made){ // graceful fallback so the action always produces something
-    deck.slides.push({id:nid(),kind:'title',title:topic,sub:'Drafted by Polly'});
-    deck.slides.push({id:nid(),kind:'content',title:'Key points',body:'Polly will fill this in once the AI service is reachable.',notes:'Speaker notes appear here once the AI service is connected.'});
+// FULL DECK: content slides (title/body/notes) with polls placed by the model and
+// images generated per slide. This is the real product — no stub fallbacks; if the
+// AI is unreachable the modal says so honestly.
+async function pollyDeck(topic,count){
+  const tok = fbAuth&&fbAuth.currentUser ? await fbAuth.currentUser.getIdToken() : null;
+  const includePolls=document.getElementById('pollyPolls').checked;
+  const includeImages=document.getElementById('pollyImgs').checked;
+  const r=await fetch('/api/polly',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},tok?{'Authorization':'Bearer '+tok}:{}),
+    body:JSON.stringify({topic,type:'deck',count,language:LANG,includePolls,includeImages})});
+  let data=null; try{ data=await r.json(); }catch(e){}
+  if(!r.ok || !data || !Array.isArray(data.slides) || !data.slides.length)
+    throw new Error((data&&data.error) || (tok?'Polly could not build the deck — try again.':'Sign in so Polly can build your deck.'));
+  const imgQueue=[];
+  data.slides.forEach(sl=>{
+    if(sl.kind==='poll'){
+      const multi=Array.isArray(sl.correctAnswers)&&sl.correctAnswers.length>1;
+      deck.slides.push({ id:nid(), kind:'poll', question:{ text:sl.text, type:multi?'multiple_choice_multi':'multiple_choice',
+        options:(sl.options||[]).map(t=>({text:t})),
+        correctAnswer:(Array.isArray(sl.correctAnswers)&&sl.correctAnswers.length)?(multi?sl.correctAnswers:sl.correctAnswers[0]):null,
+        sessionCode:null, qIndex:0 }});
+    } else {
+      const node={ id:nid(), kind:'content', title:sl.title, body:sl.body||'', notes:sl.notes||'' };
+      if(includeImages && sl.imagePrompt) imgQueue.push({ slide:node, prompt:sl.imagePrompt });
+      deck.slides.push(node);
+    }
+  });
+  currentIdx=deck.slides.length-1; renderNav(); renderCanvas(); save();
+  if(imgQueue.length) illustrateDeck(imgQueue,tok);   // images arrive in the background
+}
+// Generate images one by one (quota-friendly, capped) and drop each onto its slide
+// as a movable/resizable element.
+async function illustrateDeck(queue,tok){
+  const cap=Math.min(queue.length,6);
+  for(let i=0;i<cap;i++){
+    toast('✨ Polly is illustrating '+(i+1)+'/'+cap+'…');
+    try{
+      const r=await fetch('/api/polly-image',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},tok?{'Authorization':'Bearer '+tok}:{}),
+        body:JSON.stringify({ prompt:queue[i].prompt, size:'1024x1024' })});
+      const d=await r.json().catch(()=>null);
+      if(d&&d.image){
+        (queue[i].slide.elements=queue[i].slide.elements||[]).push({type:'image',x:57,y:14,w:38,src:d.image});
+        save(); renderNav();
+        if(deck.slides[currentIdx]&&deck.slides[currentIdx].id===queue[i].slide.id) renderCanvas();
+      }
+    }catch(e){}
   }
-  currentIdx=deck.slides.length-1;
+  toast('✨ Deck illustrated');
 }
 // Interactive questions for a specific product (poll/quiz/survey/study).
 async function pollyQuestions(topic,type,count){
@@ -826,6 +879,19 @@ function loadSaved(){ try{ const s=localStorage.getItem('ps_present_deck'); if(s
 document.addEventListener('keydown',e=>{
   if(isPresenting())return;
   const ae=document.activeElement; if(ae&&(ae.isContentEditable||ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'))return;
+  // A selected element captures the keyboard first (Canva-style)…
+  const se=_fmtEl();
+  if(se){
+    const nudge=e.shiftKey?4:1;
+    const node=document.querySelector(`#canvasSlide .el[data-i="${selEl}"]`);
+    if(e.key==='Delete'||e.key==='Backspace'){ deck.slides[currentIdx].elements.splice(selEl,1); selEl=-1; renderCanvas(); scheduleSave(); e.preventDefault(); return; }
+    if(e.key==='Escape'){ selEl=-1; renderCanvas(); e.preventDefault(); return; }
+    if(e.key==='ArrowLeft'){ se.x=Math.max(0,se.x-nudge); if(node)node.style.left=se.x+'%'; scheduleSave(); e.preventDefault(); return; }
+    if(e.key==='ArrowRight'){ se.x=Math.min(97,se.x+nudge); if(node)node.style.left=se.x+'%'; scheduleSave(); e.preventDefault(); return; }
+    if(e.key==='ArrowUp'){ se.y=Math.max(0,se.y-nudge); if(node)node.style.top=se.y+'%'; scheduleSave(); e.preventDefault(); return; }
+    if(e.key==='ArrowDown'){ se.y=Math.min(97,se.y+nudge); if(node)node.style.top=se.y+'%'; scheduleSave(); e.preventDefault(); return; }
+  }
+  // …otherwise the keys drive the slide navigator.
   if(e.key==='ArrowDown'){ if(currentIdx<deck.slides.length-1)selectSlide(currentIdx+1); e.preventDefault(); }
   else if(e.key==='ArrowUp'){ if(currentIdx>0)selectSlide(currentIdx-1); e.preventDefault(); }
   else if(e.key==='Delete'||e.key==='Backspace'){ if(currentIdx>=0){deleteSlide();e.preventDefault();} }

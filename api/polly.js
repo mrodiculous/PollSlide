@@ -59,6 +59,58 @@ const TYPE_GUIDE = {
 
 const LANG_NAMES = { en:'English', es:'Spanish', de:'German', fr:'French', pt:'Portuguese', it:'Italian', nl:'Dutch', ja:'Japanese', zh:'Chinese (Simplified)', ar:'Arabic', hi:'Hindi' };
 
+// ── FULL-DECK generation (PresentSlide) ────────────────────────────────────────
+// Returns a complete presentation: informational content slides (title/body/
+// speaker notes/imagePrompt) with poll questions placed strategically between
+// sections. This is what "build me a 10-slide deck on X" actually delivers.
+function buildDeckMessages({ topic, count, includePolls, includeImages, source, language }) {
+  const langName = LANG_NAMES[language] || 'English';
+  const langRule = language && language !== 'en'
+    ? ` Write ALL content in ${langName}. JSON keys stay in English; VALUES are in ${langName}.`
+    : '';
+  const schema = `{
+  "slides": [
+    { "kind": "content", "title": "slide heading", "body": "2-4 tight sentences or • bullet lines", "notes": "2-3 sentences the presenter SAYS for this slide (conversational, first person)"${includeImages ? ', "imagePrompt": "a vivid text-to-image prompt for a fitting illustration, or omit if none needed"' : ''} }${includePolls ? `,
+    { "kind": "poll", "text": "the audience question", "options": ["option 1","option 2","option 3"], "answers": ["correct option word-for-word, or [] for opinion polls"] }` : ''}
+  ]
+}`;
+  const system =
+    `You are Polly, PollSlide's AI presentation designer. Build a COMPLETE, well-structured ${count}-slide deck: ` +
+    `an engaging opening slide, a logical narrative through the material, and a strong close.` +
+    (includePolls ? ` Place poll questions STRATEGICALLY — after key sections, roughly every 3-4 content slides (2-3 polls in a ${count}-slide deck), never two polls in a row, never the first slide.` : '') +
+    (includeImages ? ` Give an "imagePrompt" to the slides that would genuinely benefit from an illustration (about half).` : '') +
+    ` Every slide gets speaker notes.${langRule}` +
+    ` Return ONLY valid JSON in exactly this shape — no markdown, no commentary. The "slides" array must have exactly ${count} entries total:\n${schema}`;
+  const user = source
+    ? `Build the ${count}-slide deck from ONLY this source material.` + (topic ? ` Focus: ${topic}.` : '') + `\n\nSOURCE MATERIAL:\n"""\n${source}\n"""`
+    : `Topic: ${topic}\nBuild the ${count}-slide deck.`;
+  return [ { role: 'system', content: system }, { role: 'user', content: user } ];
+}
+
+// Shape a deck response: content slides (title required) + polls (options resolved).
+function normalizeDeck(raw) {
+  let parsed;
+  try { parsed = JSON.parse(raw); }
+  catch { throw new Error('Model did not return valid JSON'); }
+  const list = Array.isArray(parsed) ? parsed : (parsed.slides || []);
+  if (!Array.isArray(list) || list.length === 0) throw new Error('No slides in model output');
+  return list.map((s) => {
+    if (s.kind === 'poll' || (s.options && s.text)) {
+      const options = (Array.isArray(s.options) ? s.options : [])
+        .map((o) => (typeof o === 'string' ? o : (o && o.text) || '')).filter(Boolean).slice(0, 6);
+      if (options.length < 2) return null;
+      const correctAnswers = resolveCorrectIndices(s, options);
+      return { kind: 'poll', text: String(s.text || '').trim(), options, correctAnswers };
+    }
+    const title = String(s.title || s.text || '').trim();
+    if (!title) return null;
+    return { kind: 'content', title,
+      body:  String(s.body || '').trim(),
+      notes: String(s.notes || s.speakerNotes || '').trim(),
+      imagePrompt: String(s.imagePrompt || '').trim() };
+  }).filter(Boolean);
+}
+
 function buildMessages({ topic, type, count, difficulty, audience, source, language }) {
   const isStudy  = type === 'study';
   const isSurvey = type === 'survey';
@@ -248,7 +300,9 @@ module.exports = async function handler(req, res) {
   // ── Inputs (all optional except topic) ─────────────────────────────────────
   const body       = req.body || {};
   const topic      = String(body.topic || '').trim();
-  const type       = ['poll', 'survey', 'quiz', 'study', 'presentation'].includes(body.type) ? body.type : 'quiz';
+  const type       = ['poll', 'survey', 'quiz', 'study', 'presentation', 'deck'].includes(body.type) ? body.type : 'quiz';
+  const includePolls  = body.includePolls  !== false;   // deck only: polls woven in (default on)
+  const includeImages = body.includeImages !== false;   // deck only: imagePrompts (default on)
   const count      = Math.min(Math.max(parseInt(body.count, 10) || 1, 1), 30);   // clamp 1–10
   const difficulty = body.difficulty ? String(body.difficulty).slice(0, 40) : '';
   const audience   = body.audience   ? String(body.audience).slice(0, 80)   : '';
@@ -264,7 +318,9 @@ module.exports = async function handler(req, res) {
   try { quota = await checkQuota(req); }
   catch (e) { if (e && e.code) return res.status(e.code).json({ error: e.error, overLimit: !!e.overLimit, limit: e.limit, used: e.used }); throw e; }
 
-  const messages = buildMessages({ topic, type, count, difficulty, audience, source: sourceMaterial, language });
+  const messages = type === 'deck'
+    ? buildDeckMessages({ topic, count, includePolls, includeImages, source: sourceMaterial, language })
+    : buildMessages({ topic, type, count, difficulty, audience, source: sourceMaterial, language });
 
   let raw = '';
   let source = '';
@@ -293,6 +349,11 @@ module.exports = async function handler(req, res) {
 
   // 3) Shape the result.
   try {
+    if (type === 'deck') {
+      const slides = normalizeDeck(raw);
+      try { await consumeQuota(quota); } catch (e) { /* never fail the response over the counter */ }
+      return res.status(200).json({ source, type, topic, slides });
+    }
     const questions = normalizeQuestions(raw, type);
     try { await consumeQuota(quota); } catch (e) { /* never fail the response over the counter */ }
     return res.status(200).json({ source, type, topic, questions });
