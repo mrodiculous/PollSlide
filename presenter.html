@@ -5820,7 +5820,8 @@ function openPresentMode() {
   // Make sure the opening slide is actually live in Firebase so the companion
   // follows from question one. If it's already the live question, don't re-launch
   // (that would reset its reveal state); otherwise launch it now.
-  if (liveQIdx !== idx) launchQuestion(idx, { silent: true });
+  // Flashcards have no live audience question — never launch them to the session.
+  if (liveQIdx !== idx && questions[idx].type !== 'flashcard') launchQuestion(idx, { silent: true });
   renderPresentSlide(_presentIdx);
 
   // Tick the reveal/post-reveal status badge every second without a full re-render
@@ -5837,7 +5838,11 @@ function openPresentMode() {
     if (e.key === 'Escape') { closePresentMode(); return; }
     if (e.key === 'ArrowRight' || e.key === ' ') { presentNav(1); e.preventDefault(); }
     if (e.key === 'ArrowLeft') { presentNav(-1); e.preventDefault(); }
-    if (e.key === 'r' || e.key === 'R') { doReveal(); renderPresentSlide(_presentIdx); }
+    if (e.key === 'r' || e.key === 'R') {
+      if (questions[_presentIdx] && questions[_presentIdx].type === 'flashcard') { revealed = !revealed; } // flip both ways
+      else doReveal();
+      renderPresentSlide(_presentIdx);
+    }
     if (e.key === 'q' || e.key === 'Q') { togglePresentQA(); }
   };
   document.addEventListener('keydown', _presentKbHandler);
@@ -5937,8 +5942,12 @@ function presentNav(dir) {
   // pinned to the FIRST launched question and never received the reveal/post-reveal
   // phase for Q2+. launchQuestion() writes the new id + phase:'live' + postReveal,
   // and also resets all reveal/post-reveal state for a clean slate per slide.
-  launchQuestion(newIdx, { silent: true });
-  _subscribePresentResponses(); // present-mode response feed for the new question
+  if (questions[newIdx].type === 'flashcard') {
+    revealed = false;            // fresh card starts face-down; R flips it
+  } else {
+    launchQuestion(newIdx, { silent: true });
+    _subscribePresentResponses(); // present-mode response feed for the new question
+  }
   renderPresentSlide(_presentIdx);
 }
 
@@ -6057,6 +6066,21 @@ function renderPresentSlide(idx) {
   const container = document.getElementById('presentContent');
   if (!container || !questions[idx]) return;
   const q = questions[idx];
+  // ── Flashcards (StudySlide): present as a real card — front, flip to back ──
+  // (Without this branch flashcards fell into the poll renderers with q.text
+  //  undefined and present mode looked broken for study decks.)
+  if (q.type === 'flashcard') {
+    container.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;text-align:center;padding:4vw;">
+        <div style="font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--p-muted,#9090b8);font-weight:700;margin-bottom:2.2vw;">Card ${idx+1} / ${questions.length}</div>
+        <div style="font-family:Syne,sans-serif;font-weight:800;font-size:clamp(28px,4.6vw,64px);line-height:1.15;color:var(--p-text,#fff);max-width:72vw;">${escapeHtml(q.front||'')}</div>
+        ${revealed
+          ? `<div style="font-family:'DM Sans',sans-serif;font-weight:600;font-size:clamp(20px,3vw,40px);color:#43e97b;margin-top:3vw;max-width:72vw;">${escapeHtml(q.back||'')}</div>`
+          : `<div style="font-size:clamp(13px,1.2vw,16px);color:var(--p-muted,#9090b8);margin-top:3vw;">Press <b>R</b> — or click Reveal — to flip the card</div>`}
+      </div>`;
+    const badge = document.getElementById('presentRevealBadge'); if (badge) badge.innerHTML = '';
+    return;
+  }
   const letters = ['A','B','C','D','E','F'];
   const PS_COLORS = ['#6c63ff','#ff6584','#38d9f5','#f7b731','#a78bfa','#43e97b'];
   const responses = _lastPresResponses.length ? _lastPresResponses : (_lastResponses || []);

@@ -718,7 +718,7 @@ async function pollyDeck(topic,count){
   let data=null; try{ data=await r.json(); }catch(e){}
   if(!r.ok || !data || !Array.isArray(data.slides) || !data.slides.length)
     throw new Error((data&&data.error) || (tok?'Polly could not build the deck — try again.':'Sign in so Polly can build your deck.'));
-  const imgQueue=[];
+  const firstNew=deck.slides.length, imgQueue=[];
   data.slides.forEach(sl=>{
     if(sl.kind==='poll'){
       const multi=Array.isArray(sl.correctAnswers)&&sl.correctAnswers.length>1;
@@ -732,7 +732,7 @@ async function pollyDeck(topic,count){
       deck.slides.push(node);
     }
   });
-  currentIdx=deck.slides.length-1; renderNav(); renderCanvas(); save();
+  currentIdx=firstNew; renderNav(); renderCanvas(); save();
   if(imgQueue.length) illustrateDeck(imgQueue,tok);   // images arrive in the background
 }
 // Generate images one by one (quota-friendly, capped) and drop each onto its slide
