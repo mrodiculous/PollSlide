@@ -58,7 +58,8 @@
   .spacer{flex:1;}
   .pill-btn{display:inline-flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border:none;border-radius:9px;font-family:'Syne';font-weight:700;font-size:13px;padding:9px 18px;}
   .pill-btn.ghost{background:var(--chrome2);border:1px solid var(--border2);color:var(--text);}
-  select.mini{background:var(--chrome2);color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:7px 9px;font-size:12px;}
+  select.mini,input.mini{background:var(--chrome2);color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:7px 9px;font-size:12px;font-family:inherit;}
+  input.mini::placeholder{color:var(--muted);}
   #acct{font-size:12px;color:var(--muted);}
 
   /* ── Body: navigator + canvas ───────────────────────────── */
@@ -88,12 +89,12 @@
   /* WYSIWYG: ALL slide typography is sized in cqw (percent of the slide's own
      width), so the edit canvas is pixel-proportional to the present view. */
   .s-eyebrow{font-family:var(--theme-font);font-weight:700;font-size:1.9cqw;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:1.7cqw;}
-  .s-title{font-family:var(--theme-font);font-weight:800;font-size:6.2cqw;color:#fff;line-height:1.12;outline:none;}
-  .s-sub{font-family:'DM Sans',sans-serif;font-weight:500;font-size:2.9cqw;color:var(--muted);margin-top:1.8cqw;outline:none;}
-  .s-body{font-family:'DM Sans',sans-serif;font-weight:500;font-size:2.7cqw;color:#e7e7f5;margin-top:1.6cqw;line-height:1.5;outline:none;}
+  .s-title{font-family:var(--theme-font);font-weight:800;font-size:6.2cqw;color:var(--slide-text,#fff);line-height:1.12;outline:none;}
+  .s-sub{font-family:'DM Sans',sans-serif;font-weight:500;font-size:2.9cqw;color:var(--slide-muted,var(--muted));margin-top:1.8cqw;outline:none;}
+  .s-body{font-family:'DM Sans',sans-serif;font-weight:500;font-size:2.7cqw;color:var(--slide-body,#e7e7f5);margin-top:1.6cqw;line-height:1.5;outline:none;}
   .s-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
   .s-opts{margin-top:2.4cqw;display:flex;flex-direction:column;gap:1.2cqw;max-width:70%;}
-  .s-opt{display:flex;align-items:center;gap:1.3cqw;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);border-radius:1.2cqw;padding:1.2cqw 1.8cqw;font-family:'DM Sans',sans-serif;font-weight:600;font-size:2.4cqw;color:#fff;}
+  .s-opt{display:flex;align-items:center;gap:1.3cqw;background:var(--opt-bg,rgba(255,255,255,.08));border:1px solid var(--opt-border,rgba(255,255,255,.14));border-radius:1.2cqw;padding:1.2cqw 1.8cqw;font-family:'DM Sans',sans-serif;font-weight:600;font-size:2.4cqw;color:var(--slide-text,#fff);}
   .s-opt .ltr{width:3.2cqw;height:3.2cqw;border-radius:.8cqw;background:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.7cqw;flex-shrink:0;}
   .s-opt[contenteditable]{outline:none;}
   .qr-card{position:absolute;right:5%;bottom:7%;width:13cqw;background:#fff;padding:1.1cqw;border-radius:1.6cqw;text-align:center;box-shadow:0 12px 36px rgba(0,0,0,.45);}
@@ -131,7 +132,7 @@
   .p-bar .pos{color:var(--muted);font-size:12px;}
   .live{width:min(1000px,90vw);position:absolute;top:50%;left:50%;transform:translate(-50%,-52%);font-family:var(--theme-font);}
   .live{padding-right:16cqw;} /* clearance so results never collide with the QR card */
-  .live .lq{font-family:var(--theme-font);font-weight:800;font-size:5.4cqw;color:#fff;line-height:1.12;margin-bottom:1cqw;}
+  .live .lq{font-family:var(--theme-font);font-weight:800;font-size:5.4cqw;color:var(--slide-text,#fff);line-height:1.12;margin-bottom:1cqw;}
   .live .tag{font-family:'DM Sans',sans-serif;font-weight:700;font-size:1.6cqw;letter-spacing:.08em;color:var(--muted);margin-bottom:2cqw;}
   .live .tag.rev{color:var(--accent3);}
   .bar{margin-bottom:1.7cqw;}
@@ -148,7 +149,7 @@
   .wordcloud{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;justify-content:center;}
   .respc{position:absolute;top:2.2cqw;right:3cqw;font-family:var(--theme-font);font-weight:800;font-size:2.1cqw;color:var(--muted);}
   .flashcard{text-align:center;}
-  .fc-front{font-family:var(--theme-font);font-weight:800;font-size:5.8cqw;color:#fff;}
+  .fc-front{font-family:var(--theme-font);font-weight:800;font-size:5.8cqw;color:var(--slide-text,#fff);}
   .fc-back{font-family:'DM Sans',sans-serif;font-weight:600;font-size:3.6cqw;color:var(--accent3);margin-top:2.6cqw;}
   .fc-hint{font-size:1.7cqw;color:var(--muted);margin-top:2.2cqw;}
 
@@ -214,10 +215,11 @@
 
   <!-- Theme -->
   <div class="rib-group">
-    <button class="rib-btn" onclick="toggleMenu('themeMenu')">Theme <span class="caret">▾</span></button>
+    <button class="rib-btn" onclick="buildThemeMenu();toggleMenu('themeMenu')">Theme <span class="caret">▾</span></button>
     <div class="menu hidden" id="themeMenu"></div>
   </div>
 
+  <input id="deckTitle" class="mini" style="width:180px;margin-left:6px;font-weight:600;" placeholder="Untitled deck" oninput="deck.title=this.value;scheduleSave()" title="Deck title — used in reports & history">
   <div class="spacer"></div>
   <span id="acct"></span>
   <button class="pill-btn ghost" id="authBtn" onclick="toggleAuth()" style="display:none;">Sign in</button>
@@ -358,14 +360,29 @@ const THEMES = {
   educational:  { name:'Educational',  font:"'DM Sans',sans-serif",        slideBg:'linear-gradient(135deg,#163a2f,#0e211b)',
     vars:{'--accent':'#2f9e6e','--accent2':'#f59e0b','--accent3':'#34d399','--accent4':'#fbbf24'} },
   fun:          { name:'Fun',          font:"'Syne','DM Sans',sans-serif",  slideBg:'linear-gradient(135deg,#3a0ca3,#1a0b2e)',
-    vars:{'--accent':'#ff5fa2','--accent2':'#00d4ff','--accent3':'#ffd23f','--accent4':'#7cff6b'} }
+    vars:{'--accent':'#ff5fa2','--accent2':'#00d4ff','--accent3':'#ffd23f','--accent4':'#7cff6b'} },
+  minimal:      { name:'Minimal Light', font:"'DM Sans',sans-serif",        slideBg:'linear-gradient(135deg,#ffffff,#eef0f6)',
+    vars:{'--accent':'#4f46e5','--accent2':'#e11d48','--accent3':'#16a34a','--accent4':'#d97706',
+          '--slide-text':'#15152a','--slide-body':'#3c3c55','--slide-muted':'#6b6b85',
+          '--opt-bg':'rgba(20,20,45,.05)','--opt-border':'rgba(20,20,45,.14)'} },
+  midnight:     { name:'Midnight',     font:"'DM Sans',sans-serif",        slideBg:'linear-gradient(135deg,#05070f,#0b1222)',
+    vars:{'--accent':'#38bdf8','--accent2':'#f472b6','--accent3':'#4ade80','--accent4':'#facc15'} },
+  sunset:       { name:'Sunset',       font:"'Syne','DM Sans',sans-serif",  slideBg:'linear-gradient(135deg,#3d1635,#1a0b16)',
+    vars:{'--accent':'#fb923c','--accent2':'#f43f5e','--accent3':'#34d399','--accent4':'#fbbf24'} },
+  ocean:        { name:'Ocean',        font:"'DM Sans',sans-serif",        slideBg:'linear-gradient(135deg,#062a3f,#04121d)',
+    vars:{'--accent':'#22d3ee','--accent2':'#818cf8','--accent3':'#34d399','--accent4':'#fde047'} }
 };
 function applyThemeTo(el, key){ const th=THEMES[key]||THEMES.gamified;
+  ['--slide-text','--slide-body','--slide-muted','--opt-bg','--opt-border'].forEach(k=>el.style.removeProperty(k)); // dark defaults unless the theme overrides
   Object.entries(th.vars).forEach(([k,v])=>el.style.setProperty(k,v));
   el.style.setProperty('--slide-bg', th.slideBg); el.style.setProperty('--theme-font', th.font); }
 function setTheme(key){ if(!THEMES[key])return; deck.theme=key; closeMenus(); applyThemeTo(document.documentElement,key); renderCanvas(); renderNav(); }
-function buildThemeMenu(){ document.getElementById('themeMenu').innerHTML = Object.entries(THEMES).map(([k,th])=>
-  `<div class="menu-item" onclick="setTheme('${k}')"><span class="mi-ico">🎨</span><span>${th.name}</span></div>`).join(''); }
+function buildThemeMenu(){ document.getElementById('themeMenu').innerHTML =
+  `<div style="padding:6px 10px 2px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);">Whole deck</div>` +
+  Object.entries(THEMES).map(([k,th])=>
+  `<div class="menu-item" onclick="setTheme('${k}')"><span class="mi-ico">🎨</span><span>${th.name}${k===deck.theme?' ✓':''}</span></div>`).join('') +
+  `<div class="menu-sep"></div><div class="menu-item" onclick="clearSlideThemes()"><span class="mi-ico">🧽</span><span>Clear per-slide overrides<span class="mi-sub">Every slide follows the deck theme</span></span></div>`; }
+function clearSlideThemes(){ deck.slides.forEach(s=>delete s.theme); closeMenus(); renderCanvas(); renderNav(); scheduleSave(); toast('All slides follow the deck theme'); }
 
 /* ─── Slide-type registry — add a kind = one entry ─────────────────────────────
    interactive:true  → audience answers → gets a QR.  content kinds get no QR.    */
@@ -384,6 +401,12 @@ function hasQR(s){ return !!(SLIDE_TYPES[s.kind]&&SLIDE_TYPES[s.kind].qr); }
 
 /* ─── Deck model ───────────────────────────────────────────────────────────────*/
 let deck = { theme:'gamified', slides:[] };
+/* Undo/redo — JSON snapshots before every mutating action (Cmd/Ctrl+Z, +Shift=redo). */
+let _undo=[], _redo=[];
+function pushUndo(){ try{ const j=JSON.stringify(deck); const cap=j.length>5e6?8:50; _undo.push(j); while(_undo.length>cap)_undo.shift(); _redo.length=0; }catch(e){} }
+function _restore(j){ try{ deck=JSON.parse(j); }catch(e){ return; } if(currentIdx>=deck.slides.length)currentIdx=deck.slides.length-1; selEl=-1; renderNav(); renderCanvas(); scheduleSave(); }
+function doUndo(){ if(!_undo.length){ toast('Nothing to undo'); return; } _redo.push(JSON.stringify(deck)); _restore(_undo.pop()); }
+function doRedo(){ if(!_redo.length)return; _undo.push(JSON.stringify(deck)); _restore(_redo.pop()); }
 let currentIdx = -1;
 let _uid=0; const nid=()=>'sl_'+(++_uid);
 
@@ -399,7 +422,7 @@ function defaultSlide(kind){
   return Object.assign(base,{ question:{ text:(kind==='quiz'?'Quiz question?':'Poll question?'), type:qtype,
     options:[{text:'Option A'},{text:'Option B'},{text:'Option C'}], correctAnswer:(kind==='quiz'?0:null), sessionCode:null, qIndex:0 } });
 }
-function addSlide(kind){ closeMenus(); const s=defaultSlide(kind); const at=currentIdx<0?deck.slides.length:currentIdx+1;
+function addSlide(kind){ closeMenus(); pushUndo(); const s=defaultSlide(kind); const at=currentIdx<0?deck.slides.length:currentIdx+1;
   deck.slides.splice(at,0,s); currentIdx=at; renderNav(); renderCanvas();
   if(SLIDE_TYPES[kind].interactive) schedulePublish(); }   // auto-live: QR works the moment it exists
 
@@ -415,12 +438,12 @@ function renderNav(){
   scheduleSave();
   const el=document.getElementById('nav');
   if(!deck.slides.length){ el.innerHTML=`<div class="nav-empty">No slides yet.<br>Use <b>Insert</b> or <b>✨ Polly AI</b> to add one — or <b>File ▸ Import</b> your deck.</div>
-    <button class="nav-add" onclick="toggleMenu('insertMenu')">＋ Add slide</button>`; return; }
+    <button class="nav-add" onclick="addSlide('content')" title="Adds a text slide — pick other types from Insert">＋ Add slide</button>`; return; }
   el.innerHTML = deck.slides.map((s,i)=>`
     <div class="nav-item ${i===currentIdx?'sel':''}" onclick="selectSlide(${i})">
       <div class="nav-num">${i+1}</div>
       <div class="nav-thumb">${thumbInner(s)}${hasQR(s)?'<span class="badge">🔲</span>':''}</div>
-    </div>`).join('') + `<button class="nav-add" onclick="toggleMenu('insertMenu')">＋ Add slide</button>`;
+    </div>`).join('') + `<button class="nav-add" onclick="addSlide('content')" title="Adds a text slide — pick other types from Insert">＋ Add slide</button>`;
 }
 function thumbInner(s){
   if(s.kind==='image' && s.img) return `<img class="s-img" src="${s.img}" alt="">`;
@@ -430,14 +453,14 @@ function thumbInner(s){
   return `<div class="tw"><div class="tt">${esc(label).slice(0,60)}</div></div>`;
 }
 function selectSlide(i){ currentIdx=i; renderNav(); renderCanvas(); }
-function moveSlide(d){ const j=currentIdx+d; if(j<0||j>=deck.slides.length)return; [deck.slides[currentIdx],deck.slides[j]]=[deck.slides[j],deck.slides[currentIdx]]; currentIdx=j; renderNav(); renderCanvas(); schedulePublish(); }
-function deleteSlide(){ if(currentIdx<0)return; deck.slides.splice(currentIdx,1); if(currentIdx>=deck.slides.length)currentIdx=deck.slides.length-1; renderNav(); renderCanvas(); schedulePublish(); }
-function duplicateSlide(){ if(currentIdx<0)return; const c=JSON.parse(JSON.stringify(deck.slides[currentIdx])); c.id=nid(); if(c.question)delete c.question.imported; deck.slides.splice(currentIdx+1,0,c); currentIdx++; renderNav(); renderCanvas(); schedulePublish(); }
+function moveSlide(d){ const j=currentIdx+d; if(j<0||j>=deck.slides.length)return; pushUndo(); [deck.slides[currentIdx],deck.slides[j]]=[deck.slides[j],deck.slides[currentIdx]]; currentIdx=j; renderNav(); renderCanvas(); schedulePublish(); }
+function deleteSlide(){ if(currentIdx<0)return; pushUndo(); deck.slides.splice(currentIdx,1); if(currentIdx>=deck.slides.length)currentIdx=deck.slides.length-1; renderNav(); renderCanvas(); schedulePublish(); }
+function duplicateSlide(){ if(currentIdx<0)return; pushUndo(); const c=JSON.parse(JSON.stringify(deck.slides[currentIdx])); c.id=nid(); if(c.question)delete c.question.imported; deck.slides.splice(currentIdx+1,0,c); currentIdx++; renderNav(); renderCanvas(); schedulePublish(); }
 
 /* ─── Edit canvas ─────────────────────────────────────────────────────────────*/
 function renderCanvas(){
   const slide=document.getElementById('canvasSlide'); const tools=document.getElementById('stageTools');
-  applyThemeTo(slide, deck.theme);
+  applyThemeTo(slide, (deck.slides[currentIdx]&&deck.slides[currentIdx].theme)||deck.theme);
   const na=document.getElementById('notesArea'); if(na) na.value=(currentIdx>=0&&deck.slides[currentIdx])?(deck.slides[currentIdx].notes||''):'';
   if(currentIdx<0||!deck.slides[currentIdx]){ slide.innerHTML=`<div class="slide-inner placeholder-q">Select or add a slide to begin.</div>`; tools.innerHTML=''; return; }
   const s=deck.slides[currentIdx]; const d=SLIDE_TYPES[s.kind];
@@ -447,6 +470,7 @@ function renderCanvas(){
     <button class="st-btn" onclick="addImageEl()">＋ Image</button>
     <span id="fmtBar" style="display:none;align-items:center;gap:5px;"></span>
     ${((s.kind==='poll'||s.kind==='quiz')&&(s.question.type||'').indexOf('multiple_choice')===0)?`<select class="st-btn" onchange="setDisplay(this.value)" title="How results are shown"><option value="bars"${(s.question.displayMode||'bars')==='bars'?' selected':''}>▭ Bars</option><option value="column"${s.question.displayMode==='column'?' selected':''}>▮ Columns</option><option value="donut"${s.question.displayMode==='donut'?' selected':''}>◐ Donut</option><option value="bignum"${s.question.displayMode==='bignum'?' selected':''}># Big numbers</option></select>`:''}
+    <select class="st-btn" onchange="setSlideTheme(this.value)" title="Theme for THIS slide (Theme menu sets the whole deck)"><option value="">🎨 Deck theme</option>${Object.entries(THEMES).map(([k,th])=>`<option value="${k}"${s.theme===k?" selected":""}>${th.name}</option>`).join("")}</select>
     <select class="st-btn" onchange="setTransition(this.value)" title="Slide transition"><option value="fade"${(s.transition||'fade')==='fade'?' selected':''}>⇋ Fade</option><option value="none"${s.transition==='none'?' selected':''}>∅ None</option></select>
     <span class="spacer" style="flex:1;"></span>
     <button class="st-btn" onclick="moveSlide(-1)">↑</button>
@@ -498,22 +522,25 @@ function editHtml(s){
 function setCorrect(oi){ deck.slides[currentIdx].question.correctAnswer=oi; renderCanvas(); scheduleSave(); schedulePublish(); }
 function setDisplay(v){ const s=deck.slides[currentIdx]; if(s&&s.question){ s.question.displayMode=v; scheduleSave(); toast('Results shown as: '+v); } }
 function setTransition(v){ const s=deck.slides[currentIdx]; if(s){ s.transition=v; scheduleSave(); } }
+function setSlideTheme(v){ const s=deck.slides[currentIdx]; if(!s)return; if(v&&THEMES[v]) s.theme=v; else delete s.theme; renderCanvas(); renderNav(); scheduleSave(); }
 // QR caption tells the truth: live → "Scan to answer"; not yet published → why.
 function qrLabel(s){ if(s.question&&s.question.sessionCode) return t('present.scan');
   return (typeof userId!=='undefined'&&userId) ? 'Activating…' : 'Sign in to activate'; }
 function qrCard(s){ return hasQR(s) ? `<div class="qr-card"><div class="qrbox"></div><div class="qrl">${qrLabel(s)}</div></div>` : ''; }
 function answerUrl(s){ const c=s.question&&s.question.sessionCode; const i=(s.question&&s.question.qIndex)||0;
-  return c ? ('https://app.pollslide.com/answer#'+c+'/'+i) : 'https://app.pollslide.com/answer'; }
+  if(!c) return 'https://app.pollslide.com/answer';
+  if(s.kind==='qa') return 'https://app.pollslide.com/answer#'+c+'/qa';   // Slido-style ask+upvote page (answer.html qa mode)
+  return 'https://app.pollslide.com/answer#'+c+'/'+i; }
 function renderQR(box, url){ box.innerHTML=''; try{ new QRCode(box,{text:url,width:300,height:300,colorDark:'#0b0b15',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.H}); }catch(e){} } // 300px render, CSS scales → crisp at any slide size
 
 /* ─── Free-form elements — add / drag / resize / delete (the Canva core).
    Positions x,y,w are % of the slide; text size is cqw so it scales in present.  */
 let selEl=-1;
 function ensureEls(s){ if(!s.elements)s.elements=[]; return s.elements; }
-function addText(){ const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;} ensureEls(s).push({type:'text',x:20,y:42,w:56,size:6,color:'#ffffff',text:'Your text'}); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); editElText(selEl); }
+function addText(){ const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;} pushUndo(); ensureEls(s).push({type:'text',x:20,y:42,w:56,size:6,color:'#ffffff',text:'Your text'}); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); editElText(selEl); }
 function addImageEl(){ if(currentIdx<0){toast('Add a slide first.');return;} document.getElementById('elImgInput').click(); }
-function onElImg(file){ if(!file)return; const s=deck.slides[currentIdx]; if(!s)return; const r=new FileReader(); r.onload=e=>{ ensureEls(s).push({type:'image',x:32,y:22,w:36,src:e.target.result}); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); }; r.readAsDataURL(file); }
-function delElement(ev,i){ ev.stopPropagation(); const s=deck.slides[currentIdx]; if(!s||!s.elements)return; s.elements.splice(i,1); selEl=-1; renderCanvas(); scheduleSave(); }
+function onElImg(file){ if(!file)return; const s=deck.slides[currentIdx]; if(!s)return; const r=new FileReader(); r.onload=e=>{ pushUndo(); ensureEls(s).push({type:'image',x:32,y:22,w:36,src:e.target.result}); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); }; r.readAsDataURL(file); }
+function delElement(ev,i){ ev.stopPropagation(); const s=deck.slides[currentIdx]; if(!s||!s.elements)return; pushUndo(); s.elements.splice(i,1); selEl=-1; renderCanvas(); scheduleSave(); }
 function elLayer(s, editable){ if(!s.elements||!s.elements.length)return '';
   return `<div class="el-layer">`+s.elements.map((e,i)=>{ const st=`left:${e.x}%;top:${e.y}%;width:${e.w}%;`;
     const body = e.type==='image' ? `<img src="${e.src||''}" alt="">`
@@ -641,13 +668,14 @@ function buildResult(q,r){ return (RESULT_RENDERERS[q.type]||renderBars)(q,r); }
 let presentIdx=0,_revealed=false,_kb=null,_liveUnsub=null,_liveSlide=null,_liveResp={};
 function isPresenting(){ return document.getElementById('present').classList.contains('show'); }
 async function startPresent(i){ if(!deck.slides.length){toast('Add a slide first.');return;}
-  if(typeof userId!=='undefined'&&userId&&nativeLive().length){ await publishDeck(); } // publish the latest so QR codes scan
+  if(typeof userId!=='undefined'&&userId&&deck.slides.some(s=>isInteractive(s)&&!(s.question&&s.question.imported))){ await publishDeck(); } // publish the latest so every QR (incl. Q&A) scans
   presentIdx=Math.max(0,Math.min(i||0,deck.slides.length-1)); _revealed=false;
   const el=document.getElementById('present'); el.classList.add('show'); try{ el.requestFullscreen&&el.requestFullscreen().catch(()=>{}); }catch(e){}
   renderPresentSlide(presentIdx);
+  document.getElementById('pStage').onclick=(e)=>{ if(e.target.closest('.qr-card')||e.target.closest('button'))return; presentNav(1); }; // click advances (Keynote)
   _kb=(e)=>{ if(e.key==='Escape')endPresent(); else if(e.key==='ArrowRight'||e.key===' '){presentNav(1);e.preventDefault();} else if(e.key==='ArrowLeft')presentNav(-1); else if(e.key==='r'||e.key==='R')doReveal(); };
   document.addEventListener('keydown',_kb); }
-function endPresent(){ document.getElementById('present').classList.remove('show'); if(_kb){document.removeEventListener('keydown',_kb);_kb=null;} try{document.fullscreenElement&&document.exitFullscreen&&document.exitFullscreen().catch(()=>{});}catch(e){} detachLive(); }
+function endPresent(){ document.getElementById('pStage').onclick=null; document.getElementById('present').classList.remove('show'); if(_kb){document.removeEventListener('keydown',_kb);_kb=null;} try{document.fullscreenElement&&document.exitFullscreen&&document.exitFullscreen().catch(()=>{});}catch(e){} detachLive(); }
 function presentNav(d){ const j=presentIdx+d; if(j<0||j>=deck.slides.length)return; presentIdx=j; _revealed=false; renderPresentSlide(j); }
 function slideHasPoll(s){ return s && isInteractive(s) && s.kind!=='qa'; }
 function renderPresentSlide(i){ const s=deck.slides[i]; const st=document.getElementById('pStage'); const el=document.getElementById('present');
@@ -718,6 +746,7 @@ async function pollyDeck(topic,count){
   let data=null; try{ data=await r.json(); }catch(e){}
   if(!r.ok || !data || !Array.isArray(data.slides) || !data.slides.length)
     throw new Error((data&&data.error) || (tok?'Polly could not build the deck — try again.':'Sign in so Polly can build your deck.'));
+  pushUndo();
   const firstNew=deck.slides.length, imgQueue=[];
   data.slides.forEach(sl=>{
     if(sl.kind==='poll'){
@@ -804,6 +833,9 @@ async function publishDeck(){
   if(typeof fbDb==='undefined'||!fbDb||!userId) return false;
   const code = deck.sessionCode || genCode();
   const live = nativeLive();
+  // Q&A slides need the session code too (their QR opens answer#CODE/qa; questions
+  // land at sessions/CODE/qa) — they're live surfaces but not quiz_builder entries.
+  deck.slides.forEach(s=>{ if(s.kind==='qa'){ s.question=s.question||{}; s.question.sessionCode=code; } });
   const questions = live.map((s,i)=>{ s.question=s.question||{}; s.question.sessionCode=code; s.question.qIndex=i;
     if(s.kind==='study') return { type:'flashcard', front:s.question.front||'', back:s.question.back||'', text:s.question.front||'' };
     return { text:s.question.text||'', type:s.question.type||'multiple_choice', options:s.question.options||[], correctAnswer:(s.question.correctAnswer!=null?s.question.correctAnswer:null) }; });
@@ -853,7 +885,7 @@ async function resetTallies(){
         if(snap.exists()){ responses[qId]=snap.val(); any=true; } }
       if(any){ // archive first — the report's history keeps every answer
         await fbDb.ref('users/'+userId+'/archives/presentslide_'+code+'/'+ts).set({
-          name:'PresentSlide deck', sessionCode:code, productType:'presentslide', archivedAt:ts,
+          name:(deck.title||'PresentSlide deck'), sessionCode:code, productType:'presentslide', archivedAt:ts,
           questions:list.map(t=>({ text:t.q.text||t.q.front||'', type:t.q.type||'', options:t.q.options||null,
             correctAnswer:(t.q.correctAnswer!=null?t.q.correctAnswer:null) })), responses });
       }
@@ -868,7 +900,7 @@ function closeMenus(){ document.querySelectorAll('.menu').forEach(m=>m.classList
 function toggleMenu(id){ const m=document.getElementById(id); const open=!m.classList.contains('hidden'); closeMenus(); if(!open)m.classList.remove('hidden'); }
 function openModal(id){ document.getElementById(id).classList.add('show'); }
 function closeModal(id){ document.getElementById(id).classList.remove('show'); }
-function newDeck(){ closeMenus(); if(deck.slides.length && !confirm('Start a new deck? Unsaved slides will be cleared.'))return; deck={theme:deck.theme,slides:[]}; currentIdx=-1; renderNav(); renderCanvas(); }
+function newDeck(){ closeMenus(); if(deck.slides.length && !confirm('Start a new deck? Unsaved slides will be cleared.'))return; pushUndo(); deck={theme:deck.theme,slides:[]}; currentIdx=-1; const ti=document.getElementById('deckTitle'); if(ti)ti.value=''; renderNav(); renderCanvas(); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 /* Persistence — autosave the deck to localStorage so work survives a refresh.
    (Image-heavy decks may exceed the quota; we fail silently — cloud save is next.) */
@@ -879,12 +911,13 @@ function loadSaved(){ try{ const s=localStorage.getItem('ps_present_deck'); if(s
 document.addEventListener('keydown',e=>{
   if(isPresenting())return;
   const ae=document.activeElement; if(ae&&(ae.isContentEditable||ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'))return;
+  if((e.metaKey||e.ctrlKey)&&(e.key==='z'||e.key==='Z')){ e.shiftKey?doRedo():doUndo(); e.preventDefault(); return; }
   // A selected element captures the keyboard first (Canva-style)…
   const se=_fmtEl();
   if(se){
     const nudge=e.shiftKey?4:1;
     const node=document.querySelector(`#canvasSlide .el[data-i="${selEl}"]`);
-    if(e.key==='Delete'||e.key==='Backspace'){ deck.slides[currentIdx].elements.splice(selEl,1); selEl=-1; renderCanvas(); scheduleSave(); e.preventDefault(); return; }
+    if(e.key==='Delete'||e.key==='Backspace'){ pushUndo(); deck.slides[currentIdx].elements.splice(selEl,1); selEl=-1; renderCanvas(); scheduleSave(); e.preventDefault(); return; }
     if(e.key==='Escape'){ selEl=-1; renderCanvas(); e.preventDefault(); return; }
     if(e.key==='ArrowLeft'){ se.x=Math.max(0,se.x-nudge); if(node)node.style.left=se.x+'%'; scheduleSave(); e.preventDefault(); return; }
     if(e.key==='ArrowRight'){ se.x=Math.min(97,se.x+nudge); if(node)node.style.left=se.x+'%'; scheduleSave(); e.preventDefault(); return; }
@@ -898,7 +931,7 @@ document.addEventListener('keydown',e=>{
   else if((e.metaKey||e.ctrlKey)&&(e.key==='d'||e.key==='D')){ if(currentIdx>=0){duplicateSlide();e.preventDefault();} }
 });
 let _tt; function toast(m){ const el=document.getElementById('toast'); el.textContent=m; el.classList.add('show'); clearTimeout(_tt); _tt=setTimeout(()=>el.classList.remove('show'),2600); }
-document.addEventListener('click',e=>{ if(!e.target.closest('.rib-group'))closeMenus(); });
+document.addEventListener('click',e=>{ if(!e.target.closest('.rib-group')&&!e.target.closest('.nav-add'))closeMenus(); });
 
 /* ─── Boot ────────────────────────────────────────────────────────────────────*/
 function boot(){
@@ -906,6 +939,7 @@ function boot(){
   const fx=window.__PRESENT_FIXTURE;
   if(!fx){ const saved=loadSaved(); if(saved){ deck=saved; if(!deck.theme)deck.theme='gamified'; currentIdx=deck.slides.length?0:-1; } }
   applyThemeTo(document.documentElement,deck.theme);
+  const _ti=document.getElementById('deckTitle'); if(_ti)_ti.value=deck.title||'';
   renderNav(); renderCanvas();
   if(fx){ if(fx.lang){LANG=fx.lang;initLang();} if(fx.deck){deck=fx.deck;deck.slides.forEach(s=>{if(!s.id)s.id=nid();}); currentIdx=0; renderNav(); renderCanvas();} if(fx.present!=null)startPresent(fx.present); return; }
   initFirebase();
