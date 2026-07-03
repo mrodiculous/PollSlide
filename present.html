@@ -219,6 +219,12 @@
     <div class="menu hidden" id="themeMenu"></div>
   </div>
 
+  <!-- History -->
+  <div class="rib-group">
+    <button class="rib-btn" onclick="buildHistoryMenu();toggleMenu('historyMenu')" title="Every change this session — click one to revert (⌘Z undoes step by step)">🕘 History <span class="caret">▾</span></button>
+    <div class="menu hidden" id="historyMenu" style="max-height:340px;overflow-y:auto;min-width:250px;"></div>
+  </div>
+
   <input id="deckTitle" class="mini" style="width:180px;margin-left:6px;font-weight:600;" placeholder="Untitled deck" oninput="deck.title=this.value;scheduleSave()" title="Deck title — used in reports & history">
   <div class="spacer"></div>
   <span id="acct"></span>
@@ -321,6 +327,36 @@
   </div>
 </div>
 
+<!-- ── THEME EDITOR MODAL ───────────────────────────────────────────────────── -->
+<div class="overlay" id="themeEditorOverlay">
+  <div class="modal">
+    <h2>🎨 Custom theme</h2>
+    <p class="sub">Pick your colors and font — the preview updates live. Saved themes appear everywhere themes do.</p>
+    <label>Name</label><input id="teN" maxlength="24" oninput="updateThemePreview()">
+    <label>Background style</label>
+    <select id="teStyle" onchange="updateThemePreview()"><option value="gradient">Gradient</option><option value="radial">Radial glow</option><option value="solid">Solid</option></select>
+    <div style="display:flex;gap:10px;">
+      <div style="flex:1;"><label>Background</label><input type="color" id="teA" value="#101024" oninput="updateThemePreview()" style="height:38px;padding:2px;"></div>
+      <div style="flex:1;"><label>Second color</label><input type="color" id="teB" value="#2b1a55" oninput="updateThemePreview()" style="height:38px;padding:2px;"></div>
+      <div style="flex:1;"><label>Text</label><input type="color" id="teT" value="#ffffff" oninput="updateThemePreview()" style="height:38px;padding:2px;"></div>
+      <div style="flex:1;"><label>Accent</label><input type="color" id="teAc" value="#6c63ff" oninput="updateThemePreview()" style="height:38px;padding:2px;"></div>
+    </div>
+    <label>Font</label>
+    <select id="teF" onchange="updateThemePreview()"><option value="display">Display (bold, punchy)</option><option value="sans">Clean sans</option><option value="serif">Serif (classic)</option><option value="mono">Mono (technical)</option></select>
+    <label>Preview</label>
+    <div id="tePreview" style="aspect-ratio:16/9;border-radius:10px;border:1px solid var(--border2);padding:8% 7%;display:flex;flex-direction:column;justify-content:center;gap:8px;overflow:hidden;">
+      <div class="pv-t" style="font-size:20px;">Slide title</div>
+      <div class="pv-b" style="font-size:13px;">Body text looks like this on your background.</div>
+      <div class="pv-a" style="width:64px;height:8px;border-radius:100px;"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="pill-btn ghost" id="teDelete" onclick="deleteCustomTheme()" style="margin-right:auto;color:var(--accent2);">Delete</button>
+      <button class="pill-btn ghost" onclick="closeModal('themeEditorOverlay')">Cancel</button>
+      <button class="pill-btn" onclick="saveCustomTheme()">Save theme</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── AUTH MODAL ───────────────────────────────────────────────────────────── -->
 <div class="overlay" id="authOverlay">
   <div class="modal">
@@ -353,35 +389,83 @@ function setLang(l){ if(!LANG_NAMES[l])return; LANG=l; localStorage.setItem('ps_
 
 /* ─── Themes (registry; scoped to slides via CSS vars on #present / canvas) ─────*/
 const THEMES = {
-  gamified:     { name:'Gamified',     font:"'Syne','DM Sans',sans-serif", slideBg:'linear-gradient(135deg,#1a1340,#0b0b16)',
+  gamified:     { name:'Gamified',     font:"'Syne','DM Sans',sans-serif",
+    slideBg:'radial-gradient(ellipse 80% 60% at 88% -8%, rgba(108,99,255,.5), transparent 60%), radial-gradient(ellipse 60% 50% at -8% 108%, rgba(255,101,132,.32), transparent 55%), radial-gradient(ellipse 40% 30% at 55% 115%, rgba(67,233,123,.16), transparent 60%), linear-gradient(135deg,#1c1445,#0b0b16)',
     vars:{'--accent':'#6c63ff','--accent2':'#ff6584','--accent3':'#43e97b','--accent4':'#f7b731'} },
-  professional: { name:'Professional', font:"'DM Sans',sans-serif",        slideBg:'linear-gradient(135deg,#18222f,#0e151d)',
+  professional: { name:'Professional', font:"'DM Sans',sans-serif",
+    slideBg:'linear-gradient(90deg, rgba(59,130,246,.14) 0 6px, transparent 6px), radial-gradient(ellipse 70% 55% at 100% 0%, rgba(59,130,246,.16), transparent 55%), linear-gradient(160deg,#1b2735,#0c141d 70%)',
     vars:{'--accent':'#3b82f6','--accent2':'#64748b','--accent3':'#22c55e','--accent4':'#eab308'} },
-  educational:  { name:'Educational',  font:"'DM Sans',sans-serif",        slideBg:'linear-gradient(135deg,#163a2f,#0e211b)',
+  educational:  { name:'Educational',  font:"'DM Sans',sans-serif",
+    slideBg:'repeating-linear-gradient(0deg, transparent 0 46px, rgba(255,255,255,.035) 46px 47px), radial-gradient(ellipse 65% 50% at 10% -5%, rgba(52,211,153,.2), transparent 55%), linear-gradient(150deg,#17402f,#0c1f17)',
     vars:{'--accent':'#2f9e6e','--accent2':'#f59e0b','--accent3':'#34d399','--accent4':'#fbbf24'} },
-  fun:          { name:'Fun',          font:"'Syne','DM Sans',sans-serif",  slideBg:'linear-gradient(135deg,#3a0ca3,#1a0b2e)',
+  fun:          { name:'Fun',          font:"'Syne','DM Sans',sans-serif",
+    slideBg:'radial-gradient(circle 22% at 15% 20%, rgba(255,95,162,.4), transparent 70%), radial-gradient(circle 18% at 85% 30%, rgba(0,212,255,.32), transparent 70%), radial-gradient(circle 20% at 70% 90%, rgba(255,210,63,.25), transparent 70%), radial-gradient(circle 14% at 30% 85%, rgba(124,255,107,.22), transparent 70%), linear-gradient(135deg,#42109f,#170a29)',
     vars:{'--accent':'#ff5fa2','--accent2':'#00d4ff','--accent3':'#ffd23f','--accent4':'#7cff6b'} },
-  minimal:      { name:'Minimal Light', font:"'DM Sans',sans-serif",        slideBg:'linear-gradient(135deg,#ffffff,#eef0f6)',
+  minimal:      { name:'Minimal Light', font:"'DM Sans',sans-serif",
+    slideBg:'radial-gradient(ellipse 60% 45% at 92% -10%, rgba(79,70,229,.08), transparent 60%), linear-gradient(135deg,#ffffff,#eef0f6)',
     vars:{'--accent':'#4f46e5','--accent2':'#e11d48','--accent3':'#16a34a','--accent4':'#d97706',
           '--slide-text':'#15152a','--slide-body':'#3c3c55','--slide-muted':'#6b6b85',
           '--opt-bg':'rgba(20,20,45,.05)','--opt-border':'rgba(20,20,45,.14)'} },
-  midnight:     { name:'Midnight',     font:"'DM Sans',sans-serif",        slideBg:'linear-gradient(135deg,#05070f,#0b1222)',
+  midnight:     { name:'Midnight',     font:"'DM Sans',sans-serif",
+    slideBg:'radial-gradient(circle 2px at 12% 18%, rgba(255,255,255,.8) 0 1px, transparent 2px), radial-gradient(circle 2px at 34% 62%, rgba(255,255,255,.5) 0 1px, transparent 2px), radial-gradient(circle 2px at 58% 28%, rgba(255,255,255,.6) 0 1px, transparent 2px), radial-gradient(circle 2px at 78% 74%, rgba(255,255,255,.45) 0 1px, transparent 2px), radial-gradient(circle 2px at 90% 12%, rgba(255,255,255,.7) 0 1px, transparent 2px), radial-gradient(ellipse 55% 40% at 80% 0%, rgba(56,189,248,.18), transparent 60%), linear-gradient(160deg,#060a18,#03050c)',
     vars:{'--accent':'#38bdf8','--accent2':'#f472b6','--accent3':'#4ade80','--accent4':'#facc15'} },
-  sunset:       { name:'Sunset',       font:"'Syne','DM Sans',sans-serif",  slideBg:'linear-gradient(135deg,#3d1635,#1a0b16)',
+  sunset:       { name:'Sunset',       font:"'Syne','DM Sans',sans-serif",
+    slideBg:'radial-gradient(ellipse 90% 55% at 50% 112%, rgba(251,146,60,.55), rgba(244,63,94,.28) 45%, transparent 70%), linear-gradient(180deg,#2b1030,#4a1631 60%,#1a0b16)',
     vars:{'--accent':'#fb923c','--accent2':'#f43f5e','--accent3':'#34d399','--accent4':'#fbbf24'} },
-  ocean:        { name:'Ocean',        font:"'DM Sans',sans-serif",        slideBg:'linear-gradient(135deg,#062a3f,#04121d)',
+  ocean:        { name:'Ocean',        font:"'DM Sans',sans-serif",
+    slideBg:'radial-gradient(ellipse 70% 50% at 30% -10%, rgba(34,211,238,.22), transparent 55%), radial-gradient(ellipse 50% 40% at 85% 110%, rgba(129,140,248,.2), transparent 60%), linear-gradient(180deg,#073246,#052232 55%,#03141f)',
     vars:{'--accent':'#22d3ee','--accent2':'#818cf8','--accent3':'#34d399','--accent4':'#fde047'} }
 };
+/* ── Custom themes — user-built in the Theme editor, persisted locally ──────── */
+const EL_FONTS={ display:"'Syne','DM Sans',sans-serif", sans:"'DM Sans',sans-serif", serif:"Georgia,'Times New Roman',serif", mono:"'Menlo','Courier New',monospace" };
+function hexA(hex,a){ const h=hex.replace('#',''); const n=parseInt(h.length===3?h.split('').map(c=>c+c).join(''):h,16);
+  return `rgba(${(n>>16)&255},${(n>>8)&255},${n&255},${a})`; }
+function buildCustomBg(style,a,b){ if(style==='solid')return `linear-gradient(${a},${a})`;
+  if(style==='radial')return `radial-gradient(ellipse 85% 70% at 50% 0%, ${b}, transparent 65%), linear-gradient(${a},${a})`;
+  return `linear-gradient(135deg,${a},${b})`; }
+function customThemeFromDef(def){ return { name:def.name, custom:true, def,
+  font:EL_FONTS[def.font]||EL_FONTS.display, slideBg:buildCustomBg(def.style,def.bgA,def.bgB),
+  vars:{ '--accent':def.accent,'--accent2':'#ff6584','--accent3':'#43e97b','--accent4':'#f7b731',
+    '--slide-text':def.text,'--slide-body':hexA(def.text,.85),'--slide-muted':hexA(def.text,.6),
+    '--opt-bg':hexA(def.text,.07),'--opt-border':hexA(def.text,.16) } }; }
+function loadCustomThemes(){ try{ const o=JSON.parse(localStorage.getItem('ps_custom_themes')||'{}');
+  Object.entries(o).forEach(([k,def])=>{ THEMES[k]=customThemeFromDef(def); }); }catch(e){} }
+function saveCustomThemes(){ try{ const o={}; Object.entries(THEMES).forEach(([k,th])=>{ if(th.custom)o[k]=th.def; });
+  localStorage.setItem('ps_custom_themes',JSON.stringify(o)); }catch(e){} }
+let _editingThemeKey=null;
+function openThemeEditor(key){ closeMenus(); _editingThemeKey=(key&&THEMES[key]&&THEMES[key].custom)?key:null;
+  const d=_editingThemeKey?THEMES[_editingThemeKey].def:{name:'My theme',style:'gradient',bgA:'#101024',bgB:'#2b1a55',text:'#ffffff',accent:'#6c63ff',font:'display'};
+  teN.value=d.name; teStyle.value=d.style; teA.value=d.bgA; teB.value=d.bgB; teT.value=d.text; teAc.value=d.accent; teF.value=d.font;
+  document.getElementById('teDelete').style.display=_editingThemeKey?'':'none';
+  updateThemePreview(); openModal('themeEditorOverlay'); }
+function _teDef(){ return { name:(teN.value.trim()||'My theme').slice(0,24), style:teStyle.value, bgA:teA.value, bgB:teB.value, text:teT.value, accent:teAc.value, font:teF.value }; }
+function updateThemePreview(){ const d=_teDef(); const pv=document.getElementById('tePreview');
+  pv.style.background=buildCustomBg(d.style,d.bgA,d.bgB);
+  pv.querySelector('.pv-t').style.cssText=`color:${d.text};font-family:${EL_FONTS[d.font]||EL_FONTS.display};font-weight:800;`;
+  pv.querySelector('.pv-b').style.color=hexA(d.text,.8);
+  pv.querySelector('.pv-a').style.background=d.accent;
+  teB.parentElement.style.display=(d.style==='solid')?'none':''; }
+function saveCustomTheme(){ const d=_teDef(); const key=_editingThemeKey||('custom_'+Date.now());
+  pushUndo('Save theme');
+  THEMES[key]=customThemeFromDef(d); saveCustomThemes(); closeModal('themeEditorOverlay');
+  setTheme(key); toast('Theme "'+d.name+'" saved'); }
+function deleteCustomTheme(){ if(!_editingThemeKey)return; if(!confirm('Delete this theme?'))return;
+  delete THEMES[_editingThemeKey]; saveCustomThemes();
+  if(deck.theme===_editingThemeKey){ deck.theme='gamified'; applyThemeTo(document.documentElement,'gamified'); }
+  deck.slides.forEach(sl=>{ if(sl.theme===_editingThemeKey)delete sl.theme; });
+  closeModal('themeEditorOverlay'); renderCanvas(); renderNav(); scheduleSave(); }
 function applyThemeTo(el, key){ const th=THEMES[key]||THEMES.gamified;
   ['--slide-text','--slide-body','--slide-muted','--opt-bg','--opt-border'].forEach(k=>el.style.removeProperty(k)); // dark defaults unless the theme overrides
   Object.entries(th.vars).forEach(([k,v])=>el.style.setProperty(k,v));
   el.style.setProperty('--slide-bg', th.slideBg); el.style.setProperty('--theme-font', th.font); }
-function setTheme(key){ if(!THEMES[key])return; deck.theme=key; closeMenus(); applyThemeTo(document.documentElement,key); renderCanvas(); renderNav(); }
+function setTheme(key){ if(!THEMES[key])return; pushUndo('Deck theme: '+THEMES[key].name); deck.theme=key; closeMenus(); applyThemeTo(document.documentElement,key); renderCanvas(); renderNav(); }
 function buildThemeMenu(){ document.getElementById('themeMenu').innerHTML =
   `<div style="padding:6px 10px 2px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);">Whole deck</div>` +
   Object.entries(THEMES).map(([k,th])=>
-  `<div class="menu-item" onclick="setTheme('${k}')"><span class="mi-ico">🎨</span><span>${th.name}${k===deck.theme?' ✓':''}</span></div>`).join('') +
-  `<div class="menu-sep"></div><div class="menu-item" onclick="clearSlideThemes()"><span class="mi-ico">🧽</span><span>Clear per-slide overrides<span class="mi-sub">Every slide follows the deck theme</span></span></div>`; }
+  `<div class="menu-item" onclick="setTheme('${k}')"><span class="mi-ico">🎨</span><span>${th.name}${k===deck.theme?' ✓':''}</span>${th.custom?`<span class="qrtag" style="cursor:pointer;" onclick="event.stopPropagation();openThemeEditor('${k}')">✎ edit</span>`:''}</div>`).join('') +
+  `<div class="menu-sep"></div>` +
+  `<div class="menu-item" onclick="openThemeEditor()"><span class="mi-ico">➕</span><span>Create custom theme…<span class="mi-sub">Your colors, your font</span></span></div>` +
+  `<div class="menu-item" onclick="clearSlideThemes()"><span class="mi-ico">🧽</span><span>Clear per-slide overrides<span class="mi-sub">Every slide follows the deck theme</span></span></div>`; }
 function clearSlideThemes(){ deck.slides.forEach(s=>delete s.theme); closeMenus(); renderCanvas(); renderNav(); scheduleSave(); toast('All slides follow the deck theme'); }
 
 /* ─── Slide-type registry — add a kind = one entry ─────────────────────────────
@@ -403,10 +487,25 @@ function hasQR(s){ return !!(SLIDE_TYPES[s.kind]&&SLIDE_TYPES[s.kind].qr); }
 let deck = { theme:'gamified', slides:[] };
 /* Undo/redo — JSON snapshots before every mutating action (Cmd/Ctrl+Z, +Shift=redo). */
 let _undo=[], _redo=[];
-function pushUndo(){ try{ const j=JSON.stringify(deck); const cap=j.length>5e6?8:50; _undo.push(j); while(_undo.length>cap)_undo.shift(); _redo.length=0; }catch(e){} }
-function _restore(j){ try{ deck=JSON.parse(j); }catch(e){ return; } if(currentIdx>=deck.slides.length)currentIdx=deck.slides.length-1; selEl=-1; renderNav(); renderCanvas(); scheduleSave(); }
-function doUndo(){ if(!_undo.length){ toast('Nothing to undo'); return; } _redo.push(JSON.stringify(deck)); _restore(_undo.pop()); }
-function doRedo(){ if(!_redo.length)return; _undo.push(JSON.stringify(deck)); _restore(_redo.pop()); }
+function pushUndo(label){ try{ const j=JSON.stringify(deck); const cap=j.length>5e6?8:50;
+  _undo.push({j, l:label||'Edit', ts:Date.now()}); while(_undo.length>cap)_undo.shift(); _redo.length=0; }catch(e){} }
+function _restore(j){ try{ deck=JSON.parse(j); }catch(e){ return; } if(currentIdx>=deck.slides.length)currentIdx=deck.slides.length-1; selEl=-1;
+  const ti=document.getElementById('deckTitle'); if(ti)ti.value=deck.title||'';
+  applyThemeTo(document.documentElement,deck.theme); renderNav(); renderCanvas(); scheduleSave(); }
+function doUndo(){ if(!_undo.length){ toast('Nothing to undo'); return; } const e=_undo.pop(); _redo.push({j:JSON.stringify(deck),l:e.l,ts:Date.now()}); _restore(e.j); }
+function doRedo(){ if(!_redo.length)return; const e=_redo.pop(); _undo.push({j:JSON.stringify(deck),l:e.l,ts:Date.now()}); _restore(e.j); }
+/* History panel — every change, newest first; click any point to revert to it. */
+function buildHistoryMenu(){ const m=document.getElementById('historyMenu'); if(!m)return;
+  if(!_undo.length){ m.innerHTML='<div style="padding:10px 12px;font-size:12px;color:var(--muted);">No changes yet this session.</div>'; return; }
+  const fmt=ts=>{ const d=new Date(ts); return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'}); };
+  m.innerHTML = `<div style="padding:6px 10px 2px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);">Revert to before…</div>` +
+    _undo.slice(-20).map((e,i,arr)=>{ const idx=_undo.length-arr.length+i;
+      return `<div class="menu-item" onclick="historyRevert(${idx})"><span class="mi-ico">↩</span><span>${esc(e.l)}<span class="mi-sub">${fmt(e.ts)}</span></span></div>`; }).reverse().join('');
+}
+function historyRevert(idx){ if(idx<0||idx>=_undo.length)return; closeMenus();
+  const target=_undo[idx];
+  _redo.length=0; _undo.push({j:JSON.stringify(deck), l:'Before revert', ts:Date.now()});
+  _restore(target.j); toast('Reverted to before "'+target.l+'"'); }
 let currentIdx = -1;
 let _uid=0; const nid=()=>'sl_'+(++_uid);
 
@@ -422,15 +521,23 @@ function defaultSlide(kind){
   return Object.assign(base,{ question:{ text:(kind==='quiz'?'Quiz question?':'Poll question?'), type:qtype,
     options:[{text:'Option A'},{text:'Option B'},{text:'Option C'}], correctAnswer:(kind==='quiz'?0:null), sessionCode:null, qIndex:0 } });
 }
-function addSlide(kind){ closeMenus(); pushUndo(); const s=defaultSlide(kind); const at=currentIdx<0?deck.slides.length:currentIdx+1;
+function addSlide(kind){ closeMenus(); pushUndo('Add '+(SLIDE_TYPES[kind]?SLIDE_TYPES[kind].label:kind)); const s=defaultSlide(kind); const at=currentIdx<0?deck.slides.length:currentIdx+1;
   deck.slides.splice(at,0,s); currentIdx=at; renderNav(); renderCanvas();
   if(SLIDE_TYPES[kind].interactive) schedulePublish(); }   // auto-live: QR works the moment it exists
 
 /* ─── Insert menu (built from the registry) ───────────────────────────────────*/
 function buildInsertMenu(){
-  document.getElementById('insertMenu').innerHTML = Object.entries(SLIDE_TYPES).map(([k,d],i)=>
+  document.getElementById('insertMenu').innerHTML =
+    `<div style="padding:6px 10px 2px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);">Slides</div>` +
+    Object.entries(SLIDE_TYPES).map(([k,d],i)=>
     (i===3?'<div class="menu-sep"></div>':'')+
-    `<div class="menu-item" onclick="addSlide('${k}')"><span class="mi-ico">${d.ico}</span><span>${d.label}<span class="mi-sub">${d.sub}</span></span>${d.qr?'<span class="qrtag">QR</span>':''}</div>`).join('');
+    `<div class="menu-item" onclick="addSlide('${k}')"><span class="mi-ico">${d.ico}</span><span>${d.label}<span class="mi-sub">${d.sub}</span></span>${d.qr?'<span class="qrtag">QR</span>':''}</div>`).join('') +
+    `<div class="menu-sep"></div><div style="padding:6px 10px 2px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);">On this slide</div>` +
+    `<div class="menu-item" onclick="closeMenus();addText()"><span class="mi-ico">🅣</span><span>Text box</span></div>` +
+    `<div class="menu-item" onclick="closeMenus();addImageEl()"><span class="mi-ico">🖼️</span><span>Image</span></div>` +
+    `<div class="menu-item" onclick="addShape('rect')"><span class="mi-ico">▭</span><span>Rectangle</span></div>` +
+    `<div class="menu-item" onclick="addShape('circle')"><span class="mi-ico">◯</span><span>Circle</span></div>` +
+    `<div class="menu-item" onclick="addEmoji()"><span class="mi-ico">🎉</span><span>Emoji / symbol</span></div>`;
 }
 
 /* ─── Navigator ───────────────────────────────────────────────────────────────*/
@@ -453,9 +560,9 @@ function thumbInner(s){
   return `<div class="tw"><div class="tt">${esc(label).slice(0,60)}</div></div>`;
 }
 function selectSlide(i){ currentIdx=i; renderNav(); renderCanvas(); }
-function moveSlide(d){ const j=currentIdx+d; if(j<0||j>=deck.slides.length)return; pushUndo(); [deck.slides[currentIdx],deck.slides[j]]=[deck.slides[j],deck.slides[currentIdx]]; currentIdx=j; renderNav(); renderCanvas(); schedulePublish(); }
-function deleteSlide(){ if(currentIdx<0)return; pushUndo(); deck.slides.splice(currentIdx,1); if(currentIdx>=deck.slides.length)currentIdx=deck.slides.length-1; renderNav(); renderCanvas(); schedulePublish(); }
-function duplicateSlide(){ if(currentIdx<0)return; pushUndo(); const c=JSON.parse(JSON.stringify(deck.slides[currentIdx])); c.id=nid(); if(c.question)delete c.question.imported; deck.slides.splice(currentIdx+1,0,c); currentIdx++; renderNav(); renderCanvas(); schedulePublish(); }
+function moveSlide(d){ const j=currentIdx+d; if(j<0||j>=deck.slides.length)return; pushUndo('Move slide'); [deck.slides[currentIdx],deck.slides[j]]=[deck.slides[j],deck.slides[currentIdx]]; currentIdx=j; renderNav(); renderCanvas(); schedulePublish(); }
+function deleteSlide(){ if(currentIdx<0)return; pushUndo('Delete slide '+(currentIdx+1)); deck.slides.splice(currentIdx,1); if(currentIdx>=deck.slides.length)currentIdx=deck.slides.length-1; renderNav(); renderCanvas(); schedulePublish(); }
+function duplicateSlide(){ if(currentIdx<0)return; pushUndo('Duplicate slide'); const c=JSON.parse(JSON.stringify(deck.slides[currentIdx])); c.id=nid(); if(c.question)delete c.question.imported; deck.slides.splice(currentIdx+1,0,c); currentIdx++; renderNav(); renderCanvas(); schedulePublish(); }
 
 /* ─── Edit canvas ─────────────────────────────────────────────────────────────*/
 function renderCanvas(){
@@ -522,7 +629,7 @@ function editHtml(s){
 function setCorrect(oi){ deck.slides[currentIdx].question.correctAnswer=oi; renderCanvas(); scheduleSave(); schedulePublish(); }
 function setDisplay(v){ const s=deck.slides[currentIdx]; if(s&&s.question){ s.question.displayMode=v; scheduleSave(); toast('Results shown as: '+v); } }
 function setTransition(v){ const s=deck.slides[currentIdx]; if(s){ s.transition=v; scheduleSave(); } }
-function setSlideTheme(v){ const s=deck.slides[currentIdx]; if(!s)return; if(v&&THEMES[v]) s.theme=v; else delete s.theme; renderCanvas(); renderNav(); scheduleSave(); }
+function setSlideTheme(v){ const s=deck.slides[currentIdx]; if(!s)return; pushUndo('Slide theme'); if(v&&THEMES[v]) s.theme=v; else delete s.theme; renderCanvas(); renderNav(); scheduleSave(); }
 // QR caption tells the truth: live → "Scan to answer"; not yet published → why.
 function qrLabel(s){ if(s.question&&s.question.sessionCode) return t('present.scan');
   return (typeof userId!=='undefined'&&userId) ? 'Activating…' : 'Sign in to activate'; }
@@ -537,14 +644,22 @@ function renderQR(box, url){ box.innerHTML=''; try{ new QRCode(box,{text:url,wid
    Positions x,y,w are % of the slide; text size is cqw so it scales in present.  */
 let selEl=-1;
 function ensureEls(s){ if(!s.elements)s.elements=[]; return s.elements; }
-function addText(){ const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;} pushUndo(); ensureEls(s).push({type:'text',x:20,y:42,w:56,size:6,color:'#ffffff',text:'Your text'}); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); editElText(selEl); }
+function addText(){ const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;} pushUndo('Add text box'); ensureEls(s).push({type:'text',x:20,y:42,w:56,size:6,color:'#ffffff',text:'Your text'}); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); editElText(selEl); }
 function addImageEl(){ if(currentIdx<0){toast('Add a slide first.');return;} document.getElementById('elImgInput').click(); }
-function onElImg(file){ if(!file)return; const s=deck.slides[currentIdx]; if(!s)return; const r=new FileReader(); r.onload=e=>{ pushUndo(); ensureEls(s).push({type:'image',x:32,y:22,w:36,src:e.target.result}); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); }; r.readAsDataURL(file); }
-function delElement(ev,i){ ev.stopPropagation(); const s=deck.slides[currentIdx]; if(!s||!s.elements)return; pushUndo(); s.elements.splice(i,1); selEl=-1; renderCanvas(); scheduleSave(); }
+function addShape(kind){ const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;} closeMenus(); pushUndo('Add shape');
+  ensureEls(s).push({type:'shape',shape:kind,x:38,y:34,w:kind==='circle'?18:26,color:'#6c63ff',opacity:.92}); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); }
+function addEmoji(){ const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;} closeMenus();
+  const ch=prompt('Emoji or symbol to add:','🎉'); if(!ch)return; pushUndo('Add emoji');
+  ensureEls(s).push({type:'emoji',char:ch.slice(0,4),x:44,y:38,w:12}); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); }
+function onElImg(file){ if(!file)return; const s=deck.slides[currentIdx]; if(!s)return; const r=new FileReader(); r.onload=e=>{ pushUndo('Add image'); ensureEls(s).push({type:'image',x:32,y:22,w:36,src:e.target.result}); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); }; r.readAsDataURL(file); }
+function delElement(ev,i){ ev.stopPropagation(); const s=deck.slides[currentIdx]; if(!s||!s.elements)return; pushUndo('Delete element'); s.elements.splice(i,1); selEl=-1; renderCanvas(); scheduleSave(); }
 function elLayer(s, editable){ if(!s.elements||!s.elements.length)return '';
   return `<div class="el-layer">`+s.elements.map((e,i)=>{ const st=`left:${e.x}%;top:${e.y}%;width:${e.w}%;`;
-    const body = e.type==='image' ? `<img src="${e.src||''}" alt="">`
-      : `<div class="el-txt" style="font-size:${e.size||6}cqw;color:${e.color||'#fff'};font-weight:${e.weight||700};font-style:${e.italic?'italic':'normal'};text-align:${e.align||'left'};font-family:var(--theme-font);" ${editable?`ondblclick="editElText(${i})"`:''}>${esc(e.text||'')}</div>`;
+    let body;
+    if(e.type==='image') body=`<img src="${e.src||''}" alt="">`;
+    else if(e.type==='shape') body=`<div class="el-shape" style="width:100%;aspect-ratio:${e.shape==='circle'?'1/1':'16/10'};background:${e.color||'var(--accent)'};opacity:${e.opacity!=null?e.opacity:.92};border-radius:${e.shape==='circle'?'50%':'1.2cqw'};"></div>`;
+    else if(e.type==='emoji') body=`<div class="el-emoji" style="font-size:${((e.w||12)*0.8).toFixed(2)}cqw;line-height:1.1;text-align:center;">${esc(e.char||'🎉')}</div>`;
+    else body=`<div class="el-txt" style="font-size:${e.size||6}cqw;color:${e.color||'#fff'};font-weight:${e.weight||700};font-style:${e.italic?'italic':'normal'};text-decoration:${e.under?'underline':'none'};text-align:${e.align||'left'};font-family:${e.font?EL_FONTS[e.font]:'var(--theme-font)'};" ${editable?`ondblclick="editElText(${i})"`:''}>${esc(e.text||'')}</div>`;
     return `<div class="el ${e.type} ${(editable&&i===selEl)?'sel':''}" data-i="${i}" style="${st}">${body}${editable?`<span class="el-del" onclick="delElement(event,${i})">✕</span><span class="el-rz"></span>`:''}</div>`;
   }).join('')+`</div>`; }
 function wireElementDrag(){ const slide=document.getElementById('canvasSlide');
@@ -560,7 +675,8 @@ function wireElementDrag(){ const slide=document.getElementById('canvasSlide');
     function mm(m){ const dx=(m.clientX-sx)/rect.width*100, dy=(m.clientY-sy)/rect.height*100;
       if(resizing){ e.w=Math.max(5,Math.min(100,ow+dx));
         // Canva-style: resizing a text box scales its type with it
-        if(e.type==='text'){ e.size=+(os*(e.w/ow)).toFixed(2); const t=elDiv.querySelector('.el-txt'); if(t)t.style.fontSize=e.size+'cqw'; } }
+        if(e.type==='text'){ e.size=+(os*(e.w/ow)).toFixed(2); const t=elDiv.querySelector('.el-txt'); if(t)t.style.fontSize=e.size+'cqw'; }
+        if(e.type==='emoji'){ const t=elDiv.querySelector('.el-emoji'); if(t)t.style.fontSize=(e.w*0.8).toFixed(2)+'cqw'; } }
       else { e.x=Math.max(0,Math.min(97,ox+dx)); e.y=Math.max(0,Math.min(97,oy+dy));
         const cx=e.x+e.w/2; if(Math.abs(cx-50)<2.5)e.x=50-e.w/2; else if(Math.abs(e.x)<2)e.x=0; else if(Math.abs(e.x+e.w-100)<2)e.x=100-e.w; // snap x: center / edges
         if(Math.abs(e.y-46)<2.5)e.y=46; else if(Math.abs(e.y)<2)e.y=0; } // snap y: center-ish / top
@@ -586,17 +702,35 @@ function renderFmtBar(){ const bar=document.getElementById('fmtBar'); if(!bar)re
   const e=_fmtEl();
   if(!e){ bar.style.display='none'; bar.innerHTML=''; return; }
   const layers=`<button class="st-btn" onclick="fmtLayer(1)" title="Bring forward">⬆</button>
-    <button class="st-btn" onclick="fmtLayer(-1)" title="Send back">⬇</button>`;
+    <button class="st-btn" onclick="fmtLayer(-1)" title="Send back">⬇</button>
+    <button class="st-btn" onclick="fmtCenterH()" title="Center horizontally">⊟</button>
+    <button class="st-btn" onclick="fmtCenterV()" title="Center vertically">⊞</button>`;
   bar.style.display='inline-flex';
+  if(e.type==='shape'){ bar.innerHTML=`<input type="color" value="${e.color||'#6c63ff'}" oninput="fmtShapeColor(this.value)" title="Shape color" style="width:30px;height:29px;padding:1px;border:1px solid var(--border2);border-radius:7px;background:var(--chrome2);cursor:pointer;">${layers}`; return; }
   if(e.type!=='text'){ bar.innerHTML=layers; return; }
-  bar.innerHTML=`<button class="st-btn" onclick="fmtSize(-0.6)" title="Smaller text">A−</button>
+  bar.innerHTML=`<select class="st-btn" onchange="fmtFont(this.value)" title="Font">
+      <option value=""${!e.font?' selected':''}>Theme font</option>
+      <option value="display"${e.font==='display'?' selected':''}>Display</option>
+      <option value="sans"${e.font==='sans'?' selected':''}>Sans</option>
+      <option value="serif"${e.font==='serif'?' selected':''}>Serif</option>
+      <option value="mono"${e.font==='mono'?' selected':''}>Mono</option></select>
+    <button class="st-btn" onclick="fmtSize(-0.6)" title="Smaller text">A−</button>
     <button class="st-btn" onclick="fmtSize(0.6)" title="Bigger text">A+</button>
     <button class="st-btn" onclick="fmtBold()" title="Bold" style="${(e.weight||700)>=700?'border-color:var(--accent);':''}"><b>B</b></button>
     <button class="st-btn" onclick="fmtItalic()" title="Italic" style="${e.italic?'border-color:var(--accent);':''}"><i>I</i></button>
+    <button class="st-btn" onclick="fmtUnder()" title="Underline" style="${e.under?'border-color:var(--accent);':''}"><u>U</u></button>
     <input type="color" value="${e.color||'#ffffff'}" oninput="fmtColor(this.value)" title="Text color" style="width:30px;height:29px;padding:1px;border:1px solid var(--border2);border-radius:7px;background:var(--chrome2);cursor:pointer;">
     <button class="st-btn" onclick="fmtAlign()" title="Alignment">${({left:'⯇',center:'≡',right:'⯈'})[e.align||'left']}</button>
     ${layers}`;
 }
+function _selNode(){ return document.querySelector(`#canvasSlide .el[data-i="${selEl}"]`); }
+function fmtUnder(){ const e=_fmtEl(); if(!e)return; e.under=!e.under; const n=_selTxtNode(); if(n)n.style.textDecoration=e.under?'underline':'none'; renderFmtBar(); scheduleSave(); }
+function fmtFont(v){ const e=_fmtEl(); if(!e)return; if(v)e.font=v; else delete e.font; const n=_selTxtNode(); if(n)n.style.fontFamily=v?EL_FONTS[v]:'var(--theme-font)'; scheduleSave(); }
+function fmtShapeColor(v){ const e=_fmtEl(); if(!e)return; e.color=v; const n=_selNode(); const sh=n&&n.querySelector('.el-shape'); if(sh)sh.style.background=v; scheduleSave(); }
+function fmtCenterH(){ const e=_fmtEl(); if(!e)return; e.x=+(50-e.w/2).toFixed(2); const n=_selNode(); if(n)n.style.left=e.x+'%'; scheduleSave(); }
+function fmtCenterV(){ const e=_fmtEl(); if(!e)return; const n=_selNode(); const slide=document.getElementById('canvasSlide');
+  if(n&&slide){ const nh=n.getBoundingClientRect().height/slide.getBoundingClientRect().height*100; e.y=+Math.max(0,50-nh/2).toFixed(2); n.style.top=e.y+'%'; }
+  scheduleSave(); }
 function fmtLayer(d){ const s=deck.slides[currentIdx]; if(!s||!s.elements)return; const j=selEl+d;
   if(j<0||j>=s.elements.length)return; [s.elements[selEl],s.elements[j]]=[s.elements[j],s.elements[selEl]];
   selEl=j; renderCanvas(); scheduleSave(); }
@@ -746,7 +880,7 @@ async function pollyDeck(topic,count){
   let data=null; try{ data=await r.json(); }catch(e){}
   if(!r.ok || !data || !Array.isArray(data.slides) || !data.slides.length)
     throw new Error((data&&data.error) || (tok?'Polly could not build the deck — try again.':'Sign in so Polly can build your deck.'));
-  pushUndo();
+  pushUndo('Polly deck');
   const firstNew=deck.slides.length, imgQueue=[];
   data.slides.forEach(sl=>{
     if(sl.kind==='poll'){
@@ -900,7 +1034,7 @@ function closeMenus(){ document.querySelectorAll('.menu').forEach(m=>m.classList
 function toggleMenu(id){ const m=document.getElementById(id); const open=!m.classList.contains('hidden'); closeMenus(); if(!open)m.classList.remove('hidden'); }
 function openModal(id){ document.getElementById(id).classList.add('show'); }
 function closeModal(id){ document.getElementById(id).classList.remove('show'); }
-function newDeck(){ closeMenus(); if(deck.slides.length && !confirm('Start a new deck? Unsaved slides will be cleared.'))return; pushUndo(); deck={theme:deck.theme,slides:[]}; currentIdx=-1; const ti=document.getElementById('deckTitle'); if(ti)ti.value=''; renderNav(); renderCanvas(); }
+function newDeck(){ closeMenus(); if(deck.slides.length && !confirm('Start a new deck? Unsaved slides will be cleared.'))return; pushUndo('New deck'); deck={theme:deck.theme,slides:[]}; currentIdx=-1; const ti=document.getElementById('deckTitle'); if(ti)ti.value=''; renderNav(); renderCanvas(); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 /* Persistence — autosave the deck to localStorage so work survives a refresh.
    (Image-heavy decks may exceed the quota; we fail silently — cloud save is next.) */
@@ -917,7 +1051,7 @@ document.addEventListener('keydown',e=>{
   if(se){
     const nudge=e.shiftKey?4:1;
     const node=document.querySelector(`#canvasSlide .el[data-i="${selEl}"]`);
-    if(e.key==='Delete'||e.key==='Backspace'){ pushUndo(); deck.slides[currentIdx].elements.splice(selEl,1); selEl=-1; renderCanvas(); scheduleSave(); e.preventDefault(); return; }
+    if(e.key==='Delete'||e.key==='Backspace'){ pushUndo('Delete element'); deck.slides[currentIdx].elements.splice(selEl,1); selEl=-1; renderCanvas(); scheduleSave(); e.preventDefault(); return; }
     if(e.key==='Escape'){ selEl=-1; renderCanvas(); e.preventDefault(); return; }
     if(e.key==='ArrowLeft'){ se.x=Math.max(0,se.x-nudge); if(node)node.style.left=se.x+'%'; scheduleSave(); e.preventDefault(); return; }
     if(e.key==='ArrowRight'){ se.x=Math.min(97,se.x+nudge); if(node)node.style.left=se.x+'%'; scheduleSave(); e.preventDefault(); return; }
@@ -935,6 +1069,7 @@ document.addEventListener('click',e=>{ if(!e.target.closest('.rib-group')&&!e.ta
 
 /* ─── Boot ────────────────────────────────────────────────────────────────────*/
 function boot(){
+  loadCustomThemes();
   initLang(); buildInsertMenu(); buildThemeMenu();
   const fx=window.__PRESENT_FIXTURE;
   if(!fx){ const saved=loadSaved(); if(saved){ deck=saved; if(!deck.theme)deck.theme='gamified'; currentIdx=deck.slides.length?0:-1; } }

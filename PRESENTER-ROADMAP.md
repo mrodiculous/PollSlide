@@ -205,3 +205,22 @@ Before P1 work begins, do the **modular split (§3)** — every new feature land
 2. Add a harness fixture deck + headless render test (reuse the Chrome-headless approach).
 3. Propagate the "three ways to present" messaging to the other site pages (`download.html`, `integrations.html`, `setup.html`, `help.html`, `pricing.html`) and **regenerate `translations.js`** for the new copy.
 4. QA pass: confirm existing builder/present/Polly flows still work (no regressions).
+
+---
+
+## 8. PresentSlide editor — the 4-stage feature ladder (vs Keynote/Canva)
+
+Everything a presenting user expects, staged. **Stage 1 = shipped 2026-07-03.**
+
+### Stage 1 — Basic (SHIPPED ✅)
+Text boxes (add/drag/resize/dblclick-edit/delete) · bold/italic/underline · text color · per-element font (Display/Sans/Serif/Mono) · size controls + resize-scales-type · alignment (L/C/R) + center-H/V + drag snapping · shapes (rectangle/circle, color) · emoji/symbol elements · images (add/drag/resize/layer) · layer forward/back · undo/redo (⌘Z/⇧⌘Z) · **History panel with labeled changes + revert-to-point** · 8 rich built-in themes (layered, on-character) · **custom theme editor** (bg style/colors/text/accent/font, live preview, persisted, editable/deletable) · per-slide theme override or deck-wide · deck title · speaker notes · autosave/restore · keyboard-complete editing · click/keys to advance in present · Q&A slides live (ask+upvote page).
+
+### Stage 2 — Middle grade (next)
+Text style presets (H1/H2/body) · bullet lists in body text · copy/paste elements (⌘C/⌘V) + multi-select · drag-reorder slide navigator · element opacity + rotation · image crop/fit modes · per-slide background image · line/arrow shape · lock element · hyperlinks in text · grid & guides toggle · basic tables.
+
+### Stage 3 — High grade
+Per-element build animations (fade/slide-in, ordered) · transition library (push/wipe/zoom) · true Presenter View (notes + next slide + timer on second display) · video/audio on slides · icon/sticker library · group/ungroup · smart alignment guides (spacing hints) · master slides/layouts · export to PDF/PNG · cloud deck storage + share links.
+
+### Stage 4 — Advanced
+Real-time co-editing + comments · named cloud versions · template gallery/marketplace · brand kits (org colors/fonts/logo tokens) · Polly design assistant (restyle slide/deck, image editing) · charts bound to live data · interactive web embeds · video/GIF export · rehearsal mode with AI coaching · one-click deck localization · accessibility checker.
+
