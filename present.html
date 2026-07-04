@@ -647,6 +647,7 @@ function renderCanvas(){
   slide.innerHTML = editHtml(s);
   slide.classList.add('editing');
   slide.insertAdjacentHTML('beforeend', elLayer(s, true));  // free-form elements on top
+  slide.insertAdjacentHTML('beforeend','<div class="guide" id="vGuide"></div><div class="guide" id="hGuide"></div>'); // smart guides live inside the canvas — recreate after every render
   wireElementDrag(); renderFmtBar();
   if(hasQR(s)){ const box=slide.querySelector('.qr-card .qrbox'); if(box) renderQR(box, answerUrl(s)); }
 }
@@ -727,7 +728,7 @@ function setBgDim(v){ const s=deck.slides[currentIdx]; if(!s)return; s.bgDim=+v;
 function clearBg(){ const s=deck.slides[currentIdx]; if(!s)return; pushUndo('Remove background'); delete s.bgImg; delete s.bgDim; renderCanvas(); renderNav(); scheduleSave(); }
 function addShape(kind){ const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;} closeMenus(); pushUndo('Add shape');
   ensureEls(s).push({type:'shape',shape:kind,x:kind==='line'?30:38,y:kind==='line'?50:34,w:kind==='line'?40:(kind==='circle'?18:26),color:'#6c63ff',opacity:kind==='line'?1:.92}); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); }
-const STICKERS=['🎉','🚀','⭐','🔥','💡','✅','❌','⚠️','👍','👏','❤️','🎯','🏆','📈','📉','💰','🧠','⚡','🌍','🎓','📣','�All'.slice(0,2),'⏰','🤝','🔒','🔑','🎁','☀️','🌈','💬','❓','❗','➡️','⬅️','⬆️','⬇️','∑','Δ','π','∞','±','≈','→','✓'];
+const STICKERS=['🎉','🚀','⭐','🔥','💡','✅','❌','⚠️','👍','👏','❤️','🎯','🏆','📈','📉','💰','🧠','⚡','🌍','🎓','📣','📊','⏰','🤝','🔒','🔑','🎁','☀️','🌈','💬','❓','❗','➡️','⬅️','⬆️','⬇️','∑','Δ','π','∞','±','≈','→','✓'];
 function addEmoji(){ const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;} closeMenus();
   const grid=document.getElementById('stickerGrid');
   grid.innerHTML=STICKERS.map(ch=>`<button class="st-btn" style="font-size:22px;padding:8px;" onclick="pickSticker('${ch.replace(/'/g,"\\'")}')">${ch}</button>`).join('');
@@ -755,9 +756,12 @@ function elLayer(s, editable){ if(!s.elements||!s.elements.length)return '';
   }).join('')+`</div>`; }
 function wireElementDrag(){ const slide=document.getElementById('canvasSlide');
   slide.onmousedown=function(ev){ const elDiv=ev.target.closest('.el');
-    if(!elDiv){ if(selEl!==-1||selSet.size){ clearSel(); slide.querySelectorAll('.el.sel').forEach(n=>n.classList.remove('sel')); renderFmtBar(); } return; }
+    if(!elDiv){ startMarquee(ev,slide); return; }   // empty canvas: rubber-band select
     if(ev.target.classList.contains('el-del'))return;
-    const i=+elDiv.dataset.i; const s=deck.slides[currentIdx]; if(!s||!s.elements[i])return; const e=s.elements[i];
+    let i=+elDiv.dataset.i; const s=deck.slides[currentIdx]; if(!s||!s.elements[i])return; let e=s.elements[i];
+    // ⌥-drag duplicates (Keynote/Canva): the copy stays behind, you drag the original.
+    if(ev.altKey&&!e.locked&&!ev.target.classList.contains('el-rz')){
+      pushUndo('Duplicate element'); const c=JSON.parse(JSON.stringify(e)); delete c.grp; s.elements.push(c); }
     // Selection model: shift-click toggles membership; clicking a member of a
     // multi-selection keeps the group (so you can drag it); plain click = single.
     if(ev.shiftKey){ if(selEl>=0)selSet.add(selEl); selSet.has(i)?selSet.delete(i):selSet.add(i); selEl=i; }
@@ -772,6 +776,11 @@ function wireElementDrag(){ const slide=document.getElementById('canvasSlide');
     if(!rect.width||!rect.height) return; // slide not laid out — don't corrupt positions
     const group=selIndices().filter(gi=>s.elements[gi]&&!s.elements[gi].locked);
     const orig=group.map(gi=>({gi, x:s.elements[gi].x, y:s.elements[gi].y}));
+    // measure siblings (for smart guides) + own height, in slide-%.
+    const myH=elDiv.getBoundingClientRect().height/rect.height*100;
+    const sibs=[...slide.querySelectorAll('.el')].filter(n=>+n.dataset.i!==i).map(n=>{ const r=n.getBoundingClientRect();
+      return { l:(r.left-rect.left)/rect.width*100, r:(r.right-rect.left)/rect.width*100, cx:(r.left+r.width/2-rect.left)/rect.width*100,
+               t:(r.top-rect.top)/rect.height*100, b:(r.bottom-rect.top)/rect.height*100, cy:(r.top+r.height/2-rect.top)/rect.height*100 }; });
     const sx=ev.clientX,sy=ev.clientY,ox=e.x,oy=e.y,ow=e.w,os=e.size||6; ev.preventDefault();
     function mm(m){ const dx=(m.clientX-sx)/rect.width*100, dy=(m.clientY-sy)/rect.height*100;
       if(resizing){ e.w=Math.max(5,Math.min(100,ow+dx));
@@ -785,16 +794,48 @@ function wireElementDrag(){ const slide=document.getElementById('canvasSlide');
         return; }
       e.x=Math.max(0,Math.min(97,ox+dx)); e.y=Math.max(0,Math.min(97,oy+dy));
       const vg=document.getElementById('vGuide'), hg=document.getElementById('hGuide');
-      const cx=e.x+e.w/2; let snapX=false, snapY=false;
-      if(Math.abs(cx-50)<2.5){ e.x=50-e.w/2; snapX=true; } else if(Math.abs(e.x)<2)e.x=0; else if(Math.abs(e.x+e.w-100)<2)e.x=100-e.w; // snap x: center / edges
-      if(Math.abs(e.y-46)<2.5){ e.y=46; snapY=true; } else if(Math.abs(e.y)<2)e.y=0; // snap y: center-ish / top
-      if(vg)vg.style.display=snapX?'block':'none'; if(hg)hg.style.display=snapY?'block':'none';
+      const cx=e.x+e.w/2; let snapX=-1, snapY=-1;
+      // slide center/edges
+      if(Math.abs(cx-50)<2){ e.x=50-e.w/2; snapX=50; } else if(Math.abs(e.x)<2)e.x=0; else if(Math.abs(e.x+e.w-100)<2)e.x=100-e.w;
+      if(Math.abs(e.y-46)<2){ e.y=46; snapY=46; } else if(Math.abs(e.y)<2)e.y=0;
+      // sibling edges/centers (Canva smart guides) — measured once at drag start
+      if(snapX<0) for(const sb of sibs){ for(const [mine,set] of [[e.x,v=>e.x=v],[e.x+e.w,v=>e.x=v-e.w],[e.x+e.w/2,v=>e.x=v-e.w/2]]){
+        for(const sv of [sb.l,sb.r,sb.cx]){ if(Math.abs(mine-sv)<1.4){ set(sv); snapX=sv; break; } } if(snapX>=0)break; } if(snapX>=0)break; }
+      if(snapY<0) for(const sb of sibs){ for(const [mine,set] of [[e.y,v=>e.y=v],[e.y+myH,v=>e.y=v-myH],[e.y+myH/2,v=>e.y=v-myH/2]]){
+        for(const sv of [sb.t,sb.b,sb.cy]){ if(Math.abs(mine-sv)<1.4){ set(sv); snapY=sv; break; } } if(snapY>=0)break; } if(snapY>=0)break; }
+      if(vg){ vg.style.display=snapX>=0?'block':'none'; if(snapX>=0)vg.style.left=snapX+'%'; }
+      if(hg){ hg.style.display=snapY>=0?'block':'none'; if(snapY>=0)hg.style.top=snapY+'%'; }
       elDiv.style.left=e.x+'%'; elDiv.style.top=e.y+'%'; elDiv.style.width=e.w+'%'; }
     function mu(){ document.removeEventListener('mousemove',mm); document.removeEventListener('mouseup',mu);
       const vg=document.getElementById('vGuide'), hg=document.getElementById('hGuide'); if(vg)vg.style.display='none'; if(hg)hg.style.display='none';
+      if(ev.altKey) renderCanvas();   // show the ⌥-duplicate left at the origin
       scheduleSave(); }
     document.addEventListener('mousemove',mm); document.addEventListener('mouseup',mu); };
 }
+/* Marquee (rubber-band) selection — drag on empty canvas selects what it touches. */
+function startMarquee(ev,slide){
+  const rect=slide.getBoundingClientRect(); if(!rect.width)return;
+  const sx=ev.clientX, sy=ev.clientY; let box=null, moved=false;
+  function mm(m){ const dx=m.clientX-sx, dy=m.clientY-sy;
+    if(!moved && Math.abs(dx)<5 && Math.abs(dy)<5) return;
+    moved=true;
+    if(!box){ box=document.createElement('div'); box.id='marquee';
+      box.style.cssText='position:absolute;border:1.5px dashed var(--accent);background:rgba(108,99,255,.08);z-index:70;pointer-events:none;';
+      slide.appendChild(box); }
+    const x=Math.min(m.clientX,sx)-rect.left, y=Math.min(m.clientY,sy)-rect.top;
+    box.style.left=x+'px'; box.style.top=y+'px'; box.style.width=Math.abs(dx)+'px'; box.style.height=Math.abs(dy)+'px'; }
+  function mu(m){ document.removeEventListener('mousemove',mm); document.removeEventListener('mouseup',mu);
+    if(!moved){ // plain click on empty canvas: deselect
+      if(selEl!==-1||selSet.size){ clearSel(); slide.querySelectorAll('.el.sel').forEach(n=>n.classList.remove('sel')); renderFmtBar(); }
+      return; }
+    const bb=box.getBoundingClientRect(); box.remove();
+    clearSel();
+    slide.querySelectorAll('.el').forEach(n=>{ const r=n.getBoundingClientRect();
+      const hit=!(r.right<bb.left||r.left>bb.right||r.bottom<bb.top||r.top>bb.bottom);
+      if(hit){ selSet.add(+n.dataset.i); selEl=+n.dataset.i; }
+      n.classList.toggle('sel',hit); });
+    renderFmtBar(); }
+  document.addEventListener('mousemove',mm); document.addEventListener('mouseup',mu); }
 /* Double-click a text box to edit it (Canva/Keynote model): single click selects
    and drags; double-click enters text editing; blur leaves it. */
 function editElText(i){
@@ -804,6 +845,7 @@ function editElText(i){
   try{ const sel=window.getSelection(); sel.selectAllChildren(n); }catch(e){}
   n.oninput=()=>{ const e2=_fmtEl(); if(e2){ e2.text=n.innerText; scheduleSave(); } };
   n.onblur =()=>{ n.contentEditable='false'; };
+  n.onkeydown=(k)=>{ if(k.key==='Escape'){ k.preventDefault(); n.blur(); } };   // Esc leaves text editing
 }
 /* Contextual format toolbar — layer controls for every element; full text tools
    for text elements. */
@@ -844,8 +886,9 @@ function renderFmtBar(){ const bar=document.getElementById('fmtBar'); if(!bar)re
       <option value="sans"${e.font==='sans'?' selected':''}>Sans</option>
       <option value="serif"${e.font==='serif'?' selected':''}>Serif</option>
       <option value="mono"${e.font==='mono'?' selected':''}>Mono</option></select>
-    <button class="st-btn" onclick="fmtSize(-0.6)" title="Smaller text">A−</button>
-    <button class="st-btn" onclick="fmtSize(0.6)" title="Bigger text">A+</button>
+    <button class="st-btn" onclick="fmtSize(-0.6)" title="Smaller text (⌘⇧<)">A−</button>
+    <input type="number" step="0.2" min="1" max="20" value="${e.size||6}" onchange="fmtSizeSet(this.value)" title="Exact text size" style="width:54px;background:var(--chrome2);border:1px solid var(--border2);border-radius:7px;color:var(--text);padding:5px 6px;font-size:12px;">
+    <button class="st-btn" onclick="fmtSize(0.6)" title="Bigger text (⌘⇧>)">A+</button>
     <button class="st-btn" onclick="fmtBold()" title="Bold" style="${(e.weight||700)>=700?'border-color:var(--accent);':''}"><b>B</b></button>
     <button class="st-btn" onclick="fmtItalic()" title="Italic" style="${e.italic?'border-color:var(--accent);':''}"><i>I</i></button>
     <button class="st-btn" onclick="fmtUnder()" title="Underline" style="${e.under?'border-color:var(--accent);':''}"><u>U</u></button>
@@ -902,7 +945,8 @@ function fmtCenterV(){ const ids=selIndices(); const s0=deck.slides[currentIdx];
 function fmtLayer(d){ const s=deck.slides[currentIdx]; if(!s||!s.elements)return; const j=selEl+d;
   if(j<0||j>=s.elements.length)return; [s.elements[selEl],s.elements[j]]=[s.elements[j],s.elements[selEl]];
   selEl=j; renderCanvas(); scheduleSave(); }
-function fmtSize(d){ const e=_fmtEl(); if(!e)return; e.size=Math.max(1.2,+((e.size||6)+d).toFixed(2)); const n=_selTxtNode(); if(n)n.style.fontSize=e.size+'cqw'; scheduleSave(); }
+function fmtSize(d){ const e=_fmtEl(); if(!e)return; e.size=Math.max(1.2,+((e.size||6)+d).toFixed(2)); const n=_selTxtNode(); if(n)n.style.fontSize=e.size+'cqw'; renderFmtBar(); scheduleSave(); }
+function fmtSizeSet(v){ const e=_fmtEl(); if(!e)return; const n=+v; if(!isFinite(n))return; e.size=Math.max(1,Math.min(20,+n.toFixed(2))); const t=_selTxtNode(); if(t)t.style.fontSize=e.size+'cqw'; scheduleSave(); }
 function fmtBold(){ const e=_fmtEl(); if(!e)return; e.weight=(e.weight||700)>=700?400:700; const n=_selTxtNode(); if(n)n.style.fontWeight=e.weight; renderFmtBar(); scheduleSave(); }
 function fmtItalic(){ const e=_fmtEl(); if(!e)return; e.italic=!e.italic; const n=_selTxtNode(); if(n)n.style.fontStyle=e.italic?'italic':'normal'; renderFmtBar(); scheduleSave(); }
 function fmtColor(v){ const e=_fmtEl(); if(!e)return; e.color=v; const n=_selTxtNode(); if(n)n.style.color=v; scheduleSave(); }
@@ -1403,6 +1447,8 @@ document.addEventListener('keydown',e=>{
       unlocked.sort((a,b)=>b-a).forEach(gi=>s0.elements.splice(gi,1));
       clearSel(); renderCanvas(); scheduleSave(); e.preventDefault(); return; }
     if(e.key==='Escape'){ clearSel(); renderCanvas(); e.preventDefault(); return; }
+    if(mod&&e.shiftKey&&(e.key==='>'||e.key==='.')){ fmtSize(0.6); e.preventDefault(); return; }
+    if(mod&&e.shiftKey&&(e.key==='<'||e.key===',')){ fmtSize(-0.6); e.preventDefault(); return; }
     const mv=(dx,dy)=>{ ids.forEach(gi=>{ const ge=s0.elements[gi]; if(!ge||ge.locked)return;
         ge.x=Math.max(0,Math.min(97,ge.x+dx)); ge.y=Math.max(0,Math.min(97,ge.y+dy));
         const nd=document.querySelector(`#canvasSlide .el[data-i="${gi}"]`); if(nd){ nd.style.left=ge.x+'%'; nd.style.top=ge.y+'%'; } });
