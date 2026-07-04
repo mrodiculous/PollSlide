@@ -134,10 +134,18 @@
   .p-progress{height:3px;background:rgba(255,255,255,.08);flex-shrink:0;}
   #pProg{height:100%;width:0;background:linear-gradient(90deg,var(--accent),#a78bfa);transition:width .3s;}
   .p-stage{flex:1;position:relative;overflow:hidden;}
-  .p-stage.tr-fade > *:not(.p-logo){animation:pfade .4s ease;}
+  .p-stage.tr-fade > *:not(.p-logo){animation:pfade .42s ease;}
+  .p-stage.tr-push > *:not(.p-logo){animation:ppush .45s cubic-bezier(.2,.7,.2,1);}
+  .p-stage.tr-wipe > *:not(.p-logo){animation:pwipe .5s ease;}
+  .p-stage.tr-zoom > *:not(.p-logo){animation:pzoom .45s cubic-bezier(.2,.7,.2,1);}
   @keyframes pfade{from{opacity:0}to{opacity:1}}
-  @keyframes pfade{from{opacity:0}to{opacity:1}}
-  #pStage > .slide-inner, #pStage > .live, #pStage > .s-img, #pStage > .qr-card{animation:pfade .42s ease;}
+  @keyframes ppush{from{transform:translateX(6%);opacity:0}to{transform:translateX(0);opacity:1}}
+  @keyframes pwipe{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+  @keyframes pzoom{from{transform:scale(.94);opacity:0}to{transform:scale(1);opacity:1}}
+  .b-in{animation:pfade .4s ease;}
+  .el.b-hidden{visibility:hidden;}
+  .guide{position:absolute;background:var(--accent);opacity:.85;z-index:55;pointer-events:none;display:none;}
+  #vGuide{top:0;bottom:0;width:1px;left:50%;} #hGuide{left:0;right:0;height:1px;top:46%;}
   .p-logo{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:7px;opacity:.85;font-family:'Syne';font-weight:800;font-size:14px;color:#fff;z-index:5;pointer-events:none;}
   .p-bar{display:flex;align-items:center;gap:12px;padding:9px 16px;background:rgba(0,0,0,.55);border-top:1px solid var(--border);}
   .p-bar .pos{color:var(--muted);font-size:12px;}
@@ -212,6 +220,10 @@
       <div class="menu-item" onclick="openOrganizer()"><span class="mi-ico">🗂️</span><span>Open my presentations<span class="mi-sub">Import your saved questions</span></span></div>
       <div class="menu-sep"></div>
       <div class="menu-item" onclick="exportPDF()"><span class="mi-ico">🖨️</span><span>Export as PDF<span class="mi-sub">Print dialog → Save as PDF</span></span></div>
+      <div class="menu-item" onclick="exportPNG()"><span class="mi-ico">🖼️</span><span>Export slide as PNG<span class="mi-sub">The selected slide as an image</span></span></div>
+      <div class="menu-sep"></div>
+      <div class="menu-item" onclick="cloudSave()"><span class="mi-ico">☁️</span><span>Save deck to cloud<span class="mi-sub">Available on any of your devices</span></span></div>
+      <div class="menu-item" onclick="openCloudDecks()"><span class="mi-ico">📂</span><span>Open cloud deck</span></div>
     </div>
   </div>
 
@@ -254,6 +266,7 @@
   <input type="file" id="deckInput" accept=".pptx,.ppt,.key,application/vnd.openxmlformats-officedocument.presentationml.presentation" class="hidden" onchange="onDeckFile(this.files[0])">
   <input type="file" id="elImgInput" accept="image/*" class="hidden" onchange="onElImg(this.files[0])">
   <input type="file" id="bgImgInput" accept="image/*" class="hidden" onchange="onBgImg(this.files[0])">
+  <input type="file" id="mediaInput" accept="video/*,audio/*" class="hidden" onchange="onMediaEl(this.files[0])">
 </div>
 
 <!-- ── WORK AREA ────────────────────────────────────────────────────────────── -->
@@ -261,7 +274,7 @@
   <div class="nav" id="nav"></div>
   <div class="stage-wrap">
     <div class="stage-tools" id="stageTools"></div>
-    <div class="canvas-pad"><div class="slide" id="canvasSlide"></div></div>
+    <div class="canvas-pad"><div class="slide" id="canvasSlide"><div class="guide" id="vGuide"></div><div class="guide" id="hGuide"></div></div></div>
     <div class="notes-row"><span class="notes-lbl">🗒 Notes</span><textarea id="notesArea" placeholder="Speaker notes — only you see these" oninput="if(deck.slides[currentIdx]){deck.slides[currentIdx].notes=this.value;scheduleSave();}"></textarea></div>
   </div>
 </div>
@@ -342,6 +355,18 @@
       <button class="pill-btn ghost" onclick="closeModal('resetOverlay')">Cancel</button>
       <button class="pill-btn" onclick="resetTallies()">Reset</button>
     </div>
+  </div>
+</div>
+
+<!-- ── STICKER PICKER ───────────────────────────────────────────────────────── -->
+<div class="overlay" id="stickerOverlay">
+  <div class="modal">
+    <h2>🎉 Stickers & symbols</h2>
+    <p class="sub">Click one to drop it on the slide — drag and resize like anything else.</p>
+    <div id="stickerGrid" style="display:grid;grid-template-columns:repeat(8,1fr);gap:6px;max-height:240px;overflow-y:auto;"></div>
+    <label>Or type any emoji / character</label>
+    <div style="display:flex;gap:8px;"><input id="stickerCustom" maxlength="4" placeholder="🦄" onkeydown="if(event.key==='Enter')pickStickerCustom()"><button class="pill-btn" onclick="pickStickerCustom()">Add</button></div>
+    <div class="modal-actions"><button class="pill-btn ghost" onclick="closeModal('stickerOverlay')">Close</button></div>
   </div>
 </div>
 
@@ -557,7 +582,12 @@ function buildInsertMenu(){
     `<div class="menu-item" onclick="addShape('circle')"><span class="mi-ico">◯</span><span>Circle</span></div>` +
     `<div class="menu-item" onclick="addShape('line')"><span class="mi-ico">─</span><span>Line<span class="mi-sub">Rotate it for dividers & arrows</span></span></div>` +
     `<div class="menu-item" onclick="addEmoji()"><span class="mi-ico">🎉</span><span>Emoji / symbol</span></div>` +
-    `<div class="menu-item" onclick="addTable()"><span class="mi-ico">▦</span><span>Table<span class="mi-sub">Rows & columns, editable cells</span></span></div>`;
+    `<div class="menu-item" onclick="addTable()"><span class="mi-ico">▦</span><span>Table<span class="mi-sub">Rows & columns, editable cells</span></span></div>` +
+    `<div class="menu-sep"></div><div style="padding:6px 10px 2px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);">Layouts</div>` +
+    `<div class="menu-item" onclick="addLayout('statement')"><span class="mi-ico">❝</span><span>Big statement<span class="mi-sub">One huge centered line</span></span></div>` +
+    `<div class="menu-item" onclick="addLayout('twocol')"><span class="mi-ico">◫</span><span>Two columns<span class="mi-sub">Side-by-side text blocks</span></span></div>` +
+    `<div class="menu-item" onclick="addLayout('imgcap')"><span class="mi-ico">🖼</span><span>Image + caption<span class="mi-sub">Photo left, text right</span></span></div>` +
+    `<div class="menu-item" onclick="addLayout('agenda')"><span class="mi-ico">☰</span><span>Agenda<span class="mi-sub">Title + bulleted list</span></span></div>`;
 }
 
 /* ─── Navigator ───────────────────────────────────────────────────────────────*/
@@ -608,7 +638,7 @@ function renderCanvas(){
     <span id="fmtBar" style="display:none;align-items:center;gap:5px;"></span>
     ${((s.kind==='poll'||s.kind==='quiz')&&(s.question.type||'').indexOf('multiple_choice')===0)?`<select class="st-btn" onchange="setDisplay(this.value)" title="How results are shown"><option value="bars"${(s.question.displayMode||'bars')==='bars'?' selected':''}>▭ Bars</option><option value="column"${s.question.displayMode==='column'?' selected':''}>▮ Columns</option><option value="donut"${s.question.displayMode==='donut'?' selected':''}>◐ Donut</option><option value="bignum"${s.question.displayMode==='bignum'?' selected':''}># Big numbers</option></select>`:''}
     <select class="st-btn" onchange="setSlideTheme(this.value)" title="Theme for THIS slide (Theme menu sets the whole deck)"><option value="">🎨 Deck theme</option>${Object.entries(THEMES).map(([k,th])=>`<option value="${k}"${s.theme===k?" selected":""}>${th.name}</option>`).join("")}</select>
-    <select class="st-btn" onchange="setTransition(this.value)" title="Slide transition"><option value="fade"${(s.transition||'fade')==='fade'?' selected':''}>⇋ Fade</option><option value="none"${s.transition==='none'?' selected':''}>∅ None</option></select>
+    <select class="st-btn" onchange="setTransition(this.value)" title="Slide transition"><option value="fade"${(s.transition||'fade')==='fade'?' selected':''}>⇋ Fade</option><option value="push"${s.transition==='push'?' selected':''}>→ Push</option><option value="wipe"${s.transition==='wipe'?' selected':''}>◧ Wipe</option><option value="zoom"${s.transition==='zoom'?' selected':''}>⤢ Zoom</option><option value="none"${s.transition==='none'?' selected':''}>∅ None</option></select>
     <span class="spacer" style="flex:1;"></span>
     <button class="st-btn" onclick="moveSlide(-1)">↑</button>
     <button class="st-btn" onclick="moveSlide(1)">↓</button>
@@ -682,6 +712,14 @@ function selIndices(){ return selSet.size?[...selSet].sort((a,b)=>a-b):(selEl>=0
 function ensureEls(s){ if(!s.elements)s.elements=[]; return s.elements; }
 function addText(){ const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;} pushUndo('Add text box'); ensureEls(s).push({type:'text',x:20,y:42,w:56,size:6,color:'#ffffff',text:'Your text'}); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); editElText(selEl); }
 function addImageEl(){ if(currentIdx<0){toast('Add a slide first.');return;} document.getElementById('elImgInput').click(); }
+function onMediaEl(file){ if(!file)return; const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;}
+  if(file.size>12*1024*1024){ toast('Media over 12 MB — please use a smaller file.'); return; }
+  const kind=file.type.indexOf('video')===0?'video':'audio';
+  const r=new FileReader(); r.onload=e=>{ pushUndo('Add '+kind);
+    ensureEls(s).push({type:kind,x:kind==='video'?28:30,y:kind==='video'?24:44,w:kind==='video'?44:40,src:e.target.result});
+    selSet.clear(); selEl=s.elements.length-1; renderCanvas(); scheduleSave();
+    if(file.size>4*1024*1024) toast('Added — large media may not autosave; export or keep this window open.'); };
+  r.readAsDataURL(file); document.getElementById('mediaInput').value=''; }
 function onBgImg(file){ if(!file)return; const s=deck.slides[currentIdx]; if(!s)return; const r=new FileReader();
   r.onload=e=>{ pushUndo('Background image'); s.bgImg=e.target.result; if(s.bgDim==null)s.bgDim=.35; renderCanvas(); renderNav(); scheduleSave(); };
   r.readAsDataURL(file); document.getElementById('bgImgInput').value=''; }
@@ -689,9 +727,14 @@ function setBgDim(v){ const s=deck.slides[currentIdx]; if(!s)return; s.bgDim=+v;
 function clearBg(){ const s=deck.slides[currentIdx]; if(!s)return; pushUndo('Remove background'); delete s.bgImg; delete s.bgDim; renderCanvas(); renderNav(); scheduleSave(); }
 function addShape(kind){ const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;} closeMenus(); pushUndo('Add shape');
   ensureEls(s).push({type:'shape',shape:kind,x:kind==='line'?30:38,y:kind==='line'?50:34,w:kind==='line'?40:(kind==='circle'?18:26),color:'#6c63ff',opacity:kind==='line'?1:.92}); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); }
+const STICKERS=['🎉','🚀','⭐','🔥','💡','✅','❌','⚠️','👍','👏','❤️','🎯','🏆','📈','📉','💰','🧠','⚡','🌍','🎓','📣','�All'.slice(0,2),'⏰','🤝','🔒','🔑','🎁','☀️','🌈','💬','❓','❗','➡️','⬅️','⬆️','⬇️','∑','Δ','π','∞','±','≈','→','✓'];
 function addEmoji(){ const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;} closeMenus();
-  const ch=prompt('Emoji or symbol to add:','🎉'); if(!ch)return; pushUndo('Add emoji');
-  ensureEls(s).push({type:'emoji',char:ch.slice(0,4),x:44,y:38,w:12}); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); }
+  const grid=document.getElementById('stickerGrid');
+  grid.innerHTML=STICKERS.map(ch=>`<button class="st-btn" style="font-size:22px;padding:8px;" onclick="pickSticker('${ch.replace(/'/g,"\\'")}')">${ch}</button>`).join('');
+  openModal('stickerOverlay'); }
+function pickSticker(ch){ const s=deck.slides[currentIdx]; if(!s)return; closeModal('stickerOverlay'); pushUndo('Add sticker');
+  ensureEls(s).push({type:'emoji',char:ch,x:44,y:38,w:12}); selSet.clear(); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); }
+function pickStickerCustom(){ const v=(document.getElementById('stickerCustom').value||'').trim(); if(!v)return; pickSticker(v.slice(0,4)); }
 function onElImg(file){ if(!file)return; const s=deck.slides[currentIdx]; if(!s)return; const r=new FileReader(); r.onload=e=>{ pushUndo('Add image'); ensureEls(s).push({type:'image',x:32,y:22,w:36,src:e.target.result}); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); }; r.readAsDataURL(file); }
 function delElement(ev,i){ ev.stopPropagation(); const s=deck.slides[currentIdx]; if(!s||!s.elements)return; if(s.elements[i]&&s.elements[i].locked){ toast('🔒 Locked — unlock first'); return; } pushUndo('Delete element'); s.elements.splice(i,1); selEl=-1; renderCanvas(); scheduleSave(); }
 function elLayer(s, editable){ if(!s.elements||!s.elements.length)return '';
@@ -702,6 +745,8 @@ function elLayer(s, editable){ if(!s.elements||!s.elements.length)return '';
       : `<img src="${e.src||''}" alt="">`;
     else if(e.type==='shape') body=`<div class="el-shape" style="width:100%;${e.shape==='line'?'height:.9cqw;':'aspect-ratio:'+(e.shape==='circle'?'1/1':'16/10')+';'}background:${e.color||'var(--accent)'};border-radius:${e.shape==='circle'?'50%':(e.shape==='line'?'100px':'1.2cqw')};"></div>`;
     else if(e.type==='emoji') body=`<div class="el-emoji" style="font-size:${((e.w||12)*0.8).toFixed(2)}cqw;line-height:1.1;text-align:center;">${esc(e.char||'🎉')}</div>`;
+    else if(e.type==='video') body=`<video src="${e.src||''}" controls playsinline style="width:100%;border-radius:6px;display:block;background:#000;"></video>`;
+    else if(e.type==='audio') body=`<audio src="${e.src||''}" controls style="width:100%;display:block;"></audio>`;
     else if(e.type==='table') body=`<div class="el-table" style="grid-template-columns:repeat(${(e.cells&&e.cells[0]||[1]).length},1fr);">${(e.cells||[]).map((row,r)=>row.map((cell,c)=>`<div class="tcell" ${editable?`contenteditable="true" oninput="deck.slides[currentIdx].elements[${i}].cells[${r}][${c}]=this.innerText;scheduleSave()"`:''}>${esc(cell||'')}</div>`).join('')).join('')}</div>`;
     else { const inner=e.bullet?esc(e.text||'').split('\n').map(l=>l.trim()?'•&nbsp;'+l:l).join('<br>'):esc(e.text||'');
       const txtDiv=`<div class="el-txt ${(!editable&&e.href)?'':''}${(editable&&e.href)?'lnk':''}" style="font-size:${e.size||6}cqw;color:${e.color||'#fff'};font-weight:${e.weight||700};font-style:${e.italic?'italic':'normal'};text-decoration:${e.under?'underline':'none'};text-align:${e.align||'left'};font-family:${e.font?EL_FONTS[e.font]:'var(--theme-font)'};white-space:pre-wrap;" ${editable?`ondblclick="editElText(${i})"`:''}>${inner}</div>`;
@@ -716,7 +761,8 @@ function wireElementDrag(){ const slide=document.getElementById('canvasSlide');
     // Selection model: shift-click toggles membership; clicking a member of a
     // multi-selection keeps the group (so you can drag it); plain click = single.
     if(ev.shiftKey){ if(selEl>=0)selSet.add(selEl); selSet.has(i)?selSet.delete(i):selSet.add(i); selEl=i; }
-    else if(!(selSet.size>1&&selSet.has(i))){ selSet.clear(); selEl=i; }
+    else if(!(selSet.size>1&&selSet.has(i))){ selSet.clear(); selEl=i;
+      if(e.grp){ s.elements.forEach((ge,gi)=>{ if(ge.grp===e.grp)selSet.add(gi); }); } }  // clicking a grouped element selects the whole group
     else selEl=i;
     slide.querySelectorAll('.el').forEach(n=>n.classList.toggle('sel', +n.dataset.i===selEl||selSet.has(+n.dataset.i)));
     renderFmtBar();
@@ -738,10 +784,15 @@ function wireElementDrag(){ const slide=document.getElementById('canvasSlide');
           const nd=slide.querySelector(`.el[data-i="${o.gi}"]`); if(nd){ nd.style.left=ge.x+'%'; nd.style.top=ge.y+'%'; } });
         return; }
       e.x=Math.max(0,Math.min(97,ox+dx)); e.y=Math.max(0,Math.min(97,oy+dy));
-      const cx=e.x+e.w/2; if(Math.abs(cx-50)<2.5)e.x=50-e.w/2; else if(Math.abs(e.x)<2)e.x=0; else if(Math.abs(e.x+e.w-100)<2)e.x=100-e.w; // snap x: center / edges
-      if(Math.abs(e.y-46)<2.5)e.y=46; else if(Math.abs(e.y)<2)e.y=0; // snap y: center-ish / top
+      const vg=document.getElementById('vGuide'), hg=document.getElementById('hGuide');
+      const cx=e.x+e.w/2; let snapX=false, snapY=false;
+      if(Math.abs(cx-50)<2.5){ e.x=50-e.w/2; snapX=true; } else if(Math.abs(e.x)<2)e.x=0; else if(Math.abs(e.x+e.w-100)<2)e.x=100-e.w; // snap x: center / edges
+      if(Math.abs(e.y-46)<2.5){ e.y=46; snapY=true; } else if(Math.abs(e.y)<2)e.y=0; // snap y: center-ish / top
+      if(vg)vg.style.display=snapX?'block':'none'; if(hg)hg.style.display=snapY?'block':'none';
       elDiv.style.left=e.x+'%'; elDiv.style.top=e.y+'%'; elDiv.style.width=e.w+'%'; }
-    function mu(){ document.removeEventListener('mousemove',mm); document.removeEventListener('mouseup',mu); scheduleSave(); }
+    function mu(){ document.removeEventListener('mousemove',mm); document.removeEventListener('mouseup',mu);
+      const vg=document.getElementById('vGuide'), hg=document.getElementById('hGuide'); if(vg)vg.style.display='none'; if(hg)hg.style.display='none';
+      scheduleSave(); }
     document.addEventListener('mousemove',mm); document.addEventListener('mouseup',mu); };
 }
 /* Double-click a text box to edit it (Canva/Keynote model): single click selects
@@ -765,6 +816,8 @@ function renderFmtBar(){ const bar=document.getElementById('fmtBar'); if(!bar)re
     bar.innerHTML=`<span style="font-weight:700;color:var(--text);">${selSet.size} selected</span>
       <button class="st-btn" onclick="fmtCenterH()" title="Center horizontally">⊟</button>
       <button class="st-btn" onclick="fmtCenterV()" title="Center vertically">⊞</button>
+      <button class="st-btn" onclick="grpSel(true)" title="Group (⌘G)">⧉ Group</button>
+      <button class="st-btn" onclick="grpSel(false)" title="Ungroup (⇧⌘G)">⧉̸</button>
       <span style="color:var(--muted);">drag moves all · ⌘C copy · Delete removes</span>`;
     return; }
   const layers=`<button class="st-btn" onclick="fmtLayer(1)" title="Bring forward">⬆</button>
@@ -773,7 +826,8 @@ function renderFmtBar(){ const bar=document.getElementById('fmtBar'); if(!bar)re
     <button class="st-btn" onclick="fmtCenterV()" title="Center vertically">⊞</button>
     <button class="st-btn" onclick="fmtRotate()" title="Rotate 15° (⇧-click to reset)">↻${e.rot?e.rot+'°':''}</button>
     <input type="range" min="0.2" max="1" step="0.1" value="${e.opacity!=null?e.opacity:1}" oninput="fmtOpacity(this.value)" title="Opacity" style="width:56px;accent-color:var(--accent);">
-    <button class="st-btn" onclick="fmtLock()" title="${e.locked?'Unlock':'Lock (prevents moving/deleting)'}" style="${e.locked?'border-color:var(--accent4);':''}">${e.locked?'🔒':'🔓'}</button>`;
+    <button class="st-btn" onclick="fmtLock()" title="${e.locked?'Unlock':'Lock (prevents moving/deleting)'}" style="${e.locked?'border-color:var(--accent4);':''}">${e.locked?'🔒':'🔓'}</button>
+    <button class="st-btn" onclick="fmtBuild()" title="Build: reveal this element on click while presenting" style="${e.build?'border-color:var(--accent);':''}">✦${e.build?('#'+(buildEls(deck.slides[currentIdx]).findIndex(x=>x.i===selEl)+1)):''}</button>`;
   bar.style.display='inline-flex';
   if(e.type==='shape'){ bar.innerHTML=`<input type="color" value="${e.color||'#6c63ff'}" oninput="fmtShapeColor(this.value)" title="Shape color" style="width:30px;height:29px;padding:1px;border:1px solid var(--border2);border-radius:7px;background:var(--chrome2);cursor:pointer;">${layers}`; return; }
   if(e.type==='image'){ bar.innerHTML=`<button class="st-btn" onclick="fmtImgFit()" title="Toggle natural / cover crop" style="${e.fit==='cover'?'border-color:var(--accent);':''}">▣ ${e.fit==='cover'?'Cover':'Natural'}</button>${layers}`; return; }
@@ -813,6 +867,18 @@ function tblRow(d){ const e=_fmtEl(); if(!e||e.type!=='table')return; pushUndo('
   if(d>0)e.cells.push(Array(cols).fill('')); else if(e.cells.length>1)e.cells.pop(); renderCanvas(); scheduleSave(); }
 function tblCol(d){ const e=_fmtEl(); if(!e||e.type!=='table')return; pushUndo('Table columns');
   if(d>0)e.cells.forEach(r=>r.push('')); else if(e.cells[0].length>1)e.cells.forEach(r=>r.pop()); renderCanvas(); scheduleSave(); }
+function addLayout(kind){ closeMenus(); pushUndo('Add layout'); const at=currentIdx<0?deck.slides.length:currentIdx+1;
+  let sl;
+  if(kind==='statement') sl={id:nid(),kind:'content',title:'',body:'',elements:[{type:'text',x:8,y:38,w:84,size:7.4,weight:800,align:'center',color:'#ffffff',text:'One big idea.'}]};
+  else if(kind==='twocol') sl={id:nid(),kind:'content',title:'Two things',body:'',elements:[
+    {type:'text',x:6,y:34,w:42,size:2.6,weight:500,color:'#e7e7f5',text:'First column — add your points here.'},
+    {type:'text',x:52,y:34,w:42,size:2.6,weight:500,color:'#e7e7f5',text:'Second column — and the counterpart here.'}]};
+  else if(kind==='imgcap') sl={id:nid(),kind:'content',title:'',body:'',elements:[
+    {type:'shape',shape:'rect',x:6,y:16,w:46,color:'#26263e',opacity:1},
+    {type:'text',x:56,y:30,w:38,size:3.4,weight:700,color:'#ffffff',text:'Caption headline'},
+    {type:'text',x:56,y:44,w:38,size:2.2,weight:500,color:'#c9c9e2',text:'Swap the placeholder for an image (＋ Image) and tell its story here.'}]};
+  else sl={id:nid(),kind:'content',title:'Agenda',body:'',elements:[{type:'text',x:6,y:32,w:60,size:2.8,weight:500,color:'#e7e7f5',bullet:true,text:'First topic\nSecond topic\nThird topic\nWrap-up'}]};
+  deck.slides.splice(at,0,sl); currentIdx=at; renderNav(); renderCanvas(); scheduleSave(); }
 function addTable(){ const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;} closeMenus(); pushUndo('Add table');
   ensureEls(s).push({type:'table',x:20,y:28,w:60,cells:[['Header','Header'],['','']]}); selSet.clear(); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); }
 function fmtUnder(){ const e=_fmtEl(); if(!e)return; e.under=!e.under; const n=_selTxtNode(); if(n)n.style.textDecoration=e.under?'underline':'none'; renderFmtBar(); scheduleSave(); }
@@ -820,6 +886,12 @@ function fmtFont(v){ const e=_fmtEl(); if(!e)return; if(v)e.font=v; else delete 
 function fmtShapeColor(v){ const e=_fmtEl(); if(!e)return; e.color=v; const n=_selNode(); const sh=n&&n.querySelector('.el-shape'); if(sh)sh.style.background=v; scheduleSave(); }
 function fmtRotate(ev){ const e=_fmtEl(); if(!e)return; e.rot=(window.event&&window.event.shiftKey)?0:(((e.rot||0)+15)%360); const n=_selNode(); if(n)n.style.transform='rotate('+(e.rot||0)+'deg)'; renderFmtBar(); scheduleSave(); }
 function fmtOpacity(v){ const e=_fmtEl(); if(!e)return; e.opacity=+v; const n=_selNode(); if(n)n.style.opacity=v; scheduleSave(); }
+function grpSel(on){ const ids=selIndices(); const s0=deck.slides[currentIdx]; if(!s0||!ids.length)return;
+  pushUndo(on?'Group':'Ungroup');
+  if(on){ const g='g'+Date.now(); ids.forEach(gi=>{ if(s0.elements[gi])s0.elements[gi].grp=g; }); toast('Grouped'); }
+  else ids.forEach(gi=>{ if(s0.elements[gi])delete s0.elements[gi].grp; });
+  renderFmtBar(); scheduleSave(); }
+function fmtBuild(){ const e=_fmtEl(); if(!e)return; e.build=!e.build; renderFmtBar(); scheduleSave(); toast(e.build?'✦ Builds in on click while presenting':'Build removed'); }
 function fmtLock(){ const e=_fmtEl(); if(!e)return; e.locked=!e.locked; renderFmtBar(); scheduleSave(); toast(e.locked?'🔒 Locked — drag/delete disabled':'🔓 Unlocked'); }
 function fmtCenterH(){ const ids=selIndices(); const s0=deck.slides[currentIdx]; if(!ids.length||!s0)return;
   ids.forEach(gi=>{ const e=s0.elements[gi]; if(!e||e.locked)return; e.x=+(50-e.w/2).toFixed(2);
@@ -896,24 +968,37 @@ function buildResult(q,r){ return (RESULT_RENDERERS[q.type]||renderBars)(q,r); }
 
 /* ─── Present engine (logo bottom-center) ─────────────────────────────────────*/
 let presentIdx=0,_revealed=false,_kb=null,_liveUnsub=null,_liveSlide=null,_liveResp={};
+let _buildStep=0;   // how many build-elements are revealed on the current slide
+function buildEls(sl){ return (sl&&sl.elements||[]).map((e,i)=>({e,i})).filter(x=>x.e.build); }
 function isPresenting(){ return document.getElementById('present').classList.contains('show'); }
 async function startPresent(i){ if(!deck.slides.length){toast('Add a slide first.');return;}
   if(typeof userId!=='undefined'&&userId&&deck.slides.some(s=>isInteractive(s)&&!(s.question&&s.question.imported))){ await publishDeck(); } // publish the latest so every QR (incl. Q&A) scans
   presentIdx=Math.max(0,Math.min(i||0,deck.slides.length-1)); _revealed=false; _presentT0=Date.now();
   const el=document.getElementById('present'); el.classList.add('show'); try{ el.requestFullscreen&&el.requestFullscreen().catch(()=>{}); }catch(e){}
   renderPresentSlide(presentIdx);
-  document.getElementById('pStage').onclick=(e)=>{ if(e.target.closest('.qr-card')||e.target.closest('button')||e.target.closest('a'))return; presentNav(1); }; // click advances (Keynote)
+  document.getElementById('pStage').onclick=(e)=>{ if(e.target.closest('.qr-card')||e.target.closest('button')||e.target.closest('a')||e.target.closest('video')||e.target.closest('audio'))return; presentNav(1); }; // click advances (Keynote)
   _kb=(e)=>{ if(e.key==='Escape')endPresent(); else if(e.key==='ArrowRight'||e.key===' '){presentNav(1);e.preventDefault();} else if(e.key==='ArrowLeft')presentNav(-1); else if(e.key==='r'||e.key==='R')doReveal(); };
   document.addEventListener('keydown',_kb); }
 function endPresent(){ closePresenterView(); document.getElementById('pStage').onclick=null; document.getElementById('present').classList.remove('show'); if(_kb){document.removeEventListener('keydown',_kb);_kb=null;} try{document.fullscreenElement&&document.exitFullscreen&&document.exitFullscreen().catch(()=>{});}catch(e){} detachLive(); }
-function presentNav(d){ const j=presentIdx+d; if(j<0||j>=deck.slides.length)return; presentIdx=j; _revealed=false; renderPresentSlide(j); }
+function presentNav(d){
+  const cur=deck.slides[presentIdx];
+  if(d>0){ const b=buildEls(cur); if(b.length&&_buildStep<b.length){ _buildStep++; revealBuilds(); return; } }
+  if(d<0&&_buildStep>0){ _buildStep--; revealBuilds(); return; }
+  const j=presentIdx+d; if(j<0||j>=deck.slides.length)return; presentIdx=j; _revealed=false; _buildStep=0; renderPresentSlide(j); }
+// Show/hide build elements for the CURRENT step without re-rendering the slide.
+function revealBuilds(){ const st=document.getElementById('pStage'); const sl=deck.slides[presentIdx]; const b=buildEls(sl);
+  b.forEach((x,ord)=>{ const n=st.querySelector(`.el[data-i="${x.i}"]`); if(!n)return;
+    const show=ord<_buildStep; if(show&&n.classList.contains('b-hidden')){ n.classList.remove('b-hidden'); n.classList.add('b-in'); }
+    else if(!show) n.classList.add('b-hidden'); }); }
 function slideHasPoll(s){ return s && isInteractive(s) && s.kind!=='qa'; }
 function renderPresentSlide(i){ const s=deck.slides[i]; const st=document.getElementById('pStage'); const el=document.getElementById('present');
+  setTimeout(revealBuilds,0);   // apply build visibility after this render paints
   applyThemeTo(el, (s&&s.theme)||deck.theme||'gamified');
   st.classList.toggle('tr-fade', !(s&&s.transition==='none')); // per-slide transition
   document.getElementById('pPos').textContent=(i+1)+' / '+deck.slides.length;
   const pr=document.getElementById('pProg'); if(pr)pr.style.width=(deck.slides.length?(i+1)/deck.slides.length*100:0)+'%';
   document.getElementById('revealBtn').style.display=slideHasPoll(s)?'':'none';
+  const _tr=(s&&s.transition)||'fade'; document.getElementById('pStage').className='p-stage'+(_tr!=='none'?' tr-'+_tr:'');
   updatePresenterView();
   st.style.background = (s&&s.kind==='image')?'#000':'var(--slide-bg)';
   // keep the logo node, replace the rest
@@ -1206,6 +1291,48 @@ function staticSlideHtml(sl){
     inner=`<div class="slide-inner"><div class="s-eyebrow">${(SLIDE_TYPES[sl.kind]||{}).label||''} · answered live</div><div class="s-title">${esc(q.text||'')}</div>${optsHtml}</div>`; }
   return `<div class="slide pdf-page" style="${themeStyleString(sl.theme||deck.theme)}">${bgLayer(sl)}${inner}${elLayer(sl,false)}</div>`;
 }
+// PNG of the CURRENT slide via SVG foreignObject (all our media are data URLs,
+// so the canvas stays untainted). Webfonts may fall back to system sans.
+function exportPNG(){ closeMenus();
+  const sl=deck.slides[currentIdx]; if(!sl){ toast('Select a slide first.'); return; }
+  const css=document.querySelector('style').textContent;
+  const W=1280,H=720;
+  const body=staticSlideHtml(sl).replace('class="slide pdf-page"','class="slide pdf-page" data-png');
+  const html=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml"><style>${css}
+    .pdf-page{width:${W}px;height:${H}px;max-width:none;border-radius:0;box-shadow:none;position:relative;overflow:hidden;background:var(--slide-bg);container-type:inline-size;}</style>${body}</div></foreignObject></svg>`;
+  const img=new Image();
+  img.onload=function(){ const c=document.createElement('canvas'); c.width=W; c.height=H;
+    c.getContext('2d').drawImage(img,0,0);
+    try{ const a=document.createElement('a'); a.download=(deck.title||'slide')+'-'+(currentIdx+1)+'.png'; a.href=c.toDataURL('image/png'); a.click(); toast('PNG saved'); }
+    catch(err){ toast('Could not export this slide (external image blocks it).'); } };
+  img.onerror=function(){ toast('PNG export failed for this slide.'); };
+  img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(html);
+}
+/* ── Cloud decks: save/open the whole deck under your account ── */
+function cloudSave(){ closeMenus();
+  if(typeof fbDb==='undefined'||!fbDb||!userId){ toast('Sign in to save to the cloud.'); toggleAuth(); return; }
+  let j; try{ j=JSON.stringify(deck); }catch(e){ toast('Deck too complex to save.'); return; }
+  if(j.length>9*1024*1024){ toast('Deck over 9 MB (big media) — remove some media to cloud-save.'); return; }
+  const id=deck.cloudId||('deck_'+Date.now()); deck.cloudId=id;
+  toast('Saving…');
+  fbDb.ref('users/'+userId+'/presentDecks/'+id).set({ title:deck.title||'Untitled deck', updatedAt:Date.now(), json:j })
+    .then(()=>{ save(); toast('☁️ Saved to your account'); })
+    .catch(()=>toast('Cloud save failed — try again.'));
+}
+async function openCloudDecks(){ closeMenus();
+  if(typeof fbDb==='undefined'||!fbDb||!userId){ toast('Sign in to open cloud decks.'); toggleAuth(); return; }
+  let list={};
+  try{ const s0=await fbDb.ref('users/'+userId+'/presentDecks').get(); list=s0.exists()?(s0.val()||{}):{}; }catch(e){}
+  const ids=Object.keys(list); if(!ids.length){ toast('No cloud decks yet — use “Save deck to cloud”.'); return; }
+  const menu=ids.map((id,n)=>(n+1)+'. '+(list[id].title||id)+' ('+new Date(list[id].updatedAt||0).toLocaleDateString()+')').join('\n');
+  const pick=prompt('Open which deck?\n'+menu+'\n\nEnter a number:',''); const n=parseInt(pick,10);
+  if(!n||n<1||n>ids.length)return;
+  try{ const d=JSON.parse(list[ids[n-1]].json); pushUndo('Open cloud deck'); deck=d; deck.cloudId=ids[n-1];
+    currentIdx=deck.slides.length?0:-1; clearSel();
+    const ti=document.getElementById('deckTitle'); if(ti)ti.value=deck.title||'';
+    applyThemeTo(document.documentElement,deck.theme); renderNav(); renderCanvas(); save(); toast('Deck loaded'); }
+  catch(e){ toast('Could not load that deck.'); }
+}
 function exportPDF(){ closeMenus();
   if(!deck.slides.length){ toast('Add a slide first.'); return; }
   const css=document.querySelector('style').textContent;
@@ -1245,6 +1372,11 @@ document.addEventListener('keydown',e=>{
   // A selected element captures the keyboard first (Canva-style)…
   const mod=e.metaKey||e.ctrlKey;
   // Copy / paste — elements when selected, otherwise the whole slide (Keynote model).
+  if(mod&&(e.key==='g'||e.key==='G')){ const ids=selIndices(); const s0=deck.slides[currentIdx];
+    if(s0&&ids.length){ if(e.shiftKey){ pushUndo('Ungroup'); ids.forEach(gi=>{ if(s0.elements[gi])delete s0.elements[gi].grp; }); toast('Ungrouped'); }
+      else if(ids.length>1){ pushUndo('Group'); const g='g'+Date.now(); ids.forEach(gi=>{ if(s0.elements[gi])s0.elements[gi].grp=g; }); toast('Grouped — click any member to move them together'); }
+      renderFmtBar(); scheduleSave(); }
+    e.preventDefault(); return; }
   if(mod&&(e.key==='c'||e.key==='C')){ const ids=selIndices(); const s0=deck.slides[currentIdx];
     if(ids.length&&s0){ _clipEls=ids.map(gi=>JSON.parse(JSON.stringify(s0.elements[gi]))); _clipSlide=null; toast(ids.length+' element'+(ids.length>1?'s':'')+' copied'); }
     else if(s0){ _clipSlide=JSON.stringify(s0); _clipEls=null; toast('Slide copied'); }
