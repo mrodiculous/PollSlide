@@ -654,9 +654,9 @@ function renderNav(){
 }
 function thumbInner(s){
   if(s.kind==='image' && s.img) return `<img class="s-img" src="${s.img}" alt="">`;
-  const label = s.kind==='study' ? (s.question.front||'Card')
-    : isInteractive(s) ? (s.question.text||SLIDE_TYPES[s.kind].label)
-    : (s.title||SLIDE_TYPES[s.kind].label);
+  const label = s.kind==='study' ? (plain(s.question.front)||'Card')
+    : isInteractive(s) ? (plain(s.question.text)||SLIDE_TYPES[s.kind].label)
+    : (plain(s.title)||SLIDE_TYPES[s.kind].label);
   return `<div class="tw"><div class="tt">${esc(label).slice(0,60)}</div></div>`;
 }
 function selectSlide(i){ currentIdx=i; clearSel(); renderNav(); renderCanvas(); }
@@ -677,6 +677,7 @@ function duplicateSlide(){ if(currentIdx<0)return; pushUndo('Duplicate slide'); 
 function renderCanvas(){
   const slide=document.getElementById('canvasSlide'); const tools=document.getElementById('stageTools');
   applyThemeTo(slide, (deck.slides[currentIdx]&&deck.slides[currentIdx].theme)||deck.theme);
+  slide.style.background=(deck.slides[currentIdx]&&deck.slides[currentIdx].bgColor)||'';
   const na=document.getElementById('notesArea'); if(na) na.value=(currentIdx>=0&&deck.slides[currentIdx])?(deck.slides[currentIdx].notes||''):'';
   if(currentIdx<0||!deck.slides[currentIdx]){ slide.innerHTML=`<div class="slide-inner placeholder-q">Select or add a slide to begin.</div>`; tools.innerHTML=''; return; }
   const s=deck.slides[currentIdx]; const d=SLIDE_TYPES[s.kind];
@@ -684,6 +685,7 @@ function renderCanvas(){
     ${d.qr?'<span style="color:var(--accent3);">· QR auto-shown for audience</span>':'<span>· no QR (content slide)</span>'}
     <button class="st-btn" onclick="addText()">＋ Text</button>
     <button class="st-btn" onclick="addImageEl()">＋ Image</button>
+    <input type="color" value="${s.bgColor||'#101024'}" onchange="setBgColor(this.value)" title="Slide background color" style="width:28px;height:28px;padding:1px;border:1px solid var(--border2);border-radius:7px;background:var(--chrome2);cursor:pointer;">${s.bgColor?`<button class="st-btn" onclick="clearBgColor()" title="Back to theme background">✕</button>`:''}
     ${(s.kind==='title'||s.kind==='content')?`<button class="st-btn" onclick="bgImgInput.click()" title="Background image for this slide">🌄 BG</button>${s.bgImg?`<input type="range" min="0" max="0.7" step="0.05" value="${s.bgDim!=null?s.bgDim:.35}" oninput="setBgDim(this.value)" title="Darken background" style="width:52px;accent-color:var(--accent);"><button class="st-btn" onclick="clearBg()" title="Remove background image">✕BG</button>`:''}`:''}
     <span id="fmtBar" style="display:none;align-items:center;gap:5px;"></span>
     ${((s.kind==='poll'||s.kind==='quiz')&&(s.question.type||'').indexOf('multiple_choice')===0)?`<select class="st-btn" onchange="setDisplay(this.value)" title="How results are shown"><option value="bars"${(s.question.displayMode||'bars')==='bars'?' selected':''}>▭ Bars</option><option value="column"${s.question.displayMode==='column'?' selected':''}>▮ Columns</option><option value="donut"${s.question.displayMode==='donut'?' selected':''}>◐ Donut</option><option value="bignum"${s.question.displayMode==='bignum'?' selected':''}># Big numbers</option></select>`:''}
@@ -701,29 +703,29 @@ function renderCanvas(){
   wireElementDrag(); renderFmtBar();
   if(hasQR(s)){ const box=slide.querySelector('.qr-card .qrbox'); if(box) renderQR(box, answerUrl(s)); }
 }
-function bind(field, idx){ return `oninput="deck.slides[${idx}].${field}=this.innerText;scheduleSave()" `; }
-function bindQ(field, idx){ return `oninput="deck.slides[${idx}].question.${field}=this.innerText;scheduleSave();schedulePublish()" `; }
+function bind(field, idx){ return `oninput="deck.slides[${idx}].${field}=this.innerHTML;scheduleSave()" `; }
+function bindQ(field, idx){ return `oninput="deck.slides[${idx}].question.${field}=this.innerHTML;scheduleSave();schedulePublish()" `; }
 function bgLayer(s){ if(!s.bgImg)return ''; const dim=s.bgDim!=null?s.bgDim:.35;
   return `<img class="s-bg" src="${s.bgImg}" alt=""><div class="s-bg-dim" style="opacity:${dim};"></div>`; }
 function editHtml(s){
   const i=currentIdx; const letters=['A','B','C','D','E','F'];
   if(s.kind==='title') return bgLayer(s)+`<div class="slide-inner">
-    <div class="s-title" contenteditable="true" ${bind('title',i)}>${esc(s.title||'')}</div>
-    <div class="s-sub" contenteditable="true" ${bind('sub',i)}>${esc(s.sub||'')}</div></div>`;
+    <div class="s-title" contenteditable="true" ${bind('title',i)}>${rich(s.title||'')}</div>
+    <div class="s-sub" contenteditable="true" ${bind('sub',i)}>${rich(s.sub||'')}</div></div>`;
   if(s.kind==='content') return bgLayer(s)+`<div class="slide-inner">
-    <div class="s-title" contenteditable="true" ${bind('title',i)}>${esc(s.title||'')}</div>
-    <div class="s-body" contenteditable="true" ${bind('body',i)}>${esc(s.body||'')}</div></div>`;
+    <div class="s-title" contenteditable="true" ${bind('title',i)}>${rich(s.title||'')}</div>
+    <div class="s-body" contenteditable="true" ${bind('body',i)}>${rich(s.body||'')}</div></div>`;
   if(s.kind==='image') return s.img
     ? `<img class="s-img" src="${s.img}" alt="">`
     : `<div class="slide-inner placeholder-q" style="flex-direction:column;gap:10px;"><div>No image yet</div><button class="st-btn" onclick="imgInput.click()">Choose image…</button></div>`;
   if(s.kind==='study') return `<div class="slide-inner" style="align-items:center;text-align:center;">
     <div class="s-eyebrow">Flashcard</div>
-    <div class="s-title" contenteditable="true" oninput="deck.slides[${i}].question.front=this.innerText;scheduleSave();schedulePublish()">${esc(s.question.front||'')}</div>
-    <div class="s-body" style="color:var(--accent3);" contenteditable="true" oninput="deck.slides[${i}].question.back=this.innerText;scheduleSave();schedulePublish()">${esc(s.question.back||'')}</div>
+    <div class="s-title" contenteditable="true" oninput="deck.slides[${i}].question.front=this.innerHTML;scheduleSave();schedulePublish()">${rich(s.question.front||'')}</div>
+    <div class="s-body" style="color:var(--accent3);" contenteditable="true" oninput="deck.slides[${i}].question.back=this.innerHTML;scheduleSave();schedulePublish()">${rich(s.question.back||'')}</div>
     ${qrCard(s)}</div>`;
   if(s.kind==='qa') return `<div class="slide-inner">
     <div class="s-eyebrow">Audience Q&amp;A</div>
-    <div class="s-title" contenteditable="true" ${bindQ('text',i)}>${esc(s.question.text||'')}</div>
+    <div class="s-title" contenteditable="true" ${bindQ('text',i)}>${rich(s.question.text||'')}</div>
     ${qrCard(s)}</div>`;
   // poll / quiz / survey
   const opts=(s.question.options||[]);
@@ -731,12 +733,12 @@ function editHtml(s){
     ? `<div class="s-sub">★ Rating 1–${s.question.ratingMax||5}</div>`
     : `<div class="s-opts">${opts.map((o,oi)=>`<div class="s-opt">
         <span class="ltr">${letters[oi]}</span>
-        <span contenteditable="true" oninput="deck.slides[${i}].question.options[${oi}].text=this.innerText;scheduleSave();schedulePublish()" style="flex:1;">${esc(o.text||'')}</span>
+        <span contenteditable="true" oninput="deck.slides[${i}].question.options[${oi}].text=this.innerHTML;scheduleSave();schedulePublish()" style="flex:1;">${rich(o.text||'')}</span>
         ${(s.kind==='quiz')?`<span style="font-size:11px;color:${s.question.correctAnswer===oi?'var(--accent3)':'var(--muted)'};cursor:pointer;" onclick="setCorrect(${oi})">${s.question.correctAnswer===oi?'✓ correct':'mark'}</span>`:''}
       </div>`).join('')}</div>`;
   return `<div class="slide-inner">
     <div class="s-eyebrow">${SLIDE_TYPES[s.kind].label}${s.kind==='quiz'?' · tap "mark" to set the answer':''}</div>
-    <div class="s-title" contenteditable="true" ${bindQ('text',i)}>${esc(s.question.text||'')}</div>
+    <div class="s-title" contenteditable="true" ${bindQ('text',i)}>${rich(s.question.text||'')}</div>
     ${optsHtml}${qrCard(s)}</div>`;
 }
 function setCorrect(oi){ deck.slides[currentIdx].question.correctAnswer=oi; renderCanvas(); scheduleSave(); schedulePublish(); }
@@ -774,6 +776,8 @@ function onMediaEl(file){ if(!file)return; const s=deck.slides[currentIdx]; if(!
 function onBgImg(file){ if(!file)return; const s=deck.slides[currentIdx]; if(!s)return; const r=new FileReader();
   r.onload=e=>{ pushUndo('Background image'); s.bgImg=e.target.result; if(s.bgDim==null)s.bgDim=.35; renderCanvas(); renderNav(); scheduleSave(); };
   r.readAsDataURL(file); document.getElementById('bgImgInput').value=''; }
+function setBgColor(v){ const s=deck.slides[currentIdx]; if(!s)return; pushUndo('Background color'); s.bgColor=v; renderCanvas(); renderNav(); scheduleSave(); }
+function clearBgColor(){ const s=deck.slides[currentIdx]; if(!s)return; delete s.bgColor; renderCanvas(); renderNav(); scheduleSave(); }
 function setBgDim(v){ const s=deck.slides[currentIdx]; if(!s)return; s.bgDim=+v; const d=document.querySelector('#canvasSlide .s-bg-dim'); if(d)d.style.opacity=v; scheduleSave(); }
 function clearBg(){ const s=deck.slides[currentIdx]; if(!s)return; pushUndo('Remove background'); delete s.bgImg; delete s.bgDim; renderCanvas(); renderNav(); scheduleSave(); }
 function addShape(kind){ const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;} closeMenus(); pushUndo('Add shape');
@@ -799,7 +803,7 @@ function elLayer(s, editable){ if(!s.elements||!s.elements.length)return '';
     else if(e.type==='video') body=`<video src="${e.src||''}" controls playsinline style="width:100%;border-radius:6px;display:block;background:#000;"></video>`;
     else if(e.type==='audio') body=`<audio src="${e.src||''}" controls style="width:100%;display:block;"></audio>`;
     else if(e.type==='table') body=`<div class="el-table" style="grid-template-columns:repeat(${(e.cells&&e.cells[0]||[1]).length},1fr);">${(e.cells||[]).map((row,r)=>row.map((cell,c)=>`<div class="tcell" ${editable?`contenteditable="true" oninput="deck.slides[currentIdx].elements[${i}].cells[${r}][${c}]=this.innerText;scheduleSave()"`:''}>${esc(cell||'')}</div>`).join('')).join('')}</div>`;
-    else { const inner=e.bullet?esc(e.text||'').split('\n').map(l=>l.trim()?'•&nbsp;'+l:l).join('<br>'):esc(e.text||'');
+    else { const inner=e.bullet?esc(plainLines(e.text||'')).split('\n').map(l=>l.trim()?'•&nbsp;'+l:l).join('<br>'):rich(e.text||'');
       const txtDiv=`<div class="el-txt ${(!editable&&e.href)?'':''}${(editable&&e.href)?'lnk':''}" style="font-size:${e.size||6}cqw;color:${e.color||'#fff'};font-weight:${e.weight||700};font-style:${e.italic?'italic':'normal'};text-decoration:${e.under?'underline':'none'};text-align:${e.align||'left'};font-family:${e.font?EL_FONTS[e.font]:'var(--theme-font)'};white-space:pre-wrap;" ${editable?`ondblclick="editElText(${i})"`:''}>${inner}</div>`;
       body=(!editable&&e.href)?`<a href="${esc(e.href)}" target="_blank" rel="noopener">${txtDiv}</a>`:txtDiv; }
     return `<div class="el ${e.type} ${(editable&&(i===selEl||selSet.has(i)))?'sel':''}" data-i="${i}" style="${st}">${body}${editable?`<span class="el-del" onclick="delElement(event,${i})">✕</span><span class="el-rz nw" data-d="nw"></span><span class="el-rz ne" data-d="ne"></span><span class="el-rz sw" data-d="sw"></span><span class="el-rz se" data-d="se"></span>`:''}</div>`;
@@ -897,7 +901,7 @@ function editElText(i){
   const n=document.querySelector(`#canvasSlide .el[data-i="${i}"] .el-txt`); if(!n)return;
   n.contentEditable='true'; n.focus();
   try{ const sel=window.getSelection(); sel.selectAllChildren(n); }catch(e){}
-  n.oninput=()=>{ const e2=_fmtEl(); if(e2){ e2.text=n.innerText; scheduleSave(); } };
+  n.oninput=()=>{ const e2=_fmtEl(); if(e2){ e2.text=n.innerHTML; scheduleSave(); } };
   n.onblur =()=>{ n.contentEditable='false'; };
   n.onkeydown=(k)=>{ if(k.key==='Escape'){ k.preventDefault(); n.blur(); } };   // Esc leaves text editing
 }
@@ -940,12 +944,12 @@ function renderFmtBar(){ const bar=document.getElementById('fmtBar'); if(!bar)re
       <option value="sans"${e.font==='sans'?' selected':''}>Sans</option>
       <option value="serif"${e.font==='serif'?' selected':''}>Serif</option>
       <option value="mono"${e.font==='mono'?' selected':''}>Mono</option></select>
-    <button class="st-btn" onclick="fmtSize(-0.6)" title="Smaller text (⌘⇧<)">A−</button>
+    <button class="st-btn" onmousedown="event.preventDefault()" onclick="fmtSize(-0.6)" title="Smaller text (⌘⇧<)">A−</button>
     <input type="number" step="0.2" min="1" max="20" value="${e.size||6}" onchange="fmtSizeSet(this.value)" title="Exact text size" style="width:54px;background:var(--chrome2);border:1px solid var(--border2);border-radius:7px;color:var(--text);padding:5px 6px;font-size:12px;">
-    <button class="st-btn" onclick="fmtSize(0.6)" title="Bigger text (⌘⇧>)">A+</button>
-    <button class="st-btn" onclick="fmtBold()" title="Bold" style="${(e.weight||700)>=700?'border-color:var(--accent);':''}"><b>B</b></button>
-    <button class="st-btn" onclick="fmtItalic()" title="Italic" style="${e.italic?'border-color:var(--accent);':''}"><i>I</i></button>
-    <button class="st-btn" onclick="fmtUnder()" title="Underline" style="${e.under?'border-color:var(--accent);':''}"><u>U</u></button>
+    <button class="st-btn" onmousedown="event.preventDefault()" onclick="fmtSize(0.6)" title="Bigger text (⌘⇧>)">A+</button>
+    <button class="st-btn" onmousedown="event.preventDefault()" onclick="fmtBold()" title="Bold" style="${(e.weight||700)>=700?'border-color:var(--accent);':''}"><b>B</b></button>
+    <button class="st-btn" onmousedown="event.preventDefault()" onclick="fmtItalic()" title="Italic" style="${e.italic?'border-color:var(--accent);':''}"><i>I</i></button>
+    <button class="st-btn" onmousedown="event.preventDefault()" onclick="fmtUnder()" title="Underline" style="${e.under?'border-color:var(--accent);':''}"><u>U</u></button>
     <button class="st-btn" onclick="fmtBullet()" title="Bullet list (each line becomes a bullet)" style="${e.bullet?'border-color:var(--accent);':''}">≔</button>
     <button class="st-btn" onclick="fmtLink()" title="${e.href?('Link: '+e.href):'Add link'}" style="${e.href?'border-color:var(--accent);':''}">🔗</button>
     <input type="color" value="${e.color||'#ffffff'}" oninput="fmtColor(this.value)" title="Text color" style="width:30px;height:29px;padding:1px;border:1px solid var(--border2);border-radius:7px;background:var(--chrome2);cursor:pointer;">
@@ -978,7 +982,7 @@ function addLayout(kind){ closeMenus(); pushUndo('Add layout'); const at=current
   deck.slides.splice(at,0,sl); currentIdx=at; renderNav(); renderCanvas(); scheduleSave(); }
 function addTable(){ const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;} closeMenus(); pushUndo('Add table');
   ensureEls(s).push({type:'table',x:20,y:28,w:60,cells:[['Header','Header'],['','']]}); selSet.clear(); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); }
-function fmtUnder(){ const e=_fmtEl(); if(!e)return; e.under=!e.under; const n=_selTxtNode(); if(n)n.style.textDecoration=e.under?'underline':'none'; renderFmtBar(); scheduleSave(); }
+function fmtUnder(){ if(execOnSelection('underline'))return; const e=_fmtEl(); if(!e)return; e.under=!e.under; const n=_selTxtNode(); if(n)n.style.textDecoration=e.under?'underline':'none'; renderFmtBar(); scheduleSave(); }
 function fmtFont(v){ const e=_fmtEl(); if(!e)return; if(v)e.font=v; else delete e.font; const n=_selTxtNode(); if(n)n.style.fontFamily=v?EL_FONTS[v]:'var(--theme-font)'; scheduleSave(); }
 function fmtShapeColor(v){ const e=_fmtEl(); if(!e)return; e.color=v; const n=_selNode(); const sh=n&&n.querySelector('.el-shape'); if(sh)sh.style.background=v; scheduleSave(); }
 function fmtRotate(ev){ const e=_fmtEl(); if(!e)return; e.rot=(window.event&&window.event.shiftKey)?0:(((e.rot||0)+15)%360); const n=_selNode(); if(n)n.style.transform='rotate('+(e.rot||0)+'deg)'; renderFmtBar(); scheduleSave(); }
@@ -999,11 +1003,11 @@ function fmtCenterV(){ const ids=selIndices(); const s0=deck.slides[currentIdx];
 function fmtLayer(d){ const s=deck.slides[currentIdx]; if(!s||!s.elements)return; const j=selEl+d;
   if(j<0||j>=s.elements.length)return; [s.elements[selEl],s.elements[j]]=[s.elements[j],s.elements[selEl]];
   selEl=j; renderCanvas(); scheduleSave(); }
-function fmtSize(d){ const e=_fmtEl(); if(!e)return; e.size=Math.max(1.2,+((e.size||6)+d).toFixed(2)); const n=_selTxtNode(); if(n)n.style.fontSize=e.size+'cqw'; renderFmtBar(); scheduleSave(); }
+function fmtSize(d){ if(sizeSelection(d>0?1.15:1/1.15))return; const e=_fmtEl(); if(!e)return; e.size=Math.max(1.2,+((e.size||6)+d).toFixed(2)); const n=_selTxtNode(); if(n)n.style.fontSize=e.size+'cqw'; renderFmtBar(); scheduleSave(); }
 function fmtSizeSet(v){ const e=_fmtEl(); if(!e)return; const n=+v; if(!isFinite(n))return; e.size=Math.max(1,Math.min(20,+n.toFixed(2))); const t=_selTxtNode(); if(t)t.style.fontSize=e.size+'cqw'; scheduleSave(); }
-function fmtBold(){ const e=_fmtEl(); if(!e)return; e.weight=(e.weight||700)>=700?400:700; const n=_selTxtNode(); if(n)n.style.fontWeight=e.weight; renderFmtBar(); scheduleSave(); }
-function fmtItalic(){ const e=_fmtEl(); if(!e)return; e.italic=!e.italic; const n=_selTxtNode(); if(n)n.style.fontStyle=e.italic?'italic':'normal'; renderFmtBar(); scheduleSave(); }
-function fmtColor(v){ const e=_fmtEl(); if(!e)return; e.color=v; const n=_selTxtNode(); if(n)n.style.color=v; scheduleSave(); }
+function fmtBold(){ if(execOnSelection('bold'))return; const e=_fmtEl(); if(!e)return; e.weight=(e.weight||700)>=700?400:700; const n=_selTxtNode(); if(n)n.style.fontWeight=e.weight; renderFmtBar(); scheduleSave(); }
+function fmtItalic(){ if(execOnSelection('italic'))return; const e=_fmtEl(); if(!e)return; e.italic=!e.italic; const n=_selTxtNode(); if(n)n.style.fontStyle=e.italic?'italic':'normal'; renderFmtBar(); scheduleSave(); }
+function fmtColor(v){ if(execOnSelection('foreColor',v))return; const e=_fmtEl(); if(!e)return; e.color=v; const n=_selTxtNode(); if(n)n.style.color=v; scheduleSave(); }
 function fmtAlign(){ const e=_fmtEl(); if(!e)return; e.align=({left:'center',center:'right',right:'left'})[e.align||'left']; const n=_selTxtNode(); if(n)n.style.textAlign=e.align; renderFmtBar(); scheduleSave(); }
 
 /* ─── Import: PDF / images ────────────────────────────────────────────────────*/
@@ -1035,7 +1039,7 @@ function _counts(q,r){ const c=(q.options||[]).map(()=>0); r.forEach(x=>{try{con
 function _corr(q){ const a=q.correctAnswer; return (a!=null&&a!=='')?(Array.isArray(a)?a.map(Number):[Number(a)]):[]; }
 function _txt(r){ let a=r.answer; try{const v=JSON.parse(a);a=(typeof v==='string')?v:a;}catch(e){} return a; }
 function renderBars(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q); return (q.options||[]).map((o,i)=>{const p=tot?Math.round(c[i]/tot*100):0,sc=_revealed&&cor.includes(i);
-  return `<div class="bar"><div class="bar-top"><span>${LET[i]}. ${esc(o.text||'')}${sc?' ✓':''}</span><span>${c[i]} (${p}%)</span></div><div class="bar-track"><div class="bar-fill ${sc?'correct':''}" style="width:${p}%"></div></div></div>`;}).join(''); }
+  return `<div class="bar"><div class="bar-top"><span>${LET[i]}. ${rich(o.text||'')}${sc?' ✓':''}</span><span>${c[i]} (${p}%)</span></div><div class="bar-track"><div class="bar-fill ${sc?'correct':''}" style="width:${p}%"></div></div></div>`;}).join(''); }
 function renderRating(q,r){ const m=q.ratingMax||5,tot=r.length,c={}; for(let i=1;i<=m;i++)c[i]=0; r.forEach(x=>{try{const v=JSON.parse(x.answer);if(v&&c[v]!=null)c[v]++;}catch(e){}}); const avg=tot?(Object.entries(c).reduce((s,[k,v])=>s+(+k*v),0)/tot).toFixed(1):'—';
   return `<div class="metric">★ ${avg} <span>avg of ${tot}</span></div>`+Object.entries(c).map(([v,n])=>{const p=tot?Math.round(n/tot*100):0;return `<div class="bar"><div class="bar-top"><span>★ ${v}</span><span>${n} (${p}%)</span></div><div class="bar-track"><div class="bar-fill" style="width:${p}%"></div></div></div>`;}).join(''); }
 function renderFree(q,r){ if(q.displayMode==='word_cloud')return renderWC(q,r); const it=r.map(_txt).filter(a=>a&&a!=='__none__'); if(!it.length)return `<div style="color:var(--muted)">${t('present.waiting')}</div>`;
@@ -1052,14 +1056,14 @@ function renderDonut(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q); const
   const segs=(q.options||[]).map((o,i)=>{ const len=(tot?c[i]/tot:0)*C; const col=(_revealed&&cor.includes(i))?'#43e97b':_PAL[i%_PAL.length];
     const s=`<circle r="${R}" cx="60" cy="60" fill="none" stroke="${col}" stroke-width="16" stroke-dasharray="${len.toFixed(2)} ${(C-len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 60 60)"></circle>`; off+=len; return s; }).join('');
   const legend=(q.options||[]).map((o,i)=>{ const pct=tot?Math.round(c[i]/tot*100):0; const col=(_revealed&&cor.includes(i))?'#43e97b':_PAL[i%_PAL.length];
-    return `<div style="display:flex;align-items:center;gap:1cqw;font-size:2cqw;margin-bottom:.9cqw;"><span style="width:1.5cqw;height:1.5cqw;border-radius:.4cqw;background:${col};flex-shrink:0;"></span><span style="flex:1;">${LET[i]}. ${esc(o.text||'')}</span><span>${c[i]} (${pct}%)</span></div>`; }).join('');
+    return `<div style="display:flex;align-items:center;gap:1cqw;font-size:2cqw;margin-bottom:.9cqw;"><span style="width:1.5cqw;height:1.5cqw;border-radius:.4cqw;background:${col};flex-shrink:0;"></span><span style="flex:1;">${LET[i]}. ${rich(o.text||'')}</span><span>${c[i]} (${pct}%)</span></div>`; }).join('');
   return `<div style="display:flex;gap:3.4cqw;align-items:center;flex-wrap:wrap;"><svg viewBox="0 0 120 120" style="flex-shrink:0;width:24cqw;height:24cqw;">${segs}<text x="60" y="67" text-anchor="middle" fill="#fff" font-size="22" font-family="Syne" font-weight="800">${tot}</text></svg><div style="flex:1;min-width:26cqw;">${legend}</div></div>`; }
 function renderColumn(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q); const mx=Math.max(1,...c);
   return `<div style="display:flex;gap:2cqw;align-items:flex-end;height:30cqw;padding-top:2.6cqw;">`+(q.options||[]).map((o,i)=>{ const h=Math.round(c[i]/mx*100),pct=tot?Math.round(c[i]/tot*100):0,col=(_revealed&&cor.includes(i))?'#43e97b':_PAL[i%_PAL.length];
     return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;"><div style="font-weight:700;font-size:1.9cqw;margin-bottom:.7cqw;">${pct}%</div><div style="width:68%;height:${h}%;min-height:.5cqw;background:${col};border-radius:1cqw 1cqw 0 0;transition:height .5s;"></div><div style="margin-top:1cqw;font-weight:600;font-size:1.8cqw;text-align:center;">${LET[i]}<div style="color:var(--muted);font-size:.8em;">${esc((o.text||'').slice(0,16))}</div></div></div>`; }).join('')+`</div>`; }
 function renderBig(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q);
   return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(18cqw,1fr));gap:2.4cqw;">`+(q.options||[]).map((o,i)=>{ const pct=tot?Math.round(c[i]/tot*100):0,ok=_revealed&&cor.includes(i);
-    return `<div><div style="font-family:var(--theme-font);font-weight:800;font-size:7cqw;color:${ok?'#43e97b':'var(--accent)'};line-height:1;">${c[i]}</div><div style="font-weight:600;font-size:2.1cqw;margin-top:.7cqw;">${LET[i]}. ${esc(o.text||'')}${ok?' ✓':''}</div><div style="color:var(--muted);font-size:1.6cqw;">${pct}%</div></div>`; }).join('')+`</div>`; }
+    return `<div><div style="font-family:var(--theme-font);font-weight:800;font-size:7cqw;color:${ok?'#43e97b':'var(--accent)'};line-height:1;">${c[i]}</div><div style="font-weight:600;font-size:2.1cqw;margin-top:.7cqw;">${LET[i]}. ${rich(o.text||'')}${ok?' ✓':''}</div><div style="color:var(--muted);font-size:1.6cqw;">${pct}%</div></div>`; }).join('')+`</div>`; }
 function renderMC(q,r){ switch(q.displayMode){ case 'donut':return renderDonut(q,r); case 'column':return renderColumn(q,r); case 'bignum':return renderBig(q,r); case 'wordcloud':return renderWC(q,r); default:return renderBars(q,r); } }
 const RESULT_RENDERERS={ multiple_choice:renderMC, multiple_choice_multi:renderMC, number:renderMC, rating:renderRating, free_text:renderFree, word_cloud:renderWC, ranking:renderRank, nps:renderNps };
 function buildResult(q,r){ return (RESULT_RENDERERS[q.type]||renderBars)(q,r); }
@@ -1098,15 +1102,15 @@ function renderPresentSlide(i){ const s=deck.slides[i]; const st=document.getEle
   document.getElementById('revealBtn').style.display=slideHasPoll(s)?'':'none';
   const _tr=(s&&s.transition)||'fade'; document.getElementById('pStage').className='p-stage'+(_tr!=='none'?' tr-'+_tr:'');
   updatePresenterView();
-  st.style.background = (s&&s.kind==='image')?'#000':'var(--slide-bg)';
+  st.style.background = (s&&s.kind==='image')?'#000':((s&&s.bgColor)||'var(--slide-bg)');
   // keep the logo node, replace the rest
   st.querySelectorAll(':scope > *:not(.p-logo)').forEach(n=>n.remove());
   const wrap=document.createElement('div'); st.insertBefore(wrap, st.firstChild);
   if(!s){ wrap.outerHTML=''; return; }
   if(s.kind==='image'){ wrap.outerHTML=`<img class="s-img" src="${s.img||''}" alt="">`+elLayer(s,false); return; }
-  if(s.kind==='title'){ wrap.outerHTML=bgLayer(s)+`<div class="slide-inner" style="font-family:var(--theme-font);"><div class="s-title">${esc(s.title||'')}</div><div class="s-sub">${esc(s.sub||'')}</div></div>`+elLayer(s,false); return; }
-  if(s.kind==='content'){ wrap.outerHTML=bgLayer(s)+`<div class="slide-inner" style="font-family:var(--theme-font);"><div class="s-title">${esc(s.title||'')}</div><div class="s-body">${esc(s.body||'')}</div></div>`+elLayer(s,false); return; }
-  if(s.kind==='study'){ wrap.outerHTML=`<div class="slide-inner" style="align-items:center;text-align:center;font-family:var(--theme-font);"><div class="flashcard"><div class="fc-front">${esc(s.question.front||'')}</div>${_revealed?`<div class="fc-back">${esc(s.question.back||'')}</div>`:`<div class="fc-hint">${t('present.flip')}</div>`}</div></div>`+elLayer(s,false); return; }
+  if(s.kind==='title'){ wrap.outerHTML=bgLayer(s)+`<div class="slide-inner" style="font-family:var(--theme-font);"><div class="s-title">${rich(s.title||'')}</div><div class="s-sub">${rich(s.sub||'')}</div></div>`+elLayer(s,false); return; }
+  if(s.kind==='content'){ wrap.outerHTML=bgLayer(s)+`<div class="slide-inner" style="font-family:var(--theme-font);"><div class="s-title">${rich(s.title||'')}</div><div class="s-body">${rich(s.body||'')}</div></div>`+elLayer(s,false); return; }
+  if(s.kind==='study'){ wrap.outerHTML=`<div class="slide-inner" style="align-items:center;text-align:center;font-family:var(--theme-font);"><div class="flashcard"><div class="fc-front">${rich(s.question.front||'')}</div>${_revealed?`<div class="fc-back">${rich(s.question.back||'')}</div>`:`<div class="fc-hint">${t('present.flip')}</div>`}</div></div>`+elLayer(s,false); return; }
   if(s.kind==='qa'){ wrap.outerHTML=`<div class="slide-inner" style="font-family:var(--theme-font);"><div class="s-eyebrow">Q&amp;A</div><div class="s-title">${esc(s.question.text||'')}</div></div>`+elLayer(s,false)+qrPresent(s); afterPresentQR(s); return; }
   // poll/quiz/survey → live results
   wrap.remove(); attachLive(s); paintLive(s);
@@ -1122,7 +1126,7 @@ function paintLive(s){ const st=document.getElementById('pStage'); st.querySelec
   const q=s.question, r=respFor(s), tot=r.length; const node=document.createElement('div'); node.innerHTML=`
     <div class="respc">${tot?t('present.responses',{n:tot}):t('present.waiting')}</div>
     <div class="live"><div class="tag ${_revealed?'rev':''}">${_revealed?t('present.revealed'):t('present.live')}</div>
-      <div class="lq">${esc(q.text||'')}</div>${buildResult(q,r)}</div>
+      <div class="lq">${rich(q.text||'')}</div>${buildResult(q,r)}</div>
     ${qrPresent(s)}`;
   while(node.firstChild) st.insertBefore(node.firstChild, st.querySelector('.p-logo'));
   const box=st.querySelector('.qr-card .qrbox'); if(box)renderQR(box, answerUrl(s)); }
@@ -1251,8 +1255,8 @@ async function publishDeck(){
   // land at sessions/CODE/qa) — they're live surfaces but not quiz_builder entries.
   deck.slides.forEach(s=>{ if(s.kind==='qa'){ s.question=s.question||{}; s.question.sessionCode=code; } });
   const questions = live.map((s,i)=>{ s.question=s.question||{}; s.question.sessionCode=code; s.question.qIndex=i;
-    if(s.kind==='study') return { type:'flashcard', front:s.question.front||'', back:s.question.back||'', text:s.question.front||'' };
-    return { text:s.question.text||'', type:s.question.type||'multiple_choice', options:s.question.options||[], correctAnswer:(s.question.correctAnswer!=null?s.question.correctAnswer:null) }; });
+    if(s.kind==='study') return { type:'flashcard', front:plain(s.question.front||''), back:plain(s.question.back||''), text:plain(s.question.front||'') };
+    return { text:plain(s.question.text||''), type:s.question.type||'multiple_choice', options:(s.question.options||[]).map(o=>({text:plain(o.text||'')})), correctAnswer:(s.question.correctAnswer!=null?s.question.correctAnswer:null) }; });
   try{
     if(questions.length){
       await fbDb.ref('quiz_builder/'+code+'/questions').set(questions);
@@ -1314,8 +1318,8 @@ async function resetTallies(){
    window.opener. All state flows one way: main window → popup DOM.             */
 let _pvWin=null, _pvTick=null, _presentT0=0;
 function _slideLabel(sl){ if(!sl)return '— end of deck —';
-  const d=SLIDE_TYPES[sl.kind]||{}; const txt = sl.kind==='study'?(sl.question&&sl.question.front)||'Card'
-    : (sl.question&&sl.question.text)||sl.title||d.label||sl.kind;
+  const d=SLIDE_TYPES[sl.kind]||{}; const txt = sl.kind==='study'?plain(sl.question&&sl.question.front)||'Card'
+    : plain((sl.question&&sl.question.text)||sl.title)||d.label||sl.kind;
   return (d.ico?d.ico+' ':'')+String(txt).slice(0,90); }
 function openPresenterView(){
   if(_pvWin&&!_pvWin.closed){ _pvWin.focus(); return; }
@@ -1378,16 +1382,16 @@ function themeStyleString(key){ const th=THEMES[key]||THEMES.gamified; let out='
 function staticSlideHtml(sl){
   const letters=['A','B','C','D','E','F'];
   let inner='';
-  if(sl.kind==='title') inner=`<div class="slide-inner"><div class="s-title">${esc(sl.title||'')}</div><div class="s-sub">${esc(sl.sub||'')}</div></div>`;
-  else if(sl.kind==='content') inner=`<div class="slide-inner"><div class="s-title">${esc(sl.title||'')}</div><div class="s-body">${esc(sl.body||'')}</div></div>`;
+  if(sl.kind==='title') inner=`<div class="slide-inner"><div class="s-title">${rich(sl.title||'')}</div><div class="s-sub">${rich(sl.sub||'')}</div></div>`;
+  else if(sl.kind==='content') inner=`<div class="slide-inner"><div class="s-title">${rich(sl.title||'')}</div><div class="s-body">${rich(sl.body||'')}</div></div>`;
   else if(sl.kind==='image') inner=sl.img?`<img class="s-img" src="${sl.img}" alt="">`:'';
   else if(sl.kind==='study') inner=`<div class="slide-inner" style="align-items:center;text-align:center;"><div class="s-eyebrow">Flashcard</div><div class="s-title">${esc(sl.question.front||'')}</div><div class="s-body" style="color:var(--accent3);">${esc(sl.question.back||'')}</div></div>`;
   else if(sl.kind==='qa') inner=`<div class="slide-inner"><div class="s-eyebrow">Audience Q&amp;A</div><div class="s-title">${esc(sl.question.text||'')}</div></div>`;
   else { const q=sl.question||{}; const opts=(q.options||[]);
     const optsHtml=q.type==='rating'?`<div class="s-sub">★ Rating 1–${q.ratingMax||5}</div>`
-      :`<div class="s-opts">${opts.map((o,oi)=>`<div class="s-opt"><span class="ltr">${letters[oi]}</span><span>${esc(o.text||'')}</span></div>`).join('')}</div>`;
-    inner=`<div class="slide-inner"><div class="s-eyebrow">${(SLIDE_TYPES[sl.kind]||{}).label||''} · answered live</div><div class="s-title">${esc(q.text||'')}</div>${optsHtml}</div>`; }
-  return `<div class="slide pdf-page" style="${themeStyleString(sl.theme||deck.theme)}">${bgLayer(sl)}${inner}${elLayer(sl,false)}</div>`;
+      :`<div class="s-opts">${opts.map((o,oi)=>`<div class="s-opt"><span class="ltr">${letters[oi]}</span><span>${rich(o.text||'')}</span></div>`).join('')}</div>`;
+    inner=`<div class="slide-inner"><div class="s-eyebrow">${(SLIDE_TYPES[sl.kind]||{}).label||''} · answered live</div><div class="s-title">${rich(q.text||'')}</div>${optsHtml}</div>`; }
+  return `<div class="slide pdf-page" style="${themeStyleString(sl.theme||deck.theme)}${sl.bgColor?('background:'+sl.bgColor+';'):''}">${bgLayer(sl)}${inner}${elLayer(sl,false)}</div>`;
 }
 // PNG of the CURRENT slide via SVG foreignObject (all our media are data URLs,
 // so the canvas stays untainted). Webfonts may fall back to system sans.
@@ -1536,6 +1540,49 @@ function toggleGrid(){ const on=document.body.classList.toggle('showGrid'); loca
   const b=document.getElementById('gridBtn'); if(b)b.style.color=on?'var(--accent)':''; }
 function newDeck(){ closeMenus(); if(deck.slides.length && !confirm('Start a new deck? Unsaved slides will be cleared.'))return; pushUndo('New deck'); deck={theme:deck.theme,slides:[]}; currentIdx=-1; const ti=document.getElementById('deckTitle'); if(ti)ti.value=''; renderNav(); renderCanvas(); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+const RICH_TAGS={B:1,STRONG:1,I:1,EM:1,U:1,SPAN:1,BR:1,DIV:1,FONT:1};
+function rich(h){ if(h==null)return ''; const t=document.createElement('template'); t.innerHTML=String(h);
+  (function walk(n){ [...n.children].forEach(c=>{ walk(c);
+    if(!RICH_TAGS[c.tagName]){ c.replaceWith(...c.childNodes); return; }
+    const keep={ color:(c.style&&c.style.color)||'', fontSize:(c.style&&c.style.fontSize)||'',
+      fontWeight:(c.style&&c.style.fontWeight)||'', fontStyle:(c.style&&c.style.fontStyle)||'',
+      textDecoration:(c.style&&(c.style.textDecorationLine||c.style.textDecoration))||'' };
+    const fcol=c.getAttribute?c.getAttribute('color'):'';
+    while(c.attributes&&c.attributes.length)c.removeAttribute(c.attributes[0].name);
+    if(c.tagName==='FONT'){ const sp=document.createElement('span'); if(fcol)sp.style.color=fcol; while(c.firstChild)sp.appendChild(c.firstChild); c.replaceWith(sp); return; }
+    if(keep.color)c.style.color=keep.color; if(keep.fontSize)c.style.fontSize=keep.fontSize;
+    if(keep.fontWeight)c.style.fontWeight=keep.fontWeight; if(keep.fontStyle)c.style.fontStyle=keep.fontStyle;
+    if(keep.textDecoration)c.style.textDecoration=keep.textDecoration; }); })(t.content);
+  return t.innerHTML; }
+function plain(h){ const t=document.createElement('template'); t.innerHTML=String(h==null?'':h).replace(/<br\s*\/?>/gi,'\n').replace(/<\/div>\s*<div>/gi,'\n'); return (t.content.textContent||'').trim(); }
+function plainLines(h){ const t=document.createElement('template'); t.innerHTML=String(h==null?'':h).replace(/<br\s*\/?>/gi,'\n').replace(/<div>/gi,'\n'); return (t.content.textContent||''); }
+let _savedRange=null;
+document.addEventListener('selectionchange',()=>{ try{ const sel=getSelection(); if(!sel.rangeCount)return;
+  const r=sel.getRangeAt(0); const el=(r.startContainer.nodeType===1?r.startContainer:r.startContainer.parentElement);
+  if(el&&el.closest('[contenteditable="true"]'))_savedRange=r.cloneRange(); }catch(e){} });
+function _editHost(){ const ae=document.activeElement; return (ae&&ae.isContentEditable)?ae:null; }
+function _restoreSel(){ try{ if(!_savedRange)return null; const sel=getSelection(); sel.removeAllRanges(); sel.addRange(_savedRange);
+  const el=(_savedRange.startContainer.nodeType===1?_savedRange.startContainer:_savedRange.startContainer.parentElement);
+  return el?el.closest('[contenteditable="true"]'):null; }catch(e){ return null; } }
+function _persist(host){ if(host)host.dispatchEvent(new Event('input',{bubbles:false})); }
+function execOnSelection(cmd,val){ const host=_editHost()||_restoreSel(); if(!host)return false;
+  const sel=getSelection(); if(!sel.rangeCount||sel.isCollapsed)return false;
+  try{ document.execCommand('styleWithCSS',false,cmd==='foreColor'); document.execCommand(cmd,false,val||null); }catch(e){ return false; }
+  _persist(host); return true; }
+function sizeSelection(f){ const host=_editHost()||_restoreSel(); if(!host)return false;
+  const sel=getSelection(); if(!sel.rangeCount||sel.isCollapsed)return false;
+  // Measure the selection's size BEFORE the command — Chrome may REPLACE an
+  // existing sized span rather than nest, so 'before' is the only reliable base.
+  const r0=sel.getRangeAt(0);
+  const anchor=(r0.startContainer.nodeType===1?r0.startContainer:r0.startContainer.parentElement);
+  const prePx=parseFloat(getComputedStyle(anchor).fontSize)||16;
+  try{ document.execCommand('styleWithCSS',false,false); document.execCommand('fontSize',false,'7'); }catch(e){ return false; }
+  host.querySelectorAll('font[size="7"]').forEach(fEl=>{
+    const parPx=parseFloat(getComputedStyle(fEl.parentElement).fontSize)||prePx;
+    const em=Math.max(.3,Math.min(4,(prePx*f)/parPx));
+    const sp=document.createElement('span'); sp.style.fontSize=em.toFixed(3)+'em';
+    while(fEl.firstChild)sp.appendChild(fEl.firstChild); fEl.replaceWith(sp); });
+  _persist(host); return true; }
 /* Persistence — autosave the deck to localStorage so work survives a refresh.
    (Image-heavy decks may exceed the quota; we fail silently — cloud save is next.) */
 function save(){ try{ localStorage.setItem('ps_present_deck', JSON.stringify(deck)); }catch(e){} }
@@ -1544,7 +1591,11 @@ function loadSaved(){ try{ const s=localStorage.getItem('ps_present_deck'); if(s
 /* Editor keyboard shortcuts — only when not presenting and not typing in a field. */
 document.addEventListener('keydown',e=>{
   if(isPresenting())return;
-  const ae=document.activeElement; if(ae&&(ae.isContentEditable||ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'))return;
+  const ae=document.activeElement;
+  if(ae&&ae.isContentEditable&&(e.metaKey||e.ctrlKey)&&!e.shiftKey){
+    const m={b:'bold',i:'italic',u:'underline'}[String(e.key||'').toLowerCase()];
+    if(m){ document.execCommand('styleWithCSS',false,false); document.execCommand(m); ae.dispatchEvent(new Event('input')); e.preventDefault(); return; } }
+  if(ae&&(ae.isContentEditable||ae.tagName==='INPUT'||ae.tagName==='TEXTAREA'))return;
   if((e.metaKey||e.ctrlKey)&&(e.key==='z'||e.key==='Z')){ e.shiftKey?doRedo():doUndo(); e.preventDefault(); return; }
   // A selected element captures the keyboard first (Canva-style)…
   const mod=e.metaKey||e.ctrlKey;
