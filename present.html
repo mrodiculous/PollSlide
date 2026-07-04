@@ -210,6 +210,8 @@
       <div class="menu-item" onclick="imgInput.click()"><span class="mi-ico">🖼️</span><span>Import images</span></div>
       <div class="menu-item" onclick="deckInput.click()"><span class="mi-ico">📊</span><span>Import PowerPoint / Keynote<span class="mi-sub">.pptx · .ppt · .key → slides</span></span></div>
       <div class="menu-item" onclick="openOrganizer()"><span class="mi-ico">🗂️</span><span>Open my presentations<span class="mi-sub">Import your saved questions</span></span></div>
+      <div class="menu-sep"></div>
+      <div class="menu-item" onclick="exportPDF()"><span class="mi-ico">🖨️</span><span>Export as PDF<span class="mi-sub">Print dialog → Save as PDF</span></span></div>
     </div>
   </div>
 
@@ -274,6 +276,7 @@
     <button class="pill-btn ghost" onclick="presentNav(-1)">← Prev</button>
     <button class="pill-btn ghost" onclick="presentNav(1)">Next →</button>
     <button class="pill-btn ghost" id="revealBtn" onclick="doReveal()">Reveal</button>
+    <button class="pill-btn ghost" onclick="openPresenterView()" title="Notes, next slide and timer — put this on your laptop screen">🗒 Presenter view</button>
     <div class="spacer"></div>
     <span class="pos" id="pPos"></span>
     <button class="pill-btn ghost" onclick="endPresent()">✕ Exit</button>
@@ -896,13 +899,13 @@ let presentIdx=0,_revealed=false,_kb=null,_liveUnsub=null,_liveSlide=null,_liveR
 function isPresenting(){ return document.getElementById('present').classList.contains('show'); }
 async function startPresent(i){ if(!deck.slides.length){toast('Add a slide first.');return;}
   if(typeof userId!=='undefined'&&userId&&deck.slides.some(s=>isInteractive(s)&&!(s.question&&s.question.imported))){ await publishDeck(); } // publish the latest so every QR (incl. Q&A) scans
-  presentIdx=Math.max(0,Math.min(i||0,deck.slides.length-1)); _revealed=false;
+  presentIdx=Math.max(0,Math.min(i||0,deck.slides.length-1)); _revealed=false; _presentT0=Date.now();
   const el=document.getElementById('present'); el.classList.add('show'); try{ el.requestFullscreen&&el.requestFullscreen().catch(()=>{}); }catch(e){}
   renderPresentSlide(presentIdx);
   document.getElementById('pStage').onclick=(e)=>{ if(e.target.closest('.qr-card')||e.target.closest('button')||e.target.closest('a'))return; presentNav(1); }; // click advances (Keynote)
   _kb=(e)=>{ if(e.key==='Escape')endPresent(); else if(e.key==='ArrowRight'||e.key===' '){presentNav(1);e.preventDefault();} else if(e.key==='ArrowLeft')presentNav(-1); else if(e.key==='r'||e.key==='R')doReveal(); };
   document.addEventListener('keydown',_kb); }
-function endPresent(){ document.getElementById('pStage').onclick=null; document.getElementById('present').classList.remove('show'); if(_kb){document.removeEventListener('keydown',_kb);_kb=null;} try{document.fullscreenElement&&document.exitFullscreen&&document.exitFullscreen().catch(()=>{});}catch(e){} detachLive(); }
+function endPresent(){ closePresenterView(); document.getElementById('pStage').onclick=null; document.getElementById('present').classList.remove('show'); if(_kb){document.removeEventListener('keydown',_kb);_kb=null;} try{document.fullscreenElement&&document.exitFullscreen&&document.exitFullscreen().catch(()=>{});}catch(e){} detachLive(); }
 function presentNav(d){ const j=presentIdx+d; if(j<0||j>=deck.slides.length)return; presentIdx=j; _revealed=false; renderPresentSlide(j); }
 function slideHasPoll(s){ return s && isInteractive(s) && s.kind!=='qa'; }
 function renderPresentSlide(i){ const s=deck.slides[i]; const st=document.getElementById('pStage'); const el=document.getElementById('present');
@@ -911,6 +914,7 @@ function renderPresentSlide(i){ const s=deck.slides[i]; const st=document.getEle
   document.getElementById('pPos').textContent=(i+1)+' / '+deck.slides.length;
   const pr=document.getElementById('pProg'); if(pr)pr.style.width=(deck.slides.length?(i+1)/deck.slides.length*100:0)+'%';
   document.getElementById('revealBtn').style.display=slideHasPoll(s)?'':'none';
+  updatePresenterView();
   st.style.background = (s&&s.kind==='image')?'#000':'var(--slide-bg)';
   // keep the logo node, replace the rest
   st.querySelectorAll(':scope > *:not(.p-logo)').forEach(n=>n.remove());
@@ -1120,6 +1124,103 @@ async function resetTallies(){
     }
     toast('✓ Tallies cleared — answers saved to your report history.');
   }catch(e){ toast('Could not reset — try again.'); }
+}
+
+/* ─── PRESENTER VIEW — second window: notes, next slide, timer, controls ──────
+   The popup is same-origin (about:blank); its buttons drive THIS window via
+   window.opener. All state flows one way: main window → popup DOM.             */
+let _pvWin=null, _pvTick=null, _presentT0=0;
+function _slideLabel(sl){ if(!sl)return '— end of deck —';
+  const d=SLIDE_TYPES[sl.kind]||{}; const txt = sl.kind==='study'?(sl.question&&sl.question.front)||'Card'
+    : (sl.question&&sl.question.text)||sl.title||d.label||sl.kind;
+  return (d.ico?d.ico+' ':'')+String(txt).slice(0,90); }
+function openPresenterView(){
+  if(_pvWin&&!_pvWin.closed){ _pvWin.focus(); return; }
+  _pvWin=window.open('','psPresenterView','width=780,height=540');
+  if(!_pvWin){ toast('Allow pop-ups to use Presenter view.'); return; }
+  _pvWin.document.write(`<!doctype html><html><head><title>Presenter view — PollSlide</title><style>
+    body{margin:0;background:#0a0a12;color:#f4f4fc;font-family:'DM Sans',-apple-system,sans-serif;display:flex;flex-direction:column;height:100vh;}
+    .top{display:flex;align-items:center;gap:14px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.1);}
+    .clock{font-size:22px;font-weight:700;} .elapsed{font-size:22px;font-weight:700;color:#43e97b;}
+    .lbl{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:#9090b8;display:block;}
+    .pos{margin-left:auto;font-size:18px;font-weight:700;color:#9090b8;}
+    .main{flex:1;display:grid;grid-template-columns:1.4fr 1fr;gap:14px;padding:14px 16px;min-height:0;}
+    .card{background:#13131f;border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:14px;display:flex;flex-direction:column;min-height:0;}
+    .cur{font-size:20px;font-weight:800;line-height:1.3;} .nxt{font-size:16px;font-weight:600;color:#c9c9e2;}
+    .notes{flex:1;overflow-y:auto;font-size:18px;line-height:1.55;color:#e7e7f5;white-space:pre-wrap;margin-top:8px;}
+    .bar{display:flex;gap:10px;padding:12px 16px;border-top:1px solid rgba(255,255,255,.1);}
+    button{flex:1;background:#1a1a2c;border:1px solid rgba(255,255,255,.16);color:#f4f4fc;border-radius:10px;padding:14px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;}
+    button:hover{border-color:#6c63ff;} button.go{background:#6c63ff;border-color:#6c63ff;}
+  </style></head><body>
+    <div class="top"><div><span class="lbl">Clock</span><span class="clock" id="pvClock">–:–</span></div>
+      <div><span class="lbl">Elapsed</span><span class="elapsed" id="pvElapsed">0:00</span></div>
+      <div class="pos" id="pvPos"></div></div>
+    <div class="main">
+      <div class="card"><span class="lbl">Current slide — your notes</span><div class="cur" id="pvCur"></div><div class="notes" id="pvNotes"></div></div>
+      <div class="card"><span class="lbl">Next up</span><div class="nxt" id="pvNext"></div></div>
+    </div>
+    <div class="bar">
+      <button onclick="opener&&opener.presentNav(-1)">← Prev</button>
+      <button class="go" onclick="opener&&opener.presentNav(1)">Next →</button>
+      <button onclick="opener&&opener.doReveal()">Reveal</button>
+    </div>
+  </body></html>`);
+  _pvWin.document.close();
+  if(_pvTick)clearInterval(_pvTick);
+  _pvTick=setInterval(()=>{ if(!_pvWin||_pvWin.closed){ clearInterval(_pvTick); _pvTick=null; return; }
+    try{ const d=_pvWin.document;
+      d.getElementById('pvClock').textContent=new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+      const el=Math.max(0,Math.floor((Date.now()-(_presentT0||Date.now()))/1000));
+      d.getElementById('pvElapsed').textContent=Math.floor(el/60)+':'+String(el%60).padStart(2,'0');
+    }catch(e){} },1000);
+  updatePresenterView();
+}
+function updatePresenterView(){
+  if(!_pvWin||_pvWin.closed)return;
+  try{ const d=_pvWin.document; const s=deck.slides[presentIdx];
+    d.getElementById('pvPos').textContent=(presentIdx+1)+' / '+deck.slides.length;
+    d.getElementById('pvCur').textContent=_slideLabel(s);
+    d.getElementById('pvNotes').textContent=(s&&s.notes)||'(no speaker notes on this slide)';
+    d.getElementById('pvNext').textContent=_slideLabel(deck.slides[presentIdx+1]);
+  }catch(e){}
+}
+function closePresenterView(){ if(_pvTick){clearInterval(_pvTick);_pvTick=null;} if(_pvWin&&!_pvWin.closed){ try{_pvWin.close();}catch(e){} } _pvWin=null; }
+
+/* ─── EXPORT AS PDF — print window with every slide as a page; the browser's
+   print dialog does the PDF (works offline, pixel-true to the themes).         */
+function themeStyleString(key){ const th=THEMES[key]||THEMES.gamified; let out='';
+  Object.entries(th.vars).forEach(([k,v])=>out+=k+':'+v+';');
+  out+='--slide-bg:'+th.slideBg.replace(/"/g,"'")+';--theme-font:'+th.font+';';
+  return out; }
+function staticSlideHtml(sl){
+  const letters=['A','B','C','D','E','F'];
+  let inner='';
+  if(sl.kind==='title') inner=`<div class="slide-inner"><div class="s-title">${esc(sl.title||'')}</div><div class="s-sub">${esc(sl.sub||'')}</div></div>`;
+  else if(sl.kind==='content') inner=`<div class="slide-inner"><div class="s-title">${esc(sl.title||'')}</div><div class="s-body">${esc(sl.body||'')}</div></div>`;
+  else if(sl.kind==='image') inner=sl.img?`<img class="s-img" src="${sl.img}" alt="">`:'';
+  else if(sl.kind==='study') inner=`<div class="slide-inner" style="align-items:center;text-align:center;"><div class="s-eyebrow">Flashcard</div><div class="s-title">${esc(sl.question.front||'')}</div><div class="s-body" style="color:var(--accent3);">${esc(sl.question.back||'')}</div></div>`;
+  else if(sl.kind==='qa') inner=`<div class="slide-inner"><div class="s-eyebrow">Audience Q&amp;A</div><div class="s-title">${esc(sl.question.text||'')}</div></div>`;
+  else { const q=sl.question||{}; const opts=(q.options||[]);
+    const optsHtml=q.type==='rating'?`<div class="s-sub">★ Rating 1–${q.ratingMax||5}</div>`
+      :`<div class="s-opts">${opts.map((o,oi)=>`<div class="s-opt"><span class="ltr">${letters[oi]}</span><span>${esc(o.text||'')}</span></div>`).join('')}</div>`;
+    inner=`<div class="slide-inner"><div class="s-eyebrow">${(SLIDE_TYPES[sl.kind]||{}).label||''} · answered live</div><div class="s-title">${esc(q.text||'')}</div>${optsHtml}</div>`; }
+  return `<div class="slide pdf-page" style="${themeStyleString(sl.theme||deck.theme)}">${bgLayer(sl)}${inner}${elLayer(sl,false)}</div>`;
+}
+function exportPDF(){ closeMenus();
+  if(!deck.slides.length){ toast('Add a slide first.'); return; }
+  const css=document.querySelector('style').textContent;
+  const fontLink=(document.querySelector('link[href*="fonts.googleapis"]')||{}).href||'';
+  const pw=window.open('','_blank');
+  if(!pw){ toast('Allow pop-ups to export the PDF.'); return; }
+  pw.document.write(`<!doctype html><html><head><title>${esc(deck.title||'PollSlide deck')}</title>
+    ${fontLink?`<link href="${fontLink}" rel="stylesheet">`:''}<style>${css}
+    html,body{height:auto;overflow:visible;background:#fff;margin:0;}
+    .pdf-page{width:100vw;max-width:none;aspect-ratio:16/9;border-radius:0;box-shadow:none;position:relative;overflow:hidden;background:var(--slide-bg);page-break-after:always;break-after:page;container-type:inline-size;}
+    @page{size:297mm 167mm;margin:0;}
+    </style></head><body>`+deck.slides.map(staticSlideHtml).join('')+`</body></html>`);
+  pw.document.close();
+  setTimeout(()=>{ try{ pw.focus(); pw.print(); }catch(e){} }, 500);
+  toast('In the print dialog choose “Save as PDF”.');
 }
 
 /* ─── Menus / modals / utils ──────────────────────────────────────────────────*/

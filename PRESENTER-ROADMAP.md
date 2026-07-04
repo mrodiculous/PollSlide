@@ -218,8 +218,9 @@ Text boxes (add/drag/resize/dblclick-edit/delete) · bold/italic/underline · te
 ### Stage 2 — Middle grade (SHIPPED ✅ 2026-07-04)
 Copy/paste elements & whole slides (⌘C/⌘V) · multi-select (shift-click, group drag/nudge/delete/⌘D) · drag-reorder slide navigator · rotation (15° steps, ⇧-reset) · opacity · lock element · line shape · **text style presets** (Title/Heading/Sub/Body/Caption) · **bullet lists** (per-line) · **hyperlinks on text** (clickable in present, excluded from click-advance) · **image fit modes** (natural/cover) · **per-slide background image** (+ darken slider, edit & present) · **grid + center guides toggle** (persisted) · **tables** (editable cells, add/remove rows & columns).
 
-### Stage 3 — High grade
-Per-element build animations (fade/slide-in, ordered) · transition library (push/wipe/zoom) · true Presenter View (notes + next slide + timer on second display) · video/audio on slides · icon/sticker library · group/ungroup · smart alignment guides (spacing hints) · master slides/layouts · export to PDF/PNG · cloud deck storage + share links.
+### Stage 3 — High grade (in progress)
+**Shipped 2026-07-04:** true **Presenter View** (second window: clock, elapsed timer, current-slide notes, next-up preview, Prev/Next/Reveal controls that drive the show; auto-closes with the show) · **Export as PDF** (every slide print-perfect with its theme, 16:9 pages, browser print→Save-as-PDF).
+**Remaining:** per-element build animations · transition library (push/wipe/zoom) · video/audio on slides · icon/sticker library · group/ungroup · smart alignment guides · master slides/layouts · PNG export · cloud deck storage + share links.
 
 ### Stage 4 — Advanced
 Real-time co-editing + comments · named cloud versions · template gallery/marketplace · brand kits (org colors/fonts/logo tokens) · Polly design assistant (restyle slide/deck, image editing) · charts bound to live data · interactive web embeds · video/GIF export · rehearsal mode with AI coaching · one-click deck localization · accessibility checker.
