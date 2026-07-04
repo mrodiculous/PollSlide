@@ -62,6 +62,43 @@
   input.mini::placeholder{color:var(--muted);}
   #acct{font-size:12px;color:var(--muted);}
 
+  /* ── Tool rail + slide-out panel (PollSlide-styled, Canva ergonomics) ── */
+  .trail{width:58px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:4px;}
+  .trail-btn{width:46px;height:52px;border:none;background:none;color:var(--muted);border-radius:11px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:19px;cursor:pointer;}
+  .trail-btn small{font-size:8.5px;font-weight:700;letter-spacing:.04em;font-family:'DM Sans';}
+  .trail-btn:hover{color:var(--text);background:var(--chrome2);}
+  .trail-btn.on{color:#fff;background:linear-gradient(135deg,rgba(108,99,255,.35),rgba(108,99,255,.12));box-shadow:inset 0 0 0 1px rgba(108,99,255,.5);}
+  .rail-panel{width:0;overflow:hidden;background:rgba(17,17,27,.96);border-right:1px solid var(--border);transition:width .18s ease;flex-shrink:0;}
+  .rail-panel.open{width:242px;}
+  .rp-inner{width:242px;padding:14px 12px;height:100%;overflow-y:auto;}
+  .rp-title{font-family:'Syne';font-weight:800;font-size:14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;}
+  .rp-x{background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;}
+  .rp-sec{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted);margin:12px 0 6px;}
+  .rp-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .rp-tile{background:var(--chrome2);border:1px solid var(--border2);border-radius:10px;padding:11px 8px;color:var(--text);font-size:12px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;text-align:center;}
+  .rp-tile:hover{border-color:var(--accent);box-shadow:0 0 14px rgba(108,99,255,.25);}
+  .rp-tile .ico{font-size:20px;}
+  .rp-text-tile{background:var(--chrome2);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;color:var(--text);cursor:pointer;margin-bottom:8px;}
+  .rp-text-tile:hover{border-color:var(--accent);}
+  .rp-swatch{aspect-ratio:16/9;border-radius:8px;border:2px solid var(--border2);cursor:pointer;position:relative;overflow:hidden;display:flex;align-items:flex-end;padding:5px 7px;font-size:10px;font-weight:700;color:#fff;text-shadow:0 1px 4px rgba(0,0,0,.7);}
+  .rp-swatch:hover{border-color:var(--accent);}
+  .rp-swatch.on{border-color:var(--accent);box-shadow:0 0 12px rgba(108,99,255,.4);}
+  /* corner handles */
+  .el-rz{display:none;}
+  .editing .el.sel .el-rz{display:block;position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;border:2.5px solid var(--accent);box-shadow:0 1px 6px rgba(0,0,0,.5);z-index:4;}
+  .editing .el.sel .el-rz.nw{left:-8px;top:-8px;cursor:nwse-resize;}
+  .editing .el.sel .el-rz.ne{right:-8px;top:-8px;cursor:nesw-resize;}
+  .editing .el.sel .el-rz.sw{left:-8px;bottom:-8px;cursor:nesw-resize;}
+  .editing .el.sel .el-rz.se{right:-8px;bottom:-8px;cursor:nwse-resize;}
+  .editing .el.sel{outline:1.5px solid var(--accent);outline-offset:2px;}
+  /* zoom controls + add-between-thumbs */
+  .zoomctl{display:flex;align-items:center;gap:6px;margin-left:auto;flex-shrink:0;}
+  .zoomctl button{background:var(--chrome2);border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:4px 9px;font-size:12px;cursor:pointer;}
+  .zoomctl button:hover{border-color:var(--accent);}
+  #zoomPct{font-size:12px;color:var(--muted);min-width:40px;text-align:center;}
+  .tw-add{height:14px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;opacity:0;cursor:pointer;border-radius:6px;margin:-4px 0 2px 21px;}
+  .nav:hover .tw-add{opacity:.55;} .tw-add:hover{opacity:1!important;color:var(--accent);background:rgba(108,99,255,.1);}
+
   /* ── Body: navigator + canvas ───────────────────────────── */
   .work{display:flex;height:calc(100% - 52px);}
   .nav{width:188px;flex-shrink:0;background:var(--panel);border-right:1px solid var(--border);overflow-y:auto;padding:12px 10px;}
@@ -122,7 +159,7 @@
   .editing .el.sel{outline:2px solid var(--accent);outline-offset:3px;}
   .el-del,.el-rz{display:none;}
   .editing .el.sel .el-del{display:flex;position:absolute;top:-11px;right:-11px;width:22px;height:22px;border-radius:50%;background:var(--accent2);color:#fff;font-size:11px;align-items:center;justify-content:center;cursor:pointer;z-index:4;}
-  .editing .el.sel .el-rz{display:block;position:absolute;right:-9px;bottom:-9px;width:18px;height:18px;border-radius:5px;background:var(--accent);border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.4);cursor:nwse-resize;z-index:4;}
+  /* (single bottom-right handle replaced by 4 corner handles — styles above) */
 
   /* edit hints */
   [contenteditable="true"]:hover{box-shadow:inset 0 0 0 1px var(--border2);border-radius:4px;}
@@ -208,6 +245,9 @@
     </div>
   </div>
   <div class="rib-sep"></div>
+  <button class="rib-btn" onclick="doUndo()" title="Undo (⌘Z)" style="padding:8px 9px;">↩</button>
+  <button class="rib-btn" onclick="doRedo()" title="Redo (⇧⌘Z)" style="padding:8px 9px;">↪</button>
+  <div class="rib-sep"></div>
 
   <!-- File -->
   <div class="rib-group">
@@ -271,11 +311,21 @@
 
 <!-- ── WORK AREA ────────────────────────────────────────────────────────────── -->
 <div class="work">
+  <div class="trail" id="trail">
+    <button class="trail-btn" data-p="design" onclick="togglePanel('design')">🎨<small>Design</small></button>
+    <button class="trail-btn" data-p="text" onclick="togglePanel('text')">🅣<small>Text</small></button>
+    <button class="trail-btn" data-p="elements" onclick="togglePanel('elements')">▢<small>Shapes</small></button>
+    <button class="trail-btn" data-p="media" onclick="togglePanel('media')">🖼<small>Media</small></button>
+    <button class="trail-btn" data-p="live" onclick="togglePanel('live')">📊<small>Live</small></button>
+    <button class="trail-btn" data-p="import" onclick="togglePanel('import')">⬆<small>Import</small></button>
+  </div>
+  <div class="rail-panel" id="railPanel"><div class="rp-inner" id="rpInner"></div></div>
   <div class="nav" id="nav"></div>
   <div class="stage-wrap">
     <div class="stage-tools" id="stageTools"></div>
     <div class="canvas-pad"><div class="slide" id="canvasSlide"><div class="guide" id="vGuide"></div><div class="guide" id="hGuide"></div></div></div>
-    <div class="notes-row"><span class="notes-lbl">🗒 Notes</span><textarea id="notesArea" placeholder="Speaker notes — only you see these" oninput="if(deck.slides[currentIdx]){deck.slides[currentIdx].notes=this.value;scheduleSave();}"></textarea></div>
+    <div class="notes-row"><span class="notes-lbl">🗒 Notes</span><textarea id="notesArea" placeholder="Speaker notes — only you see these" oninput="if(deck.slides[currentIdx]){deck.slides[currentIdx].notes=this.value;scheduleSave();}"></textarea>
+      <div class="zoomctl"><button onclick="setZoom(_zoom-0.125)" title="Zoom out">−</button><span id="zoomPct">100%</span><button onclick="setZoom(_zoom+0.125)" title="Zoom in">＋</button><button onclick="setZoom(1)" title="Actual size">Fit</button></div></div>
   </div>
 </div>
 
@@ -600,7 +650,7 @@ function renderNav(){
     <div class="nav-item ${i===currentIdx?'sel':''}" onclick="selectSlide(${i})" draggable="true" ondragstart="navDragStart(event,${i})" ondragover="navDragOver(event,${i})" ondragleave="navDragLeave(event)" ondrop="navDrop(event,${i})" ondragend="navDragEnd()">
       <div class="nav-num">${i+1}</div>
       <div class="nav-thumb">${thumbInner(s)}${hasQR(s)?'<span class="badge">🔲</span>':''}</div>
-    </div>`).join('') + `<button class="nav-add" onclick="addSlide('content')" title="Adds a text slide — pick other types from Insert">＋ Add slide</button>`;
+    </div><div class="tw-add" onclick="event.stopPropagation();addSlideAt(${i+1})" title="Add a slide here">＋ ─────</div>`).join('') + `<button class="nav-add" onclick="addSlide('content')" title="Adds a text slide — pick other types from Insert">＋ Add slide</button>`;
 }
 function thumbInner(s){
   if(s.kind==='image' && s.img) return `<img class="s-img" src="${s.img}" alt="">`;
@@ -752,7 +802,7 @@ function elLayer(s, editable){ if(!s.elements||!s.elements.length)return '';
     else { const inner=e.bullet?esc(e.text||'').split('\n').map(l=>l.trim()?'•&nbsp;'+l:l).join('<br>'):esc(e.text||'');
       const txtDiv=`<div class="el-txt ${(!editable&&e.href)?'':''}${(editable&&e.href)?'lnk':''}" style="font-size:${e.size||6}cqw;color:${e.color||'#fff'};font-weight:${e.weight||700};font-style:${e.italic?'italic':'normal'};text-decoration:${e.under?'underline':'none'};text-align:${e.align||'left'};font-family:${e.font?EL_FONTS[e.font]:'var(--theme-font)'};white-space:pre-wrap;" ${editable?`ondblclick="editElText(${i})"`:''}>${inner}</div>`;
       body=(!editable&&e.href)?`<a href="${esc(e.href)}" target="_blank" rel="noopener">${txtDiv}</a>`:txtDiv; }
-    return `<div class="el ${e.type} ${(editable&&(i===selEl||selSet.has(i)))?'sel':''}" data-i="${i}" style="${st}">${body}${editable?`<span class="el-del" onclick="delElement(event,${i})">✕</span><span class="el-rz"></span>`:''}</div>`;
+    return `<div class="el ${e.type} ${(editable&&(i===selEl||selSet.has(i)))?'sel':''}" data-i="${i}" style="${st}">${body}${editable?`<span class="el-del" onclick="delElement(event,${i})">✕</span><span class="el-rz nw" data-d="nw"></span><span class="el-rz ne" data-d="ne"></span><span class="el-rz sw" data-d="sw"></span><span class="el-rz se" data-d="se"></span>`:''}</div>`;
   }).join('')+`</div>`; }
 function wireElementDrag(){ const slide=document.getElementById('canvasSlide');
   slide.onmousedown=function(ev){ const elDiv=ev.target.closest('.el');
@@ -772,7 +822,7 @@ function wireElementDrag(){ const slide=document.getElementById('canvasSlide');
     renderFmtBar();
     if(ev.target.isContentEditable) return;                    // typing, not dragging
     if(e.locked){ return; }                                    // locked: selectable, not movable
-    const resizing=ev.target.classList.contains('el-rz')&&selSet.size<=1; const rect=slide.getBoundingClientRect();
+    const _rz=ev.target.closest('.el-rz'); const resizing=!!_rz&&selSet.size<=1; const rdir=resizing?(_rz.dataset.d||'se'):'se'; const rect=slide.getBoundingClientRect();
     if(!rect.width||!rect.height) return; // slide not laid out — don't corrupt positions
     const group=selIndices().filter(gi=>s.elements[gi]&&!s.elements[gi].locked);
     const orig=group.map(gi=>({gi, x:s.elements[gi].x, y:s.elements[gi].y}));
@@ -783,11 +833,15 @@ function wireElementDrag(){ const slide=document.getElementById('canvasSlide');
                t:(r.top-rect.top)/rect.height*100, b:(r.bottom-rect.top)/rect.height*100, cy:(r.top+r.height/2-rect.top)/rect.height*100 }; });
     const sx=ev.clientX,sy=ev.clientY,ox=e.x,oy=e.y,ow=e.w,os=e.size||6; ev.preventDefault();
     function mm(m){ const dx=(m.clientX-sx)/rect.width*100, dy=(m.clientY-sy)/rect.height*100;
-      if(resizing){ e.w=Math.max(5,Math.min(100,ow+dx));
+      if(resizing){
+        const fromLeft=(rdir==='nw'||rdir==='sw');
+        const nw2=Math.max(5,Math.min(100,fromLeft?ow-dx:ow+dx));
+        if(fromLeft) e.x=Math.max(0,ox+(ow-nw2));   // left handles keep the right edge pinned
+        e.w=nw2;
         // Canva-style: resizing a text box scales its type with it
         if(e.type==='text'){ e.size=+(os*(e.w/ow)).toFixed(2); const t=elDiv.querySelector('.el-txt'); if(t)t.style.fontSize=e.size+'cqw'; }
         if(e.type==='emoji'){ const t=elDiv.querySelector('.el-emoji'); if(t)t.style.fontSize=(e.w*0.8).toFixed(2)+'cqw'; }
-        elDiv.style.width=e.w+'%'; return; }
+        elDiv.style.left=e.x+'%'; elDiv.style.width=e.w+'%'; return; }
       if(group.length>1){ // group drag — move every selected element together
         orig.forEach(o=>{ const ge=s.elements[o.gi]; ge.x=Math.max(0,Math.min(97,o.x+dx)); ge.y=Math.max(0,Math.min(97,o.y+dy));
           const nd=slide.querySelector(`.el[data-i="${o.gi}"]`); if(nd){ nd.style.left=ge.x+'%'; nd.style.top=ge.y+'%'; } });
@@ -1394,6 +1448,85 @@ function exportPDF(){ closeMenus();
   toast('In the print dialog choose “Save as PDF”.');
 }
 
+/* ─── TOOL RAIL — PollSlide's take on the Canva side panel ─────────────────────*/
+let _panel=null;
+function togglePanel(t){ if(_panel===t){ closePanel(); return; } _panel=t;
+  document.querySelectorAll('.trail-btn').forEach(b=>b.classList.toggle('on',b.dataset.p===t));
+  document.getElementById('railPanel').classList.add('open');
+  renderPanel(); }
+function closePanel(){ _panel=null; document.getElementById('railPanel').classList.remove('open');
+  document.querySelectorAll('.trail-btn').forEach(b=>b.classList.remove('on')); }
+function renderPanel(){ const el=document.getElementById('rpInner'); if(!el||!_panel)return;
+  const X=`<button class="rp-x" onclick="closePanel()">✕</button>`;
+  if(_panel==='design'){
+    el.innerHTML=`<div class="rp-title">Design ${X}</div>
+      <div class="rp-sec">Themes — whole deck</div>
+      <div class="rp-grid">${Object.entries(THEMES).map(([k,th])=>`<div class="rp-swatch ${k===deck.theme?'on':''}" style="background:${th.slideBg.replace(/"/g,"'")}" onclick="setTheme('${k}');renderPanel()">${th.name}</div>`).join('')}</div>
+      <div class="rp-text-tile" style="margin-top:10px;" onclick="openThemeEditor()">➕ Create custom theme…</div>
+      <div class="rp-sec">Layouts</div>
+      <div class="rp-grid">
+        <div class="rp-tile" onclick="addLayout('statement')"><span class="ico">❝</span>Big statement</div>
+        <div class="rp-tile" onclick="addLayout('twocol')"><span class="ico">◫</span>Two columns</div>
+        <div class="rp-tile" onclick="addLayout('imgcap')"><span class="ico">🖼</span>Image + caption</div>
+        <div class="rp-tile" onclick="addLayout('agenda')"><span class="ico">☰</span>Agenda</div>
+      </div>`; }
+  else if(_panel==='text'){
+    el.innerHTML=`<div class="rp-title">Text ${X}</div>
+      <div class="rp-text-tile" onclick="addTextPreset('heading')"><div style="font-family:'Syne';font-weight:800;font-size:20px;">Add a heading</div></div>
+      <div class="rp-text-tile" onclick="addTextPreset('sub')"><div style="font-weight:700;font-size:15px;">Add a subheading</div></div>
+      <div class="rp-text-tile" onclick="addTextPreset('body')"><div style="font-size:12.5px;color:var(--muted);">Add a little bit of body text</div></div>
+      <div class="rp-sec">More</div>
+      <div class="rp-grid">
+        <div class="rp-tile" onclick="addText()"><span class="ico">🅣</span>Plain text box</div>
+        <div class="rp-tile" onclick="addTable()"><span class="ico">▦</span>Table</div>
+      </div>`; }
+  else if(_panel==='elements'){
+    el.innerHTML=`<div class="rp-title">Shapes & stickers ${X}</div>
+      <div class="rp-grid">
+        <div class="rp-tile" onclick="addShape('rect')"><span class="ico">▭</span>Rectangle</div>
+        <div class="rp-tile" onclick="addShape('circle')"><span class="ico">◯</span>Circle</div>
+        <div class="rp-tile" onclick="addShape('line')"><span class="ico">─</span>Line</div>
+        <div class="rp-tile" onclick="addEmoji()"><span class="ico">🎉</span>Stickers</div>
+      </div>`; }
+  else if(_panel==='media'){
+    el.innerHTML=`<div class="rp-title">Media ${X}</div>
+      <div class="rp-grid">
+        <div class="rp-tile" onclick="addImageEl()"><span class="ico">🖼️</span>Image</div>
+        <div class="rp-tile" onclick="mediaInput.click()"><span class="ico">🎬</span>Video / audio</div>
+        <div class="rp-tile" onclick="bgImgInput.click()"><span class="ico">🌄</span>Slide background</div>
+        <div class="rp-tile" onclick="addSlide('image')"><span class="ico">🞕</span>Full-bleed image slide</div>
+      </div>`; }
+  else if(_panel==='live'){
+    el.innerHTML=`<div class="rp-title">Live audience ${X}</div>
+      <div class="rp-sec">Each adds a slide with a live QR</div>
+      <div class="rp-grid">
+        <div class="rp-tile" onclick="addSlide('poll')"><span class="ico">🗳️</span>Poll</div>
+        <div class="rp-tile" onclick="addSlide('quiz')"><span class="ico">🏆</span>Quiz</div>
+        <div class="rp-tile" onclick="addSlide('survey')"><span class="ico">📋</span>Survey</div>
+        <div class="rp-tile" onclick="addSlide('study')"><span class="ico">📚</span>Flashcard</div>
+        <div class="rp-tile" onclick="addSlide('qa')"><span class="ico">💬</span>Audience Q&A</div>
+        <div class="rp-tile" onclick="openOrganizer()"><span class="ico">🗂️</span>My questions</div>
+      </div>
+      <div class="rp-text-tile" style="margin-top:10px;" onclick="openPolly()">✨ Build with Polly AI…</div>`; }
+  else if(_panel==='import'){
+    el.innerHTML=`<div class="rp-title">Import ${X}</div>
+      <div class="rp-grid">
+        <div class="rp-tile" onclick="pdfInput.click()"><span class="ico">📄</span>PDF</div>
+        <div class="rp-tile" onclick="imgInput.click()"><span class="ico">🖼️</span>Images</div>
+        <div class="rp-tile" onclick="deckInput.click()"><span class="ico">📊</span>PowerPoint / Keynote</div>
+        <div class="rp-tile" onclick="openCloudDecks()"><span class="ico">📂</span>Cloud decks</div>
+      </div>`; }
+}
+function addTextPreset(k){ const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;} pushUndo('Add '+k);
+  const P={heading:{size:4.6,weight:800,text:'Add a heading'},sub:{size:3.2,weight:700,text:'Add a subheading'},body:{size:2.4,weight:500,text:'Add a little bit of body text'}}[k]||{};
+  ensureEls(s).push(Object.assign({type:'text',x:14,y:40,w:60,color:'#ffffff'},P)); selSet.clear(); selEl=s.elements.length-1; renderCanvas(); scheduleSave(); editElText(selEl); }
+function addSlideAt(at){ pushUndo('Add slide'); const sl=defaultSlide('content'); deck.slides.splice(at,0,sl); currentIdx=at; renderNav(); renderCanvas(); }
+/* ─── Zoom (WYSIWYG-safe: changes the slide's real width, cqw follows) ─────────*/
+let _zoom=+(localStorage.getItem('ps_zoom')||1); if(!(_zoom>=0.5&&_zoom<=1.75))_zoom=1;
+function setZoom(z){ _zoom=Math.max(0.5,Math.min(1.75,+z.toFixed(3))); localStorage.setItem('ps_zoom',_zoom); applyZoom(); }
+function applyZoom(){ const sl=document.getElementById('canvasSlide'); if(sl){ sl.style.width=(840*_zoom)+'px'; sl.style.maxWidth='none'; }
+  const zp=document.getElementById('zoomPct'); if(zp)zp.textContent=Math.round(_zoom*100)+'%'; }
+
 /* ─── Menus / modals / utils ──────────────────────────────────────────────────*/
 function closeMenus(){ document.querySelectorAll('.menu').forEach(m=>m.classList.add('hidden')); }
 function toggleMenu(id){ const m=document.getElementById(id); const open=!m.classList.contains('hidden'); closeMenus(); if(!open)m.classList.remove('hidden'); }
@@ -1475,6 +1608,7 @@ function boot(){
   if(!fx){ const saved=loadSaved(); if(saved){ deck=saved; if(!deck.theme)deck.theme='gamified'; currentIdx=deck.slides.length?0:-1; } }
   applyThemeTo(document.documentElement,deck.theme);
   const _ti=document.getElementById('deckTitle'); if(_ti)_ti.value=deck.title||'';
+  applyZoom();
   if(localStorage.getItem('ps_grid')){ document.body.classList.add('showGrid'); const b=document.getElementById('gridBtn'); if(b)b.style.color='var(--accent)'; }
   renderNav(); renderCanvas();
   if(fx){ if(fx.lang){LANG=fx.lang;initLang();} if(fx.deck){deck=fx.deck;deck.slides.forEach(s=>{if(!s.id)s.id=nid();}); currentIdx=0; renderNav(); renderCanvas();} if(fx.present!=null)startPresent(fx.present); return; }
