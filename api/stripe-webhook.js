@@ -68,6 +68,33 @@ async function updateUserTier(uid, tier, stripeCustomerId) {
   await db.ref(`users/${uid}`).update(updates);
   await db.ref(`admin/users_index/${uid}`).update(updates);
   console.log(`Updated user ${uid} tier → ${tier}`);
+  await syncWorkspaceTier(db, uid, tier);
+}
+
+// If this user OWNS a team workspace, keep the workspace and its members in
+// step with the owner's subscription: workspaces/<id>/tier drives the seat
+// limit in api/team.js, and members inherit their tier because the owner pays.
+// When the owner leaves the team tiers (downgrade or cancel), members drop to
+// free — never to the owner's personal paid tier.
+async function syncWorkspaceTier(db, uid, tier) {
+  try {
+    const wsId = (await db.ref(`users/${uid}/workspaceId`).get()).val();
+    if (!wsId) return;
+    const wsSnap = await db.ref(`workspaces/${wsId}`).get();
+    if (!wsSnap.exists()) return;
+    const ws = wsSnap.val();
+    if (ws.ownerUid !== uid || ws.tier === tier) return;
+    await db.ref(`workspaces/${wsId}/tier`).set(tier);
+    const memberTier = (tier === 'team_small' || tier === 'team_large') ? tier : 'free';
+    for (const memberUid of Object.keys(ws.members || {})) {
+      if (memberUid === uid) continue;
+      await db.ref(`users/${memberUid}/tier`).set(memberTier);
+      await db.ref(`admin/users_index/${memberUid}/tier`).set(memberTier);
+    }
+    console.log(`Synced workspace ${wsId} tier → ${tier}; members → ${memberTier}`);
+  } catch (e) {
+    console.error('Workspace tier sync failed (non-fatal):', e.message);
+  }
 }
 
 async function getUserUidByEmail(email) {
@@ -87,7 +114,7 @@ async function sendEmailNotification(type, to, data) {
     const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com';
     await fetch(`${APP_URL}/api/send-email`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-internal-key': process.env.INTERNAL_API_KEY || '' },
       body: JSON.stringify({ type, to, data }),
     });
   } catch (e) {

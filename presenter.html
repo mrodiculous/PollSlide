@@ -1561,10 +1561,13 @@ async function submitAuth() {
   try {
     if (authMode === 'signup') {
       await auth.createUserWithEmailAndPassword(email, pass);
-      // Fire welcome email for new accounts (non-blocking)
-      fetch('/api/send-email', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ type: 'welcome', to: email, data: {} })
+      // Fire welcome email for new accounts (non-blocking). The endpoint requires
+      // our signed-in token and only ever emails the token's own address.
+      auth.currentUser.getIdToken().then(function(t) {
+        return fetch('/api/send-email', {
+          method: 'POST', headers: {'Content-Type':'application/json', 'Authorization':'Bearer '+t},
+          body: JSON.stringify({ type: 'welcome', to: email, data: {} })
+        });
       }).catch(function() {}); // silent fail — email is nice-to-have, not critical
     }
     else await auth.signInWithEmailAndPassword(email, pass);

@@ -1,20 +1,33 @@
 // PollSlide Transactional Email System
 // Vercel Serverless Function — uses Resend (resend.com)
-// 
+//
 // SETUP INSTRUCTIONS:
 // 1. Create a free Resend account at https://resend.com
 // 2. Get your API key from the Resend dashboard
 // 3. In Vercel: Settings → Environment Variables → add RESEND_API_KEY
-// 4. (Optional) Verify your domain in Resend for custom "from" address
+// 4. Add INTERNAL_API_KEY = a long random string (e.g. `openssl rand -hex 32`).
+//    Server-side callers (stripe-webhook, legal-watch, team) send it back as the
+//    x-internal-key header. ⚠️ Set it BEFORE deploying this version, or those
+//    internal emails will be skipped (they're all best-effort/non-fatal).
+// 5. (Optional) Verify your domain in Resend for custom "from" address
 //    Without verification, emails send from "onboarding@resend.dev"
-// 5. Deploy — the endpoint is live at app.pollslide.com/api/send-email
+// 6. Deploy — the endpoint is live at app.pollslide.com/api/send-email
 //
-// USAGE (from presenter.html or Stripe webhook):
-//   fetch('/api/send-email', {
-//     method: 'POST',
-//     headers: { 'Content-Type': 'application/json' },
-//     body: JSON.stringify({ type: 'welcome', to: 'user@example.com', data: {} })
-//   });
+// AUTHORIZATION (this endpoint is NOT public — it can email anyone from our
+// domain, so every caller must prove who they are):
+//   • internal server-to-server: header  x-internal-key: <INTERNAL_API_KEY>
+//     → any template, any recipient.
+//   • admin browser (admin.html): Authorization: Bearer <Firebase idToken>
+//     whose verified email is in lib/quota.js ADMIN_EMAILS
+//     → any template, any recipient.
+//   • signed-in user (presenter.html): Authorization: Bearer <Firebase idToken>
+//     → USER_TYPES templates only, recipient FORCED to the token's own verified
+//       email, rate-limited per uid (email_quota/<uid> in RTDB).
+//   • anything else → 401/403.
+
+const crypto = require('crypto');
+const admin = require('firebase-admin');
+const { verifyToken, tokenFrom, getApp, configured, ADMIN_EMAILS } = require('../lib/quota');
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.FROM_EMAIL || 'PollSlide <help@pollslide.com>';
@@ -68,7 +81,23 @@ function baseLayout(title, body, ctaUrl, ctaText) {
 </body></html>`;
 }
 
+// Escape user-influenced values before interpolating into HTML.
+const esc = s => String(s || '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+
 const TEMPLATES = {
+  // Sent by api/team.js when an owner/admin invites someone to a workspace.
+  team_invite: (data) => ({
+    subject: `${esc(data.invitedBy) || 'A teammate'} invited you to ${esc(data.wsName) || 'their team'} on PollSlide`,
+    html: baseLayout('Team Invitation', `
+      <h1 style="font-size:24px;font-weight:800;margin:0 0 12px;color:#15152a;">You're invited! 🎉</h1>
+      <p style="font-size:16px;color:#5a5a78;margin:0 0 18px;"><strong>${esc(data.invitedBy) || 'A teammate'}</strong> invited you to join <strong>${esc(data.wsName) || 'their team'}</strong> on PollSlide${data.role === 'admin' ? ' as an <strong>admin</strong>' : ''}.</p>
+      <div style="background:#f4f4fc;border-radius:10px;padding:14px 16px;font-size:14px;color:#5a5a78;margin:0 0 18px;border-left:3px solid ${BRAND_COLOR};">
+        Sign in — or create a free account — using <strong>this email address</strong>, and you'll join the team automatically with its paid features unlocked. No code needed.
+      </div>
+      <p style="font-size:13px;color:#9090b8;margin:0;">Didn't expect this? You can simply ignore this email.</p>
+    `, 'https://app.pollslide.com/presenter', 'Join the team →')
+  }),
+
   // Generic notification (used by the legal/compliance watcher and other internal alerts).
   notify: (data) => ({
     subject: data.subject || 'PollSlide notification',
@@ -185,12 +214,40 @@ const TEMPLATES = {
   }),
 };
 
+// ── AUTHORIZATION ────────────────────────────────────────────────────────────
+// Templates a signed-in (non-admin) browser user may trigger — only ever to
+// their own verified address.
+const USER_TYPES = ['welcome'];
+const USER_HOURLY_LIMIT = 5;
+
+function internalKeyOk(req) {
+  const expected = process.env.INTERNAL_API_KEY || '';
+  const got = String(req.headers['x-internal-key'] || '');
+  if (!expected || !got) return false;
+  const a = Buffer.from(expected), b = Buffer.from(got);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
+// Sliding hourly counter at email_quota/<uid>; the transaction aborts (returns
+// undefined) once the cap is hit. Any failure counts as "not allowed".
+async function rateLimitOk(uid) {
+  try {
+    const hour = Math.floor(Date.now() / 3600000);
+    const r = await admin.database(getApp()).ref('email_quota/' + uid).transaction(v => {
+      if (!v || v.h !== hour) return { h: hour, n: 1 };
+      if (v.n >= USER_HOURLY_LIMIT) return;
+      return { h: hour, n: v.n + 1 };
+    });
+    return !!r.committed;
+  } catch (e) { return false; }
+}
+
 // ── HANDLER ──────────────────────────────────────────────────────────────────
 module.exports = async function handler(req, res) {
-  // CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // CORS: browser callers are the app itself (presenter.html / admin.html).
+  res.setHeader('Access-Control-Allow-Origin', process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
@@ -198,7 +255,22 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'RESEND_API_KEY not configured. Add it in Vercel Environment Variables.' });
   }
 
-  const { type, to, data } = req.body || {};
+  const { type, data } = req.body || {};
+  let { to } = req.body || {};
+
+  if (!internalKeyOk(req)) {
+    if (!configured()) return res.status(503).json({ error: 'Email authorization unavailable (Firebase Admin not configured).' });
+    const tok = tokenFrom(req);
+    if (!tok) return res.status(401).json({ error: 'Sign in required.' });
+    let who;
+    try { who = await verifyToken(tok); } catch (e) { return res.status(401).json({ error: 'Your session expired — sign in again.' }); }
+    if (!ADMIN_EMAILS.includes(who.email)) {
+      if (!USER_TYPES.includes(type)) return res.status(403).json({ error: 'This email type is server-only.' });
+      if (!who.email) return res.status(403).json({ error: 'Your account has no verified email.' });
+      to = who.email; // users can only email themselves
+      if (!(await rateLimitOk(who.uid))) return res.status(429).json({ error: 'Too many emails — try again later.' });
+    }
+  }
 
   if (!type || !to) {
     return res.status(400).json({ error: 'Missing "type" or "to" field.', available_types: Object.keys(TEMPLATES) });

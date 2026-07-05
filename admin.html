@@ -504,9 +504,12 @@ async function setTier(uid,tier){
       const rank={free:0,pro:1,team_small:2,team_large:3};
       const isDown=(rank[tier]??0)<(rank[prev]??0);
       const nice=(TIER_CONFIG[tier]||{}).name||tier, niceOld=(TIER_CONFIG[prev]||{}).name||prev;
-      fetch('/api/send-email',{method:'POST',headers:{'Content-Type':'application/json'},
+      // The endpoint verifies our token's email is in ADMIN_EMAILS before
+      // allowing arbitrary recipients.
+      auth.currentUser.getIdToken().then(t=>fetch('/api/send-email',{method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},
         body:JSON.stringify(isDown?{type:'downgrade',to:email,data:{oldPlan:niceOld,plan:nice}}
-                                  :{type:'upgrade',  to:email,data:{plan:nice}})}).catch(()=>{});
+                                  :{type:'upgrade',  to:email,data:{plan:nice}})})).catch(()=>{});
       emailed=true;
     }
     toast('Plan set to '+tier+(emailed?' · user emailed':''),'success');renderDetailBody(uid);renderPage();

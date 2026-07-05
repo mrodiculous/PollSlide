@@ -71,6 +71,16 @@ module.exports = async function handler(req, res) {
         const inv = { email: e, role: r, invitedBy: callerEmail, createdAt: Date.now() };
         await db.ref('workspaces/' + wsId + '/invites/' + k).set(inv);
         await db.ref('team_invites/' + k).set({ wsId, wsName: ws.name || '', role: r, invitedBy: callerEmail, createdAt: inv.createdAt });
+        // Tell the invitee — without this they'd only find out if they happened
+        // to sign in with this email. Best-effort: the invite stands either way.
+        try {
+          const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com';
+          await fetch(`${APP_URL}/api/send-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-internal-key': process.env.INTERNAL_API_KEY || '' },
+            body: JSON.stringify({ type: 'team_invite', to: e, data: { wsName: ws.name || '', invitedBy: callerEmail, role: r } }),
+          });
+        } catch (mailErr) { console.error('Invite email failed (non-fatal):', mailErr.message); }
         return res.status(200).json({ ok: true });
       }
       case 'accept': {

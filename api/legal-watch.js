@@ -94,7 +94,7 @@ module.exports = async function handler(req, res) {
       const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com';
       const list = changes.map(c => `<li><a href="${c.url}">${c.label}</a></li>`).join('');
       await fetch(APP_URL + '/api/send-email', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-internal-key': process.env.INTERNAL_API_KEY || '' },
         body: JSON.stringify({
           type: 'notify',
           to: process.env.LEGAL_ALERT_EMAIL || 'help@pollslide.com',
