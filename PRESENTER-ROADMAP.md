@@ -226,6 +226,10 @@ Also shipped: per-element **build animations** (✦ toggle; click reveals one el
 ### Editor chrome (SHIPPED ✅ 2026-07-04) — Canva/Keynote ergonomics, PollSlide's skin
 Left **tool rail** with slide-out panels (Design=theme swatches+layouts · Text="Add a heading/subheading/body" tiles · Shapes & stickers · Media · **Live audience** (Poll/Quiz/Survey/Flashcard/Q&A tiles + Polly) · Import) — dark glass, purple glow, Syne type: unmistakably ours. **Four corner resize handles** with proper anchoring (left handles pin the right edge). **Zoom** (50–175%, WYSIWYG-safe — text scales exactly with the slide). Visible **undo/redo** buttons. **＋ add-slide between thumbnails** on hover.
 
-### Stage 4 — Advanced
+### Stage 4 — Advanced (core SHIPPED ✅ 2026-07-04; infra items deferred)
+**Shipped:** full **discoverability layer** — Edit menu with every action AND its shortcut shown (menus teach the keys), floating text toolbar wherever text is edited (incl. built-in titles/bodies — no shortcut knowledge needed), ⌘A select-all, "?" shortcuts & gestures reference · **named cloud versions** (save a restore point with a name, restore from history) · **per-slide comments** (with count badge; never shown when presenting) · **template gallery** (Pitch, Lecture, Quiz night, Team meeting, Workshop — one click, undo-safe).
+**Deferred (need backend/infra, not client code):** real-time co-editing & shared comments (needs sync server / CRDT) · share-links for decks (needs DB-rules change) · brand kits with org-wide sync · Polly restyle-my-deck (needs new API mode) · live-data charts · video export.
+
+### Stage 4 — original list (reference)
 Real-time co-editing + comments · named cloud versions · template gallery/marketplace · brand kits (org colors/fonts/logo tokens) · Polly design assistant (restyle slide/deck, image editing) · charts bound to live data · interactive web embeds · video/GIF export · rehearsal mode with AI coaching · one-click deck localization · accessibility checker.
 

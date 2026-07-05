@@ -209,6 +209,16 @@
   .fc-back{font-family:'DM Sans',sans-serif;font-weight:600;font-size:3.6cqw;color:var(--accent3);margin-top:2.6cqw;}
   .fc-hint{font-size:1.7cqw;color:var(--muted);margin-top:2.2cqw;}
 
+  /* Floating text toolbar — appears wherever you're editing text (incl. titles) */
+  #inlineBar{position:fixed;display:none;z-index:1200;background:var(--chrome);border:1px solid var(--border2);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:5px;gap:4px;align-items:center;}
+  #inlineBar.show{display:inline-flex;}
+  #inlineBar button{background:var(--chrome2);border:1px solid var(--border2);color:var(--text);border-radius:7px;min-width:30px;height:30px;font-size:13px;cursor:pointer;}
+  #inlineBar button:hover{border-color:var(--accent);}
+  .mi-k{margin-left:auto;font-size:11px;color:var(--muted);padding-left:14px;font-family:'DM Sans';}
+  .cmt-badge{font-size:9px;font-weight:800;background:var(--accent);color:#fff;border-radius:100px;padding:1px 5px;margin-left:3px;}
+  .kbd-row{display:flex;justify-content:space-between;gap:14px;padding:6px 2px;border-bottom:1px solid var(--border);font-size:13px;}
+  .kbd-row b{color:var(--muted);font-weight:600;font-family:'Menlo',monospace;font-size:12px;}
+
   /* ── Modal (Polly / generic) + auth ──────────────────────── */
   .overlay{position:fixed;inset:0;background:rgba(7,7,15,.86);z-index:1500;display:none;align-items:center;justify-content:center;padding:20px;}
   .overlay.show{display:flex;}
@@ -264,6 +274,28 @@
       <div class="menu-sep"></div>
       <div class="menu-item" onclick="cloudSave()"><span class="mi-ico">☁️</span><span>Save deck to cloud<span class="mi-sub">Available on any of your devices</span></span></div>
       <div class="menu-item" onclick="openCloudDecks()"><span class="mi-ico">📂</span><span>Open cloud deck</span></div>
+      <div class="menu-item" onclick="saveVersion()"><span class="mi-ico">🏷️</span><span>Save named version<span class="mi-sub">A restore point you can name</span></span></div>
+      <div class="menu-item" onclick="openVersions()"><span class="mi-ico">🕰️</span><span>Version history…</span></div>
+      <div class="menu-sep"></div>
+      <div class="menu-item" onclick="openTemplates()"><span class="mi-ico">📐</span><span>New from template…<span class="mi-sub">Pitch, lecture, quiz night & more</span></span></div>
+    </div>
+  </div>
+
+  <!-- Edit — every action visible, shortcuts shown so they teach themselves -->
+  <div class="rib-group">
+    <button class="rib-btn" onclick="toggleMenu('editMenu')">Edit <span class="caret">▾</span></button>
+    <div class="menu hidden" id="editMenu" style="min-width:270px;">
+      <div class="menu-item" onclick="closeMenus();doUndo()"><span class="mi-ico">↩</span><span>Undo</span><span class="mi-k">⌘Z</span></div>
+      <div class="menu-item" onclick="closeMenus();doRedo()"><span class="mi-ico">↪</span><span>Redo</span><span class="mi-k">⇧⌘Z</span></div>
+      <div class="menu-sep"></div>
+      <div class="menu-item" onclick="closeMenus();doCopy()"><span class="mi-ico">⧉</span><span>Copy<span class="mi-sub">Selected elements, or the slide</span></span><span class="mi-k">⌘C</span></div>
+      <div class="menu-item" onclick="closeMenus();doPaste()"><span class="mi-ico">📋</span><span>Paste</span><span class="mi-k">⌘V</span></div>
+      <div class="menu-item" onclick="closeMenus();doDuplicateSel()"><span class="mi-ico">⊕</span><span>Duplicate</span><span class="mi-k">⌘D</span></div>
+      <div class="menu-item" onclick="closeMenus();doDeleteSel()"><span class="mi-ico">🗑</span><span>Delete</span><span class="mi-k">⌫</span></div>
+      <div class="menu-sep"></div>
+      <div class="menu-item" onclick="closeMenus();selectAllEls()"><span class="mi-ico">▣</span><span>Select all on slide</span><span class="mi-k">⌘A</span></div>
+      <div class="menu-item" onclick="closeMenus();grpSel(true)"><span class="mi-ico">⧉</span><span>Group selection</span><span class="mi-k">⌘G</span></div>
+      <div class="menu-item" onclick="closeMenus();grpSel(false)"><span class="mi-ico">⧉̸</span><span>Ungroup</span><span class="mi-k">⇧⌘G</span></div>
     </div>
   </div>
 
@@ -286,6 +318,8 @@
 
   <!-- View: grid toggle -->
   <button class="rib-btn" id="gridBtn" onclick="toggleGrid()" title="Show a 10% grid + center guides on the canvas">⌗ Grid</button>
+
+  <button class="rib-btn" onclick="openShortcuts()" title="Every shortcut and gesture">?</button>
 
   <!-- History -->
   <div class="rib-group">
@@ -462,6 +496,43 @@
       <button class="pill-btn ghost" onclick="closeModal('authOverlay')">Cancel</button>
       <button class="pill-btn" onclick="doSignIn()">Sign in</button>
     </div>
+  </div>
+</div>
+
+<div id="inlineBar">
+  <button onmousedown="event.preventDefault()" onclick="inlineCmd('bold')" title="Bold (⌘B)"><b>B</b></button>
+  <button onmousedown="event.preventDefault()" onclick="inlineCmd('italic')" title="Italic (⌘I)"><i>I</i></button>
+  <button onmousedown="event.preventDefault()" onclick="inlineCmd('underline')" title="Underline (⌘U)"><u>U</u></button>
+  <button onmousedown="event.preventDefault()" onclick="inlineSize(1/1.15)" title="Smaller (select text first)">A−</button>
+  <button onmousedown="event.preventDefault()" onclick="inlineSize(1.15)" title="Bigger (select text first)">A+</button>
+  <input type="color" value="#ffffff" oninput="inlineColor(this.value)" title="Text color" style="width:30px;height:30px;padding:1px;border:1px solid var(--border2);border-radius:7px;background:var(--chrome2);cursor:pointer;">
+</div>
+
+<div class="overlay" id="kbdOverlay">
+  <div class="modal" style="width:min(520px,94vw);">
+    <h2>⌨ Shortcuts & gestures</h2>
+    <p class="sub">Everything here also lives in the menus and toolbars — these are just the fast lanes.</p>
+    <div style="max-height:46vh;overflow-y:auto;" id="kbdList"></div>
+    <div class="modal-actions"><button class="pill-btn" onclick="closeModal('kbdOverlay')">Got it</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="cmtOverlay">
+  <div class="modal">
+    <h2>💬 Slide comments</h2>
+    <p class="sub">Notes for yourself about this slide — never shown while presenting.</p>
+    <div id="cmtList" style="max-height:200px;overflow-y:auto;margin-bottom:10px;"></div>
+    <div style="display:flex;gap:8px;"><input id="cmtInput" placeholder="Add a comment…" onkeydown="if(event.key==='Enter')addComment()"><button class="pill-btn" onclick="addComment()">Add</button></div>
+    <div class="modal-actions"><button class="pill-btn ghost" onclick="closeModal('cmtOverlay')">Close</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="tplOverlay">
+  <div class="modal" style="width:min(560px,94vw);">
+    <h2>📐 Start from a template</h2>
+    <p class="sub">A ready-made deck — swap in your content and go. Replaces the current deck (undo brings it back).</p>
+    <div id="tplGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;"></div>
+    <div class="modal-actions"><button class="pill-btn ghost" onclick="closeModal('tplOverlay')">Cancel</button></div>
   </div>
 </div>
 
@@ -685,6 +756,7 @@ function renderCanvas(){
     ${d.qr?'<span style="color:var(--accent3);">· QR auto-shown for audience</span>':'<span>· no QR (content slide)</span>'}
     <button class="st-btn" onclick="addText()">＋ Text</button>
     <button class="st-btn" onclick="addImageEl()">＋ Image</button>
+    <button class="st-btn" onclick="openComments()" title="Comments on this slide">💬${(s.comments&&s.comments.length)?`<span class="cmt-badge">${s.comments.length}</span>`:''}</button>
     <input type="color" value="${s.bgColor||'#101024'}" onchange="setBgColor(this.value)" title="Slide background color" style="width:28px;height:28px;padding:1px;border:1px solid var(--border2);border-radius:7px;background:var(--chrome2);cursor:pointer;">${s.bgColor?`<button class="st-btn" onclick="clearBgColor()" title="Back to theme background">✕</button>`:''}
     ${(s.kind==='title'||s.kind==='content')?`<button class="st-btn" onclick="bgImgInput.click()" title="Background image for this slide">🌄 BG</button>${s.bgImg?`<input type="range" min="0" max="0.7" step="0.05" value="${s.bgDim!=null?s.bgDim:.35}" oninput="setBgDim(this.value)" title="Darken background" style="width:52px;accent-color:var(--accent);"><button class="st-btn" onclick="clearBg()" title="Remove background image">✕BG</button>`:''}`:''}
     <span id="fmtBar" style="display:none;align-items:center;gap:5px;"></span>
@@ -1452,6 +1524,143 @@ function exportPDF(){ closeMenus();
   toast('In the print dialog choose “Save as PDF”.');
 }
 
+/* ─── SHARED EDIT ACTIONS — one implementation for menus, toolbars & keys ─────*/
+function doCopy(){ const ids=selIndices(); const s0=deck.slides[currentIdx];
+  if(ids.length&&s0){ _clipEls=ids.map(gi=>JSON.parse(JSON.stringify(s0.elements[gi]))); _clipSlide=null; toast(ids.length+' element'+(ids.length>1?'s':'')+' copied'); }
+  else if(s0){ _clipSlide=JSON.stringify(s0); _clipEls=null; toast('Slide copied'); } }
+function doPaste(){
+  if(_clipEls&&deck.slides[currentIdx]){ pushUndo('Paste elements'); const s0=deck.slides[currentIdx]; const els=ensureEls(s0);
+    selSet.clear(); _clipEls.forEach(ce=>{ const c=JSON.parse(JSON.stringify(ce)); c.x=Math.min(94,(c.x||0)+3); c.y=Math.min(94,(c.y||0)+3); delete c.locked; els.push(c); selSet.add(els.length-1); });
+    selEl=els.length-1; renderCanvas(); scheduleSave(); }
+  else if(_clipSlide){ pushUndo('Paste slide'); const c=JSON.parse(_clipSlide); c.id=nid(); if(c.question)delete c.question.imported;
+    deck.slides.splice(currentIdx+1,0,c); currentIdx++; renderNav(); renderCanvas(); scheduleSave(); schedulePublish(); }
+  else toast('Nothing copied yet.'); }
+function doDuplicateSel(){ const ids=selIndices(); const s0=deck.slides[currentIdx];
+  if(ids.length&&s0){ pushUndo('Duplicate element'); const els=s0.elements; const added=[];
+    ids.forEach(gi=>{ const c=JSON.parse(JSON.stringify(els[gi])); c.x=Math.min(94,c.x+3); c.y=Math.min(94,c.y+3); delete c.locked; els.push(c); added.push(els.length-1); });
+    selSet=new Set(added); selEl=added[added.length-1]; renderCanvas(); scheduleSave(); }
+  else duplicateSlide(); }
+function doDeleteSel(){ const ids=selIndices(); const s0=deck.slides[currentIdx];
+  if(ids.length&&s0){ const unlocked=ids.filter(gi=>!(s0.elements[gi]&&s0.elements[gi].locked));
+    if(!unlocked.length){ toast('🔒 Locked — unlock first'); return; }
+    pushUndo('Delete element'+(unlocked.length>1?'s':'')); unlocked.sort((a,b)=>b-a).forEach(gi=>s0.elements.splice(gi,1));
+    clearSel(); renderCanvas(); scheduleSave(); }
+  else deleteSlide(); }
+function selectAllEls(){ const s0=deck.slides[currentIdx]; if(!s0||!s0.elements||!s0.elements.length){ toast('No elements on this slide.'); return; }
+  selSet=new Set(s0.elements.map((_,i)=>i)); selEl=s0.elements.length-1; renderCanvas(); }
+
+/* ─── INLINE TEXT BAR — visible formatting wherever you edit text ─────────────*/
+function inlineHost(){ const ae=document.activeElement;
+  return (ae&&ae.isContentEditable&&ae.closest&&ae.closest('#canvasSlide'))?ae:null; }
+function positionInlineBar(){ const bar=document.getElementById('inlineBar'); const host=inlineHost();
+  if(!host){ bar.classList.remove('show'); return; }
+  bar.classList.add('show');
+  let r=null; try{ const sel=getSelection(); if(sel.rangeCount){ const rr=sel.getRangeAt(0).getBoundingClientRect(); if(rr&&(rr.width||rr.height))r=rr; } }catch(e){}
+  if(!r)r=host.getBoundingClientRect();
+  const bw=bar.offsetWidth||220;
+  bar.style.left=Math.max(8,Math.min(window.innerWidth-bw-8, r.left+r.width/2-bw/2))+'px';
+  bar.style.top=Math.max(8,(r.top-44))+'px'; }
+document.addEventListener('selectionchange',()=>{ setTimeout(positionInlineBar,0); });
+document.addEventListener('focusout',()=>{ setTimeout(positionInlineBar,50); });
+function inlineCmd(cmd){ const host=inlineHost()||_restoreSel(); if(!host)return;
+  document.execCommand('styleWithCSS',false,false); document.execCommand(cmd); _persist(host); }
+function inlineSize(f){ if(!sizeSelection(f)) toast('Select some text first, then A− / A+'); }
+function inlineColor(v){ const host=inlineHost()||_restoreSel(); if(!host)return;
+  const sel=getSelection(); if(sel.isCollapsed){ toast('Select some text first.'); return; }
+  document.execCommand('styleWithCSS',false,true); document.execCommand('foreColor',false,v); _persist(host); }
+
+/* ─── SHORTCUTS REFERENCE ─────────────────────────────────────────────────────*/
+const KBD_LIST=[
+ ['Undo / Redo','⌘Z · ⇧⌘Z'],['Copy / Paste','⌘C · ⌘V'],['Duplicate selection or slide','⌘D'],
+ ['Delete selection or slide','⌫'],['Select all elements','⌘A'],['Group / Ungroup','⌘G · ⇧⌘G'],
+ ['Bold / Italic / Underline (while editing)','⌘B · ⌘I · ⌘U'],['Text bigger / smaller','⌘⇧> · ⌘⇧<'],
+ ['Nudge element (big steps)','← ↑ ↓ → (⇧ = ×4)'],['Leave text editing / deselect','Esc'],
+ ['— Gestures —',''],['Edit text','Double-click it'],['Move a box','Click once, then drag'],
+ ['Resize (text scales with the box)','Drag a corner handle'],['Duplicate by dragging','⌥-drag'],
+ ['Select several','Shift-click, or drag on empty canvas'],['Reorder slides','Drag thumbnails'],
+ ['Add a slide anywhere','＋ between thumbnails'],['Present: next / reveal / flip card','Click or → · R'],
+];
+function openShortcuts(){ closeMenus(); document.getElementById('kbdList').innerHTML=
+  KBD_LIST.map(([a,b])=>`<div class="kbd-row"><span>${a}</span><b>${b}</b></div>`).join(''); openModal('kbdOverlay'); }
+
+/* ─── COMMENTS (per slide) ────────────────────────────────────────────────────*/
+function openComments(){ const s0=deck.slides[currentIdx]; if(!s0){ toast('Select a slide.'); return; } renderComments(); openModal('cmtOverlay');
+  setTimeout(()=>document.getElementById('cmtInput').focus(),60); }
+function renderComments(){ const s0=deck.slides[currentIdx]; const list=s0.comments||[];
+  document.getElementById('cmtList').innerHTML=list.length?list.map((c,i)=>`<div style="background:var(--chrome2);border:1px solid var(--border2);border-radius:9px;padding:8px 10px;margin-bottom:6px;font-size:13px;">${esc(c.txt)}<div style="display:flex;justify-content:space-between;margin-top:4px;"><span style="font-size:11px;color:var(--muted);">${new Date(c.t).toLocaleString()}</span><span style="font-size:11px;color:var(--accent2);cursor:pointer;" onclick="delComment(${i})">delete</span></div></div>`).join(''):'<div style="color:var(--muted);font-size:13px;">No comments on this slide yet.</div>'; }
+function addComment(){ const s0=deck.slides[currentIdx]; const v=(document.getElementById('cmtInput').value||'').trim(); if(!s0||!v)return;
+  (s0.comments=s0.comments||[]).push({t:Date.now(),txt:v.slice(0,500)}); document.getElementById('cmtInput').value='';
+  renderComments(); renderCanvas(); scheduleSave(); }
+function delComment(i){ const s0=deck.slides[currentIdx]; if(!s0||!s0.comments)return; s0.comments.splice(i,1); renderComments(); renderCanvas(); scheduleSave(); }
+
+/* ─── NAMED VERSIONS (cloud restore points) ───────────────────────────────────*/
+async function saveVersion(){ closeMenus();
+  if(typeof fbDb==='undefined'||!fbDb||!userId){ toast('Sign in to save versions.'); toggleAuth(); return; }
+  const name=prompt('Name this version:','Before big changes'); if(!name)return;
+  if(!deck.cloudId) deck.cloudId='deck_'+Date.now();
+  let j; try{ j=JSON.stringify(deck); }catch(e){ toast('Deck too complex.'); return; }
+  if(j.length>9*1024*1024){ toast('Deck over 9 MB — trim media first.'); return; }
+  try{ await fbDb.ref('users/'+userId+'/presentDecks/'+deck.cloudId+'/versions/'+Date.now()).set({name:name.slice(0,60),json:j,at:Date.now()});
+    toast('🏷️ Version "'+name+'" saved'); }catch(e){ toast('Could not save version.'); } }
+async function openVersions(){ closeMenus();
+  if(typeof fbDb==='undefined'||!fbDb||!userId){ toast('Sign in first.'); toggleAuth(); return; }
+  if(!deck.cloudId){ toast('No versions yet — use "Save named version".'); return; }
+  let vs={}; try{ const s0=await fbDb.ref('users/'+userId+'/presentDecks/'+deck.cloudId+'/versions').get(); vs=s0.exists()?(s0.val()||{}):{}; }catch(e){}
+  const keys=Object.keys(vs).sort().reverse(); if(!keys.length){ toast('No versions yet — use "Save named version".'); return; }
+  const menu=keys.map((k,n)=>(n+1)+'. '+(vs[k].name||k)+' — '+new Date(vs[k].at||+k).toLocaleString()).join('\n');
+  const pick=prompt('Restore which version?\n'+menu+'\n\nEnter a number:',''); const n=parseInt(pick,10);
+  if(!n||n<1||n>keys.length)return;
+  try{ pushUndo('Restore version'); const d=JSON.parse(vs[keys[n-1]].json); const cid=deck.cloudId; deck=d; deck.cloudId=cid;
+    currentIdx=deck.slides.length?0:-1; clearSel(); applyThemeTo(document.documentElement,deck.theme);
+    const ti=document.getElementById('deckTitle'); if(ti)ti.value=deck.title||''; renderNav(); renderCanvas(); save(); toast('Version restored'); }
+  catch(e){ toast('Could not restore that version.'); } }
+
+/* ─── TEMPLATE GALLERY ────────────────────────────────────────────────────────*/
+const TEMPLATES={
+ pitch:{ name:'🚀 Pitch deck', theme:'professional', slides:()=>[
+   {kind:'title',title:'Company name',sub:'One line that says what you do'},
+   {kind:'content',title:'The problem',body:'Who hurts, how badly, and why now.'},
+   {kind:'content',title:'Our solution',body:'What you built and why it wins.'},
+   {kind:'poll',question:{text:'What would you pay for this?',type:'multiple_choice',options:[{text:'$10/mo'},{text:'$25/mo'},{text:'$100/mo'}],correctAnswer:null,sessionCode:null,qIndex:0}},
+   {kind:'content',title:'Traction',body:'Users · revenue · growth — your three best numbers.'},
+   {kind:'content',title:'The ask',body:'What you need and what it unlocks.'}]},
+ lecture:{ name:'🎓 Lecture', theme:'educational', slides:()=>[
+   {kind:'title',title:'Today\'s topic',sub:'Course · session'},
+   {kind:'content',title:'What you\'ll learn',body:'Three takeaways for today.'},
+   {kind:'content',title:'Core concept',body:'Explain it simply first, then deepen.'},
+   {kind:'quiz',question:{text:'Quick check: did that land?',type:'multiple_choice',options:[{text:'Yes, crystal'},{text:'Mostly'},{text:'Lost me'}],correctAnswer:0,sessionCode:null,qIndex:0}},
+   {kind:'content',title:'Worked example',body:'Walk it through step by step.'},
+   {kind:'qa',title:'Questions?',question:{type:'qa',text:'Ask anything — top-voted first'}}]},
+ quiznight:{ name:'🏆 Quiz night', theme:'gamified', slides:()=>[
+   {kind:'title',title:'QUIZ NIGHT',sub:'Phones out — scan to play'},
+   {kind:'quiz',question:{text:'Round 1: warm-up question',type:'multiple_choice',options:[{text:'Answer A'},{text:'Answer B'},{text:'Answer C'}],correctAnswer:0,sessionCode:null,qIndex:0}},
+   {kind:'quiz',question:{text:'Round 2: harder now',type:'multiple_choice',options:[{text:'Answer A'},{text:'Answer B'},{text:'Answer C'},{text:'Answer D'}],correctAnswer:1,sessionCode:null,qIndex:1}},
+   {kind:'content',title:'Half-time',body:'Stretch. Talk trash. Refill.'},
+   {kind:'quiz',question:{text:'Final: winner takes all',type:'multiple_choice',options:[{text:'Answer A'},{text:'Answer B'}],correctAnswer:0,sessionCode:null,qIndex:2}}]},
+ meeting:{ name:'🤝 Team meeting', theme:'minimal', slides:()=>[
+   {kind:'title',title:'Weekly sync',sub:new Date().toLocaleDateString()},
+   {kind:'content',title:'Agenda',body:'',elements:[{type:'text',x:6,y:32,w:60,size:2.8,weight:500,color:'#3c3c55',bullet:true,text:'Wins\nBlockers\nDecisions needed\nNext week'}]},
+   {kind:'poll',question:{text:'How was your week?',type:'multiple_choice',options:[{text:'🔥 Great'},{text:'🙂 Fine'},{text:'😮‍💨 Rough'}],correctAnswer:null,sessionCode:null,qIndex:0}},
+   {kind:'content',title:'Decisions',body:'What we agreed, who owns it, by when.'}]},
+ workshop:{ name:'🛠 Workshop', theme:'ocean', slides:()=>[
+   {kind:'title',title:'Workshop title',sub:'Hands-on session'},
+   {kind:'content',title:'Ground rules',body:'Cameras on · questions anytime · build together.'},
+   {kind:'survey',question:{text:'Experience level with the topic?',type:'rating',ratingMax:5,options:[],correctAnswer:null,sessionCode:null,qIndex:0}},
+   {kind:'content',title:'Exercise 1',body:'The task, the time box, and what good looks like.'},
+   {kind:'qa',title:'Stuck? Ask here',question:{type:'qa',text:'Workshop help desk'}}]},
+};
+function openTemplates(){ closeMenus();
+  document.getElementById('tplGrid').innerHTML=Object.entries(TEMPLATES).map(([k,t2])=>
+    `<div class="rp-tile" style="padding:14px 10px;" onclick="useTemplate('${k}')"><span class="ico" style="font-size:24px;">${t2.name.split(' ')[0]}</span>${t2.name.slice(t2.name.indexOf(' ')+1)}<span style="font-size:10px;color:var(--muted);">${t2.slides().length} slides</span></div>`).join('');
+  openModal('tplOverlay'); }
+function useTemplate(k){ const t2=TEMPLATES[k]; if(!t2)return;
+  if(deck.slides.length&&!confirm('Replace the current deck with this template? (Undo restores it.)'))return;
+  pushUndo('Template: '+t2.name); closeModal('tplOverlay');
+  deck={theme:t2.theme,title:plain(t2.name.slice(2)),slides:t2.slides().map(sl=>Object.assign({id:nid()},sl))};
+  currentIdx=0; clearSel(); applyThemeTo(document.documentElement,deck.theme);
+  const ti=document.getElementById('deckTitle'); if(ti)ti.value=deck.title||'';
+  renderNav(); renderCanvas(); scheduleSave(); schedulePublish(); toast('Template loaded — make it yours'); }
+
 /* ─── TOOL RAIL — PollSlide's take on the Canva side panel ─────────────────────*/
 let _panel=null;
 function togglePanel(t){ if(_panel===t){ closePanel(); return; } _panel=t;
@@ -1600,22 +1809,15 @@ document.addEventListener('keydown',e=>{
   // A selected element captures the keyboard first (Canva-style)…
   const mod=e.metaKey||e.ctrlKey;
   // Copy / paste — elements when selected, otherwise the whole slide (Keynote model).
+  if(mod&&(e.key==='a'||e.key==='A')){ const s0=deck.slides[currentIdx];
+    if(s0&&s0.elements&&s0.elements.length){ selectAllEls(); e.preventDefault(); return; } }
   if(mod&&(e.key==='g'||e.key==='G')){ const ids=selIndices(); const s0=deck.slides[currentIdx];
     if(s0&&ids.length){ if(e.shiftKey){ pushUndo('Ungroup'); ids.forEach(gi=>{ if(s0.elements[gi])delete s0.elements[gi].grp; }); toast('Ungrouped'); }
       else if(ids.length>1){ pushUndo('Group'); const g='g'+Date.now(); ids.forEach(gi=>{ if(s0.elements[gi])s0.elements[gi].grp=g; }); toast('Grouped — click any member to move them together'); }
       renderFmtBar(); scheduleSave(); }
     e.preventDefault(); return; }
-  if(mod&&(e.key==='c'||e.key==='C')){ const ids=selIndices(); const s0=deck.slides[currentIdx];
-    if(ids.length&&s0){ _clipEls=ids.map(gi=>JSON.parse(JSON.stringify(s0.elements[gi]))); _clipSlide=null; toast(ids.length+' element'+(ids.length>1?'s':'')+' copied'); }
-    else if(s0){ _clipSlide=JSON.stringify(s0); _clipEls=null; toast('Slide copied'); }
-    e.preventDefault(); return; }
-  if(mod&&(e.key==='v'||e.key==='V')){
-    if(_clipEls&&deck.slides[currentIdx]){ pushUndo('Paste elements'); const s0=deck.slides[currentIdx]; const els=ensureEls(s0);
-      selSet.clear(); _clipEls.forEach(ce=>{ const c=JSON.parse(JSON.stringify(ce)); c.x=Math.min(94,(c.x||0)+3); c.y=Math.min(94,(c.y||0)+3); delete c.locked; els.push(c); selSet.add(els.length-1); });
-      selEl=els.length-1; renderCanvas(); scheduleSave(); }
-    else if(_clipSlide){ pushUndo('Paste slide'); const c=JSON.parse(_clipSlide); c.id=nid(); if(c.question)delete c.question.imported;
-      deck.slides.splice(currentIdx+1,0,c); currentIdx++; renderNav(); renderCanvas(); scheduleSave(); schedulePublish(); }
-    e.preventDefault(); return; }
+  if(mod&&(e.key==='c'||e.key==='C')){ doCopy(); e.preventDefault(); return; }
+  if(mod&&(e.key==='v'||e.key==='V')){ doPaste(); e.preventDefault(); return; }
   const se=_fmtEl();
   if(se){
     const ids=selIndices(); const s0=deck.slides[currentIdx];
