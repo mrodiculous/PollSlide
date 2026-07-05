@@ -24,7 +24,11 @@
     "KNOWN LIMITATION: the self-join clause ($uid === auth.uid) lets a signed-in user add",
     "themselves (needed only as a fallback before api/team.js is deployed). Once the API is",
     "live, remove that clause so only owners/admins can write members — acceptance then goes",
-    "through the API (Admin SDK, which bypasses these rules anyway)."
+    "through the API (Admin SDK, which bypasses these rules anyway).",
+    "",
+    "SHARE LINKS (PresentSlide): merge the 'sharedDecks' block too. A share id is",
+    "unguessable (random); anyone WITH THE LINK can read that one deck; only the",
+    "signed-in owner can create or overwrite their own share."
   ],
   "rules": {
     "workspaces": {
@@ -48,6 +52,13 @@
       "$emailKey": {
         ".read": "auth != null",
         ".write": "auth != null"
+      }
+    },
+    "sharedDecks": {
+      "$sid": {
+        ".read": "true",
+        ".write": "auth != null && (!data.exists() || data.child('owner').val() === auth.uid)",
+        ".validate": "newData.hasChildren(['owner','title','json','at'])"
       }
     }
   }
