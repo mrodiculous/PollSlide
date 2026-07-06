@@ -1626,6 +1626,7 @@ function toggleUserMenu() {
       { icon:'✨', label:'See plans & upgrade',   fn:'openPlanPicker()' },
       { icon:'📊', label:'PowerPoint live results', fn:'openPPTGuide()' },
       { icon:'📖', label:'Setup guide',           fn:"window.open('https://pollslide.com/setup','_blank')" },
+      { icon:'🟢', label:'System status',         fn:"window.open('https://pollslide.com/status','_blank')" },
       { icon:'⚠',  label:'Delete my account',     fn:'requestAccountDeletion()', danger:true },
     ];
     itemsEl.innerHTML = menuItems.map(m =>

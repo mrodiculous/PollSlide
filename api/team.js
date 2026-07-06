@@ -8,7 +8,12 @@
 //
 // Env (same as stripe-webhook.js): FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL,
 // FIREBASE_PRIVATE_KEY, FIREBASE_DATABASE_URL, NEXT_PUBLIC_APP_URL.
+//
+// Admin (help@pollslide.com, via lib/quota ADMIN_EMAILS) can act on ANY
+// workspace, plus admin-only actions: adminList, adminAssign, adminSetTier,
+// adminDelete — these power the Teams page in admin.html.
 const admin = require('firebase-admin');
+const { ADMIN_EMAILS } = require('../lib/quota');
 
 function getApp() {
   if (admin.apps.length) return admin.apps[0];
@@ -48,15 +53,31 @@ module.exports = async function handler(req, res) {
     const callerUid   = decoded.uid;
     const callerEmail = (decoded.email || '').toLowerCase();
 
-    const { action, wsId, email, role, uid, emailKey: ek } = req.body || {};
+    const { action, wsId, email, role, uid, emailKey: ek, tier } = req.body || {};
+    const isSiteAdmin = ADMIN_EMAILS.includes(callerEmail);
 
     const wsData = async id => { const s = await db.ref('workspaces/' + id).get(); return s.exists() ? s.val() : null; };
     const requireManager = async id => {
       const ws = await wsData(id);
       if (!ws) throw { code: 404, msg: 'Workspace not found' };
+      if (isSiteAdmin) return ws; // site admin can manage any workspace
       const m = ws.members && ws.members[callerUid];
       if (!m || !['owner', 'admin'].includes(m.role)) throw { code: 403, msg: 'Not authorized' };
       return ws;
+    };
+    const requireSiteAdmin = () => { if (!isSiteAdmin) throw { code: 403, msg: 'Admins only' }; };
+    // Detach a member: remove from the workspace AND clean their user record
+    // right away (no waiting for the client-side self-heal at next sign-in).
+    const detachMember = async (id, memberUid, ws) => {
+      await db.ref('workspaces/' + id + '/members/' + memberUid).remove();
+      const wsIdSnap = await db.ref('users/' + memberUid + '/workspaceId').get();
+      if (wsIdSnap.val() === id) {
+        await db.ref('users/' + memberUid + '/workspaceId').remove();
+        if (memberUid !== ws.ownerUid) {
+          await db.ref('users/' + memberUid + '/tier').set('free');
+          await db.ref('admin/users_index/' + memberUid + '/tier').set('free').catch(() => {});
+        }
+      }
     };
 
     switch (action) {
@@ -104,15 +125,65 @@ module.exports = async function handler(req, res) {
       case 'remove': {
         const ws = await requireManager(wsId);
         if (uid === ws.ownerUid) return res.status(400).json({ error: 'Cannot remove the owner' });
-        await db.ref('workspaces/' + wsId + '/members/' + uid).remove();
+        await detachMember(wsId, uid, ws);
         return res.status(200).json({ ok: true });
       }
       case 'setRole': {
         const ws = await requireManager(wsId);
         if (uid === ws.ownerUid) return res.status(400).json({ error: 'Cannot change the owner' });
-        const callerRole = ws.members[callerUid].role;
+        const callerRole = isSiteAdmin ? 'owner' : (ws.members[callerUid] || {}).role;
         if (role === 'member' && callerRole !== 'owner') return res.status(403).json({ error: 'Only the owner can demote an admin' });
         await db.ref('workspaces/' + wsId + '/members/' + uid + '/role').set(role === 'admin' ? 'admin' : 'member');
+        return res.status(200).json({ ok: true });
+      }
+      // ── Site-admin actions (admin.html → Teams page) ──
+      case 'adminList': {
+        requireSiteAdmin();
+        const snap = await db.ref('workspaces').get();
+        const out = [];
+        if (snap.exists()) snap.forEach(s => { const v = s.val(); out.push({ id: s.key, name: v.name || '', tier: v.tier || 'team_small', ownerUid: v.ownerUid, createdAt: v.createdAt || 0, members: v.members || {}, invites: v.invites || {} }); });
+        return res.status(200).json({ ok: true, workspaces: out, seats: SEATS });
+      }
+      case 'adminAssign': {
+        // Add an EXISTING account to a workspace directly — no invite dance.
+        requireSiteAdmin();
+        const ws = await wsData(wsId);
+        if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+        const e = (email || '').toLowerCase().trim();
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return res.status(400).json({ error: 'Invalid email' });
+        if (Object.values(ws.members || {}).some(m => (m.email || '').toLowerCase() === e)) return res.status(409).json({ error: 'Already a member' });
+        if (Object.keys(ws.members || {}).length + Object.keys(ws.invites || {}).length >= seatLimit(ws)) return res.status(409).json({ error: 'No seats left' });
+        let user;
+        try { user = await admin.auth(app).getUserByEmail(e); }
+        catch (err) { return res.status(404).json({ error: 'No account with that email — send an invite instead' }); }
+        const r = role === 'admin' ? 'admin' : 'member';
+        await db.ref('workspaces/' + wsId + '/members/' + user.uid).set({ email: e, role: r, joinedAt: Date.now() });
+        await db.ref('users/' + user.uid + '/workspaceId').set(wsId);
+        await db.ref('users/' + user.uid + '/tier').set(ws.tier);
+        await db.ref('admin/users_index/' + user.uid + '/tier').set(ws.tier).catch(() => {});
+        return res.status(200).json({ ok: true, uid: user.uid });
+      }
+      case 'adminSetTier': {
+        requireSiteAdmin();
+        const ws = await wsData(wsId);
+        if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+        const t = SEATS[tier] ? tier : null;
+        if (!t) return res.status(400).json({ error: 'Tier must be team_small or team_large' });
+        await db.ref('workspaces/' + wsId + '/tier').set(t);
+        for (const mUid of Object.keys(ws.members || {})) {
+          if (mUid === ws.ownerUid) continue; // owner's tier follows their own billing
+          await db.ref('users/' + mUid + '/tier').set(t);
+          await db.ref('admin/users_index/' + mUid + '/tier').set(t).catch(() => {});
+        }
+        return res.status(200).json({ ok: true });
+      }
+      case 'adminDelete': {
+        requireSiteAdmin();
+        const ws = await wsData(wsId);
+        if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+        for (const mUid of Object.keys(ws.members || {})) await detachMember(wsId, mUid, ws);
+        for (const k of Object.keys(ws.invites || {})) await db.ref('team_invites/' + k).remove().catch(() => {});
+        await db.ref('workspaces/' + wsId).remove();
         return res.status(200).json({ ok: true });
       }
       case 'revoke': {

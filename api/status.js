@@ -125,6 +125,54 @@ function getAdminDb() {
 
 const tsKey = t => String(t).padStart(15, '0'); // fixed width → orderByKey sorts chronologically
 
+// ── Incident auto-log ────────────────────────────────────────────────────────
+// On every component status transition, write admin/incidents/<ts> describing
+// what changed and what the platform did about it automatically. Transitions
+// to 'down' also email the founder (internal-key call to our own send-email).
+const AUTO_ACTIONS = {
+  ai_text:   { degraded: 'Auto-failover engaged: Polly and translation are being served by the cloud provider. Users unaffected.', down: 'No provider reachable — Polly and translation requests will fail until a provider returns.', up: 'Primary provider healthy again — traffic back on the normal chain.' },
+  ai_images: { degraded: 'Auto-failover engaged: images served by the backup provider. Users unaffected.', down: 'No image provider reachable — question images unavailable.', up: 'Image chain healthy again.' },
+  realtime:  { down: 'No automatic remedy — live sessions are down until Firebase recovers.', up: 'Realtime database reachable again — live sessions restored.' },
+  hosting:   { down: 'No automatic remedy — check Vercel.', up: 'Hosting restored.' },
+  email:     { down: 'Emails are queued client-side as best-effort and skipped — no automatic remedy. Check Resend.', up: 'Email delivery restored.' },
+  billing:   { down: 'Checkout/portal calls will error — existing subscriptions unaffected. Check Stripe.', up: 'Billing restored.' },
+};
+
+async function recordIncidents(platform) {
+  const db = getAdminDb();
+  if (!db) return;
+  try {
+    const now = Date.now();
+    const metaRef = db.ref('status_meta/last');
+    const prev = (await metaRef.get()).val() || {};
+    const cur = {};
+    for (const [id, c] of Object.entries(platform)) cur[id] = c.status;
+    const changes = Object.entries(cur).filter(([id, s]) => (prev[id] || 'up') !== s);
+    if (!changes.length) return;
+    await metaRef.set(cur);
+    for (const [id, s] of changes) {
+      const from = prev[id] || 'up';
+      const auto = (AUTO_ACTIONS[id] || {})[s] || (s === 'up' ? 'Recovered.' : 'See the admin health panel for fix steps.');
+      await db.ref('admin/incidents/' + tsKey(now) + '_' + id).set({ t: now, comp: id, from, to: s, auto });
+      if (s === 'down' && process.env.INTERNAL_API_KEY) {
+        try {
+          const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com';
+          await fetch(`${APP_URL}/api/send-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-internal-key': process.env.INTERNAL_API_KEY },
+            body: JSON.stringify({ type: 'notify', to: process.env.LEGAL_ALERT_EMAIL || 'help@pollslide.com', data: {
+              subject: `🔴 PollSlide status: ${id} is down`,
+              heading: `${id} went down`,
+              body: `Component <b>${id}</b> transitioned ${from} → ${s}.<br>${auto}<br><br>Open the admin health panel for recommended fixes.`,
+              ctaUrl: APP_URL + '/admin', ctaText: 'Open health panel',
+            } }),
+          });
+        } catch (e) { /* alert email is best-effort */ }
+      }
+    }
+  } catch (e) { /* incidents are optional — never fail the status call */ }
+}
+
 async function recordAndLoadHistory(platform) {
   const db = getAdminDb();
   if (!db) return null;
@@ -211,6 +259,7 @@ module.exports = async function handler(req, res) {
   const allUp = platformRows.every(r => r.status === 'up');
   const overall = coreDown ? 'down' : allUp ? 'up' : 'degraded';
 
+  await recordIncidents(platform);
   const uptime = await recordAndLoadHistory(platform);
 
   // Products inherit history from their (hard) dependencies: worst bar per

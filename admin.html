@@ -179,6 +179,9 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
     <div class="nav-item" onclick="showPage('users')" id="nav-users">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Users
     </div>
+    <div class="nav-item" onclick="showPage('teams')" id="nav-teams">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><circle cx="19" cy="11" r="1"/></svg>Teams
+    </div>
     <div class="nav-item" onclick="showPage('tickets')" id="nav-tickets">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Tickets
       <span class="nav-badge hidden" id="ticketBadge">0</span>
@@ -193,6 +196,14 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
     </div>
     <div class="nav-item" onclick="showPage('legal')" id="nav-legal">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Legal actions
+    </div>
+
+    <div class="nav-section">Ops</div>
+    <div class="nav-item" onclick="showPage('health')" id="nav-health">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>System health
+    </div>
+    <div class="nav-item" onclick="showPage('security')" id="nav-security">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Security
     </div>
 
     <div class="nav-section">Product</div>
@@ -256,7 +267,7 @@ const ADMIN_EMAILS=['help@pollslide.com'];
 
 // ─── TIER CONFIG (single source of truth — mirrors presenter.html) ────────────
 const TIER_CONFIG = {
-  free:       { name:'Free',       maxPres:3,  maxPart:25,  aiMonthly:0,   price:0   },
+  free:       { name:'Free',       maxPres:3,  maxPart:25,  aiMonthly:5,   price:0   },
   pro:        { name:'Pro',        maxPres:-1, maxPart:-1,  aiMonthly:20,  price:12  },
   team_small: { name:'Team Small', maxPres:-1, maxPart:-1,  aiMonthly:100, price:39  },
   team_large: { name:'Team Large', maxPres:-1, maxPart:-1,  aiMonthly:300, price:199 },
@@ -334,12 +345,12 @@ function showPage(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const nav=document.getElementById('nav-'+page);if(nav)nav.classList.add('active');
-  const titles={dashboard:'Dashboard',users:'Users',tickets:'Support Tickets',comms:'Send Message',flows:'Message Flows',legal:'Legal Quick Actions',ai:'AI / Polly Management',tiers:'Plans & Tiers',search:'Lookup'};
+  const titles={dashboard:'Dashboard',users:'Users',teams:'Teams',tickets:'Support Tickets',comms:'Send Message',flows:'Message Flows',legal:'Legal Quick Actions',health:'System Health',security:'Security',ai:'AI / Polly Management',tiers:'Plans & Tiers',search:'Lookup'};
   document.getElementById('pageTitle').textContent=titles[page]||page;
   closeDetail();renderPage();
 }
 function renderPage(){
-  const map={dashboard:renderDashboard,users:renderUsers,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,ai:renderAI,tiers:renderTiers,search:renderSearch};
+  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch};
   if(map[currentPage])map[currentPage]();
 }
 
@@ -446,7 +457,7 @@ function renderDetailBody(uid){
     <div class="dp-row"><span class="lbl">Joined</span><span>${u.createdAt?new Date(u.createdAt).toLocaleDateString():'—'}</span></div>
     <div class="dp-row"><span class="lbl">Last seen</span><span>${u.lastSeen?new Date(u.lastSeen).toLocaleString():'—'}</span></div>
     <div class="dp-row"><span class="lbl">Presentations</span><span>${presCount} / ${tier.maxPres>0?tier.maxPres:'∞'}</span></div>
-    ${tier.aiMonthly>=0?`<div class="dp-row"><span class="lbl">AI uses this month</span><span>${aiUsed} / ${tier.aiMonthly>0?tier.aiMonthly:'∞'}</span></div>`:''}
+    <div class="dp-row"><span class="lbl">AI uses this month</span><span>${aiUsed} / ${tier.aiMonthly<0?'∞':tier.aiMonthly}</span></div>
     ${u.flagged?`<div class="dp-row"><span class="lbl">Status</span><span class="pill pill-danger">⚑ Flagged</span></div>`:''}
   </div>
   <div class="dp-sec">
@@ -1149,6 +1160,162 @@ async function syncAllUsers() {
   } catch(e) {
     toast('Sync failed: ' + e.message, 'danger');
   }
+}
+
+// ─── TEAMS ────────────────────────────────────────────────────────────────────
+// Server-authoritative via /api/team admin actions (site admin can manage any
+// workspace). Assign existing users directly, invite, change roles, remove,
+// change tier, or delete a whole workspace.
+let adminWorkspaces=[], adminSeats={team_small:5,team_large:25}, twOpen={};
+function esc(s){return String(s??'').replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));}
+async function adminTeamApi(action,payload){
+  const t=await auth.currentUser.getIdToken();
+  const r=await fetch('/api/team',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify(Object.assign({action},payload||{}))});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+  return d;
+}
+function renderTeams(){
+  document.getElementById('content').innerHTML='<div class="card"><div class="card-hd"><h2>Team workspaces</h2><button class="btn btn-sm btn-ghost" onclick="renderTeams()">↺ Refresh</button></div><div id="teamsBody" style="padding:14px 18px;color:var(--muted);font-size:13px;">Loading workspaces…</div></div>';
+  loadTeamsPage();
+}
+async function loadTeamsPage(){
+  const el=document.getElementById('teamsBody');
+  try{
+    const d=await adminTeamApi('adminList');
+    adminWorkspaces=d.workspaces||[]; adminSeats=d.seats||adminSeats;
+    if(!adminWorkspaces.length){el.innerHTML='No team workspaces yet. One is created automatically the first time a team-tier owner opens “Team admin” in the app.';return;}
+    el.style.padding='0';
+    el.innerHTML='<table><thead><tr><th></th><th>Workspace</th><th>Owner</th><th>Tier</th><th>Seats</th><th>Created</th><th></th></tr></thead><tbody>'+adminWorkspaces.map((w,i)=>{
+      const members=Object.entries(w.members||{}),invites=Object.entries(w.invites||{});
+      const owner=(w.members||{})[w.ownerUid]||{};
+      const used=members.length+invites.length,limit=adminSeats[w.tier]||5;
+      const open=twOpen[w.id];
+      return `<tr style="cursor:pointer;" onclick="twToggle('${w.id}')">
+        <td style="width:24px;color:var(--muted);">${open?'▾':'▸'}</td>
+        <td>${esc(w.name)||'<span style="color:var(--muted)">Unnamed</span>'}</td>
+        <td>${esc(owner.email||w.ownerUid)}</td>
+        <td><span class="pill pill-team">${esc(w.tier)}</span></td>
+        <td>${used} / ${limit}</td>
+        <td>${w.createdAt?timeAgo(w.createdAt):'—'}</td>
+        <td onclick="event.stopPropagation()"><button class="btn btn-xs btn-ghost" style="color:var(--accent2);border-color:var(--accent2);" onclick="twDelete('${w.id}')">Delete</button></td>
+      </tr>`+(open?`<tr><td></td><td colspan="6" style="padding:0 12px 14px;">
+        ${members.map(([uid,m])=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12.5px;">
+          <span style="flex:1;">${esc(m.email)}</span><span class="pill ${m.role==='owner'?'pill-pro':m.role==='admin'?'pill-team':'pill-free'}">${m.role}</span>
+          ${m.role==='member'?`<button class="btn btn-xs btn-ghost" onclick="twSetRole('${w.id}','${uid}','admin')">Make admin</button>`:''}
+          ${m.role==='admin'?`<button class="btn btn-xs btn-ghost" onclick="twSetRole('${w.id}','${uid}','member')">Make member</button>`:''}
+          ${m.role!=='owner'?`<button class="btn btn-xs btn-ghost" onclick="twRemove('${w.id}','${uid}')">Remove</button>`:''}
+        </div>`).join('')}
+        ${invites.map(([k,inv])=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12.5px;opacity:.8;">
+          <span style="flex:1;">✉️ ${esc(inv.email)} <span style="color:var(--muted)">(invited)</span></span><span class="pill pill-free">${inv.role==='admin'?'admin':'member'}</span>
+          <button class="btn btn-xs btn-ghost" onclick="twRevoke('${w.id}','${k}')">Revoke</button>
+        </div>`).join('')}
+        <div style="display:flex;gap:6px;align-items:center;margin-top:10px;flex-wrap:wrap;">
+          <input type="email" id="twEmail_${w.id}" placeholder="user@email.com" style="flex:1;min-width:160px;margin:0;padding:6px 10px;font-size:12.5px;">
+          <select id="twRole_${w.id}" style="margin:0;padding:6px;font-size:12.5px;"><option value="member">Member</option><option value="admin">Admin</option></select>
+          <button class="btn btn-xs btn-ghost" onclick="twAssign('${w.id}',false)">Add existing user</button>
+          <button class="btn btn-xs btn-ghost" onclick="twAssign('${w.id}',true)">Send invite</button>
+          <select onchange="twSetTier('${w.id}',this.value)" style="margin:0;padding:6px;font-size:12.5px;">
+            <option value="">Tier…</option><option value="team_small">Team Small (5)</option><option value="team_large">Team Large (25)</option>
+          </select>
+        </div>
+      </td></tr>`:'');
+    }).join('')+'</tbody></table>';
+  }catch(e){el.innerHTML='Could not load workspaces: '+esc(e.message)+'<br><span style="font-size:12px;">The /api/team endpoint must be deployed and you must be signed in as an admin.</span>';}
+}
+function twToggle(id){twOpen[id]=!twOpen[id];loadTeamsPage();}
+async function twSetRole(wsId,uid,role){try{await adminTeamApi('setRole',{wsId,uid,role});toast('Role updated','success');loadTeamsPage();}catch(e){toast(e.message,'danger');}}
+function twRemove(wsId,uid){showConfirm('Remove member?','They lose team access immediately and drop to the Free plan.',async()=>{try{await adminTeamApi('remove',{wsId,uid});toast('Member removed','success');loadTeamsPage();}catch(e){toast(e.message,'danger');}});}
+async function twRevoke(wsId,k){try{await adminTeamApi('revoke',{wsId,emailKey:k});toast('Invite revoked','success');loadTeamsPage();}catch(e){toast(e.message,'danger');}}
+async function twAssign(wsId,asInvite){
+  const email=(document.getElementById('twEmail_'+wsId).value||'').trim();
+  const role=document.getElementById('twRole_'+wsId).value;
+  if(!email){toast('Enter an email first','danger');return;}
+  try{
+    await adminTeamApi(asInvite?'invite':'adminAssign',{wsId,email,role});
+    toast(asInvite?'Invite sent (they join at next sign-in)':'User added to the team','success');loadTeamsPage();
+  }catch(e){toast(e.message,'danger');}
+}
+async function twSetTier(wsId,tier){if(!tier)return;try{await adminTeamApi('adminSetTier',{wsId,tier});toast('Workspace tier set to '+tier+' (members synced)','success');loadTeamsPage();}catch(e){toast(e.message,'danger');}}
+function twDelete(wsId){showConfirm('Delete this workspace?','All members are detached and drop to Free (the owner keeps their own paid tier). This cannot be undone.',async()=>{try{await adminTeamApi('adminDelete',{wsId});toast('Workspace deleted','success');loadTeamsPage();}catch(e){toast(e.message,'danger');}});}
+
+// ─── SYSTEM HEALTH ────────────────────────────────────────────────────────────
+// Reads the same public /api/status the status page uses + the incident log
+// that api/status.js writes automatically on every component transition.
+const FIX_HINTS={
+  realtime:{down:'Firebase Realtime Database unreachable — live sessions, responses and the companion are down. Check status.firebase.google.com and the Firebase console. No app-side fix.'},
+  ai_text:{degraded:'Local Mac LLM not answering — Polly and translation are auto-served by OpenAI (users unaffected). Fix: wake the M4 Mac (keep it plugged in), check Ollama is running/warm and the Cloudflare tunnel is up.',down:'Neither the local Mac nor OpenAI is reachable. Check OPENAI_API_KEY in Vercel and the Mac tunnel — Polly is down until one returns.'},
+  ai_images:{degraded:'Local image model not answering — images auto-served by the backup provider (users unaffected). Same fix as AI text: Mac + tunnel.',down:'No image provider reachable. Check FAL_KEY / OPENAI_API_KEY in Vercel.'},
+  email:{down:'Resend unreachable or key invalid — receipts, invites and alerts are skipped. Check the Resend dashboard and RESEND_API_KEY in Vercel.'},
+  billing:{down:'Stripe API unreachable or key invalid — checkout and the billing portal will fail (existing subscriptions unaffected). Check status.stripe.com and STRIPE_SECRET_KEY.'},
+  hosting:{down:'If you can read this, hosting is actually up for you — check Vercel status for partial outages.'},
+};
+function renderHealth(){
+  document.getElementById('content').innerHTML=`
+  <div class="card"><div class="card-hd"><h2>Platform components</h2><button class="btn btn-sm btn-ghost" onclick="renderHealth()">↺ Re-check</button></div><div id="healthBody" style="padding:14px 18px;color:var(--muted);font-size:13px;">Probing all systems…</div></div>
+  <div class="card"><div class="card-hd"><h2>Incident log</h2><span style="font-size:11.5px;color:var(--muted);">written automatically on every status change — what happened and what the platform did about it</span></div><div id="incidentBody" style="padding:14px 18px;color:var(--muted);font-size:13px;">Loading…</div></div>`;
+  loadHealth();loadIncidents();
+}
+async function loadHealth(){
+  const el=document.getElementById('healthBody');
+  try{
+    const r=await fetch('/api/status',{cache:'no-store'});
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    const d=await r.json();
+    const plat=(d.components||[]).filter(c=>c.group==='platform');
+    const pill=s=>`<span class="pill ${s==='up'?'pill-team':s==='degraded'?'pill-pro':'pill-danger'}">${s==='up'?'operational':s}</span>`;
+    el.style.padding='0';
+    el.innerHTML='<table><thead><tr><th>Component</th><th>Status</th><th>What to do</th></tr></thead><tbody>'+plat.map(c=>{
+      const hint=c.status!=='up'?((FIX_HINTS[c.id]||{})[c.status]||c.note||''):'—';
+      return `<tr><td>${esc(c.name)}</td><td>${pill(c.status)}</td><td style="font-size:12px;max-width:480px;white-space:normal;">${esc(hint)}</td></tr>`;
+    }).join('')+`</tbody></table><div style="padding:10px 18px;font-size:11.5px;color:var(--muted);">Overall: ${esc(d.overall)} · checked ${new Date(d.checkedAt).toLocaleTimeString()} · public page: <a href="https://pollslide.com/status" target="_blank" style="color:var(--accent);">pollslide.com/status</a></div>`;
+  }catch(e){el.innerHTML='Could not reach /api/status: '+esc(e.message)+' — deploy the app repo first.';}
+}
+async function loadIncidents(){
+  const el=document.getElementById('incidentBody');
+  try{
+    const snap=await db.ref('admin/incidents').orderByKey().limitToLast(50).get();
+    const rows=[];snap.forEach(s=>{rows.push(s.val());});rows.reverse();
+    if(!rows.length){el.textContent='No incidents recorded yet — that\'s a good thing. Transitions (up ⇄ degraded ⇄ down) will appear here automatically.';return;}
+    el.style.padding='0';
+    el.innerHTML='<table><thead><tr><th>When</th><th>Component</th><th>Change</th><th>Automatic action</th></tr></thead><tbody>'+rows.map(i=>
+      `<tr><td style="white-space:nowrap;">${timeAgo(i.t)}</td><td>${esc(i.comp)}</td><td>${esc(i.from)} → <b>${esc(i.to)}</b></td><td style="font-size:12px;white-space:normal;max-width:460px;">${esc(i.auto)}</td></tr>`).join('')+'</tbody></table>';
+  }catch(e){el.textContent='Could not read the incident log: '+e.message;}
+}
+
+// ─── SECURITY ─────────────────────────────────────────────────────────────────
+// Runs /api/security-status: config checks, safe auto-fixes (orphaned invites,
+// stale rate-limit rows) and a logged report of what it found and fixed.
+function renderSecurity(){
+  document.getElementById('content').innerHTML=`
+  <div class="card"><div class="card-hd"><h2>Security scan</h2><button class="btn btn-sm btn-ghost" onclick="renderSecurity()">▶ Run again</button></div><div id="secBody" style="padding:14px 18px;color:var(--muted);font-size:13px;">Running checks and safe auto-fixes…</div></div>
+  <div class="card"><div class="card-hd"><h2>Scan history</h2></div><div id="secLog" style="padding:14px 18px;color:var(--muted);font-size:13px;">Loading…</div></div>`;
+  runSecurityScan();loadSecurityLog();
+}
+async function runSecurityScan(){
+  const el=document.getElementById('secBody');
+  try{
+    const t=await auth.currentUser.getIdToken();
+    const r=await fetch('/api/security-status',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t}});
+    const d=await r.json();
+    if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
+    const sevPill=s=>`<span class="pill ${s==='high'?'pill-danger':s==='warn'?'pill-pro':'pill-free'}">${s}</span>`;
+    el.innerHTML=
+      `<div style="margin-bottom:12px;font-weight:600;color:${d.ok?'var(--accent3)':'var(--accent2)'};">${d.ok?'✓ No high-severity issues':'✗ High-severity issues need attention'}</div>`
+      +(d.fixed&&d.fixed.length?`<div style="margin-bottom:12px;"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--accent3);margin-bottom:6px;">Auto-fixed this run</div>${d.fixed.map(f=>`<div style="font-size:12.5px;padding:4px 0;">🔧 ${esc(f)}</div>`).join('')}</div>`:'<div style="margin-bottom:12px;font-size:12.5px;">Nothing needed auto-fixing this run.</div>')
+      +(d.issues&&d.issues.length?`<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:6px;">Needs a human</div>`+d.issues.map(i=>`<div style="padding:8px 0;border-top:1px solid var(--border);font-size:12.5px;">${sevPill(i.sev)} ${esc(i.what)}<div style="color:var(--muted);margin-top:2px;">→ ${esc(i.fix)}</div></div>`).join(''):'<div style="font-size:12.5px;">No open issues. 🎉</div>');
+  }catch(e){el.innerHTML='Scan failed: '+esc(e.message)+'<br><span style="font-size:12px;">The /api/security-status endpoint must be deployed and you must be signed in as an admin.</span>';}
+}
+async function loadSecurityLog(){
+  const el=document.getElementById('secLog');
+  try{
+    const snap=await db.ref('admin/security_log').orderByKey().limitToLast(20).get();
+    const rows=[];snap.forEach(s=>{rows.push(s.val());});rows.reverse();
+    if(!rows.length){el.textContent='No previous scans.';return;}
+    el.style.padding='0';
+    el.innerHTML='<table><thead><tr><th>When</th><th>By</th><th>High</th><th>Warn</th><th>Auto-fixed</th></tr></thead><tbody>'+rows.map(x=>
+      `<tr><td>${timeAgo(x.t)}</td><td>${esc(x.by)}</td><td>${x.high||0}</td><td>${x.warn||0}</td><td style="font-size:12px;white-space:normal;">${x.fixed?esc(x.fixed.join(' · ')):'—'}</td></tr>`).join('')+'</tbody></table>';
+  }catch(e){el.textContent='Could not read scan history: '+e.message;}
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
