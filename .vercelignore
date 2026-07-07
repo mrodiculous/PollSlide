@@ -1,0 +1,2 @@
+# Server-side only — never deploy/serve these as static assets on the app domain.
+converter-service

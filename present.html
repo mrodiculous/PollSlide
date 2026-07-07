@@ -137,6 +137,8 @@
   .qr-card{position:absolute;right:5%;bottom:7%;width:13cqw;background:#fff;padding:1.1cqw;border-radius:1.6cqw;text-align:center;box-shadow:0 12px 36px rgba(0,0,0,.45);}
   .qr-card .qrbox canvas,.qr-card .qrbox img{width:100%!important;height:auto!important;display:block;}
   .qr-card .qrl{font-family:'DM Sans',sans-serif;font-weight:700;font-size:1.35cqw;color:#0b0b15;margin-top:.7cqw;}
+  .qr-card .qrn{font-family:'DM Sans',sans-serif;font-weight:500;font-size:0.95cqw;color:#555;margin-top:.4cqw;line-height:1.35;}
+  .qr-card .qrn b{color:#0b0b15;}
   .placeholder-q{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;}
   .s-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;}
   .s-bg-dim{position:absolute;inset:0;background:#000;z-index:0;}
@@ -549,7 +551,8 @@ const LANG_NAMES = { en:'English', es:'Español', de:'Deutsch', fr:'Français', 
 let LANG = localStorage.getItem('ps_user_lang')||'en'; if(!LANG_NAMES[LANG]) LANG='en';
 const I18N = { en:{
   'present.live':'● LIVE', 'present.revealed':'✓ Answer revealed', 'present.waiting':'Waiting for responses…',
-  'present.responses':'{n} responses', 'present.flip':'Press → to flip', 'present.scan':'Scan to answer'
+  'present.responses':'{n} responses', 'present.flip':'Press → to flip', 'present.scan':'Scan to answer',
+  'present.nocam':'No camera?'
 }, es:{}, de:{}, fr:{}, pt:{}, it:{} };
 function t(k,v){ let s=(I18N[LANG]&&I18N[LANG][k])||I18N.en[k]||k; if(v)for(const x in v)s=s.replace('{'+x+'}',v[x]); return s; }
 function initLang(){ const sel=document.getElementById('langSel'); sel.innerHTML=Object.entries(LANG_NAMES).map(([c,n])=>`<option value="${c}" ${c===LANG?'selected':''}>${n}</option>`).join(''); }
@@ -827,7 +830,10 @@ function setSlideTheme(v){ const s=deck.slides[currentIdx]; if(!s)return; pushUn
 // QR caption tells the truth: live → "Scan to answer"; not yet published → why.
 function qrLabel(s){ if(s.question&&s.question.sessionCode) return t('present.scan');
   return (typeof userId!=='undefined'&&userId) ? 'Activating…' : 'Sign in to activate'; }
-function qrCard(s){ return hasQR(s) ? `<div class="qr-card"><div class="qrbox"></div><div class="qrl">${qrLabel(s)}</div></div>` : ''; }
+function qrCard(s){ if(!hasQR(s)) return '';
+  const c = s.question && s.question.sessionCode;   // laptop path: type the code at the answer URL
+  const nocam = c ? `<div class="qrn">${t('present.nocam')} <b>app.pollslide.com/answer</b><br>· ${c} ·</div>` : '';
+  return `<div class="qr-card"><div class="qrbox"></div><div class="qrl">${qrLabel(s)}</div>${nocam}</div>`; }
 function answerUrl(s){ const c=s.question&&s.question.sessionCode; const i=(s.question&&s.question.qIndex)||0;
   if(!c) return 'https://app.pollslide.com/answer';
   if(s.kind==='qa') return 'https://app.pollslide.com/answer#'+c+'/qa';   // Slido-style ask+upvote page (answer.html qa mode)

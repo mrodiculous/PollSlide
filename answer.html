@@ -234,11 +234,11 @@ function render(html) { document.getElementById('app').innerHTML = html; }
 // ── i18n: the audience page matches the deck's language (set by the presenter) ──
 let LANG = 'en';
 const I18N = {
-  es:{enterName:'Escribe tu nombre',nameOnce:'Solo necesitas hacerlo una vez por sesión.',yourName:'Tu nombre',continue:'Continuar →',enterNamePlease:'Por favor, escribe tu nombre.',submitAnswer:'Enviar respuesta',submitRating:'Enviar valoración',submitAnswers:'Enviar respuestas',submitted:'✓ ¡Enviado!',alreadyAnswered:'¡Ya respondiste esta pregunta!',selectAll:'✓ Marca todas las que correspondan',submitSurvey:'Enviar encuesta',submitQuiz:'Enviar y ver puntuación',thankYou:'¡Gracias!',recorded:'Tus respuestas se han guardado.',qaTitle:'Preguntas del público',qaSub:'Haz una pregunta — o vota las que quieras que respondan.',ask:'Preguntar',typeQuestion:'Escribe tu pregunta…',loading:'Cargando…',responses:'respuestas',question:'Pregunta'},
-  de:{enterName:'Gib deinen Namen ein',nameOnce:'Nur einmal pro Sitzung nötig.',yourName:'Dein Name',continue:'Weiter →',enterNamePlease:'Bitte gib deinen Namen ein.',submitAnswer:'Antwort senden',submitRating:'Bewertung senden',submitAnswers:'Antworten senden',submitted:'✓ Gesendet!',alreadyAnswered:'Du hast diese Frage bereits beantwortet!',selectAll:'✓ Alle Zutreffenden auswählen',submitSurvey:'Umfrage senden',submitQuiz:'Senden & Punktzahl ansehen',thankYou:'Danke!',recorded:'Deine Antworten wurden gespeichert.',qaTitle:'Publikumsfragen',qaSub:'Stelle eine Frage — oder stimme für andere ab.',ask:'Fragen',typeQuestion:'Schreibe deine Frage…',loading:'Lädt…',responses:'Antworten',question:'Frage'},
-  fr:{enterName:'Entrez votre nom',nameOnce:'À faire une seule fois par session.',yourName:'Votre nom',continue:'Continuer →',enterNamePlease:'Veuillez entrer votre nom.',submitAnswer:'Envoyer la réponse',submitRating:'Envoyer la note',submitAnswers:'Envoyer les réponses',submitted:'✓ Envoyé !',alreadyAnswered:'Vous avez déjà répondu à cette question !',selectAll:'✓ Sélectionnez tout ce qui s’applique',submitSurvey:'Envoyer le sondage',submitQuiz:'Envoyer et voir le score',thankYou:'Merci !',recorded:'Vos réponses ont été enregistrées.',qaTitle:'Questions du public',qaSub:'Posez une question — ou votez pour celles à traiter.',ask:'Demander',typeQuestion:'Écrivez votre question…',loading:'Chargement…',responses:'réponses',question:'Question'},
-  pt:{enterName:'Digite seu nome',nameOnce:'Só precisa fazer isso uma vez por sessão.',yourName:'Seu nome',continue:'Continuar →',enterNamePlease:'Por favor, digite seu nome.',submitAnswer:'Enviar resposta',submitRating:'Enviar avaliação',submitAnswers:'Enviar respostas',submitted:'✓ Enviado!',alreadyAnswered:'Você já respondeu a esta pergunta!',selectAll:'✓ Marque todas as aplicáveis',submitSurvey:'Enviar pesquisa',submitQuiz:'Enviar e ver pontuação',thankYou:'Obrigado!',recorded:'Suas respostas foram registradas.',qaTitle:'Perguntas do público',qaSub:'Faça uma pergunta — ou vote nas que quer ver respondidas.',ask:'Perguntar',typeQuestion:'Escreva sua pergunta…',loading:'Carregando…',responses:'respostas',question:'Pergunta'},
-  it:{enterName:'Inserisci il tuo nome',nameOnce:'Da fare una sola volta per sessione.',yourName:'Il tuo nome',continue:'Continua →',enterNamePlease:'Inserisci il tuo nome.',submitAnswer:'Invia risposta',submitRating:'Invia valutazione',submitAnswers:'Invia risposte',submitted:'✓ Inviato!',alreadyAnswered:'Hai già risposto a questa domanda!',selectAll:'✓ Seleziona tutte quelle pertinenti',submitSurvey:'Invia sondaggio',submitQuiz:'Invia e vedi punteggio',thankYou:'Grazie!',recorded:'Le tue risposte sono state registrate.',qaTitle:'Domande del pubblico',qaSub:'Fai una domanda — o vota quelle da trattare.',ask:'Chiedi',typeQuestion:'Scrivi la tua domanda…',loading:'Caricamento…',responses:'risposte',question:'Domanda'},
+  es:{enterName:'Escribe tu nombre',nameOnce:'Solo necesitas hacerlo una vez por sesión.',yourName:'Tu nombre',continue:'Continuar →',enterNamePlease:'Por favor, escribe tu nombre.',submitAnswer:'Enviar respuesta',submitRating:'Enviar valoración',submitAnswers:'Enviar respuestas',submitted:'✓ ¡Enviado!',alreadyAnswered:'¡Ya respondiste esta pregunta!',selectAll:'✓ Marca todas las que correspondan',submitSurvey:'Enviar encuesta',submitQuiz:'Enviar y ver puntuación',thankYou:'¡Gracias!',recorded:'Tus respuestas se han guardado.',qaTitle:'Preguntas del público',qaSub:'Haz una pregunta — o vota las que quieras que respondan.',ask:'Preguntar',typeQuestion:'Escribe tu pregunta…',loading:'Cargando…',responses:'respuestas',question:'Pregunta',typeAnswer:'Escribe tu respuesta…',tapToFlip:'TOCA PARA GIRAR',answerFace:'RESPUESTA',showAnswer:'Mostrar respuesta',again:'Otra vez',hard:'Difícil',good:'Bien',easy:'Fácil',yourAnswer:'Tu respuesta',correctWas:'Correcta',skipped:'(omitida)',joinTitle:'Únete a una sesión',joinSub:'Escribe el código que aparece junto al código QR.',joinBtn:'Unirse →',joinShort:'Ese código parece demasiado corto: revísalo e inténtalo de nuevo.',joinNotFound:'No se encontró ninguna sesión con ese código. Verifícalo con tu presentador.',joinFail:'No se pudo comprobar el código: revisa tu conexión.'},
+  de:{enterName:'Gib deinen Namen ein',nameOnce:'Nur einmal pro Sitzung nötig.',yourName:'Dein Name',continue:'Weiter →',enterNamePlease:'Bitte gib deinen Namen ein.',submitAnswer:'Antwort senden',submitRating:'Bewertung senden',submitAnswers:'Antworten senden',submitted:'✓ Gesendet!',alreadyAnswered:'Du hast diese Frage bereits beantwortet!',selectAll:'✓ Alle Zutreffenden auswählen',submitSurvey:'Umfrage senden',submitQuiz:'Senden & Punktzahl ansehen',thankYou:'Danke!',recorded:'Deine Antworten wurden gespeichert.',qaTitle:'Publikumsfragen',qaSub:'Stelle eine Frage — oder stimme für andere ab.',ask:'Fragen',typeQuestion:'Schreibe deine Frage…',loading:'Lädt…',responses:'Antworten',question:'Frage',typeAnswer:'Schreibe deine Antwort…',tapToFlip:'ZUM UMDREHEN TIPPEN',answerFace:'ANTWORT',showAnswer:'Antwort zeigen',again:'Nochmal',hard:'Schwer',good:'Gut',easy:'Leicht',yourAnswer:'Deine Antwort',correctWas:'Richtig',skipped:'(übersprungen)',joinTitle:'Sitzung beitreten',joinSub:'Gib den Code ein, der neben dem QR-Code angezeigt wird.',joinBtn:'Beitreten →',joinShort:'Dieser Code sieht zu kurz aus — prüfe ihn und versuche es erneut.',joinNotFound:'Keine Sitzung mit diesem Code gefunden — frag deinen Präsentator.',joinFail:'Code konnte nicht geprüft werden — prüfe deine Verbindung.'},
+  fr:{enterName:'Entrez votre nom',nameOnce:'À faire une seule fois par session.',yourName:'Votre nom',continue:'Continuer →',enterNamePlease:'Veuillez entrer votre nom.',submitAnswer:'Envoyer la réponse',submitRating:'Envoyer la note',submitAnswers:'Envoyer les réponses',submitted:'✓ Envoyé !',alreadyAnswered:'Vous avez déjà répondu à cette question !',selectAll:'✓ Sélectionnez tout ce qui s’applique',submitSurvey:'Envoyer le sondage',submitQuiz:'Envoyer et voir le score',thankYou:'Merci !',recorded:'Vos réponses ont été enregistrées.',qaTitle:'Questions du public',qaSub:'Posez une question — ou votez pour celles à traiter.',ask:'Demander',typeQuestion:'Écrivez votre question…',loading:'Chargement…',responses:'réponses',question:'Question',typeAnswer:'Écrivez votre réponse…',tapToFlip:'TOUCHEZ POUR RETOURNER',answerFace:'RÉPONSE',showAnswer:'Voir la réponse',again:'Encore',hard:'Difficile',good:'Bien',easy:'Facile',yourAnswer:'Votre réponse',correctWas:'Bonne réponse',skipped:'(passée)',joinTitle:'Rejoindre une session',joinSub:'Saisissez le code affiché à côté du QR code.',joinBtn:'Rejoindre →',joinShort:'Ce code semble trop court — vérifiez-le et réessayez.',joinNotFound:'Aucune session trouvée avec ce code — vérifiez auprès de votre présentateur.',joinFail:'Impossible de vérifier le code — vérifiez votre connexion.'},
+  pt:{enterName:'Digite seu nome',nameOnce:'Só precisa fazer isso uma vez por sessão.',yourName:'Seu nome',continue:'Continuar →',enterNamePlease:'Por favor, digite seu nome.',submitAnswer:'Enviar resposta',submitRating:'Enviar avaliação',submitAnswers:'Enviar respostas',submitted:'✓ Enviado!',alreadyAnswered:'Você já respondeu a esta pergunta!',selectAll:'✓ Marque todas as aplicáveis',submitSurvey:'Enviar pesquisa',submitQuiz:'Enviar e ver pontuação',thankYou:'Obrigado!',recorded:'Suas respostas foram registradas.',qaTitle:'Perguntas do público',qaSub:'Faça uma pergunta — ou vote nas que quer ver respondidas.',ask:'Perguntar',typeQuestion:'Escreva sua pergunta…',loading:'Carregando…',responses:'respostas',question:'Pergunta',typeAnswer:'Digite sua resposta…',tapToFlip:'TOQUE PARA VIRAR',answerFace:'RESPOSTA',showAnswer:'Mostrar resposta',again:'De novo',hard:'Difícil',good:'Bom',easy:'Fácil',yourAnswer:'Sua resposta',correctWas:'Correta',skipped:'(pulada)',joinTitle:'Entrar em uma sessão',joinSub:'Digite o código exibido ao lado do QR code.',joinBtn:'Entrar →',joinShort:'Esse código parece curto demais — confira e tente novamente.',joinNotFound:'Nenhuma sessão encontrada com esse código — confirme com seu apresentador.',joinFail:'Não foi possível verificar o código — verifique sua conexão.'},
+  it:{enterName:'Inserisci il tuo nome',nameOnce:'Da fare una sola volta per sessione.',yourName:'Il tuo nome',continue:'Continua →',enterNamePlease:'Inserisci il tuo nome.',submitAnswer:'Invia risposta',submitRating:'Invia valutazione',submitAnswers:'Invia risposte',submitted:'✓ Inviato!',alreadyAnswered:'Hai già risposto a questa domanda!',selectAll:'✓ Seleziona tutte quelle pertinenti',submitSurvey:'Invia sondaggio',submitQuiz:'Invia e vedi punteggio',thankYou:'Grazie!',recorded:'Le tue risposte sono state registrate.',qaTitle:'Domande del pubblico',qaSub:'Fai una domanda — o vota quelle da trattare.',ask:'Chiedi',typeQuestion:'Scrivi la tua domanda…',loading:'Caricamento…',responses:'risposte',question:'Domanda',typeAnswer:'Scrivi la tua risposta…',tapToFlip:'TOCCA PER GIRARE',answerFace:'RISPOSTA',showAnswer:'Mostra risposta',again:'Di nuovo',hard:'Difficile',good:'Bene',easy:'Facile',yourAnswer:'La tua risposta',correctWas:'Corretta',skipped:'(saltata)',joinTitle:'Partecipa a una sessione',joinSub:'Digita il codice mostrato accanto al codice QR.',joinBtn:'Partecipa →',joinShort:'Questo codice sembra troppo corto — controllalo e riprova.',joinNotFound:'Nessuna sessione trovata con questo codice — verifica con il tuo presentatore.',joinFail:'Impossibile verificare il codice — controlla la connessione.'},
 };
 function t(key, fallback){ return (I18N[LANG] && I18N[LANG][key]) || fallback; }
 
@@ -276,12 +276,22 @@ async function translateTexts(texts){
 }
 
 // Translate a question's visible text + option labels in place (safe: indices unchanged).
+// Covers every content field a card can carry: question text, flashcard front AND back
+// (the back is the study answer — it must follow the viewer's language too), and the
+// rating scale's end labels. One batch per question so it's a single API round-trip.
 async function translateQuestion(q){
   if (!q || LANG === DECK_LANG) return q;
   const opts = q.options || [];
-  const tr = await translateTexts([ q.text || q.front || '', ...opts.map(o => o.text || '') ]);
-  if (q.front != null) q.front = tr[0]; else q.text = tr[0];
-  opts.forEach((o,i) => { o.text = tr[i+1]; });
+  const labels = q.ratingLabels || {};
+  const tr = await translateTexts([ q.text || '', q.front || '', q.back || '',
+                                    labels.low || '', labels.high || '',
+                                    ...opts.map(o => o.text || '') ]);
+  if (q.text)      q.text      = tr[0];
+  if (q.front)     q.front     = tr[1];
+  if (q.back)      q.back      = tr[2];
+  if (labels.low)  labels.low  = tr[3];
+  if (labels.high) labels.high = tr[4];
+  opts.forEach((o,i) => { o.text = tr[i+5]; });
   return q;
 }
 
@@ -310,23 +320,22 @@ function setViewerLang(code){
 
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
 async function bootApp() {
-  if (!SESSION) {
-    render(`
-      <a href="https://pollslide.com" class="logo" style="text-decoration:none;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</a>
-      <div class="status-box error">Invalid link. Please scan the correct QR code.</div>
-      <p class="center" style="color:var(--muted);font-size:13px;">Ask the presenter for the right QR code.</p>
-    `);
-    return;
-  }
+  // Pick the viewer's chrome language early — the join screen needs it too.
+  let saved = null; try { saved = localStorage.getItem('ql_viewer_lang'); } catch(e){}
+  const navL = (navigator.language || 'en').slice(0,2).toLowerCase();
+  LANG = (saved && LANGUAGES[saved]) ? saved : (LANGUAGES[navL] ? navL : 'en');
+
+  // No session in the URL → laptop/desktop users without a camera land here.
+  // Give them a join-by-code screen instead of a dead end.
+  if (!SESSION) { showJoinByCode(); return; }
 
   // Load the deck's (source) language first.
   try { const s = await db.ref(`quiz_builder/${SESSION}/language`).get(); if (s.exists() && s.val()) DECK_LANG = String(s.val()); } catch(e) {}
 
   // The viewer reads in: their saved choice → their browser language (if supported) → the deck language.
-  let saved = null; try { saved = localStorage.getItem('ql_viewer_lang'); } catch(e){}
-  const navL = (navigator.language || 'en').slice(0,2).toLowerCase();
   LANG = (saved && LANGUAGES[saved]) ? saved : (LANGUAGES[navL] ? navL : DECK_LANG);
   mountLangSelector();
+  followLive();  // code-joiners hop along when the presenter advances the live question
 
   // Restore identity from localStorage (persists across tabs / fresh QR scans within the same presentation)
   const storedId   = localStorage.getItem(`ql_pid_${SESSION}`);
@@ -338,6 +347,78 @@ async function bootApp() {
   } else {
     showNameEntry();
   }
+}
+
+// ─── JOIN BY CODE (no camera needed) ─────────────────────────────────────────
+// Laptop/desktop participants can't scan a QR. They open the answer page with no
+// session in the URL, type the code shown next to the presenter's QR, and get
+// routed exactly like a scan would: live question if one is running, otherwise
+// the whole set as a self-paced form (survey / quiz / study).
+function showJoinByCode(errMsg){
+  render(`
+    <a href="https://pollslide.com" class="logo" style="text-decoration:none;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</a>
+    <div style="text-align:center;padding:8px 0 4px;">
+      <div style="font-size:40px;margin-bottom:10px;">🎟️</div>
+      <h1 style="margin-bottom:6px;">${t('joinTitle','Join a session')}</h1>
+      <p class="subtitle">${t('joinSub','Type the session code shown next to the QR code.')}</p>
+    </div>
+    <input type="text" id="joinCode" maxlength="10" placeholder="ABC1234" autocomplete="off" autocapitalize="characters" spellcheck="false"
+           style="text-transform:uppercase;text-align:center;letter-spacing:0.18em;font-weight:700;font-size:20px;" autofocus>
+    <button class="btn btn-primary" id="joinBtn" onclick="joinByCode()" style="width:100%;justify-content:center;">${t('joinBtn','Join →')}</button>
+    <p id="joinErr" style="color:var(--accent2);font-size:13px;min-height:16px;text-align:center;margin-top:10px;">${errMsg||''}</p>
+  `);
+  const inp = document.getElementById('joinCode');
+  if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') joinByCode(); });
+}
+
+async function joinByCode(){
+  const inp = document.getElementById('joinCode');
+  const err = document.getElementById('joinErr');
+  const btn = document.getElementById('joinBtn');
+  const code = String((inp && inp.value) || '').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if (code.length < 4) { err.textContent = t('joinShort','That code looks too short — check it and try again.'); return; }
+  err.textContent = '';
+  if (inp) inp.disabled = true;
+  if (btn) { btn.disabled = true; btn.textContent = t('loading','Loading…'); }
+  try {
+    const snap = await db.ref(`quiz_builder/${code}/questions`).get();
+    if (!snap.exists()) {
+      if (inp) inp.disabled = false;
+      if (btn) { btn.disabled = false; btn.textContent = t('joinBtn','Join →'); }
+      err.textContent = t('joinNotFound','No session found with that code — double-check with your presenter.');
+      return;
+    }
+    // Presenter mid-presentation? Join the question that's live right now.
+    let dest = '#' + code;
+    try {
+      const cur = await db.ref(`sessions/${code}/currentQuestion`).get();
+      const cq = cur.exists() ? cur.val() : null;
+      if (cq && cq.status === 'active' && cq.qIndex != null && Number(cq.qIndex) >= 0) dest = '#' + code + '/' + Number(cq.qIndex);
+    } catch(e){}
+    // Remember this tab joined by code → follow the presenter when they advance.
+    try { sessionStorage.setItem('ql_follow_' + code, '1'); } catch(e){}
+    location.hash = dest;                       // hashchange listener reloads into the session
+    setTimeout(() => location.reload(), 250);   // belt & braces if the listener didn't fire
+  } catch(e) {
+    if (inp) inp.disabled = false;
+    if (btn) { btn.disabled = false; btn.textContent = t('joinBtn','Join →'); }
+    err.textContent = t('joinFail','Could not check that code — check your connection.');
+  }
+}
+
+// Code-joiners can't rescan a new QR when the presenter moves to the next
+// question — follow the live pointer instead and hop automatically. QR scanners
+// keep today's behavior (they stay on the question they scanned).
+function followLive(){
+  if (QA_MODE || SURVEY_MODE || isNaN(Q_INDEX) || Q_INDEX < 0) return;
+  let follow = false; try { follow = sessionStorage.getItem('ql_follow_' + SESSION) === '1'; } catch(e){}
+  if (!follow) return;
+  db.ref(`sessions/${SESSION}/currentQuestion/qIndex`).on('value', snap => {
+    const idx = snap.exists() ? Number(snap.val()) : NaN;
+    if (!isNaN(idx) && idx >= 0 && idx !== Q_INDEX) {
+      location.hash = SESSION + '/' + idx;   // hashchange listener reloads into the new question
+    }
+  });
 }
 
 // ─── NAME ENTRY ───────────────────────────────────────────────────────────────
@@ -751,7 +832,7 @@ function surveyQuestionBody(q, idx) {
   const isText   = q.type === 'free_text';
   const isRating = q.type === 'rating';
   if (isText) {
-    return `<textarea id="sq${idx}_txt" placeholder="Type your answer…" oninput="surveyAnswers[${idx}]=this.value.trim()" style="margin-bottom:0;"></textarea>`;
+    return `<textarea id="sq${idx}_txt" placeholder="${t('typeAnswer','Type your answer…')}" oninput="surveyAnswers[${idx}]=this.value.trim()" style="margin-bottom:0;"></textarea>`;
   }
   if (isRating) {
     const max = q.ratingMax || 5;
@@ -764,7 +845,7 @@ function surveyQuestionBody(q, idx) {
   }
   // single or multi choice
   return `
-    ${isMulti ? '<p class="multi-hint">✓ Select all that apply</p>' : ''}
+    ${isMulti ? `<p class="multi-hint">${t('selectAll','✓ Select all that apply')}</p>` : ''}
     <div class="options-grid">
       ${(q.options||[]).map((opt,i) => {
         const hasImg = opt.img && opt.img.trim();
@@ -897,10 +978,10 @@ function showSurveyDone(already) {
 
 // ─── QUIZ SCORE (gamified, shareable — the QuizSlide payoff) ──────────────────
 function answerLabel(q, answer) {
-  if (answer === undefined || answer === null) return '<span style="opacity:0.6;">(skipped)</span>';
+  if (answer === undefined || answer === null) return `<span style="opacity:0.6;">${t('skipped','(skipped)')}</span>`;
   if (q.type === 'multiple_choice' || q.type === 'multiple_choice_multi') {
     const arr = Array.isArray(answer) ? answer : [answer];
-    return arr.map(i => SURVEY_LETTERS[i] + '. ' + ((q.options||[])[i]?.text || '')).join(', ') || '(skipped)';
+    return arr.map(i => SURVEY_LETTERS[i] + '. ' + ((q.options||[])[i]?.text || '')).join(', ') || t('skipped','(skipped)');
   }
   if (q.type === 'rating') return String(answer);
   return String(answer);
@@ -929,8 +1010,8 @@ function showQuizScore() {
         <div style="color:${color};font-weight:800;font-size:16px;flex-shrink:0;width:18px;">${icon}</div>
         <div style="min-width:0;flex:1;">
           <div style="font-size:13px;font-weight:600;margin-bottom:2px;">${idx+1}. ${q.text||''}</div>
-          ${isGradable ? `<div style="font-size:12px;color:var(--muted);">Your answer: ${answerLabel(q, ans)}</div>` : `<div style="font-size:12px;color:var(--muted);">${answerLabel(q, ans)}</div>`}
-          ${showCorrect ? `<div style="font-size:12px;color:var(--accent3,#22c55e);">Correct: ${correctLabel(q)}</div>` : ''}
+          ${isGradable ? `<div style="font-size:12px;color:var(--muted);">${t('yourAnswer','Your answer')}: ${answerLabel(q, ans)}</div>` : `<div style="font-size:12px;color:var(--muted);">${answerLabel(q, ans)}</div>`}
+          ${showCorrect ? `<div style="font-size:12px;color:var(--accent3,#22c55e);">${t('correctWas','Correct')}: ${correctLabel(q)}</div>` : ''}
         </div>
       </div>`;
   }).join('');
@@ -1056,11 +1137,11 @@ function showStudyCard() {
     </div>
     <div class="study-card" id="studyCard" onclick="flipStudyCard()">
       <button class="study-speak" onclick="event.stopPropagation();speakCard()" title="Read aloud">🔊</button>
-      <div class="study-face-label" id="studyFaceLabel">TAP TO FLIP</div>
+      <div class="study-face-label" id="studyFaceLabel">${t('tapToFlip','TAP TO FLIP')}</div>
       <div class="study-front" id="studyText">${card.front}</div>
     </div>
     <div id="studyControls">
-      <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="flipStudyCard()">Show Answer</button>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="flipStudyCard()">${t('showAnswer','Show Answer')}</button>
     </div>
   `);
 }
@@ -1071,14 +1152,14 @@ function flipStudyCard() {
   const idx = studyQueue[0];
   const card = studyCardByIdx(idx);
   document.getElementById('studyText').innerHTML = card.back;
-  document.getElementById('studyFaceLabel').textContent = 'ANSWER';
+  document.getElementById('studyFaceLabel').textContent = t('answerFace','ANSWER');
   document.getElementById('studyCard').classList.add('flipped');
   document.getElementById('studyControls').innerHTML = `
     <div class="study-rate">
-      <button class="study-rate-btn again" onclick="rateCard('again')">Again<span>&lt;1m</span></button>
-      <button class="study-rate-btn hard"  onclick="rateCard('hard')">Hard<span>1d</span></button>
-      <button class="study-rate-btn good"  onclick="rateCard('good')">Good<span>≈3d</span></button>
-      <button class="study-rate-btn easy"  onclick="rateCard('easy')">Easy<span>≈7d</span></button>
+      <button class="study-rate-btn again" onclick="rateCard('again')">${t('again','Again')}<span>&lt;1m</span></button>
+      <button class="study-rate-btn hard"  onclick="rateCard('hard')">${t('hard','Hard')}<span>1d</span></button>
+      <button class="study-rate-btn good"  onclick="rateCard('good')">${t('good','Good')}<span>≈3d</span></button>
+      <button class="study-rate-btn easy"  onclick="rateCard('easy')">${t('easy','Easy')}<span>≈7d</span></button>
     </div>`;
 }
 

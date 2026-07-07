@@ -6153,6 +6153,7 @@ function renderPresentSlide(idx) {
       <div style="font-size:11px;font-weight:700;color:var(--p-55);text-align:center;letter-spacing:0.04em;line-height:1.4;max-width:130px;">Scan with Phone Camera to Answer</div>
       <div id="${qrId}" style="background:var(--p-text);border-radius:10px;padding:8px;width:116px;height:116px;flex-shrink:0;"></div>
       <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--p-25);text-align:center;word-break:break-all;max-width:110px;line-height:1.5;">${qUrl}</div>
+      <div style="font-size:10px;color:var(--p-55);text-align:center;line-height:1.5;max-width:130px;">No camera? Go to<br><b style="color:var(--p-90);">app.pollslide.com/answer</b><br>code <b style="color:var(--accent);letter-spacing:0.08em;">${presentations[activePresId]?.sessionCode||''}</b></div>
     </div>`;
 
   container.innerHTML = `

@@ -23,12 +23,12 @@ const RETAIN_MS       = 7 * 24 * 3600 * 1000; // keep 7 days of samples
 // ── Probes ───────────────────────────────────────────────────────────────────
 // Each probe resolves to 'up' | 'degraded' | 'down' (+ optional note). None throw.
 
-async function httpProbe(url, { headers = {}, timeoutMs = 4500, anyResponseIsUp = false } = {}) {
+async function httpProbe(url, { method = 'GET', body, headers = {}, timeoutMs = 4500, anyResponseIsUp = false } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const r = await fetch(url, { headers, signal: controller.signal });
-    if (anyResponseIsUp) return { ok: true };          // service answered at all (401 etc. still proves it's serving)
+    const r = await fetch(url, { method, body, headers, signal: controller.signal });
+    if (anyResponseIsUp) return { ok: true, status: r.status }; // service answered at all (401 etc. still proves it's serving)
     return { ok: r.ok, status: r.status };
   } catch (e) {
     return { ok: false, error: (e && e.name === 'AbortError') ? 'timeout' : 'unreachable' };
@@ -69,10 +69,20 @@ async function probeAiImages(aiTextCloudOk) {
 }
 
 // Email delivery (Resend) — invites, receipts, survey blasts.
+// Capability probe: an EMPTY send request never sends an email, but it proves
+// the key works for sending — a valid key gets a 422 validation error, a bad
+// key gets 401. (Don't probe GET /domains: keys scoped to "Sending access"
+// can't read it and a healthy setup looks down.)
 async function probeEmail() {
   if (!process.env.RESEND_API_KEY) return null; // not configured → omit from public page
-  const r = await httpProbe('https://api.resend.com/domains', { headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` } });
-  return r.ok ? { status: 'up' } : { status: 'down', note: 'Emails may be delayed.' };
+  const r = await httpProbe('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: '{}',
+  });
+  if (r.status === 401 || r.status === 403) return { status: 'down', note: 'Emails may be delayed.' }; // key invalid/revoked
+  if (!r.ok && r.error) return { status: 'down', note: 'Emails may be delayed.' };                     // unreachable/timeout
+  return { status: 'up' }; // 422 validation error = auth passed = can send
 }
 
 // Billing (Stripe) — checkout + customer portal.
