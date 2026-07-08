@@ -449,6 +449,7 @@
     <button class="btn btn-primary" id="shareBtn" onclick="openShareModal()" style="display:none;" title="Share link / QR for this survey">🔗 Share</button>
     <button class="btn btn-ghost" id="qaBtn" onclick="openQAPanel()" disabled title="Audience Q&amp;A — questions & upvotes">💬 Q&amp;A</button>
     <button class="btn btn-ghost" id="reportBtn" onclick="window.open('/report'+(activePresId?('?pres='+encodeURIComponent(activePresId)):''),'_blank')" disabled title="Open the full report">📊 Report</button>
+    <button class="btn btn-ghost" id="bigScreenBtn" onclick="openBigScreen()" disabled title="Open the big-screen join + live results view (projector / second screen)">🖥️ Big screen</button>
     <button class="btn btn-reset" id="resetBtn" onclick="confirmResetAll()" disabled>↺ Reset All Tallies</button>
   </div>
 </div>
@@ -1995,6 +1996,7 @@ function selectPresentation(id) {
   document.getElementById('addQBtn2').disabled = false;
   document.getElementById('resetBtn').disabled = false;
   document.getElementById('reportBtn').disabled = false;
+  document.getElementById('bigScreenBtn').disabled = false;
   document.getElementById('qaBtn').disabled = false;
   updateShareButton();
 
@@ -2036,6 +2038,7 @@ async function doDeletePres() {
     document.getElementById('addQBtn2').disabled = true;
     document.getElementById('resetBtn').disabled = true;
     document.getElementById('reportBtn').disabled = true;
+    document.getElementById('bigScreenBtn').disabled = true;
     document.getElementById('qaBtn').disabled = true;
     showSetup();
     renderQList();
@@ -2313,6 +2316,7 @@ function switchProduct(key) {
     document.getElementById('addQBtn2').disabled = true;
     document.getElementById('resetBtn').disabled = true;
     document.getElementById('reportBtn').disabled = true;
+    document.getElementById('bigScreenBtn').disabled = true;
     document.getElementById('qaBtn').disabled = true;
   }
   // Always repaint BOTH panels so they match the product you switched to
@@ -2373,6 +2377,13 @@ function renderPresList() {
 
 // ─── RESET TALLY ──────────────────────────────────────────────────────────────
 // ─── RESET ALL TALLIES (every question in every presentation) ────────────────
+// Open the big-screen join + live-results view (projector / second screen) for the active session.
+function openBigScreen() {
+  const pres = activePresId && presentations[activePresId];
+  if (!pres || !pres.sessionCode) { toast('Select a presentation first.'); return; }
+  window.open('/live#' + encodeURIComponent(pres.sessionCode), '_blank', 'noopener');
+}
+
 function confirmResetAll() {
   if (!userId || !presentations || Object.keys(presentations).length === 0) return;
   const presCount = Object.keys(presentations).length;
