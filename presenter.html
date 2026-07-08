@@ -2896,8 +2896,9 @@ function renderLiveView(idx, qId, q) {
       <div class="qr-info">
         <h3>Scan for Q${idx+1}</h3>
         <p>This QR links directly to this question only.</p>
+        <div style="font-size:11.5px;color:var(--muted);margin:4px 0 6px;line-height:1.5;">📱 No phone? Go to <b style="color:var(--accent);">pollslide.com/join</b> · code <b style="color:var(--accent);letter-spacing:.06em;">${presentations[activePresId]?.sessionCode||''}</b></div>
         <div class="qr-url" onclick="copyURL(${idx})" title="Click to copy">${qUrl}</div>
-        <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="copyQRBox(${idx})" title="Copy the QR + caption to paste into your presentation slide">📋 Copy QR box for slide</button>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="copyQRBox(${idx})" title="Copy the QR + caption (incl. the laptop-join line) to paste into your presentation slide">📋 Copy QR box for slide</button>
       </div>
     </div>
 
@@ -2914,6 +2915,7 @@ function renderLiveView(idx, qId, q) {
 // Download the QR + caption as a PNG image to drag into Keynote/PowerPoint.
 function copyQRBox(idx) {
   const qUrl = getQuestionURL(idx);
+  const code = presentations[activePresId]?.sessionCode || '';
   const tmp = document.createElement('div');
   tmp.style.cssText = 'position:fixed;left:-9999px;top:0;';
   document.body.appendChild(tmp);
@@ -2922,17 +2924,22 @@ function copyQRBox(idx) {
   new QRCode(qrDiv, { text:qUrl, width:300, height:300, colorDark:'#0b0b15', colorLight:'#ffffff', correctLevel:QRCode.CorrectLevel.H });
 
   const buildCanvas = (src) => {
-    const size = 300, pad = 40, textH = 90;
+    const size = 300, pad = 40, textH = 150;
     const canvas = document.createElement('canvas');
     canvas.width = size + pad*2;
     canvas.height = size + pad*2 + textH;
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#ffffff'; ctx.fillRect(0,0,canvas.width,canvas.height);
     if (src) ctx.drawImage(src, pad, pad, size, size);
-    ctx.fillStyle = '#0b0b15'; ctx.font = 'bold 34px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('Scan to answer', canvas.width/2, size + pad + 48);
-    ctx.fillStyle = '#555'; ctx.font = '20px sans-serif';
-    ctx.fillText('Point your phone camera here', canvas.width/2, size + pad + 78);
+    const cx = canvas.width/2, base = size + pad;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#0b0b15'; ctx.font = 'bold 34px sans-serif';
+    ctx.fillText('Scan to answer', cx, base + 46);
+    // Laptop / no-phone line so everyone can join off one slide image.
+    ctx.fillStyle = '#555'; ctx.font = '19px sans-serif';
+    ctx.fillText('No phone? Go to pollslide.com/join', cx, base + 82);
+    ctx.fillStyle = '#0b0b15'; ctx.font = 'bold 26px sans-serif';
+    ctx.fillText('code ' + code, cx, base + 118);
     return canvas;
   };
 
@@ -4512,6 +4519,7 @@ function renderEditor(idx) {
       <div class="qr-info">
         <h3>QR for Q${idx+1}</h3>
         <p>Scan this to answer this specific question.</p>
+        <div style="font-size:11.5px;color:var(--muted);margin:4px 0 6px;line-height:1.5;">📱 No phone? Go to <b style="color:var(--accent);">pollslide.com/join</b> · code <b style="color:var(--accent);letter-spacing:.06em;">${presentations[activePresId]?.sessionCode||''}</b></div>
         <div class="qr-url" onclick="copyURL(${idx})" title="Click to copy">${qUrl}</div>
       </div>
     </div>

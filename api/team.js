@@ -53,7 +53,7 @@ module.exports = async function handler(req, res) {
     const callerUid   = decoded.uid;
     const callerEmail = (decoded.email || '').toLowerCase();
 
-    const { action, wsId, email, role, uid, emailKey: ek, tier } = req.body || {};
+    const { action, wsId, email, role, uid, emailKey: ek, tier, expiresAt, note } = req.body || {};
     const isSiteAdmin = ADMIN_EMAILS.includes(callerEmail);
 
     const wsData = async id => { const s = await db.ref('workspaces/' + id).get(); return s.exists() ? s.val() : null; };
@@ -141,7 +141,7 @@ module.exports = async function handler(req, res) {
         requireSiteAdmin();
         const snap = await db.ref('workspaces').get();
         const out = [];
-        if (snap.exists()) snap.forEach(s => { const v = s.val(); out.push({ id: s.key, name: v.name || '', tier: v.tier || 'team_small', ownerUid: v.ownerUid, createdAt: v.createdAt || 0, members: v.members || {}, invites: v.invites || {} }); });
+        if (snap.exists()) snap.forEach(s => { const v = s.val(); out.push({ id: s.key, name: v.name || '', tier: v.tier || 'team_small', ownerUid: v.ownerUid, createdAt: v.createdAt || 0, members: v.members || {}, invites: v.invites || {}, comp: v.comp || null }); });
         return res.status(200).json({ ok: true, workspaces: out, seats: SEATS });
       }
       case 'adminAssign': {
@@ -175,6 +175,40 @@ module.exports = async function handler(req, res) {
           await db.ref('users/' + mUid + '/tier').set(t);
           await db.ref('admin/users_index/' + mUid + '/tier').set(t).catch(() => {});
         }
+        return res.status(200).json({ ok: true });
+      }
+      case 'adminComp': {
+        // Comp a whole workspace as a free DEMO for a period. Unlike adminSetTier, this
+        // ALSO grants the owner the tier (a demo has no paying owner) and records a comp
+        // marker with an optional expiresAt that /api/comp-sweep uses to auto-revert.
+        requireSiteAdmin();
+        const ws = await wsData(wsId);
+        if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+        const t = SEATS[tier] ? tier : null;
+        if (!t) return res.status(400).json({ error: 'Tier must be team_small or team_large' });
+        const exp = expiresAt ? Number(expiresAt) : null;
+        if (exp !== null && (!Number.isFinite(exp) || exp <= Date.now())) return res.status(400).json({ error: 'End date must be in the future' });
+        await db.ref('workspaces/' + wsId + '/tier').set(t);
+        await db.ref('workspaces/' + wsId + '/comp').set({ by: callerEmail, at: Date.now(), expiresAt: exp, note: String(note || '').slice(0, 300) });
+        for (const mUid of Object.keys(ws.members || {})) {  // everyone incl. the owner
+          await db.ref('users/' + mUid + '/tier').set(t);
+          await db.ref('admin/users_index/' + mUid + '/tier').set(t).catch(() => {});
+        }
+        return res.status(200).json({ ok: true });
+      }
+      case 'adminEndComp': {
+        // End a demo now (or the sweep does it on expiry): everyone incl. owner → Free,
+        // then delete the (content-free) workspace. Members' presentations are untouched.
+        requireSiteAdmin();
+        const ws = await wsData(wsId);
+        if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+        for (const mUid of Object.keys(ws.members || {})) {
+          await db.ref('users/' + mUid + '/workspaceId').remove().catch(() => {});
+          await db.ref('users/' + mUid + '/tier').set('free').catch(() => {});
+          await db.ref('admin/users_index/' + mUid + '/tier').set('free').catch(() => {});
+        }
+        for (const k of Object.keys(ws.invites || {})) await db.ref('team_invites/' + k).remove().catch(() => {});
+        await db.ref('workspaces/' + wsId).remove();
         return res.status(200).json({ ok: true });
       }
       case 'adminDelete': {

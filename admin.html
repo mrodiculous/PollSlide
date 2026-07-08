@@ -520,6 +520,7 @@ function renderDetailBody(uid){
   const pres=u.presentations||{},presCount=Object.keys(pres).length;
   const tc=u.tier==='pro'?'pill-pro':(u.tier==='team_small'||u.tier==='team_large')?'pill-team':'pill-free';
   const tier=TIER_CONFIG[u.tier||'free']||TIER_CONFIG.free;
+  const comp=u.comp||null;
   const aiUsed=u.aiUsedThisMonth||0;
   const aiPct=tier.aiMonthly>0?Math.min(100,Math.round(aiUsed/tier.aiMonthly*100)):0;
   document.getElementById('dpBody').innerHTML=`
@@ -541,6 +542,24 @@ function renderDetailBody(uid){
       <button class="btn btn-xs btn-ghost" style="border-color:var(--accent3);color:var(--accent3)" onclick="setTier('${uid}','team_small')">Team S</button>
       <button class="btn btn-xs btn-ghost" style="border-color:var(--accent4);color:var(--accent4)" onclick="setTier('${uid}','team_large')">Team L</button>
     </div>
+  </div>
+  <div class="dp-sec">
+    <h3>🎁 Comp this account (free plan)</h3>
+    ${comp ? `
+    <div class="dp-row"><span class="lbl">Comped to</span><span class="pill ${comp.tier==='pro'?'pill-pro':'pill-team'}">${comp.tier}</span></div>
+    <div class="dp-row"><span class="lbl">Ends</span><span>${comp.expiresAt?new Date(comp.expiresAt).toLocaleDateString()+' · '+daysLeftLabel(comp.expiresAt):'Never (permanent)'}</span></div>
+    ${comp.note?`<div class="dp-row"><span class="lbl">Note</span><span style="font-size:11px;">${esc(comp.note)}</span></div>`:''}
+    <div style="display:flex;gap:6px;align-items:center;margin-top:8px;">
+      <input type="date" id="compExtend_${uid}" style="flex:1;padding:6px 8px;">
+      <button class="btn btn-xs btn-ghost" onclick="extendUserComp('${uid}')">Extend</button>
+      <button class="btn btn-xs btn-red" onclick="endUserComp('${uid}')">End now</button>
+    </div>` : `
+    <p style="font-size:11.5px;color:var(--muted);margin-bottom:8px;">Give this person a paid plan for free. Leave the end date blank for a permanent comp (e.g. a family account).</p>
+    <select id="compTier_${uid}" style="margin-bottom:6px;"><option value="pro">Pro — free</option><option value="team_small">Team Small — free</option><option value="team_large">Team Large — free</option></select>
+    <label style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">End date (optional — blank = permanent)</label>
+    <input type="date" id="compDate_${uid}" style="margin:3px 0 6px;">
+    <input type="text" id="compNote_${uid}" placeholder="Note (e.g. 'Wife — permanent Pro')" style="margin-bottom:8px;">
+    <button class="btn btn-sm btn-green" style="width:100%;" onclick="compUser('${uid}')">🎁 Grant free plan</button>`}
   </div>
   <div class="dp-sec">
     <h3>Send message</h3>
@@ -598,6 +617,55 @@ async function setTier(uid,tier){
     }
     toast('Plan set to '+tier+(emailed?' · user emailed':''),'success');renderDetailBody(uid);renderPage();
   }catch(e){toast('Failed: '+e.message,'danger');}
+}
+
+// ─── COMP AN ACCOUNT (free plan, optional expiry) ─────────────────────────────
+// Writes users/$uid/tier + users/$uid/comp + admin/comps/$uid (the index the daily
+// /api/comp-sweep uses to auto-revert on the end date). Blank date = permanent.
+function daysLeftLabel(ts){ const d=Math.ceil((ts-Date.now())/86400000); return d<=0?'expired':d+' day'+(d!==1?'s':'')+' left'; }
+function dateToEndOfDay(str){ return str ? new Date(str+'T23:59:59').getTime() : null; }
+async function compUser(uid){
+  const tier=document.getElementById('compTier_'+uid)?.value||'pro';
+  const expiresAt=dateToEndOfDay(document.getElementById('compDate_'+uid)?.value);
+  const note=(document.getElementById('compNote_'+uid)?.value||'').trim();
+  if(expiresAt!==null && expiresAt<=Date.now()){ toast('End date must be in the future.','danger'); return; }
+  await doComp(uid,tier,expiresAt,note);
+}
+async function doComp(uid,tier,expiresAt,note){
+  const email=allUsers[uid]?.email||'';
+  const rec={ tier, note:note||'', by:currentAdminEmail, at:Date.now(), expiresAt:expiresAt||null };
+  try{
+    await db.ref(`users/${uid}/tier`).set(tier);
+    await db.ref(`users/${uid}/comp`).set(rec);
+    await db.ref(`admin/users_index/${uid}/tier`).set(tier).catch(()=>{});
+    await db.ref(`admin/comps/${uid}`).set(Object.assign({uid,email},rec));
+    if(allUsers[uid]){ allUsers[uid].tier=tier; allUsers[uid].comp=rec; }
+    // Let them know (best-effort), same channel as a manual upgrade.
+    if(email){ auth.currentUser.getIdToken().then(t=>fetch('/api/send-email',{method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},
+      body:JSON.stringify({type:'upgrade',to:email,data:{plan:(TIER_CONFIG[tier]||{}).name||tier}})})).catch(()=>{}); }
+    toast('Comped to '+tier+(expiresAt?' until '+new Date(expiresAt).toLocaleDateString():' (permanent)'),'success');
+    renderDetailBody(uid); renderPage();
+  }catch(e){ toast('Comp failed: '+e.message,'danger'); }
+}
+function extendUserComp(uid){
+  const expiresAt=dateToEndOfDay(document.getElementById('compExtend_'+uid)?.value);
+  if(!expiresAt){ toast('Pick a new end date first.','danger'); return; }
+  if(expiresAt<=Date.now()){ toast('End date must be in the future.','danger'); return; }
+  const comp=allUsers[uid]?.comp; if(!comp) return;
+  doComp(uid, comp.tier, expiresAt, comp.note||'');
+}
+function endUserComp(uid){
+  showConfirm('End this comp now?','Reverts the account to Free immediately.',async()=>{
+    try{
+      await db.ref(`users/${uid}/tier`).set('free');
+      await db.ref(`users/${uid}/comp`).remove();
+      await db.ref(`admin/users_index/${uid}/tier`).set('free').catch(()=>{});
+      await db.ref(`admin/comps/${uid}`).remove();
+      if(allUsers[uid]){ allUsers[uid].tier='free'; delete allUsers[uid].comp; }
+      toast('Comp ended — back to Free.','success'); renderDetailBody(uid); renderPage();
+    }catch(e){ toast('Failed: '+e.message,'danger'); }
+  });
 }
 
 // ─── PASSWORD RESET ───────────────────────────────────────────────────────────
@@ -1130,6 +1198,11 @@ function renderTiers(){
   </div>
 
   <div class="card" style="margin-bottom:14px;">
+    <div class="card-hd"><h2>🎁 Active comps &amp; demos</h2><span style="font-size:11px;color:var(--muted);">free grants — expiring ones auto-revert (daily). Open a user to manage.</span></div>
+    <div id="activeComps"><div class="loader">Loading…</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px;">
     <div class="card-hd"><h2>White Label enquiries</h2></div>
     <div id="whiteEnquiries"><div class="loader">Loading…</div></div>
   </div>
@@ -1143,7 +1216,7 @@ function renderTiers(){
       <button class="btn btn-primary" style="align-self:flex-start;" onclick="assignTierManual()">Assign tier</button>
     </div>
   </div>`;
-  loadWhiteEnquiries();
+  loadWhiteEnquiries();loadActiveComps();
 }
 
 async function assignTierManual(){
@@ -1164,6 +1237,29 @@ async function loadWhiteEnquiries(){
       <td style="font-size:11px;color:var(--muted);">${u.createdAt?new Date(u.createdAt).toLocaleDateString():'—'}</td>
       <td style="font-size:11px;color:var(--muted);">—</td>
       <td><span class="link-action">Manage</span></td>
+    </tr>`).join('')
+  }</tbody></table>`;
+}
+
+// Active comps (individual) + team demos in one place, soonest-to-expire first.
+async function loadActiveComps(){
+  const el=document.getElementById('activeComps');if(!el)return;
+  const rows=[];
+  try{ const snap=await db.ref('admin/comps').get();
+    if(snap.exists()) Object.entries(snap.val()).forEach(([uid,c])=>rows.push({type:'Account',who:c.email||uid,uid,tier:c.tier,expiresAt:c.expiresAt,note:c.note}));
+  }catch(e){}
+  try{ const d=await adminTeamApi('adminList');
+    (d.workspaces||[]).filter(w=>w.comp).forEach(w=>{const owner=(w.members||{})[w.ownerUid]||{};rows.push({type:'Team demo',who:w.name||owner.email||w.id,tier:w.tier,expiresAt:w.comp.expiresAt,note:w.comp.note||''});});
+  }catch(e){}
+  if(!rows.length){el.innerHTML='<div class="empty">No active comps or demos. Comp an account from Users → open a person → 🎁 Comp; start a team demo on the Teams page.</div>';return;}
+  rows.sort((a,b)=>(a.expiresAt||Infinity)-(b.expiresAt||Infinity));
+  el.innerHTML=`<table><thead><tr><th>Type</th><th>Who</th><th>Plan</th><th>Ends</th><th></th></tr></thead><tbody>${
+    rows.map(r=>`<tr ${r.uid?`class="clickable" onclick="openDetail('${r.uid}')"`:''}>
+      <td><span class="pill ${r.type==='Team demo'?'pill-team':'pill-info'}">${r.type}</span></td>
+      <td style="font-size:12px;">${esc(r.who)}</td>
+      <td><span class="pill ${r.tier==='pro'?'pill-pro':'pill-team'}">${esc(r.tier||'')}</span></td>
+      <td style="font-size:11px;">${r.expiresAt?new Date(r.expiresAt).toLocaleDateString()+' · '+daysLeftLabel(r.expiresAt):'<span style="color:var(--muted)">permanent</span>'}</td>
+      <td>${r.uid?'<span class="link-action">Manage →</span>':'<span style="font-size:11px;color:var(--muted)">Teams page</span>'}</td>
     </tr>`).join('')
   }</tbody></table>`;
 }
@@ -1268,7 +1364,7 @@ async function loadTeamsPage(){
         <td style="width:24px;color:var(--muted);">${open?'▾':'▸'}</td>
         <td>${esc(w.name)||'<span style="color:var(--muted)">Unnamed</span>'}</td>
         <td>${esc(owner.email||w.ownerUid)}</td>
-        <td><span class="pill pill-team">${esc(w.tier)}</span></td>
+        <td><span class="pill pill-team">${esc(w.tier)}</span>${w.comp?` <span class="pill pill-warn" style="margin-left:3px;" title="Free demo${w.comp.expiresAt?' — '+daysLeftLabel(w.comp.expiresAt):''}">🎁 demo</span>`:''}</td>
         <td>${used} / ${limit}</td>
         <td>${w.createdAt?timeAgo(w.createdAt):'—'}</td>
         <td onclick="event.stopPropagation()"><button class="btn btn-xs btn-ghost" style="color:var(--accent2);border-color:var(--accent2);" onclick="twDelete('${w.id}')">Delete</button></td>
@@ -1292,6 +1388,19 @@ async function loadTeamsPage(){
             <option value="">Tier…</option><option value="team_small">Team Small (5)</option><option value="team_large">Team Large (25)</option>
           </select>
         </div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap;padding-top:8px;border-top:1px dashed var(--border);">
+          <span style="font-size:11px;color:var(--muted);">🎁 Free demo:</span>
+          ${w.comp?`
+            <span class="pill pill-warn">${w.comp.expiresAt?('until '+new Date(w.comp.expiresAt).toLocaleDateString()+' · '+daysLeftLabel(w.comp.expiresAt)):'no end date'}</span>
+            <input type="date" id="twCompDate_${w.id}" style="margin:0;padding:6px;font-size:12.5px;" title="New end date">
+            <button class="btn btn-xs btn-ghost" onclick="twExtendComp('${w.id}')">Extend</button>
+            <button class="btn btn-xs btn-ghost" style="color:var(--accent2);border-color:var(--accent2);" onclick="twEndComp('${w.id}')">End demo now</button>`
+          :`
+            <select id="twCompTier_${w.id}" style="margin:0;padding:6px;font-size:12.5px;"><option value="team_small">Team Small (5)</option><option value="team_large">Team Large (25)</option></select>
+            <input type="date" id="twCompDate_${w.id}" style="margin:0;padding:6px;font-size:12.5px;" title="Demo end date (optional)">
+            <button class="btn btn-xs btn-green" onclick="twStartComp('${w.id}')">Start demo</button>
+            <span style="font-size:10.5px;color:var(--muted);">everyone incl. owner gets it free until the date</span>`}
+        </div>
       </td></tr>`:'');
     }).join('')+'</tbody></table>';
   }catch(e){el.innerHTML='Could not load workspaces: '+esc(e.message)+'<br><span style="font-size:12px;">The /api/team endpoint must be deployed and you must be signed in as an admin.</span>';}
@@ -1311,6 +1420,26 @@ async function twAssign(wsId,asInvite){
 }
 async function twSetTier(wsId,tier){if(!tier)return;try{await adminTeamApi('adminSetTier',{wsId,tier});toast('Workspace tier set to '+tier+' (members synced)','success');loadTeamsPage();}catch(e){toast(e.message,'danger');}}
 function twDelete(wsId){showConfirm('Delete this workspace?','All members are detached and drop to Free (the owner keeps their own paid tier). This cannot be undone.',async()=>{try{await adminTeamApi('adminDelete',{wsId});toast('Workspace deleted','success');loadTeamsPage();}catch(e){toast(e.message,'danger');}});}
+
+// ─── TEAM DEMO / COMP (whole workspace free for a period, incl. the owner) ─────
+async function twStartComp(wsId){
+  const tier=document.getElementById('twCompTier_'+wsId)?.value||'team_small';
+  const expiresAt=dateToEndOfDay(document.getElementById('twCompDate_'+wsId)?.value);
+  if(expiresAt!==null && expiresAt<=Date.now()){ toast('End date must be in the future.','danger'); return; }
+  try{ await adminTeamApi('adminComp',{wsId,tier,expiresAt:expiresAt||null,note:''});
+    toast('Demo started'+(expiresAt?' — ends '+new Date(expiresAt).toLocaleDateString():' (no end date)'),'success'); loadTeamsPage();
+  }catch(e){ toast(e.message,'danger'); }
+}
+function twExtendComp(wsId){
+  const expiresAt=dateToEndOfDay(document.getElementById('twCompDate_'+wsId)?.value);
+  if(!expiresAt){ toast('Pick a new end date first.','danger'); return; }
+  if(expiresAt<=Date.now()){ toast('End date must be in the future.','danger'); return; }
+  const w=adminWorkspaces.find(x=>x.id===wsId); if(!w)return;
+  adminTeamApi('adminComp',{wsId,tier:w.tier,expiresAt,note:(w.comp&&w.comp.note)||''})
+    .then(()=>{toast('Demo extended to '+new Date(expiresAt).toLocaleDateString(),'success');loadTeamsPage();})
+    .catch(e=>toast(e.message,'danger'));
+}
+function twEndComp(wsId){showConfirm('End this demo now?','Everyone incl. the owner drops to Free and the demo workspace is removed. Their presentations are kept.',async()=>{try{await adminTeamApi('adminEndComp',{wsId});toast('Demo ended','success');loadTeamsPage();}catch(e){toast(e.message,'danger');}});}
 
 // ─── SYSTEM HEALTH ────────────────────────────────────────────────────────────
 // Reads the same public /api/status the status page uses + the incident log
@@ -1700,8 +1829,9 @@ const RUNBOOK = [
   { cat:'💳 Accounts & billing', items:[
     { sym:'Give someone a free or paid plan (comp an account)',
       steps:[
-        'Users → open the person → <b>Change plan</b> → pick the tier. Admin changes bypass Stripe and email the user automatically.',
-        'For a whole team, use the <b>Teams</b> page to set a workspace tier.',
+        'One person (e.g. a family account): Users → open them → <b>🎁 Comp this account</b> → pick the plan. Leave the end date blank for permanent, or set a date to auto-expire.',
+        'A whole team demo: <b>Teams</b> page → open the workspace → <b>🎁 Free demo</b> → pick tier + end date → Start demo (everyone incl. the owner gets it free until the date).',
+        'See all active grants + countdowns on <b>Plans &amp; tiers → Active comps &amp; demos</b>. Expiring ones auto-revert daily.',
       ] },
     { sym:'Process a refund',
       steps:[
