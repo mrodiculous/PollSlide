@@ -10,6 +10,7 @@
 
 const OPENAI_API_KEY    = process.env.OPENAI_API_KEY;
 const OPENAI_TEXT_MODEL = process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini';
+const OPENAI_BASE       = 'https://api.openai.com/v1';
 
 const LOCAL_LLM_URL     = process.env.LOCAL_LLM_URL || '';
 const LOCAL_LLM_MODEL   = process.env.LOCAL_LLM_MODEL || 'qwen3:14b';
@@ -41,6 +42,23 @@ async function probe(baseURL) {
   }
 }
 
+// Validate the OpenAI BACKUP key without spending tokens: GET /v1/models is free.
+// 200 = key works (real fallback); 401 = bad/expired key (backup is dead — fix in Vercel).
+async function probeOpenAI() {
+  if (!OPENAI_API_KEY) return { configured: false, reachable: false };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 4500);
+  const t0 = Date.now();
+  try {
+    const r = await fetch(`${OPENAI_BASE}/models`, { headers: { Authorization: `Bearer ${OPENAI_API_KEY}` }, signal: controller.signal });
+    return { configured: true, reachable: r.ok, status: r.status, ms: Date.now() - t0 };
+  } catch (e) {
+    return { configured: true, reachable: false, error: (e && e.name === 'AbortError') ? 'timeout' : String(e && e.message || e), ms: Date.now() - t0 };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -48,6 +66,7 @@ module.exports = async function handler(req, res) {
 
   const localLLM   = await probe(LOCAL_LLM_URL);
   const localImage = await probe(LOCAL_IMAGE_URL);
+  const openai     = await probeOpenAI();   // validates the BACKUP key (free GET /models)
 
   return res.status(200).json({
     ok: true,
@@ -56,20 +75,20 @@ module.exports = async function handler(req, res) {
     text: {
       order: ['local', 'openai'],
       local:  { configured: !!LOCAL_LLM_URL, model: LOCAL_LLM_MODEL, ...localLLM },
-      openai: { configured: !!OPENAI_API_KEY, model: OPENAI_TEXT_MODEL },
+      openai: { model: OPENAI_TEXT_MODEL, ...openai },
     },
     // AI response summaries + free-text grading (api/ai.js) — now local-first too.
     summaries: {
       order: ['local', 'openai'],
       local:  { configured: !!LOCAL_LLM_URL, model: LOCAL_LLM_MODEL, ...localLLM },
-      openai: { configured: !!OPENAI_API_KEY, model: OPENAI_TEXT_MODEL },
+      openai: { model: OPENAI_TEXT_MODEL, ...openai },
     },
     // Question images (api/polly-image.js).
     images: {
       order: ['local', 'fal', 'openai'],
       local:  { configured: !!LOCAL_IMAGE_URL, model: LOCAL_IMAGE_MODEL, ...localImage },
       fal:    { configured: !!FAL_KEY, model: FAL_MODEL, ...(FAL_MODEL_OK ? {} : { warning: `FAL_IMAGE_MODEL value "${FAL_MODEL_RAW}" is invalid (must start with "fal-ai/") — using ${FAL_MODEL}. Fix it in Vercel.` }) },
-      openai: { configured: !!OPENAI_API_KEY, model: 'gpt-image-1' },
+      openai: { model: 'gpt-image-1', ...openai },
     },
     cfAccess: !!(process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACCESS_CLIENT_SECRET),
   });

@@ -782,6 +782,12 @@
     <h2 id="qrModalTitle" style="margin-bottom:4px;">QR Code</h2>
     <p id="qrModalDesc" style="margin-bottom:16px;"></p>
     <div id="qrModalCode"></div>
+    <!-- Slide snippet: the "Join at …, enter code" line presenters paste onto their own slide -->
+    <div id="qrSlideSnippet" style="margin:14px 0 10px;padding:12px 12px 10px;border:1px dashed var(--border2);border-radius:10px;background:var(--surface3);text-align:left;">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:7px;">📋 Put this on your slide</div>
+      <div style="font-size:13.5px;line-height:1.6;">Join at <b style="color:var(--accent);">app.pollslide.com/answer</b><br>Code <b id="qrSnippetCode" style="letter-spacing:.08em;">—</b></div>
+      <button class="btn btn-ghost" onclick="copySlideSnippet()" style="width:100%;justify-content:center;margin-top:9px;padding:8px;font-size:12px;">📋 Copy join text</button>
+    </div>
     <div class="qr-modal-url" id="qrModalURL" onclick="copyQRURL()">—</div>
     <button class="btn btn-primary" onclick="copyQRURL()" style="width:100%;justify-content:center;margin-bottom:7px;padding:10px;">Copy Link</button>
     <button class="btn btn-ghost"   id="qrEmailBtn" onclick="openEmailCompose()" style="display:none;width:100%;justify-content:center;margin-bottom:7px;padding:10px;">✉️ Email it</button>
@@ -4872,7 +4878,34 @@ function openShareModal() {
   // Email-it is for async products (people answer on their own time).
   const emailBtn = document.getElementById('qrEmailBtn');
   if (emailBtn) emailBtn.style.display = ['survey','study','quiz'].includes(pt) ? '' : 'none';
+  setSlideSnippet();
   document.getElementById('qrModal').classList.remove('hidden');
+}
+
+// ── "Join at …, enter code" slide snippet (Slido/Mentimeter-style) ──
+// Fills the code shown in the QR modal and lets the presenter copy the join
+// line to paste onto their own slide.
+function setSlideSnippet() {
+  const code = presentations[activePresId]?.sessionCode || '';
+  const el = document.getElementById('qrSnippetCode');
+  if (el) el.textContent = code || '—';
+}
+function copySlideSnippet() {
+  const code = presentations[activePresId]?.sessionCode || '';
+  const text = 'Join at app.pollslide.com/answer — Code ' + code;
+  const done = () => toast('Join text copied — paste it on your slide', 'success');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else {
+    fallbackCopy(text, done);
+  }
+}
+function fallbackCopy(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); done(); } catch (e) { toast('Copy failed — select the text manually', 'danger'); }
+  ta.remove();
 }
 
 // ─── EMAIL DISTRIBUTION (mailto v1 — sends from the user's own address) ────────
@@ -4935,6 +4968,7 @@ function showQRModal(idx){
   document.getElementById('qrModalURL').textContent=url;
   const el=document.getElementById('qrModalCode');el.innerHTML='';
   new QRCode(el,{text:url,width:210,height:210,colorDark:'#ffffff',colorLight:'#10101a',correctLevel:QRCode.CorrectLevel.H});
+  setSlideSnippet();
   document.getElementById('qrModal').classList.remove('hidden');
 }
 function closeQRModal(){document.getElementById('qrModal').classList.add('hidden');}
