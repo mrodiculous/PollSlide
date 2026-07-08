@@ -1,0 +1,90 @@
+{
+  "rules": {
+    "users": {
+      ".read": "auth != null && auth.token.email == 'help@pollslide.com'",
+      "$uid": {
+        ".read": "auth != null && (auth.uid == $uid || auth.token.email == 'help@pollslide.com')",
+        ".write": "auth != null && (auth.uid == $uid || auth.token.email == 'help@pollslide.com')"
+      }
+    },
+
+    "admin": {
+      ".read": "auth != null && auth.token.email == 'help@pollslide.com'",
+      "tickets": {
+        ".indexOn": ["status", "createdAt"],
+        ".write": "auth != null"
+      },
+      "deletion_requests": {
+        "$uid": {
+          ".read":  "auth != null && (auth.uid == $uid || auth.token.email == 'help@pollslide.com')",
+          ".write": "auth != null && (auth.uid == $uid || auth.token.email == 'help@pollslide.com')"
+        }
+      },
+      "$adminOther": {
+        ".write": "auth != null && auth.token.email == 'help@pollslide.com'"
+      }
+    },
+
+    "quiz_builder": {
+      "$sessionCode": {
+        ".read": true,
+        ".write": "auth != null"
+      }
+    },
+
+    "sessions": {
+      "$sessionCode": {
+        ".read": true,
+        "responses":       { ".write": true },
+        "currentQuestion": { ".write": "auth != null" },
+        "qstate":          { ".write": "auth != null" },
+        "meta":            { ".write": "auth != null" },
+        "qa":              { ".write": true }
+      }
+    },
+
+    "pairing": {
+      "$code": {
+        ".read": true,
+        ".write": "auth != null"
+      }
+    },
+
+    "mac_link": {
+      "$uid": {
+        ".read":  true,
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    },
+
+    "presentations": {
+      ".read": false,
+      ".write": false
+    },
+
+    "workspaces": {
+      "$wsId": {
+        ".read": "auth != null && (data.child('ownerUid').val() === auth.uid || data.child('members').child(auth.uid).exists())",
+        ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid) || data.child('ownerUid').val() === auth.uid)",
+        "members": {
+          "$uid": {
+            ".write": "auth != null && (data.parent().parent().child('ownerUid').val() === auth.uid || data.parent().parent().child('members').child(auth.uid).child('role').val() === 'admin' || $uid === auth.uid)",
+            ".validate": "!newData.exists() || newData.hasChildren(['email','role'])"
+          }
+        },
+        "invites": {
+          "$emailKey": {
+            ".write": "auth != null && (data.parent().parent().child('ownerUid').val() === auth.uid || data.parent().parent().child('members').child(auth.uid).child('role').val() === 'admin')"
+          }
+        }
+      }
+    },
+
+    "team_invites": {
+      "$emailKey": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    }
+  }
+}
