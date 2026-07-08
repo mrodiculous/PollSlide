@@ -192,6 +192,30 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
 #toast.success{border-color:rgba(67,233,123,.4);color:var(--accent3);}
 #toast.danger{border-color:rgba(255,101,132,.4);color:var(--accent2);}
 #toast.info{border-color:rgba(108,99,255,.4);color:var(--accent);}
+
+/* RUNBOOK / FIX-IT */
+.rb-intro{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);padding:14px 16px;margin-bottom:14px;font-size:13px;line-height:1.6;color:var(--muted);}
+.rb-intro strong{color:var(--text);}
+.rb-quick{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+.rb-quick a{font-size:12px;font-weight:600;background:var(--surface2);border:1px solid var(--border2);border-radius:100px;padding:5px 12px;color:var(--accent);}
+.rb-quick a:hover{border-color:var(--accent);}
+.rb-cat{margin-bottom:16px;}
+.rb-cat-hd{font-family:'Syne',sans-serif;font-weight:800;font-size:14px;padding:2px 0 9px;display:flex;align-items:center;gap:8px;}
+.rb-item{background:var(--surface);border:1px solid var(--border2);border-left:3px solid var(--accent2);border-radius:10px;margin-bottom:8px;overflow:hidden;}
+.rb-sym{padding:12px 15px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;font-weight:600;font-size:13.5px;}
+.rb-sym:hover{background:var(--surface2);}
+.rb-sym .chev{color:var(--muted);transition:transform .15s;flex-shrink:0;}
+.rb-item.open .rb-sym .chev{transform:rotate(90deg);}
+.rb-body{padding:0 15px 14px;display:none;}
+.rb-item.open .rb-body{display:block;}
+.rb-label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:12px 0 5px;font-weight:700;}
+.rb-cause{font-size:12.5px;line-height:1.6;color:var(--muted);}
+.rb-step{font-size:12.5px;line-height:1.55;color:var(--text);padding:4px 0 4px 20px;position:relative;}
+.rb-step:before{content:'→';position:absolute;left:2px;color:var(--accent);}
+.rb-cmd{display:flex;align-items:center;gap:8px;background:#0a0a14;border:1px solid var(--border);border-radius:7px;padding:8px 10px;margin:7px 0;overflow-x:auto;}
+.rb-cmd code{flex:1;white-space:pre;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11.5px;color:var(--accent3);}
+.rb-copy{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--muted);font-size:10px;font-weight:700;padding:3px 9px;cursor:pointer;flex-shrink:0;}
+.rb-copy:hover{color:var(--text);border-color:var(--accent);}
 </style>
 <link rel="icon" type="image/svg+xml" href="https://pollslide.com/logo.svg">
 <link rel="icon" type="image/x-icon" href="https://pollslide.com/favicon.ico">
@@ -261,6 +285,9 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
     <div class="nav-section">Reference</div>
     <div class="nav-item" onclick="showPage('architecture')" id="nav-architecture">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>How it works
+    </div>
+    <div class="nav-item" onclick="showPage('runbook')" id="nav-runbook">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 13h6M9 17h4"/></svg>Runbook · Fix-it
     </div>
 
     <div class="nav-sep"></div>
@@ -391,12 +418,12 @@ function showPage(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const nav=document.getElementById('nav-'+page);if(nav)nav.classList.add('active');
-  const titles={dashboard:'Dashboard',users:'Users',teams:'Teams',tickets:'Support Tickets',comms:'Send Message',flows:'Message Flows',legal:'Legal Quick Actions',health:'System Health',security:'Security',ai:'AI / Polly Management',tiers:'Plans & Tiers',search:'Lookup',architecture:'How PollSlide Works'};
+  const titles={dashboard:'Dashboard',users:'Users',teams:'Teams',tickets:'Support Tickets',comms:'Send Message',flows:'Message Flows',legal:'Legal Quick Actions',health:'System Health',security:'Security',ai:'AI / Polly Management',tiers:'Plans & Tiers',search:'Lookup',architecture:'How PollSlide Works',runbook:'Runbook · Fix-it Guide'};
   document.getElementById('pageTitle').textContent=titles[page]||page;
   closeDetail();renderPage();
 }
 function renderPage(){
-  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture};
+  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture,runbook:renderRunbook};
   if(map[currentPage])map[currentPage]();
 }
 
@@ -1607,6 +1634,131 @@ function openArchDetail(layerKey,i){
     ${rw}
     ${openBtn?`<div class="dp-sec">${openBtn}</div>`:''}`;
   document.getElementById('detailPanel').classList.add('open');
+}
+
+// ─── RUNBOOK · FIX-IT GUIDE ───────────────────────────────────────────────────
+// Self-service "what broke → exact fix" so Rod can resolve common issues fast.
+// Each step is either an instruction (string) or a copyable command ({cmd}).
+const RUNBOOK = [
+  { cat:'🤖 Polly / AI is down', items:[
+    { sym:'Polly errors — "server error (502)" or "check the AI key"',
+      cause:'The Mac LLM tunnel is misrouted or asleep. Polly is supposed to fall back to OpenAI automatically, so a HARD error usually means the OpenAI backup key is invalid too.',
+      steps:[
+        'Check both providers at a glance:',
+        {cmd:'curl -s https://app.pollslide.com/api/ai-status | python3 -m json.tool'},
+        'Read <b>text.local</b> and <b>text.openai</b> in the result.',
+        '<b>text.local.reachable = false, status 404</b> → the Mac tunnel is misrouted → see "Mac tunnel misrouted" below.',
+        '<b>text.openai.reachable = false / status 401</b> → the backup key is dead → update <b>OPENAI_API_KEY</b> in Vercel → Settings → Environment Variables, then redeploy.',
+        'Polly works as long as EITHER local (200) OR openai is reachable. You only get a hard error when BOTH are down.',
+      ] },
+    { sym:'Mac tunnel misrouted (local shows 404)',
+      cause:'Something is running the tunnel with the wrong config — classically a manual "cloudflared … --token …" started by hand, which fights the LaunchAgent.',
+      steps:[
+        'On the Mac, confirm there is exactly ONE tunnel process (the LaunchAgent):',
+        {cmd:'ps -Ao pid,user,command | grep "[c]loudflared tunnel run"'},
+        'If you see a second line containing <b>--token</b>, kill it with its PID:',
+        {cmd:'kill <PID>'},
+        'Restart the tunnel so it reloads the correct config:',
+        {cmd:'launchctl kickstart -k gui/$(id -u)/com.pollslide.cloudflared'},
+        'Re-run the health check — text.local.reachable should flip to true (200).',
+        '<b>Never run "cloudflared tunnel run --token …" by hand.</b> The LaunchAgent already runs it from config.yml. Full detail in AI-RUNBOOK.md.',
+      ] },
+    { sym:'Local Mac asleep / Ollama not responding',
+      steps:[
+        'Is Ollama up and does it have the model?',
+        {cmd:'curl -s localhost:11434/api/tags'},
+        'Is the model warm (loaded)?',
+        {cmd:'curl -s localhost:11434/api/ps'},
+        'If the model is missing, pull it:',
+        {cmd:'ollama pull llama3.2:3b'},
+        'Keep the Mac plugged in and awake. The warm-agent (com.pollslide.ollamawarm) keeps the model loaded so answers stay ~3s.',
+      ] },
+  ]},
+  { cat:'🚀 Deploying changes', items:[
+    { sym:'Push my changes live',
+      cause:'Edits sit in the local repos until pushed to Vercel; Vercel auto-deploys the connected git branch.',
+      steps:[
+        'App (app.pollslide.com): commit + push from <b>~/Documents/GitHub/PollSlide</b>.',
+        'Website (pollslide.com): commit + push from <b>~/Documents/GitHub/pollslide-website</b>.',
+        'See <b>OWNER-TODO.md</b> for exactly what is waiting to deploy right now.',
+      ] },
+  ]},
+  { cat:'🔒 Firebase rules & data', items:[
+    { sym:'Update the database security rules',
+      cause:'Rules decide who can read/write each data path.',
+      steps:[
+        'Edit the ONE canonical file: <b>database-rules.json</b> in the app repo (the old database-rules-workspaces.json is retired).',
+        'Firebase Console → Realtime Database → Rules → paste the whole file → <b>Publish</b>.',
+      ] },
+    { sym:'A feature is not saving ("permission denied")',
+      cause:'The data path the client writes to is missing a ".write" rule.',
+      steps:[
+        'Find the path (e.g. sessions/&lt;code&gt;/study) and add a matching ".write" under it in database-rules.json, then Publish.',
+        'Participant/public writes (responses, qa, study) use <code>".write": true</code>; presenter/admin writes require <code>auth != null</code>.',
+      ] },
+  ]},
+  { cat:'💳 Accounts & billing', items:[
+    { sym:'Give someone a free or paid plan (comp an account)',
+      steps:[
+        'Users → open the person → <b>Change plan</b> → pick the tier. Admin changes bypass Stripe and email the user automatically.',
+        'For a whole team, use the <b>Teams</b> page to set a workspace tier.',
+      ] },
+    { sym:'Process a refund',
+      steps:[
+        'Refund in the Stripe Dashboard → downgrade the user to Free here (Change plan) → send a confirmation via Send Message.',
+      ] },
+  ]},
+  { cat:'📊 Live session issues', items:[
+    { sym:'Companion / big screen not following the live question',
+      steps:[
+        'The companion only follows when you PRESENT (launch a question). Confirm the presenter actually launched it.',
+        'Stuck session? Users → open the owner → <b>Reset all response tallies</b>.',
+      ] },
+  ]},
+];
+
+const RB_LINKS = [
+  { label:'System Health', on:"showPage('health')" },
+  { label:'AI / Polly', on:"showPage('ai')" },
+  { label:'Security scan', on:"showPage('security')" },
+  { label:'AI status (JSON) ↗', href:'https://app.pollslide.com/api/ai-status' },
+  { label:'Vercel ↗', href:'https://vercel.com/dashboard' },
+  { label:'Firebase ↗', href:'https://console.firebase.google.com/project/echonest-live-survey/database' },
+  { label:'Stripe ↗', href:'https://dashboard.stripe.com' },
+  { label:'OpenAI usage ↗', href:'https://platform.openai.com/usage' },
+  { label:'Cloudflare ↗', href:'https://one.dash.cloudflare.com' },
+];
+
+function renderRunbook(){
+  const stepHtml = s => (typeof s === 'string')
+    ? `<div class="rb-step">${s}</div>`
+    : `<div class="rb-cmd"><code>${esc(s.cmd)}</code><button class="rb-copy" onclick="rbCopy(this)">COPY</button></div>`;
+  const itemHtml = (it,ci,ii) => `<div class="rb-item" id="rb-${ci}-${ii}">
+    <div class="rb-sym" onclick="rbToggle('${ci}-${ii}')"><span>${esc(it.sym)}</span>
+      <svg class="chev" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>
+    <div class="rb-body">
+      ${it.cause?`<div class="rb-label">Likely cause</div><div class="rb-cause">${it.cause}</div>`:''}
+      <div class="rb-label">Fix</div>
+      ${it.steps.map(stepHtml).join('')}
+    </div></div>`;
+  const links = RB_LINKS.map(l => l.href
+    ? `<a href="${l.href}" target="_blank" rel="noopener">${l.label}</a>`
+    : `<a onclick="${l.on}">${l.label}</a>`).join('');
+  document.getElementById('content').innerHTML = `
+  <div class="rb-intro">
+    <strong>Fix things fast.</strong> The most common problems and their exact fixes — click any item to expand, and use the COPY buttons for commands. When something is actually live-broken, the <b>System Health</b> and <b>AI / Polly</b> panels show what's wrong; this page tells you how to fix it. Deeper detail lives in <code>AI-RUNBOOK.md</code>, <code>OWNER-TODO.md</code> and <code>MANUAL-CHECKLIST.md</code>.
+    <div class="rb-quick">${links}</div>
+  </div>
+  ${RUNBOOK.map((c,ci)=>`<div class="rb-cat"><div class="rb-cat-hd">${c.cat}</div>${c.items.map((it,ii)=>itemHtml(it,ci,ii)).join('')}</div>`).join('')}`;
+}
+function rbToggle(id){ const el=document.getElementById('rb-'+id); if(el) el.classList.toggle('open'); }
+function rbCopy(btn){
+  const code=btn.parentElement.querySelector('code');
+  const text=code?code.textContent:'';
+  const done=()=>{ btn.textContent='COPIED'; setTimeout(()=>btn.textContent='COPY',1200); };
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(done);
+  else done();
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────

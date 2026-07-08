@@ -782,11 +782,11 @@
     <h2 id="qrModalTitle" style="margin-bottom:4px;">QR Code</h2>
     <p id="qrModalDesc" style="margin-bottom:16px;"></p>
     <div id="qrModalCode"></div>
-    <!-- Slide snippet: the "Join at …, enter code" line presenters paste onto their own slide -->
+    <!-- Slide snippet: the "no phone? go here + enter code" line presenters paste UNDER the QR on their slide -->
     <div id="qrSlideSnippet" style="margin:14px 0 10px;padding:12px 12px 10px;border:1px dashed var(--border2);border-radius:10px;background:var(--surface3);text-align:left;">
-      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:7px;">📋 Put this on your slide</div>
-      <div style="font-size:13.5px;line-height:1.6;">Join at <b style="color:var(--accent);">app.pollslide.com/answer</b><br>Code <b id="qrSnippetCode" style="letter-spacing:.08em;">—</b></div>
-      <button class="btn btn-ghost" onclick="copySlideSnippet()" style="width:100%;justify-content:center;margin-top:9px;padding:8px;font-size:12px;">📋 Copy join text</button>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:7px;">📋 Put this under the QR on your slide</div>
+      <div style="font-size:13.5px;line-height:1.6;">📱 Scan the QR — or go to <b style="color:var(--accent);">pollslide.com/join</b><br>and enter code <b id="qrSnippetCode" style="letter-spacing:.08em;">—</b></div>
+      <button class="btn btn-ghost" onclick="copySlideSnippet()" style="width:100%;justify-content:center;margin-top:9px;padding:8px;font-size:12px;">📋 Copy this line</button>
     </div>
     <div class="qr-modal-url" id="qrModalURL" onclick="copyQRURL()">—</div>
     <button class="btn btn-primary" onclick="copyQRURL()" style="width:100%;justify-content:center;margin-bottom:7px;padding:10px;">Copy Link</button>
@@ -4892,7 +4892,7 @@ function setSlideSnippet() {
 }
 function copySlideSnippet() {
   const code = presentations[activePresId]?.sessionCode || '';
-  const text = 'Join at app.pollslide.com/answer — Code ' + code;
+  const text = 'Scan the QR — or go to pollslide.com/join and enter code ' + code;
   const done = () => toast('Join text copied — paste it on your slide', 'success');
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
@@ -6199,7 +6199,7 @@ function renderPresentSlide(idx) {
       <div style="font-size:11px;font-weight:700;color:var(--p-55);text-align:center;letter-spacing:0.04em;line-height:1.4;max-width:130px;">Scan with Phone Camera to Answer</div>
       <div id="${qrId}" style="background:var(--p-text);border-radius:10px;padding:8px;width:116px;height:116px;flex-shrink:0;"></div>
       <div style="font-family:'DM Mono',monospace;font-size:9px;color:var(--p-25);text-align:center;word-break:break-all;max-width:110px;line-height:1.5;">${qUrl}</div>
-      <div style="font-size:10px;color:var(--p-55);text-align:center;line-height:1.5;max-width:130px;">No camera? Go to<br><b style="color:var(--p-90);">app.pollslide.com/answer</b><br>code <b style="color:var(--accent);letter-spacing:0.08em;">${presentations[activePresId]?.sessionCode||''}</b></div>
+      <div style="font-size:10px;color:var(--p-55);text-align:center;line-height:1.5;max-width:130px;">No camera? Go to<br><b style="color:var(--p-90);">pollslide.com/join</b><br>code <b style="color:var(--accent);letter-spacing:0.08em;">${presentations[activePresId]?.sessionCode||''}</b></div>
     </div>`;
 
   container.innerHTML = `

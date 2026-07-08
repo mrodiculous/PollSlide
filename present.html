@@ -832,7 +832,7 @@ function qrLabel(s){ if(s.question&&s.question.sessionCode) return t('present.sc
   return (typeof userId!=='undefined'&&userId) ? 'Activating…' : 'Sign in to activate'; }
 function qrCard(s){ if(!hasQR(s)) return '';
   const c = s.question && s.question.sessionCode;   // laptop path: type the code at the answer URL
-  const nocam = c ? `<div class="qrn">${t('present.nocam')} <b>app.pollslide.com/answer</b><br>· ${c} ·</div>` : '';
+  const nocam = c ? `<div class="qrn">${t('present.nocam')} <b>pollslide.com/join</b><br>· ${c} ·</div>` : '';
   return `<div class="qr-card"><div class="qrbox"></div><div class="qrl">${qrLabel(s)}</div>${nocam}</div>`; }
 function answerUrl(s){ const c=s.question&&s.question.sessionCode; const i=(s.question&&s.question.qIndex)||0;
   if(!c) return 'https://app.pollslide.com/answer';
