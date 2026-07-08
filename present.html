@@ -1571,8 +1571,8 @@ function exportPDF(){ closeMenus();
 }
 
 /* ─── SHARE LINKS + DUPLICATE DECK ─────────────────────────────────────────────
-   sharedDecks/$sid is public-read (unguessable id), owner-write — rules in
-   database-rules-workspaces.json (merge + publish in Firebase Console).        */
+   sharedDecks/$sid is public-read (unguessable id), owner-write — rules live in
+   the canonical database-rules.json (deployed 2026-07-08).                     */
 async function shareDeck(){ closeMenus();
   if(typeof fbDb==='undefined'||!fbDb||!userId){ toast('Sign in to share.'); toggleAuth(); return; }
   let j; try{ j=JSON.stringify(deck); }catch(e){ toast('Deck too complex to share.'); return; }

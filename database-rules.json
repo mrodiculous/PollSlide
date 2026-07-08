@@ -62,6 +62,14 @@
       ".write": false
     },
 
+    "sharedDecks": {
+      "$sid": {
+        ".read": true,
+        ".write": "auth != null && (!data.exists() || data.child('owner').val() === auth.uid)",
+        ".validate": "newData.hasChildren(['owner','title','json','at'])"
+      }
+    },
+
     "workspaces": {
       "$wsId": {
         ".read": "auth != null && (data.child('ownerUid').val() === auth.uid || data.child('members').child(auth.uid).exists())",

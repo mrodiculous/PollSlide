@@ -111,13 +111,14 @@ rewrites every member's `users/<uid>/tier`:
    tiers), pre-validates invites — UX only.
 2. **API** (`api/team.js`, Admin SDK): the real gate — token-verified caller,
    role checks, seat caps, invite/email match on acceptance.
-3. **RTDB rules** (`database-rules-workspaces.json`): merge into the Firebase
-   console ruleset — read access limited to members, writes role-gated. Seat
-   caps can't be expressed in rules (no `numChildren()`), which is why the API
-   is authoritative. ⚠️ The client still contains a direct-write fallback for
+3. **RTDB rules** (`database-rules.json` — the single canonical, deployed
+   ruleset; the old `database-rules-workspaces.json` fragment is retired):
+   read access limited to members, writes role-gated. Seat caps can't be
+   expressed in rules (no `numChildren()`), which is why the API is
+   authoritative. ⚠️ The client still contains a direct-write fallback for
    each mutation (used only if `/api/team` isn't deployed); once the API is
-   confirmed live in prod, remove the self-join clause from the rules as the
-   README inside that file describes.
+   confirmed live in prod, remove the `$uid === auth.uid` self-join clause
+   from the `workspaces/$wsId/members/$uid` rule.
 
 ## Emails involved
 - `team_invite` — invite notification (from `api/team.js`).
