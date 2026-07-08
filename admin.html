@@ -145,6 +145,47 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
 .quota-bar{height:7px;background:var(--surface2);border-radius:100px;overflow:hidden;}
 .quota-fill{height:100%;border-radius:100px;transition:width .4s;}
 
+/* ARCHITECTURE / HOW IT WORKS */
+.arch-intro{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);padding:14px 16px;margin-bottom:14px;font-size:13px;line-height:1.6;color:var(--muted);}
+.arch-intro strong{color:var(--text);}
+.arch-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-size:11px;}
+.arch-legend span{display:inline-flex;align-items:center;gap:5px;color:var(--muted);}
+.arch-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.arch-layer{background:var(--surface);border:1px solid var(--border2);border-radius:var(--r);margin-bottom:12px;overflow:hidden;}
+.arch-layer-hd{display:flex;align-items:center;gap:9px;padding:11px 15px;border-bottom:1px solid var(--border);}
+.arch-layer-num{width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-family:'Syne',sans-serif;font-weight:800;font-size:12px;color:#fff;flex-shrink:0;}
+.arch-layer-hd h3{font-family:'Syne',sans-serif;font-weight:700;font-size:13px;}
+.arch-layer-hd p{font-size:11.5px;color:var(--muted);margin-top:1px;}
+.arch-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(184px,1fr));gap:9px;padding:13px;}
+.arch-card{background:var(--surface2);border:1px solid var(--border2);border-left-width:3px;border-radius:9px;padding:11px 12px;cursor:pointer;transition:border-color .15s,transform .12s,background .15s;}
+.arch-card:hover{transform:translateY(-2px);background:rgba(255,255,255,.03);}
+.arch-card .ac-top{display:flex;align-items:center;gap:7px;margin-bottom:3px;}
+.arch-card .ac-icon{font-size:15px;line-height:1;}
+.arch-card .ac-name{font-family:'Syne',sans-serif;font-weight:700;font-size:12.5px;}
+.arch-card .ac-file{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:10px;color:var(--muted);margin-top:1px;}
+.arch-card .ac-desc{font-size:11px;color:var(--muted);line-height:1.45;margin-top:5px;}
+.arch-card .ac-tag{display:inline-block;font-size:9px;font-weight:700;padding:1px 6px;border-radius:100px;margin-top:7px;letter-spacing:.03em;}
+.ac-live{background:rgba(67,233,123,.14);color:var(--accent3);}
+.ac-planned{background:rgba(247,183,49,.14);color:var(--accent4);}
+.ac-internal{background:rgba(144,144,184,.15);color:var(--muted);}
+.arch-flow-wrap{display:flex;align-items:stretch;gap:0;padding:15px 13px;overflow-x:auto;}
+.arch-step{flex:1;min-width:120px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;padding:11px 12px;position:relative;}
+.arch-step .as-num{font-family:'Syne',sans-serif;font-weight:800;font-size:11px;color:var(--accent);}
+.arch-step .as-title{font-family:'Syne',sans-serif;font-weight:700;font-size:12px;margin:3px 0 4px;}
+.arch-step .as-desc{font-size:10.5px;color:var(--muted);line-height:1.4;}
+.arch-step .as-node{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:9.5px;color:var(--accent3);margin-top:6px;display:block;word-break:break-all;}
+.arch-step-arrow{display:flex;align-items:center;color:var(--muted);font-size:16px;padding:0 5px;flex-shrink:0;}
+.arch-suite{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:9px;padding:13px;}
+.arch-suite-item{border:1px solid var(--border2);border-radius:9px;padding:11px 12px;background:var(--surface2);}
+.arch-suite-item h4{font-family:'Syne',sans-serif;font-weight:700;font-size:12.5px;display:flex;align-items:center;gap:6px;}
+.arch-suite-item p{font-size:11px;color:var(--muted);line-height:1.45;margin-top:4px;}
+.dp-node-row{display:flex;align-items:center;gap:7px;font-size:12px;padding:5px 0;border-bottom:1px solid var(--border);}
+.dp-node-row:last-child{border-bottom:none;}
+.dp-node-badge{font-size:9px;font-weight:700;padding:1px 6px;border-radius:5px;flex-shrink:0;}
+.dp-badge-read{background:rgba(108,99,255,.16);color:var(--accent);}
+.dp-badge-write{background:rgba(255,101,132,.16);color:var(--accent2);}
+.dp-node-path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;word-break:break-all;}
+
 /* TOAST */
 #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(60px);background:var(--surface2);border:1px solid var(--border2);border-radius:10px;padding:10px 18px;font-size:13px;font-weight:500;transition:transform .25s;z-index:9999;white-space:nowrap;pointer-events:none;}
 #toast.show{transform:translateX(-50%) translateY(0);}
@@ -215,6 +256,11 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
     </div>
     <div class="nav-item" onclick="showPage('search')" id="nav-search">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Lookup
+    </div>
+
+    <div class="nav-section">Reference</div>
+    <div class="nav-item" onclick="showPage('architecture')" id="nav-architecture">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>How it works
     </div>
 
     <div class="nav-sep"></div>
@@ -345,12 +391,12 @@ function showPage(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const nav=document.getElementById('nav-'+page);if(nav)nav.classList.add('active');
-  const titles={dashboard:'Dashboard',users:'Users',teams:'Teams',tickets:'Support Tickets',comms:'Send Message',flows:'Message Flows',legal:'Legal Quick Actions',health:'System Health',security:'Security',ai:'AI / Polly Management',tiers:'Plans & Tiers',search:'Lookup'};
+  const titles={dashboard:'Dashboard',users:'Users',teams:'Teams',tickets:'Support Tickets',comms:'Send Message',flows:'Message Flows',legal:'Legal Quick Actions',health:'System Health',security:'Security',ai:'AI / Polly Management',tiers:'Plans & Tiers',search:'Lookup',architecture:'How PollSlide Works'};
   document.getElementById('pageTitle').textContent=titles[page]||page;
   closeDetail();renderPage();
 }
 function renderPage(){
-  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch};
+  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture};
   if(map[currentPage])map[currentPage]();
 }
 
@@ -1316,6 +1362,251 @@ async function loadSecurityLog(){
     el.innerHTML='<table><thead><tr><th>When</th><th>By</th><th>High</th><th>Warn</th><th>Auto-fixed</th></tr></thead><tbody>'+rows.map(x=>
       `<tr><td>${timeAgo(x.t)}</td><td>${esc(x.by)}</td><td>${x.high||0}</td><td>${x.warn||0}</td><td style="font-size:12px;white-space:normal;">${x.fixed?esc(x.fixed.join(' · ')):'—'}</td></tr>`).join('')+'</tbody></table>';
   }catch(e){el.textContent='Could not read scan history: '+e.message;}
+}
+
+// ─── HOW POLLSLIDE WORKS (architecture map) ───────────────────────────────────
+// Data-driven, layered picture of every surface, data node, API and service, plus
+// the live-session lifecycle. Cards open a detail panel showing what each reads/writes.
+const ARCH_LAYERS=[
+  { key:'create', num:'1', accent:'#6c63ff', title:'Presenter surfaces', sub:'Where you build decks and run the room',
+    tools:[
+      {icon:'🎛️',name:'Presenter Studio',file:'presenter.html',url:'presenter.html',status:'live',
+        desc:'The hub — build decks, run the live room, control questions, manage your team.',
+        detail:'The main app. Creates and stores presentations, mirrors questions to quiz_builder/<code> so the audience can load them, and drives the live session by publishing the current question and per-question state.',
+        reads:['users/$uid/presentations','sessions/$code/responses','sessions/$code/qa'],
+        writes:['users/$uid/presentations','quiz_builder/$code (questions, language, productType)','sessions/$code/currentQuestion','sessions/$code/qstate','sessions/$code/meta']},
+      {icon:'🖥️',name:'PresentSlide',file:'present.html',url:'present.html',status:'live',
+        desc:'Present decks from PollSlide with live poll overlays baked in. Share a deck by link.',
+        detail:'The present-from-PollSlide path: slides with in-present poll overlays, plus shareable deck links.',
+        reads:['sharedDecks/$sid','sessions/$code/currentQuestion','sessions/$code/responses'],
+        writes:['sharedDecks/$sid','sessions/$code/currentQuestion']},
+      {icon:'📊',name:'PowerPoint add-in',file:'powerpoint.html',url:'powerpoint.html',status:'live',
+        desc:'Office.js add-in — run live polls inside PowerPoint on Windows, Mac and Web.',
+        detail:'The cross-platform fallback. Embeds PollSlide questions into PowerPoint via the Office.js manifest and reads live tallies back onto the slide.',
+        reads:['quiz_builder/$code/questions','sessions/$code/responses'],
+        writes:['sessions/$code/responses','sessions/$code/meta']},
+      {icon:'🟨',name:'Google Slides overlay',file:'overlay.html',url:'overlay.html',status:'live',
+        desc:'In-present poll overlay that floats over a Google Slides deck.',
+        detail:'A transparent overlay that follows the live question and shows results on top of a Google Slides presentation.',
+        reads:['sessions/$code/currentQuestion','sessions/$code/responses'],writes:[]},
+      {icon:'🍎',name:'Mac Companion app',file:'native app · pairing/$code',url:'https://pollslide.com/download',status:'live',
+        desc:'Native macOS app that follows the live question on a second screen; pairs with a 6-digit code.',
+        detail:'Downloads separately. Pairs to a running session via a pairing code, then mirrors the live question and results — a presenter confidence monitor.',
+        reads:['pairing/$code','sessions/$code/currentQuestion','sessions/$code/responses','mac_link/$uid'],
+        writes:['pairing/$code']},
+    ]},
+  { key:'audience', num:'2', accent:'#ff6584', title:'Audience surfaces', sub:'What participants open — no login needed',
+    tools:[
+      {icon:'📱',name:'Answer / Join',file:'answer.html',url:'answer.html',status:'live',
+        desc:'What the audience opens after scanning the QR or entering a code. Answer, ask Q&A, study.',
+        detail:'The participant page. Loads the deck for a single session code and submits answers, questions and study progress.',
+        reads:['quiz_builder/$code (questions, language, productType)','sessions/$code/currentQuestion','sessions/$code/meta'],
+        writes:['sessions/$code/responses','sessions/$code/qa','sessions/$code/study']},
+      {icon:'📺',name:'Live Results',file:'live.html',url:'live.html',status:'live',
+        desc:'Big-screen live results — bars, pie, leaderboard.',
+        detail:'A read-only display surface for the room screen. Subscribes to the current question and the response tallies and animates them.',
+        reads:['sessions/$code/currentQuestion','sessions/$code/responses','sessions/$code/meta'],writes:[]},
+      {icon:'🪟',name:'Web Companion',file:'companion.html',url:'companion.html',status:'live',
+        desc:'Browser mirror of the live question — the web counterpart to the Mac app.',
+        detail:'Follows the live question in a browser tab when a native app is not available.',
+        reads:['sessions/$code/currentQuestion','sessions/$code/qstate','sessions/$code/responses','quiz_builder/$code/questions'],writes:[]},
+      {icon:'📄',name:'Reports',file:'report.html',url:'report.html',status:'live',
+        desc:'Post-session results and CSV export.',
+        detail:'Renders a shareable report of a finished session and exports responses to CSV.',
+        reads:['sessions/$code/responses','quiz_builder/$code/questions'],writes:[]},
+      {icon:'🧭',name:'Setup guide',file:'setup.html',url:'setup.html',status:'live',
+        desc:'In-app onboarding walkthrough for new presenters.',
+        detail:'Guided first-run instructions.',reads:[],writes:[]},
+    ]},
+  { key:'data', num:'4', accent:'#43e97b', title:'Realtime data — Firebase RTDB', sub:'The shared state every surface reads and writes',
+    tools:[
+      {icon:'🗂️',name:'quiz_builder/$code',file:'RTDB node',status:'internal',
+        desc:'Published questions the audience loads: questions, language, productType. Per-code read only.',
+        detail:'Presenter writes here on save; audience reads per code. Root listing is locked down (2026-07-07) so codes are not enumerable.',
+        reads:['answer.html','companion.html','powerpoint.html'],writes:['presenter.html']},
+      {icon:'⚡',name:'sessions/$code',file:'RTDB node',status:'internal',
+        desc:'Live session state: currentQuestion, responses, qstate, qa, study, meta.',
+        detail:'The heartbeat of a live room. Presenter publishes currentQuestion/qstate; audience writes responses/qa/study; displays read it all back.',
+        reads:['answer.html','live.html','companion.html','overlay.html','report.html','Mac app'],
+        writes:['presenter.html','answer.html','present.html']},
+      {icon:'👤',name:'users/$uid',file:'RTDB node',status:'internal',
+        desc:'Account data: saved presentations, tier, inbox, AI usage. Owner read/write only.',
+        detail:'Each account owns this subtree. The admin index mirrors a copy for this panel.',
+        reads:['presenter.html','admin.html'],writes:['presenter.html','api/* (Admin SDK)']},
+      {icon:'🔗',name:'pairing/$code · mac_link/$uid',file:'RTDB node',status:'internal',
+        desc:'Companion pairing handshake + per-account link pointer.',
+        detail:'A short-lived pairing code lets the Mac app attach to a session; mac_link is a non-secret uid-keyed pointer.',
+        reads:['Mac app','companion.html'],writes:['presenter.html','Mac app']},
+      {icon:'📤',name:'sharedDecks/$sid',file:'RTDB node',status:'internal',
+        desc:'PresentSlide share links: public read of an unguessable id, owner-write. Deployed 2026-07-08.',
+        detail:'Anyone with the link can open that one deck; only the signed-in owner can create or overwrite it.',
+        reads:['present.html'],writes:['present.html']},
+      {icon:'👥',name:'workspaces · team_invites',file:'RTDB node',status:'internal',
+        desc:'Team membership + invites. Server-authoritative through /api/team.',
+        detail:'Reads are limited to members; writes are role-gated. Seat caps are enforced in api/team.js (rules cannot count children).',
+        reads:['presenter.html (Team admin)','api/team.js'],writes:['api/team.js']},
+      {icon:'🛠️',name:'admin/*',file:'RTDB node',status:'internal',
+        desc:'This panel: users_index, tickets, messages, incidents, legal_log, security_log.',
+        detail:'Admin-only subtree that powers everything you are looking at right now.',
+        reads:['admin.html'],writes:['admin.html','api/status.js','api/security-status.js']},
+    ]},
+  { key:'backend', num:'5', accent:'#6c63ff', title:'Backend APIs — Vercel serverless', sub:'The /api endpoints that do the privileged work',
+    tools:[
+      {icon:'🤖',name:'Polly AI',file:'api/polly.js · polly-image.js · ai.js',status:'live',
+        desc:'Generates questions, summaries, grading and images.',
+        detail:'Routes AI requests local-Mac-first then cloud fallback, and enforces per-tier monthly quotas server-side (tamper-proof).',
+        reads:['local Mac','OpenAI','fal.ai'],writes:['users/$uid/aiUsedThisMonth']},
+      {icon:'🌐',name:'Translate',file:'api/translate.js',status:'live',
+        desc:'Live translation of questions and answers.',
+        detail:'Same local-first → OpenAI routing as Polly text.',reads:['local Mac','OpenAI'],writes:[]},
+      {icon:'👥',name:'Team API',file:'api/team.js',status:'live',
+        desc:'Server-authoritative team management + seat caps (Firebase Admin SDK).',
+        detail:'Every team mutation routes here; it verifies the caller, checks roles and enforces the 5/25 seat caps.',
+        reads:['workspaces','team_invites'],writes:['workspaces','team_invites','users/$uid/tier']},
+      {icon:'💳',name:'Billing',file:'api/create-checkout.js · billing-portal.js · stripe-webhook.js',status:'live',
+        desc:'Stripe checkout, customer portal, and the webhook that sets tiers.',
+        detail:'Checkout and portal are user-triggered; the webhook is the source of truth that flips users/$uid/tier on payment events.',
+        reads:['Stripe'],writes:['users/$uid/tier']},
+      {icon:'✉️',name:'Email',file:'api/send-email.js',status:'live',
+        desc:'Transactional email — receipts, invites, alerts — via Resend.',
+        detail:'Admin-gated for arbitrary recipients; used by billing, teams and this panel.',reads:[],writes:['Resend']},
+      {icon:'📥',name:'Deck import',file:'api/convert-deck.js',status:'live',
+        desc:'Imports PowerPoint / Slides decks into PollSlide.',
+        detail:'Server-side conversion so a deck can be presented through PollSlide.',reads:[],writes:['users/$uid/presentations']},
+      {icon:'🩺',name:'Ops endpoints',file:'api/status.js · ai-status.js · security-status.js · legal-watch.js',status:'live',
+        desc:'Health, AI provider status, security scan, legal-page watcher — feed this admin panel.',
+        detail:'These power System Health, AI status, Security scan, and the legal watcher. status.js also writes the incident log automatically.',
+        reads:['all services'],writes:['admin/incidents','admin/security_log','admin/legal_alerts']},
+      {icon:'🗑️',name:'Account ops',file:'api/delete-account.js · admin-quota.js',status:'live',
+        desc:'Full account deletion (Auth + DB) and AI quota reset.',
+        detail:'Privileged actions the client cannot do alone; used from the user detail panel.',
+        reads:[],writes:['Firebase Auth','users/$uid']},
+    ]},
+  { key:'external', num:'6', accent:'#9090b8', title:'External services', sub:'Third parties the backend talks to',
+    tools:[
+      {icon:'🖥️',name:'Your Mac (local AI)',file:'Ollama + FLUX via Cloudflare tunnel',status:'internal',
+        desc:'Primary AI at $0 marginal cost — serves text, grading and images first.',
+        detail:'Kept behind a Cloudflare Access service token. When it is asleep, the cloud fallbacks take over automatically.',reads:[],writes:[]},
+      {icon:'🧠',name:'OpenAI',file:'gpt-4o-mini · gpt-image-1',status:'internal',
+        desc:'Text/grading + image fallback when the Mac is unreachable.',detail:'',reads:[],writes:[]},
+      {icon:'🎨',name:'fal.ai',file:'FLUX schnell',status:'internal',
+        desc:'Cheap cloud image fallback between local FLUX and OpenAI.',detail:'',reads:[],writes:[]},
+      {icon:'💳',name:'Stripe',file:'payments',status:'internal',desc:'Subscriptions, checkout and the customer portal.',detail:'',reads:[],writes:[]},
+      {icon:'✉️',name:'Resend',file:'email delivery',status:'internal',desc:'Sends all transactional email.',detail:'',reads:[],writes:[]},
+      {icon:'🔥',name:'Firebase',file:'Auth + Realtime Database',status:'internal',desc:'Sign-in and all realtime data.',detail:'',reads:[],writes:[]},
+      {icon:'▲',name:'Vercel',file:'hosting + serverless',status:'internal',desc:'Serves every page and /api function.',detail:'',reads:[],writes:[]},
+    ]},
+];
+
+const ARCH_SUITE=[
+  {icon:'📊',name:'Poll',desc:'Real-time multiple-choice, word cloud and rating questions during a live talk.'},
+  {icon:'📝',name:'Survey',desc:'Async questionnaires collected over time, with email collection and follow-up.'},
+  {icon:'🎯',name:'Quiz',desc:'Graded questions with correct answers, timers, leaderboard and shareable scores.'},
+  {icon:'📚',name:'Study',desc:'Spaced-repetition flashcards and self-study built on the same question engine.'},
+];
+
+const ARCH_FLOW=[
+  {n:'1',t:'Build',d:'You create a deck in Presenter Studio.',node:'users/$uid/presentations'},
+  {n:'2',t:'Publish',d:'Questions mirror to the session code so the audience can load them.',node:'quiz_builder/$code'},
+  {n:'3',t:'Present + QR',d:'Present via PollSlide, PowerPoint or Slides; the QR shows the join code.',node:'present.html'},
+  {n:'4',t:'Audience joins',d:'Participants open the join page and load that code.',node:'answer.html → quiz_builder/$code'},
+  {n:'5',t:'Answers flow in',d:'Every response is written live.',node:'sessions/$code/responses'},
+  {n:'6',t:'Advance',d:'You move the room to the next question.',node:'sessions/$code/currentQuestion'},
+  {n:'7',t:'Live results',d:'Tallies animate on the big screen, web and Mac app.',node:'live.html · companion'},
+  {n:'8',t:'Report',d:'Export the finished session to CSV.',node:'report.html'},
+];
+
+function renderArchitecture(){
+  const legendDot=(c,l)=>`<span><span class="arch-dot" style="background:${c}"></span>${l}</span>`;
+  const card=(layerKey,i,t)=>{
+    const tag=t.status==='live'?'<span class="ac-tag ac-live">● live</span>':t.status==='planned'?'<span class="ac-tag ac-planned">◐ planned</span>':'<span class="ac-tag ac-internal">internal</span>';
+    return `<div class="arch-card" style="border-left-color:${arcAccent(layerKey)}" onclick="openArchDetail('${layerKey}',${i})">
+      <div class="ac-top"><span class="ac-icon">${t.icon}</span><span class="ac-name">${esc(t.name)}</span></div>
+      <div class="ac-file">${esc(t.file||'')}</div>
+      <div class="ac-desc">${esc(t.desc)}</div>
+      ${tag}
+    </div>`;
+  };
+  const layerHtml=L=>`<div class="arch-layer">
+    <div class="arch-layer-hd">
+      <div class="arch-layer-num" style="background:${L.accent}">${L.num}</div>
+      <div><h3>${esc(L.title)}</h3><p>${esc(L.sub)}</p></div>
+    </div>
+    <div class="arch-row">${L.tools.map((t,i)=>card(L.key,i,t)).join('')}</div>
+  </div>`;
+
+  const flowHtml=`<div class="arch-flow-wrap">${ARCH_FLOW.map((s,i)=>
+    `<div class="arch-step"><div class="as-num">STEP ${s.n}</div><div class="as-title">${esc(s.t)}</div><div class="as-desc">${esc(s.d)}</div><span class="as-node">${esc(s.node)}</span></div>`
+    +(i<ARCH_FLOW.length-1?'<div class="arch-step-arrow">→</div>':'')).join('')}</div>`;
+
+  const suiteHtml=`<div class="arch-suite">${ARCH_SUITE.map(s=>
+    `<div class="arch-suite-item"><h4>${s.icon} ${esc(s.name)}</h4><p>${esc(s.desc)}</p></div>`).join('')}</div>`;
+
+  // Order the layers top-to-bottom: create → audience → (engine/suite card) → data → backend → external
+  const create=ARCH_LAYERS.find(l=>l.key==='create'), audience=ARCH_LAYERS.find(l=>l.key==='audience');
+  const data=ARCH_LAYERS.find(l=>l.key==='data'), backend=ARCH_LAYERS.find(l=>l.key==='backend'), external=ARCH_LAYERS.find(l=>l.key==='external');
+
+  document.getElementById('content').innerHTML=`
+  <div class="arch-intro">
+    <strong>How PollSlide fits together.</strong> One engine powers four products (Poll, Survey, Quiz, Study). Presenters build and run rooms from several surfaces; the audience joins with a code; everything meets in Firebase realtime data; privileged work happens in Vercel serverless APIs that talk to a handful of external services. Click any card for what it does and which data it reads or writes.
+    <div class="arch-legend">
+      ${legendDot('#43e97b','live / operational')}
+      ${legendDot('#9090b8','internal (data / service)')}
+      ${legendDot('#6c63ff','reads a node')}
+      ${legendDot('#ff6584','writes a node')}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><h2>A live session, start to finish</h2><span style="font-size:11px;color:var(--muted);">the path a single poll takes</span></div>
+    ${flowHtml}
+  </div>
+
+  <div class="card">
+    <div class="card-hd"><h2>③ One engine · four products</h2><span style="font-size:11px;color:var(--muted);">differentiated by the <code>productType</code> flag</span></div>
+    ${suiteHtml}
+  </div>
+
+  ${layerHtml(create)}
+  ${layerHtml(audience)}
+  ${layerHtml(data)}
+  ${layerHtml(backend)}
+  ${layerHtml(external)}
+
+  <div class="arch-intro" style="margin-top:2px;">
+    <strong>Reading the map.</strong> Surfaces (layers 1–2) never touch external services directly — they go through realtime data (layer 4) and the backend (layer 5). That is why locking down the data-node rules protects every surface at once, and why the backend is the only place with secrets.
+  </div>`;
+}
+
+function arcAccent(key){return (ARCH_LAYERS.find(l=>l.key===key)||{}).accent||'var(--accent)';}
+
+function openArchDetail(layerKey,i){
+  const L=ARCH_LAYERS.find(l=>l.key===layerKey); if(!L)return;
+  const t=L.tools[i]; if(!t)return;
+  document.getElementById('dpTitle').textContent=t.name;
+  const nodeRow=(mode,arr)=>arr&&arr.length?arr.map(n=>`<div class="dp-node-row"><span class="dp-node-badge ${mode==='read'?'dp-badge-read':'dp-badge-write'}">${mode==='read'?'READS':'WRITES'}</span><span class="dp-node-path">${esc(n)}</span></div>`).join(''):'';
+  const tag=t.status==='live'?'<span class="ac-tag ac-live">● live</span>':t.status==='planned'?'<span class="ac-tag ac-planned">◐ planned</span>':'<span class="ac-tag ac-internal">internal</span>';
+  const openBtn=t.url?`<a class="btn btn-sm btn-purple" style="width:100%;margin-top:4px;" href="${t.url}" target="_blank" rel="noopener">Open ${esc(t.name)} ↗</a>`:'';
+  const rw=(t.reads&&t.reads.length)||(t.writes&&t.writes.length)
+    ? `<div class="dp-sec"><h3>Data it touches</h3>${nodeRow('read',t.reads)}${nodeRow('write',t.writes)}</div>`
+    : '';
+  document.getElementById('dpBody').innerHTML=`
+    <div class="dp-sec">
+      <h3>${esc(L.title)}</h3>
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px;">
+        <span style="font-size:26px;">${t.icon}</span>
+        <div><div style="font-family:'Syne',sans-serif;font-weight:700;font-size:15px;">${esc(t.name)}</div>
+        <div class="ac-file">${esc(t.file||'')}</div></div>
+      </div>
+      <div>${tag}</div>
+    </div>
+    <div class="dp-sec"><h3>What it does</h3>
+      <p style="font-size:13px;line-height:1.6;color:var(--text);">${esc(t.desc)}</p>
+      ${t.detail?`<p style="font-size:12.5px;line-height:1.6;color:var(--muted);margin-top:8px;">${esc(t.detail)}</p>`:''}
+    </div>
+    ${rw}
+    ${openBtn?`<div class="dp-sec">${openBtn}</div>`:''}`;
+  document.getElementById('detailPanel').classList.add('open');
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────

@@ -39,7 +39,8 @@
         "currentQuestion": { ".write": "auth != null" },
         "qstate":          { ".write": "auth != null" },
         "meta":            { ".write": "auth != null" },
-        "qa":              { ".write": true }
+        "qa":              { ".write": true },
+        "study":           { ".write": true }
       }
     },
 

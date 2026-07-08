@@ -88,13 +88,40 @@
     font-family:'DM Sans',sans-serif;
   }
 
+  /* Competitor-style join banner (Slido / Mentimeter / Kahoot) — always visible */
+  .join-banner {
+    display:flex; flex-direction:column; align-items:center; gap:16px;
+    padding:32px 20px; background:var(--surface);
+    border-bottom:1px solid var(--border); flex-shrink:0; text-align:center;
+    transition:padding .3s ease, gap .3s ease;
+  }
+  .jb-instruction { font-size:clamp(16px,2.4vw,26px); color:var(--muted); font-weight:500; }
+  .jb-instruction .jb-url { color:var(--text); font-weight:800; font-family:'Syne',sans-serif; }
+  .jb-code-row { display:flex; align-items:center; gap:32px; }
+  .jb-code-block { text-align:left; }
+  .jb-code-label { font-size:12px; text-transform:uppercase; letter-spacing:.12em; color:var(--muted); margin-bottom:2px; }
+  .jb-code {
+    font-family:'Syne',sans-serif; font-weight:800; letter-spacing:.1em;
+    font-size:clamp(46px,9vw,92px); line-height:1; color:var(--accent);
+  }
+  .jb-qr { background:#fff; padding:10px; border-radius:16px; flex-shrink:0; line-height:0; }
+  .jb-qr img, .jb-qr canvas { display:block; width:128px; height:128px; }
+  /* Compact — collapses to a slim top bar while a question is live */
+  .join-banner.compact { flex-direction:row; justify-content:center; gap:18px; padding:9px 20px; }
+  .join-banner.compact .jb-instruction { font-size:14px; align-self:center; }
+  .join-banner.compact .jb-code-row { gap:12px; }
+  .join-banner.compact .jb-code-label { display:none; }
+  .join-banner.compact .jb-code { font-size:clamp(22px,4vw,32px); }
+  .join-banner.compact .jb-qr { padding:5px; border-radius:8px; }
+  .join-banner.compact .jb-qr img, .join-banner.compact .jb-qr canvas { width:46px; height:46px; }
+
   /* Waiting state */
   #waitingState {
     flex:1; display:flex; flex-direction:column; align-items:center;
-    justify-content:center; gap:20px; padding:40px 20px; text-align:center;
+    justify-content:center; gap:14px; padding:36px 20px; text-align:center;
   }
-  #waitingState h2 { font-family:'Syne',sans-serif; font-weight:800; font-size:22px; }
-  #waitingState p  { color:var(--muted); font-size:15px; line-height:1.6; max-width:380px; }
+  #waitingState h2 { font-family:'Syne',sans-serif; font-weight:800; font-size:clamp(20px,3vw,30px); }
+  #waitingState p  { color:var(--muted); font-size:15px; line-height:1.6; max-width:420px; }
 
   /* Active question state */
   #questionState { flex:1; display:none; flex-direction:column; overflow-y:auto; }
@@ -113,10 +140,10 @@
   /* Question body */
   .q-body { padding:20px; display:flex; flex-direction:column; gap:16px; }
 
-  /* Question text */
+  /* Question text — room-legible */
   .q-text-display {
     font-family:'Syne',sans-serif; font-weight:800;
-    font-size:clamp(16px, 3.5vw, 26px); line-height:1.35;
+    font-size:clamp(22px, 4.5vw, 40px); line-height:1.3;
   }
 
   /* QR section */
@@ -257,17 +284,22 @@
     <button class="leave-btn" onclick="leaveSession()">Leave</button>
   </div>
 
+  <!-- Join banner — the hero people scan/type to join, always on screen -->
+  <div id="joinBanner" class="join-banner">
+    <div class="jb-instruction">Join at <span class="jb-url">app.pollslide.com/answer</span></div>
+    <div class="jb-code-row">
+      <div class="jb-code-block">
+        <div class="jb-code-label">Code</div>
+        <div class="jb-code" id="jbCode">—</div>
+      </div>
+      <div class="jb-qr" id="jbQr"></div>
+    </div>
+  </div>
+
   <!-- Waiting for presenter -->
   <div id="waitingState">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="60" height="60" style="opacity:.35;border-radius:18px;">
-      <rect width="100" height="100" rx="22" fill="#0d0d18"/>
-      <rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/>
-      <rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/>
-      <rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/>
-      <polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/>
-    </svg>
-    <h2>Waiting for presenter…</h2>
-    <p>This page will update automatically when the presenter goes live with a question. Keep this tab open.</p>
+    <h2>You're in. Waiting for the presenter…</h2>
+    <p>The first question appears here automatically the moment it goes live. Keep this screen up.</p>
   </div>
 
   <!-- Active question -->
@@ -294,16 +326,6 @@
 
       <!-- Media (image/gif) -->
       <div class="q-media hidden" id="qMedia"></div>
-
-      <!-- QR section -->
-      <div class="qr-section">
-        <div class="qr-wrapper" id="qrWrapper"></div>
-        <div class="qr-info">
-          <div class="qr-title">Scan to answer</div>
-          <div class="qr-code-text" id="qrCodeText">—</div>
-          <div class="qr-url" id="qrUrl"></div>
-        </div>
-      </div>
 
       <!-- Response count -->
       <div class="resp-count-big" id="respCountBig">0 <span>responses</span></div>
