@@ -48,11 +48,17 @@
   .rib-btn:hover{background:var(--chrome2);}
   .rib-btn .caret{color:var(--muted);font-size:10px;}
   .rib-sep{width:1px;height:24px;background:var(--border);margin:0 4px;}
-  .menu{position:absolute;top:calc(100% + 4px);left:0;min-width:230px;background:var(--chrome);border:1px solid var(--border2);border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.5);padding:6px;z-index:100;}
-  .menu-item{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:8px;font-size:13px;color:var(--text);}
+  .menu{position:absolute;top:calc(100% + 6px);left:0;min-width:250px;background:var(--chrome);border:1px solid var(--border2);border-radius:14px;box-shadow:0 16px 44px rgba(0,0,0,.55);padding:7px;z-index:100;}
+  .menu-head{font-family:'Syne',sans-serif;font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);padding:7px 10px 5px;}
+  .menu-item{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:9px;font-size:13px;color:var(--text);cursor:pointer;transition:background .12s;text-decoration:none;}
   .menu-item:hover{background:var(--chrome2);}
-  .menu-item .mi-ico{width:22px;text-align:center;font-size:16px;flex-shrink:0;}
+  .menu-item.active{background:rgba(108,99,255,.14);}
+  .menu-item .mi-ico{width:24px;text-align:center;font-size:17px;flex-shrink:0;}
+  .menu-item .mi-text{display:flex;flex-direction:column;line-height:1.25;}
+  .menu-item .mi-text b{font-family:'Syne',sans-serif;font-weight:800;font-size:13px;color:var(--text);}
   .menu-item .mi-sub{display:block;font-size:11px;color:var(--muted);}
+  .menu-item .mi-arrow{margin-left:auto;color:var(--muted);font-size:12px;flex-shrink:0;}
+  .menu-item .mi-here{margin-left:auto;font-size:9px;font-weight:700;color:var(--accent);background:rgba(108,99,255,.16);border:1px solid rgba(108,99,255,.32);border-radius:100px;padding:2px 8px;flex-shrink:0;}
   .menu-item .qrtag{margin-left:auto;font-size:9px;font-weight:700;color:var(--accent3);background:rgba(67,233,123,.14);border:1px solid rgba(67,233,123,.3);border-radius:100px;padding:1px 6px;}
   .menu-sep{height:1px;background:var(--border);margin:6px 4px;}
   .spacer{flex:1;}
@@ -248,12 +254,13 @@
       PresentSlide <span class="caret">▾</span>
     </button>
     <div class="menu hidden" id="brandMenu">
-      <a class="menu-item" href="https://app.pollslide.com/presenter"><span class="mi-ico">🗳️</span><span>PollSlide<span class="mi-sub">Live polls</span></span></a>
-      <a class="menu-item" href="https://app.pollslide.com/presenter"><span class="mi-ico">📋</span><span>SurveySlide<span class="mi-sub">Async surveys</span></span></a>
-      <a class="menu-item" href="https://app.pollslide.com/presenter"><span class="mi-ico">🏆</span><span>QuizSlide<span class="mi-sub">Graded quizzes</span></span></a>
-      <a class="menu-item" href="https://app.pollslide.com/presenter"><span class="mi-ico">📚</span><span>StudySlide<span class="mi-sub">Flashcards</span></span></a>
+      <div class="menu-head">Switch product</div>
+      <a class="menu-item" href="https://app.pollslide.com/presenter"><span class="mi-ico">🗳️</span><span class="mi-text"><b>PollSlide</b><span class="mi-sub">Live polls</span></span><span class="mi-arrow">↗</span></a>
+      <a class="menu-item" href="https://app.pollslide.com/presenter"><span class="mi-ico">📋</span><span class="mi-text"><b>SurveySlide</b><span class="mi-sub">Async surveys</span></span><span class="mi-arrow">↗</span></a>
+      <a class="menu-item" href="https://app.pollslide.com/presenter"><span class="mi-ico">🏆</span><span class="mi-text"><b>QuizSlide</b><span class="mi-sub">Graded quizzes</span></span><span class="mi-arrow">↗</span></a>
+      <a class="menu-item" href="https://app.pollslide.com/presenter"><span class="mi-ico">📚</span><span class="mi-text"><b>StudySlide</b><span class="mi-sub">Flashcards</span></span><span class="mi-arrow">↗</span></a>
       <div class="menu-sep"></div>
-      <div class="menu-item" style="opacity:.7;"><span class="mi-ico">🎬</span><span>PresentSlide<span class="mi-sub">You're here</span></span></div>
+      <div class="menu-item active"><span class="mi-ico">🎬</span><span class="mi-text"><b>PresentSlide</b><span class="mi-sub">Import &amp; present a full deck</span></span><span class="mi-here">You're here</span></div>
     </div>
   </div>
   <div class="rib-sep"></div>
