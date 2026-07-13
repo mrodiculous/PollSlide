@@ -1087,6 +1087,10 @@ auth.onAuthStateChanged(user => {
         }
       });
     }).catch(()=>{});
+
+    // Re-consent: if an admin has pushed a newer policy version than this user has
+    // accepted, show the review-and-accept banner. Dormant until a version exists.
+    checkPolicyConsent(userId);
   } else {
     // Safari ITP fix: if we were just signed in, wait 3s before signing out
     // because Safari may briefly clear auth persistence then restore it.
@@ -1568,6 +1572,12 @@ async function submitAuth() {
   try {
     if (authMode === 'signup') {
       await auth.createUserWithEmailAndPassword(email, pass);
+      // Seed the accepted policy version so brand-new users aren't immediately shown a
+      // "we've updated our policy" banner — they accept the current terms at signup.
+      try {
+        const pv = await db.ref('app_config/policy/version').get();
+        if (pv.exists() && auth.currentUser) await db.ref('users/'+auth.currentUser.uid+'/acceptedPolicyVersion').set(Number(pv.val()));
+      } catch(e) {}
       // Fire welcome email for new accounts (non-blocking). The endpoint requires
       // our signed-in token and only ever emails the token's own address.
       auth.currentUser.getIdToken().then(function(t) {
@@ -4990,6 +5000,60 @@ function safeJ(str){ try{return JSON.parse(str);}catch(e){return str;} }
 function toast(msg,type='info'){
   const el=document.createElement('div');el.className=`toast ${type}`;el.textContent=msg;
   document.body.appendChild(el);setTimeout(()=>el.remove(),3500);
+}
+
+// ─── POLICY RE-CONSENT BANNER ─────────────────────────────────────────────────
+// Shown on login when app_config/policy.version is newer than the version this user
+// has accepted. Set from PollSlide Admin → Legal → "Notify all users". Inert until then.
+function checkPolicyConsent(uid){
+  if(!uid) return;
+  db.ref('app_config/policy').get().then(function(snap){
+    if(!snap.exists()) return;
+    const pol=snap.val(); const v=Number(pol.version||0); if(!v) return;
+    db.ref('users/'+uid+'/acceptedPolicyVersion').get().then(function(us){
+      const accepted=us.exists()?Number(us.val()):0;
+      if(accepted>=v) return; // already up to date
+      showPolicyBanner(pol);
+    }).catch(function(){});
+  }).catch(function(){});
+}
+
+function showPolicyBanner(pol){
+  if(document.getElementById('policyBanner')) return;
+  const docs=Array.isArray(pol.docs)?pol.docs:[];
+  const links=docs.length
+    ? docs.map(d=>`<a href="${d.url}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;">${d.label}</a>`).join(' · ')
+    : `<a href="https://pollslide.com/terms" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;">Terms</a> · <a href="https://pollslide.com/privacy" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;">Privacy Policy</a>`;
+  const summary=pol.summary||"We've updated our Terms of Service and Privacy Policy.";
+  const bar=document.createElement('div');
+  bar.id='policyBanner';
+  bar.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:190000;background:var(--surface);border-top:1px solid var(--border2);box-shadow:0 -8px 30px rgba(0,0,0,0.25);padding:16px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center;';
+  bar.innerHTML=`
+    <div style="flex:1;min-width:240px;max-width:640px;">
+      <div style="font-family:Syne,sans-serif;font-weight:800;font-size:15px;margin-bottom:3px;">📜 We've updated our policies</div>
+      <div style="color:var(--muted);font-size:13.5px;line-height:1.55;">${summary} Please review and accept to continue. ${links}</div>
+    </div>
+    <div style="display:flex;gap:10px;flex-shrink:0;">
+      <button id="policyReviewBtn" style="padding:11px 18px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:11px;font-family:Syne,sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Review</button>
+      <button id="policyAcceptBtn" style="padding:11px 22px;background:var(--accent);border:none;color:#fff;border-radius:11px;font-family:Syne,sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Review &amp; Accept</button>
+    </div>`;
+  document.body.appendChild(bar);
+  const firstUrl=docs.length?docs[0].url:'https://pollslide.com/terms';
+  document.getElementById('policyReviewBtn').onclick=function(){ window.open(firstUrl,'_blank','noopener'); };
+  document.getElementById('policyAcceptBtn').onclick=function(){ acceptPolicyUpdate(Number(pol.version||0)); };
+}
+
+function acceptPolicyUpdate(version){
+  if(!userId||!version) return;
+  const now=Date.now();
+  const updates={};
+  updates['users/'+userId+'/acceptedPolicyVersion']=version;
+  updates['users/'+userId+'/acceptedPolicyAt']=now;
+  updates['users/'+userId+'/acceptedPolicyLog/'+version]=now; // audit trail of each acceptance
+  db.ref('/').update(updates).then(function(){
+    const b=document.getElementById('policyBanner'); if(b) b.remove();
+    toast('Thanks — your acceptance has been recorded.','success');
+  }).catch(function(){ toast('Could not record acceptance. Please try again.','warning'); });
 }
 // ─── PANEL RESIZE ─────────────────────────────────────────────────────────────
 (function() {

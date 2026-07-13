@@ -25,6 +25,11 @@
       }
     },
 
+    "app_config": {
+      ".read": true,
+      ".write": "auth != null && auth.token.email == 'help@pollslide.com'"
+    },
+
     "quiz_builder": {
       "$sessionCode": {
         ".read": true,

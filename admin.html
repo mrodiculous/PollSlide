@@ -1014,6 +1014,10 @@ const LEGAL_ACTIONS=[
 function renderLegal(){
   document.getElementById('content').innerHTML=`
   <div class="card" style="margin-bottom:14px;">
+    <div class="card-hd"><h2>Policy updates &amp; re-consent</h2><span style="font-size:11px;color:var(--muted);">Push a Terms/Privacy update to every user — bumps the version, notifies them in-app, and prompts re-consent on next login</span></div>
+    <div id="policyPanel" style="padding:14px;"><div class="loader">Loading…</div></div>
+  </div>
+  <div class="card" style="margin-bottom:14px;">
     <div class="card-hd"><h2>Legal quick actions</h2><span style="font-size:11px;color:var(--muted);">One-click fulfilment of legal promises from Terms of Service & Privacy Policy</span></div>
     <div class="qa-grid">
       ${LEGAL_ACTIONS.map((a,i)=>`<div class="qa-btn" onclick="legalActions[${i}].action()"><div class="qa-btn-icon">${a.icon}</div><div class="qa-btn-title">${a.title}</div><div class="qa-btn-desc">${a.desc}</div></div>`).join('')}
@@ -1023,7 +1027,120 @@ function renderLegal(){
     <div class="card-hd"><h2>Legal request log</h2></div>
     <div id="legalLog"><div class="loader">Loading…</div></div>
   </div>`;
+  loadPolicyPanel();
   loadLegalLog();
+}
+
+// ─── POLICY UPDATES & RE-CONSENT ──────────────────────────────────────────────
+// Wires legal-watch alerts → user notification + version bump → re-consent banner.
+// The user-facing banner (presenter.html) is DORMANT until a version is pushed here;
+// nothing changes for any user until you click a "Notify all users" button below.
+const POLICY_DOCS={
+  terms:  {label:'Terms of Service', url:'https://pollslide.com/terms'},
+  privacy:{label:'Privacy Policy',   url:'https://pollslide.com/privacy'},
+  cookies:{label:'Cookie Policy',    url:'https://pollslide.com/cookies'},
+};
+// legal-watch keys for OUR docs → POLICY_DOCS keys (vendor changes don't need re-consent)
+const OURS_KEYMAP={ours_terms:'terms',ours_privacy:'privacy',ours_cookies:'cookies'};
+
+async function loadPolicyPanel(){
+  const el=document.getElementById('policyPanel');if(!el)return;
+  let cur={},alerts={};
+  try{ const s=await db.ref('app_config/policy').get(); cur=s.exists()?s.val():{}; }catch(e){}
+  try{ const s=await db.ref('admin/legal_alerts').orderByChild('createdAt').limitToLast(20).get(); alerts=s.exists()?s.val():{}; }catch(e){}
+  const open=Object.entries(alerts).filter(([,a])=>(a.status||'open')==='open').reverse();
+  const curV=cur.version||0;
+  const curLine=curV
+    ? `Current policy version <b>v${curV}</b>${cur.updatedAt?` · pushed ${timeAgo(cur.updatedAt)}`:''}${cur.bumpedBy?` by ${cur.bumpedBy}`:''}`
+    : `No policy version pushed yet — the re-consent banner is inactive for all users until you push one.`;
+  const alertHtml=open.length? open.map(([ts,a])=>{
+    const ours=(a.changes||[]).filter(c=>OURS_KEYMAP[c.key]);
+    const vendor=(a.changes||[]).filter(c=>!OURS_KEYMAP[c.key]);
+    const oursHtml=ours.length?`<div style="font-size:12px;margin:4px 0;"><b>Your docs changed:</b> ${ours.map(c=>`<a href="${c.url}" target="_blank">${c.label}</a>`).join(', ')}</div>`:'';
+    const vendorHtml=vendor.length?`<div style="font-size:11px;color:var(--muted);margin:4px 0;">Vendor pages changed (no user re-consent needed): ${vendor.map(c=>c.label).join(', ')}</div>`:'';
+    const canNotify=ours.length>0;
+    return `<div style="border:1px solid var(--border2);border-radius:10px;padding:12px;margin-bottom:10px;">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:2px;">Detected ${timeAgo(a.createdAt)}</div>
+      ${oursHtml}${vendorHtml}
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
+        ${canNotify?`<button class="btn btn-sm btn-amber" onclick="notifyPolicyUpdate('${ts}')">Notify all users of this update</button>`:''}
+        <button class="btn btn-sm btn-ghost" onclick="resolveAlertOnly('${ts}')">Dismiss (no user impact)</button>
+      </div>
+    </div>`;
+  }).join('') : `<div class="empty" style="margin-bottom:10px;">No open policy alerts from the legal watcher.</div>`;
+  el.innerHTML=`
+    <div style="font-size:13px;margin-bottom:12px;padding:10px 12px;background:var(--surface2);border-radius:8px;">${curLine}</div>
+    <h3 style="font-size:13px;margin:0 0 8px;">Open legal-watch alerts</h3>
+    ${alertHtml}
+    <h3 style="font-size:13px;margin:16px 0 8px;">Or push an update manually</h3>
+    <p style="font-size:11px;color:var(--muted);margin:0 0 8px;">Use this when you've edited a policy yourself. Tick what changed and add a one-line summary users will see.</p>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px;">
+      ${Object.entries(POLICY_DOCS).map(([k,d])=>`<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="pol_${k}" ${k!=='cookies'?'checked':''}> ${d.label}</label>`).join('')}
+    </div>
+    <textarea id="polSummary" placeholder="e.g. We've updated our Terms and Privacy Policy to clarify how AI-generated content is handled." style="width:100%;min-height:60px;margin-bottom:8px;"></textarea>
+    <button class="btn btn-primary" onclick="pushPolicyManual()">Push update &amp; notify all users</button>`;
+}
+
+// Extracts the {label,url} list of OUR docs that changed in an alert.
+function _docsFromAlert(a){
+  const out=[];
+  (a.changes||[]).forEach(c=>{ const k=OURS_KEYMAP[c.key]; if(k) out.push(POLICY_DOCS[k]); });
+  return out.length?out:[POLICY_DOCS.terms,POLICY_DOCS.privacy];
+}
+
+async function notifyPolicyUpdate(ts){
+  const snap=await db.ref('admin/legal_alerts/'+ts).get();
+  if(!snap.exists()){toast('Alert not found.','danger');return;}
+  const a=snap.val();
+  const docs=_docsFromAlert(a);
+  const summary=`We've updated our ${docs.map(d=>d.label).join(' and ')}.`;
+  const targets=Object.keys(allUsers);
+  showConfirm(`Notify ${targets.length} users & bump policy version?`,
+    `${summary} They'll get an in-app notice and be asked to re-accept on next login.`,
+    ()=>_applyPolicyBump({summary,docs,targets,alertTs:ts}));
+}
+
+async function pushPolicyManual(){
+  const docs=Object.entries(POLICY_DOCS).filter(([k])=>document.getElementById('pol_'+k)?.checked).map(([,d])=>d);
+  if(!docs.length){toast('Tick at least one policy that changed.','danger');return;}
+  const summary=(document.getElementById('polSummary')?.value||'').trim()||`We've updated our ${docs.map(d=>d.label).join(' and ')}.`;
+  const targets=Object.keys(allUsers);
+  showConfirm(`Notify ${targets.length} users & bump policy version?`,
+    `${summary} They'll get an in-app notice and be asked to re-accept on next login.`,
+    ()=>_applyPolicyBump({summary,docs,targets,alertTs:null}));
+}
+
+// Single path that bumps version, notifies, logs, and resolves the alert.
+async function _applyPolicyBump({summary,docs,targets,alertTs}){
+  const curSnap=await db.ref('app_config/policy/version').get();
+  const newV=(curSnap.exists()?Number(curSnap.val()):0)+1;
+  const now=Date.now();
+  // 1) Bump the version users compare against + carry the doc links for the banner.
+  await db.ref('app_config/policy').set({
+    version:newV, updatedAt:now, summary, bumpedBy:currentAdminEmail,
+    docs:docs.map(d=>({label:d.label,url:d.url})),
+  });
+  // 2) Broadcast the heads-up notice into every user's inbox (reuses doSendMsg).
+  const msg=`📜 ${summary} Please review and accept the update — you'll be prompted next time you open PollSlide.`;
+  for(const uid of targets) await doSendMsg(uid,msg,'warning');
+  // 3) Log to the legal request log for the audit trail.
+  await db.ref('admin/legal_log/'+now).set({
+    type:'policy_update_notice', uid:'', email:'',
+    notes:`v${newV} · ${summary} · notified ${targets.length} users`,
+    loggedAt:now, loggedBy:currentAdminEmail, status:'logged', policyVersion:newV,
+  });
+  // 4) Resolve the originating alert, if any.
+  if(alertTs) await db.ref('admin/legal_alerts/'+alertTs).update({status:'resolved',resolvedAt:now,resolvedBy:currentAdminEmail,policyVersion:newV});
+  toast(`Policy v${newV} pushed — ${targets.length} users notified.`,'success');
+  loadPolicyPanel(); loadLegalLog();
+}
+
+// Dismiss an alert without touching users (e.g. only vendor pages changed).
+async function resolveAlertOnly(ts){
+  showConfirm('Dismiss this alert?','No users are notified and no version is bumped. Use this for vendor-only changes.',async()=>{
+    await db.ref('admin/legal_alerts/'+ts).update({status:'resolved',resolvedAt:Date.now(),resolvedBy:currentAdminEmail});
+    toast('Alert dismissed.','success');loadPolicyPanel();
+  });
 }
 const legalActions=LEGAL_ACTIONS;
 
