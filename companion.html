@@ -158,6 +158,28 @@
   @keyframes fadeInScale { from { opacity:0; transform:scale(0.96); } to { opacity:1; transform:scale(1); } }
   @keyframes podiumRise { from { height:0; opacity:0; } to { opacity:1; } }
   @keyframes barGrow { from { width:0; } }
+
+  /* ── PORTRAIT / "Fill Slide" mode ──────────────────────────────────────────
+     Question pinned on top, the answers/results fill the rest of the window, and
+     auto-fit is paused so the user can drag the window as tall as they like to
+     cover the slide. Toggled by the ⤢ Fill Slide button; choice is remembered. */
+  body.portrait .body { display:flex; flex-direction:column; overflow:hidden; padding:18px 18px 20px; }
+  body.portrait .panes { flex:1 1 auto; min-height:0; }
+  body.portrait .panes.stacked .pane-q { flex:0 0 auto; }
+  body.portrait .panes.stacked .pane-r {
+    flex:1 1 auto; min-height:0; display:flex; flex-direction:column;
+  }
+  body.portrait .panes.stacked .pane-r #resultsArea {
+    flex:1 1 auto; min-height:0; overflow-y:auto; display:flex; flex-direction:column; justify-content:center;
+  }
+  body.portrait .qr-pane { display:none; }         /* the QR already lives on the slide */
+  body.portrait .q-text { font-size:23px; line-height:1.3; margin-bottom:10px; }
+  body.portrait .resp-big { font-size:28px; margin-bottom:16px; }
+  body.portrait .bar-wrap { padding:13px 15px; margin-bottom:11px; }
+  body.portrait .bar-letter { width:30px; height:30px; font-size:13px; }
+  body.portrait .bar-opt-text { font-size:16px; }
+  body.portrait .bar-opt-count { font-size:18px; }
+  body.portrait .bar-opt-img { height:34px; }
 </style>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
@@ -184,6 +206,7 @@
   <button class="toggle-btn"        data-mode="number"      onclick="setMode('number')">Numbers</button>
   <button class="toggle-btn"        data-mode="leaderboard" onclick="setMode('leaderboard')">Leaderboard</button>
   <div style="flex:1;"></div>
+  <button class="toggle-btn" id="portraitBtn" onclick="togglePortrait()" title="Fill the window — question on top, answers below — so you can drag it tall over your slide">⤢ Fill Slide</button>
   <button class="toggle-btn" id="mediaToggleBtn" onclick="toggleMedia()" title="Show/hide question image or video">🖼 Media</button>
   <button class="toggle-btn" id="revealBtn" onclick="forceReveal()" title="Reveal the correct answer now">Reveal</button>
   <button class="toggle-btn" id="themeBtn" onclick="toggleTheme()" title="Switch light / dark mode" style="font-size:14px;padding:4px 8px;">☀️</button>
@@ -637,8 +660,9 @@ function renderAll() {
        </div>`
     : '';
 
-  // Responsive: side-by-side when the window is wide, stacked when narrow
-  const wide = window.innerWidth >= 620;
+  // Responsive: side-by-side when the window is wide, stacked when narrow.
+  // Portrait ("Fill Slide") mode always stacks: question on top, answers below.
+  const wide = !portraitMode && window.innerWidth >= 620;
 
   document.getElementById('body').innerHTML = `
     <div class="panes ${wide ? '' : 'stacked'}">
@@ -664,6 +688,11 @@ function renderAll() {
 
   renderResults();
   syncPostRevealTicker(); // keep the post-reveal countdown badge ticking between renders
+
+  // Reflect the (possibly remembered) portrait choice, and on the first render of
+  // the session grow the window to portrait so it starts covering the slide.
+  applyPortraitClass();
+  if (portraitMode && !_portraitGrown) { _portraitGrown = true; growWindowToPortrait(); }
 
   // Fit after full render — catches layout from toggle bar, reveal bar, QR pane
   requestFitToContent();
@@ -694,7 +723,48 @@ window.addEventListener('resize', () => {
 // window expands even when content is taller than the current window.
 let _lastRequestedH = 0;
 let _fitRAF = null;
+
+// ── PORTRAIT / "Fill Slide" mode state ──────────────────────────────────────
+let portraitMode = false;
+let _portraitGrown = false;
+try { portraitMode = localStorage.getItem('ps_portrait') === '1'; } catch (e) {}
+
+function applyPortraitClass() {
+  document.body.classList.toggle('portrait', portraitMode);
+  const b = document.getElementById('portraitBtn');
+  if (b) b.classList.toggle('active', portraitMode);
+}
+
+function togglePortrait() {
+  portraitMode = !portraitMode;
+  try { localStorage.setItem('ps_portrait', portraitMode ? '1' : '0'); } catch (e) {}
+  applyPortraitClass();
+  if (portraitMode) {
+    _portraitGrown = true;
+    growWindowToPortrait();      // expand once so it can cover the slide
+  } else {
+    _lastRequestedH = 0;         // resume auto-fit on next render
+  }
+  if (typeof curQ !== 'undefined' && curQ) renderAll();
+}
+
+// Ask the Mac app to grow the window tall (it clamps to the visible screen frame).
+// After this, auto-fit stays paused so the user can freely drag it to size.
+function growWindowToPortrait() {
+  try {
+    const screenH = (window.screen && window.screen.height) ? window.screen.height : 900;
+    const h = Math.round(screenH * 0.9);
+    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.fit) {
+      _suppressResizeUntil = Date.now() + 900;
+      window.webkit.messageHandlers.fit.postMessage({ height: h });
+    }
+  } catch (e) {}
+}
+
 function requestFitToContent() {
+  // In portrait ("Fill Slide") mode the user controls the window size, so we do
+  // NOT auto-fit to content — that would snap the window back to content height.
+  if (portraitMode) return;
   // Debounce into next animation frame so layout is complete
   cancelAnimationFrame(_fitRAF);
   _fitRAF = requestAnimationFrame(() => {
