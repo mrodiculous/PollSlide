@@ -5007,30 +5007,36 @@ function toast(msg,type='info'){
 // has accepted. Set from PollSlide Admin → Legal → "Notify all users". Inert until then.
 function checkPolicyConsent(uid){
   if(!uid) return;
-  db.ref('app_config/policy').get().then(function(snap){
-    if(!snap.exists()) return;
-    const pol=snap.val(); const v=Number(pol.version||0); if(!v) return;
-    db.ref('users/'+uid+'/acceptedPolicyVersion').get().then(function(us){
-      const accepted=us.exists()?Number(us.val()):0;
-      if(accepted>=v) return; // already up to date
-      showPolicyBanner(pol);
+  // Admin self-preview takes priority: shows the exact banner to this user only,
+  // set from Admin → Legal → "Preview banner (just me)". No global version involved.
+  db.ref('users/'+uid+'/policyPreview').get().then(function(ps){
+    if(ps.exists()){ showPolicyBanner(ps.val(), true); return; }
+    db.ref('app_config/policy').get().then(function(snap){
+      if(!snap.exists()) return;
+      const pol=snap.val(); const v=Number(pol.version||0); if(!v) return;
+      db.ref('users/'+uid+'/acceptedPolicyVersion').get().then(function(us){
+        const accepted=us.exists()?Number(us.val()):0;
+        if(accepted>=v) return; // already up to date
+        showPolicyBanner(pol, false);
+      }).catch(function(){});
     }).catch(function(){});
   }).catch(function(){});
 }
 
-function showPolicyBanner(pol){
+function showPolicyBanner(pol, isPreview){
   if(document.getElementById('policyBanner')) return;
   const docs=Array.isArray(pol.docs)?pol.docs:[];
   const links=docs.length
     ? docs.map(d=>`<a href="${d.url}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;">${d.label}</a>`).join(' · ')
     : `<a href="https://pollslide.com/terms" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;">Terms</a> · <a href="https://pollslide.com/privacy" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;">Privacy Policy</a>`;
   const summary=pol.summary||"We've updated our Terms of Service and Privacy Policy.";
+  const previewTag=isPreview?`<span style="display:inline-block;margin-bottom:5px;padding:2px 8px;border-radius:6px;background:var(--accent2);color:#fff;font-size:10.5px;font-weight:700;letter-spacing:.03em;">PREVIEW · ONLY YOU SEE THIS</span><br>`:'';
   const bar=document.createElement('div');
   bar.id='policyBanner';
   bar.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:190000;background:var(--surface);border-top:1px solid var(--border2);box-shadow:0 -8px 30px rgba(0,0,0,0.25);padding:16px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center;';
   bar.innerHTML=`
     <div style="flex:1;min-width:240px;max-width:640px;">
-      <div style="font-family:Syne,sans-serif;font-weight:800;font-size:15px;margin-bottom:3px;">📜 We've updated our policies</div>
+      ${previewTag}<div style="font-family:Syne,sans-serif;font-weight:800;font-size:15px;margin-bottom:3px;">📜 We've updated our policies</div>
       <div style="color:var(--muted);font-size:13.5px;line-height:1.55;">${summary} Please review and accept to continue. ${links}</div>
     </div>
     <div style="display:flex;gap:10px;flex-shrink:0;">
@@ -5040,7 +5046,17 @@ function showPolicyBanner(pol){
   document.body.appendChild(bar);
   const firstUrl=docs.length?docs[0].url:'https://pollslide.com/terms';
   document.getElementById('policyReviewBtn').onclick=function(){ window.open(firstUrl,'_blank','noopener'); };
-  document.getElementById('policyAcceptBtn').onclick=function(){ acceptPolicyUpdate(Number(pol.version||0)); };
+  document.getElementById('policyAcceptBtn').onclick=function(){
+    if(isPreview) endPolicyPreview();
+    else acceptPolicyUpdate(Number(pol.version||0));
+  };
+}
+
+// Preview Accept: just clears the admin-only preview flag — records nothing global.
+function endPolicyPreview(){
+  const b=document.getElementById('policyBanner'); if(b) b.remove();
+  if(userId) db.ref('users/'+userId+'/policyPreview').remove().catch(function(){});
+  toast('Preview complete — no users were notified.','success');
 }
 
 function acceptPolicyUpdate(version){

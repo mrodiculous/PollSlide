@@ -1078,7 +1078,26 @@ async function loadPolicyPanel(){
       ${Object.entries(POLICY_DOCS).map(([k,d])=>`<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="pol_${k}" ${k!=='cookies'?'checked':''}> ${d.label}</label>`).join('')}
     </div>
     <textarea id="polSummary" placeholder="e.g. We've updated our Terms and Privacy Policy to clarify how AI-generated content is handled." style="width:100%;min-height:60px;margin-bottom:8px;"></textarea>
-    <button class="btn btn-primary" onclick="pushPolicyManual()">Push update &amp; notify all users</button>`;
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-ghost" onclick="previewPolicyBanner()">👁 Preview banner (just me)</button>
+      <button class="btn btn-primary" onclick="pushPolicyManual()">Push update &amp; notify all users</button>
+    </div>
+    <p style="font-size:11px;color:var(--muted);margin:8px 0 0;">Preview shows you the exact re-consent banner in the app (app.pollslide.com, signed in as you) — <b>no users are notified and no version is bumped</b>. Always preview before a real push.</p>`;
+}
+
+// Self-preview: writes a preview payload to the ADMIN's own user node only, so the
+// exact user-facing banner appears in the app for you and nobody else. Clears itself
+// when you tap Accept in the app. Never touches app_config or any other user.
+async function previewPolicyBanner(){
+  const docs=Object.entries(POLICY_DOCS).filter(([k])=>document.getElementById('pol_'+k)?.checked).map(([,d])=>d);
+  if(!docs.length){toast('Tick at least one policy to preview.','danger');return;}
+  const summary=(document.getElementById('polSummary')?.value||'').trim()||`We've updated our ${docs.map(d=>d.label).join(' and ')}.`;
+  const curSnap=await db.ref('app_config/policy/version').get();
+  const v=(curSnap.exists()?Number(curSnap.val()):0)+1;
+  await db.ref('users/'+currentAdminUid+'/policyPreview').set({
+    version:v, summary, docs:docs.map(d=>({label:d.label,url:d.url})), setAt:Date.now(),
+  });
+  toast('Preview set — open app.pollslide.com (signed in as you) to see the exact banner. No users notified.','success');
 }
 
 // Extracts the {label,url} list of OUR docs that changed in an alert.
