@@ -1134,11 +1134,15 @@ async function _applyPolicyBump({summary,docs,targets,alertTs}){
   const curSnap=await db.ref('app_config/policy/version').get();
   const newV=(curSnap.exists()?Number(curSnap.val()):0)+1;
   const now=Date.now();
-  // 1) Bump the version users compare against + carry the doc links for the banner.
-  await db.ref('app_config/policy').set({
-    version:newV, updatedAt:now, summary, bumpedBy:currentAdminEmail,
+  const record={
+    version:newV, updatedAt:now, effectiveAt:now, summary, bumpedBy:currentAdminEmail,
     docs:docs.map(d=>({label:d.label,url:d.url})),
-  });
+  };
+  // 1) Bump the current version users compare against + carry the doc links for the banner.
+  await db.ref('app_config/policy').set(record);
+  // 1b) Append to an immutable version history so every recorded user acceptance
+  //     can be tied to exactly what that version said (consent audit trail).
+  await db.ref('app_config/policy_history/'+newV).set(record);
   // 2) Broadcast the heads-up notice into every user's inbox (reuses doSendMsg).
   const msg=`📜 ${summary} Please review and accept the update — you'll be prompted next time you open PollSlide.`;
   for(const uid of targets) await doSendMsg(uid,msg,'warning');

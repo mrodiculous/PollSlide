@@ -5025,30 +5025,36 @@ function checkPolicyConsent(uid){
 
 function showPolicyBanner(pol, isPreview){
   if(document.getElementById('policyBanner')) return;
-  const docs=Array.isArray(pol.docs)?pol.docs:[];
-  const links=docs.length
-    ? docs.map(d=>`<a href="${d.url}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;">${d.label}</a>`).join(' · ')
-    : `<a href="https://pollslide.com/terms" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;">Terms</a> · <a href="https://pollslide.com/privacy" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;">Privacy Policy</a>`;
+  const docs=Array.isArray(pol.docs)&&pol.docs.length ? pol.docs
+    : [{label:'Terms of Service',url:'https://pollslide.com/terms'},{label:'Privacy Policy',url:'https://pollslide.com/privacy'}];
+  const links=docs.map(d=>`<a href="${d.url}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline;font-weight:600;">${d.label}</a>`).join(' · ');
+  const docNames=docs.map(d=>d.label).join(' and ');
   const summary=pol.summary||"We've updated our Terms of Service and Privacy Policy.";
-  const previewTag=isPreview?`<span style="display:inline-block;margin-bottom:5px;padding:2px 8px;border-radius:6px;background:var(--accent2);color:#fff;font-size:10.5px;font-weight:700;letter-spacing:.03em;">PREVIEW · ONLY YOU SEE THIS</span><br>`:'';
-  const bar=document.createElement('div');
-  bar.id='policyBanner';
-  bar.style.cssText='position:fixed;left:0;right:0;bottom:0;z-index:190000;background:var(--surface);border-top:1px solid var(--border2);box-shadow:0 -8px 30px rgba(0,0,0,0.25);padding:16px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center;';
-  bar.innerHTML=`
-    <div style="flex:1;min-width:240px;max-width:640px;">
-      ${previewTag}<div style="font-family:Syne,sans-serif;font-weight:800;font-size:15px;margin-bottom:3px;">📜 We've updated our policies</div>
-      <div style="color:var(--muted);font-size:13.5px;line-height:1.55;">${summary} Please review and accept to continue. ${links}</div>
-    </div>
-    <div style="display:flex;gap:10px;flex-shrink:0;">
-      <button id="policyReviewBtn" style="padding:11px 18px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:11px;font-family:Syne,sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Review</button>
-      <button id="policyAcceptBtn" style="padding:11px 22px;background:var(--accent);border:none;color:#fff;border-radius:11px;font-family:Syne,sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Review &amp; Accept</button>
+  const eff=pol.effectiveAt||pol.updatedAt||Date.now();
+  let effStr=''; try{ effStr=new Date(eff).toLocaleDateString(undefined,{year:'numeric',month:'long',day:'numeric'}); }catch(e){}
+  const previewTag=isPreview?`<div style="display:inline-block;margin-bottom:10px;padding:3px 10px;border-radius:6px;background:var(--accent2);color:#fff;font-size:10.5px;font-weight:700;letter-spacing:.04em;">PREVIEW · ONLY YOU SEE THIS</div>`:'';
+  // Required consent modal (blocking) — best practice for material changes to legal terms.
+  const wrap=document.createElement('div');
+  wrap.id='policyBanner';
+  wrap.style.cssText='position:fixed;inset:0;z-index:200000;background:rgba(0,0,0,0.66);display:flex;align-items:center;justify-content:center;padding:20px;';
+  wrap.innerHTML=`
+    <div role="dialog" aria-modal="true" aria-labelledby="polTitle" style="background:var(--surface);border:1px solid var(--border2);border-radius:18px;max-width:462px;width:100%;padding:28px;box-shadow:0 24px 70px rgba(0,0,0,0.5);">
+      ${previewTag}
+      <div style="font-size:32px;margin-bottom:10px;">📜</div>
+      <div id="polTitle" style="font-family:Syne,sans-serif;font-weight:800;font-size:20px;margin-bottom:8px;">We've updated our terms</div>
+      <p style="color:var(--muted);font-size:14.5px;line-height:1.6;margin:0 0 14px;">${summary}${effStr?` These changes take effect on <b style="color:var(--text);">${effStr}</b>.`:''} Please review and accept them to keep using PollSlide.</p>
+      <div style="font-size:13.5px;margin-bottom:16px;">What changed: ${links}</div>
+      <div style="background:var(--surface2);border-radius:10px;padding:11px 13px;font-size:12.5px;color:var(--muted);line-height:1.5;margin-bottom:18px;">By selecting <b style="color:var(--text);">Accept &amp; continue</b>, you confirm you've read and agree to the updated ${docNames}.</div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;">
+        <button id="policyReviewBtn" style="padding:11px 18px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:11px;font-family:Syne,sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Review the changes</button>
+        <button id="policyAcceptBtn" style="padding:11px 24px;background:var(--accent);border:none;color:#fff;border-radius:11px;font-family:Syne,sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Accept &amp; continue</button>
+      </div>
     </div>`;
-  document.body.appendChild(bar);
-  const firstUrl=docs.length?docs[0].url:'https://pollslide.com/terms';
-  document.getElementById('policyReviewBtn').onclick=function(){ window.open(firstUrl,'_blank','noopener'); };
+  document.body.appendChild(wrap);
+  document.getElementById('policyReviewBtn').onclick=function(){ window.open(docs[0].url,'_blank','noopener'); };
   document.getElementById('policyAcceptBtn').onclick=function(){
     if(isPreview) endPolicyPreview();
-    else acceptPolicyUpdate(Number(pol.version||0));
+    else acceptPolicyUpdate(pol);
   };
 }
 
@@ -5059,13 +5065,21 @@ function endPolicyPreview(){
   toast('Preview complete — no users were notified.','success');
 }
 
-function acceptPolicyUpdate(version){
+function acceptPolicyUpdate(pol){
+  const version=Number((pol&&pol.version)||0);
   if(!userId||!version) return;
   const now=Date.now();
   const updates={};
   updates['users/'+userId+'/acceptedPolicyVersion']=version;
   updates['users/'+userId+'/acceptedPolicyAt']=now;
-  updates['users/'+userId+'/acceptedPolicyLog/'+version]=now; // audit trail of each acceptance
+  // Immutable per-acceptance audit record: which version, when, its effective date,
+  // and the exact documents the user agreed to (ties to app_config/policy_history).
+  updates['users/'+userId+'/acceptedPolicyLog/'+version]={
+    at:now, version:version,
+    effectiveAt:(pol&&(pol.effectiveAt||pol.updatedAt))||now,
+    summary:(pol&&pol.summary)||null,
+    docs:(pol&&Array.isArray(pol.docs))?pol.docs:null,
+  };
   db.ref('/').update(updates).then(function(){
     const b=document.getElementById('policyBanner'); if(b) b.remove();
     toast('Thanks — your acceptance has been recorded.','success');
