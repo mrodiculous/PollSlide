@@ -1351,6 +1351,73 @@ function goToUpgrade() {
   openPlanPicker();
 }
 
+// ─── ✨ AI INSIGHTS ───────────────────────────────────────────────────────────
+// Polly reads the free-text audience answers and surfaces themes + sentiment +
+// a one-line summary — live, on the presenter's screen. Runs on the local Mac LLM
+// first (near-free), OpenAI fallback. Data is stashed by renderRightPanel().
+async function showResponseInsights(){
+  const data = window._psInsights;
+  if(!data || !Array.isArray(data.texts) || data.texts.length<2){ toast('Need at least 2 responses to analyze.','warning'); return; }
+  renderInsightsModal({ loading:true });
+  try{
+    const idToken = currentUser ? await currentUser.getIdToken().catch(()=>null) : null;
+    const r = await fetch('/api/insights', {
+      method:'POST',
+      headers: Object.assign({'Content-Type':'application/json'}, idToken?{'Authorization':'Bearer '+idToken}:{}),
+      body: JSON.stringify({ question:data.question, texts:data.texts, language:data.language })
+    });
+    const j = await r.json().catch(()=>({error:'Bad response from server.'}));
+    if(!r.ok || j.error){ renderInsightsModal({ error: j.error || ('HTTP '+r.status) }); return; }
+    renderInsightsModal({ data:j });
+  }catch(e){ renderInsightsModal({ error:'Could not reach the insights service.' }); }
+}
+
+function renderInsightsModal(state){
+  let m = document.getElementById('insightsModal');
+  if(!m){
+    m=document.createElement('div'); m.id='insightsModal';
+    m.style.cssText='position:fixed;inset:0;z-index:200000;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:20px;';
+    m.onclick=function(e){ if(e.target===m) m.remove(); };
+    document.body.appendChild(m);
+  }
+  const close = `<button onclick="document.getElementById('insightsModal').remove()" aria-label="Close" style="position:absolute;top:12px;right:15px;background:none;border:none;color:var(--muted);font-size:22px;line-height:1;cursor:pointer;">×</button>`;
+  const shell = inner => `<div style="position:relative;background:var(--surface);border:1px solid var(--border2);border-radius:18px;max-width:520px;width:100%;max-height:86vh;overflow:auto;padding:26px;box-shadow:0 24px 70px rgba(0,0,0,0.5);">${close}${inner}</div>`;
+  if(state.loading){
+    m.innerHTML = shell(`<div style="text-align:center;padding:22px 0;"><div style="font-size:30px;margin-bottom:10px;">✨</div><div style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;margin-bottom:6px;">Polly is reading the responses…</div><div style="color:var(--muted);font-size:13.5px;">Finding the themes and the mood.</div></div>`);
+    return;
+  }
+  if(state.error){
+    m.innerHTML = shell(`<div style="font-family:Syne,sans-serif;font-weight:800;font-size:17px;margin-bottom:8px;">✨ AI Insights</div><p style="color:var(--accent2);font-size:14px;">${state.error}</p><p style="color:var(--muted);font-size:13px;margin-top:8px;">Give it a moment and try again.</p>`);
+    return;
+  }
+  const d = state.data;
+  const sent = d.sentiment||{positive:0,neutral:0,negative:0};
+  const sc = {positive:'#43e97b',neutral:'#f7b731',negative:'#ff6584'};
+  const bar = `<div style="display:flex;height:10px;border-radius:100px;overflow:hidden;margin:6px 0 5px;background:var(--surface2);">
+      <div style="width:${sent.positive}%;background:${sc.positive}"></div><div style="width:${sent.neutral}%;background:${sc.neutral}"></div><div style="width:${sent.negative}%;background:${sc.negative}"></div></div>
+    <div style="display:flex;gap:14px;font-size:11.5px;color:var(--muted);flex-wrap:wrap;"><span>🟢 ${sent.positive}% positive</span><span>🟡 ${sent.neutral}% neutral</span><span>🔴 ${sent.negative}% negative</span></div>`;
+  const themes = (d.themes||[]).map(t=>{
+    const dot = sc[t.sentiment]||sc.neutral;
+    return `<div style="border:1px solid var(--border2);border-radius:11px;padding:11px 13px;margin-bottom:8px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <span style="font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px;"><span style="width:8px;height:8px;border-radius:50%;background:${dot};flex-shrink:0;"></span>${safeJ(t.label)}</span>
+        <span style="font-family:Syne,sans-serif;font-weight:800;color:var(--accent);font-size:14px;">${t.count}</span>
+      </div>
+      ${t.example?`<div style="color:var(--muted);font-size:12.5px;margin-top:5px;font-style:italic;">“${safeJ(t.example)}”</div>`:''}
+    </div>`;
+  }).join('') || '<div style="color:var(--muted);font-size:13px;">No clear themes yet — try again once more answers arrive.</div>';
+  const srcTag = d.source==='local'?'<span style="font-size:10.5px;color:var(--muted);font-weight:400;">· private AI</span>':'';
+  m.innerHTML = shell(`
+    <div style="font-family:Syne,sans-serif;font-weight:800;font-size:18px;margin-bottom:3px;">✨ AI Insights ${srcTag}</div>
+    <div style="color:var(--muted);font-size:12px;margin-bottom:14px;">Polly analyzed ${d.count} response${d.count!==1?'s':''}</div>
+    ${d.summary?`<div style="background:var(--surface2);border-radius:11px;padding:13px 15px;font-size:14.5px;line-height:1.55;margin-bottom:16px;">${safeJ(d.summary)}</div>`:''}
+    <div style="font-weight:700;font-size:13px;margin-bottom:6px;">Overall mood</div>
+    ${bar}
+    <div style="font-weight:700;font-size:13px;margin:18px 0 8px;">Top themes</div>
+    ${themes}
+  `);
+}
+
 function openPlanPicker() {
   const existing = document.getElementById('planPickerModal');
   if (existing) existing.remove();
@@ -3568,10 +3635,16 @@ function renderRightPanel(q, responses) {
   const letters = ['A','B','C','D','E','F'];
 
   if (q.type === 'free_text') {
+    // Stash the current answers so the on-demand ✨ AI Insights panel always analyzes live data.
+    const _itexts = responses.map(r=>r.answer).filter(a=>a && a!=='__none__');
+    window._psInsights = { question:q.text||'', texts:_itexts, language:(presentations[activePresId]||{}).language||'en' };
+    const insightsBtn = _itexts.length>=2
+      ? `<button onclick="showResponseInsights()" title="Polly finds the themes & mood in these answers" style="display:inline-flex;align-items:center;gap:6px;margin:2px 0 10px;padding:8px 14px;background:linear-gradient(120deg,var(--accent),#a78bfa);border:none;color:#fff;border-radius:10px;font-family:Syne,sans-serif;font-weight:700;font-size:13px;cursor:pointer;box-shadow:0 4px 14px rgba(108,99,255,.35);">✨ AI Insights</button>`
+      : '';
     if (q.displayMode === 'word_cloud') {
-      rs.innerHTML = `<div class="resp-big" id="liveRespCount">${total} <span>responses</span></div>${buildWordCloud(q, [], responses)}`;
+      rs.innerHTML = `<div class="resp-big" id="liveRespCount">${total} <span>responses</span></div>${insightsBtn}${buildWordCloud(q, [], responses)}`;
     } else {
-      rs.innerHTML = `<div class="resp-big" id="liveRespCount">${total} <span>responses</span></div>
+      rs.innerHTML = `<div class="resp-big" id="liveRespCount">${total} <span>responses</span></div>${insightsBtn}
         ${total===0?'<div style="color:var(--muted);font-size:13px;">Waiting...</div>':
           responses.map(r=>`<div class="txt-resp">${r.answer==='__none__'?'<em style="color:var(--muted)">No answer</em>':safeJ(r.answer)}<div class="from">— ${r.name}</div></div>`).join('')}`;
     }

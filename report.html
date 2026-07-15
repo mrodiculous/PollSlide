@@ -229,8 +229,9 @@ function renderStats(data){
   const acc = graded.length ? Math.round(data.filter(r=>r.isCorrect===true).length/graded.length*100)+'%' : '—';
   const times = data.filter(r=>r.elapsed>0).map(r=>r.elapsed);
   const avg = times.length ? (times.reduce((a,b)=>a+b,0)/times.length/1000).toFixed(1)+'s' : '—';
+  const engagement = people ? (data.length/people).toFixed(1) : '—';
   const stat=(v,l)=>`<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`;
-  el('stats').innerHTML = stat(people,'Respondents')+stat(data.length,'Responses')+stat(new Set(data.map(r=>r.presId+'/'+r.qIdx)).size,'Questions')+stat(acc,'Accuracy')+stat(avg,'Avg time');
+  el('stats').innerHTML = stat(people,'Respondents')+stat(data.length,'Responses')+stat(new Set(data.map(r=>r.presId+'/'+r.qIdx)).size,'Questions')+stat(engagement,'Answers/person')+stat(acc,'Accuracy')+stat(avg,'Avg time');
 }
 function renderSummary(data){
   const byPres = {};
@@ -247,9 +248,19 @@ function renderSummary(data){
 function renderByQuestion(data){
   const groups={};
   data.forEach(r=>{ const k=r.presId+'/'+r.qIdx; (groups[k]=groups[k]||{r0:r,recs:[]}).recs.push(r); });
-  return Object.values(groups).sort((a,b)=>a.r0.qIdx-b.r0.qIdx).map(g=>{
+  return Object.values(groups).sort((a,b)=>a.r0.qIdx-b.r0.qIdx).map((g,gi)=>{
     const q=g.r0; const total=g.recs.length;
     let body='';
+    // Free-text / word-cloud questions: offer AI Insights (themes + mood) over the answers.
+    let insightsUI='';
+    if (q.type==='free_text' || !(q.options && q.options.length)){
+      const texts=g.recs.map(r=>answerText(q,r.answer)).filter(a=>a && a!=='—');
+      if (texts.length>=2){
+        window._reportIns=window._reportIns||{};
+        window._reportIns[gi]={question:q.qText||'', texts, language:'en'};
+        insightsUI=`<button onclick="reportInsights(${gi})" style="display:inline-flex;align-items:center;gap:6px;margin:10px 0 2px;padding:7px 13px;background:linear-gradient(120deg,#6c63ff,#a78bfa);border:none;color:#fff;border-radius:9px;font-weight:700;font-size:13px;cursor:pointer;">✨ AI Insights</button><div id="ri_${gi}"></div>`;
+      }
+    }
     if (q.options && q.options.length){
       const counts=q.options.map(()=>0);
       g.recs.forEach(r=>{ try{ const a=JSON.parse(r.answer); (Array.isArray(a)?a:[a]).forEach(v=>{ if(counts[v]!=null)counts[v]++; }); }catch(e){} });
@@ -264,8 +275,41 @@ function renderByQuestion(data){
       <td class="muted">${r.date?new Date(r.date).toLocaleDateString():'—'}</td></tr>`).join('');
     return `<div class="card"><h3>Q${q.qIdx+1}: ${esc(q.qText||'Untitled')} <span class="muted" style="font-weight:400;font-size:12px;">· ${esc(q.presName)} · ${total} responses</span></h3>
       ${body}
+      ${insightsUI}
       <table style="margin-top:10px;"><thead><tr><th>Who</th><th>Answered</th><th>Correct</th><th>Time</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }).join('');
+}
+
+/* ─── ✨ AI INSIGHTS in the report — themes + mood over a question's free-text answers ── */
+async function reportInsights(gi){
+  const d=(window._reportIns||{})[gi]; if(!d) return;
+  const box=el('ri_'+gi); if(!box) return;
+  box.innerHTML='<div class="muted" style="padding:8px 0;">✨ Polly is reading the responses…</div>';
+  try{
+    const token = (fbAuth && fbAuth.currentUser) ? await fbAuth.currentUser.getIdToken().catch(()=>null) : null;
+    const r=await fetch('/api/insights',{ method:'POST',
+      headers:Object.assign({'Content-Type':'application/json'}, token?{'Authorization':'Bearer '+token}:{}),
+      body:JSON.stringify(d) });
+    const j=await r.json().catch(()=>({error:'Bad response from server.'}));
+    if(!r.ok||j.error){ box.innerHTML=`<div style="color:#ff6584;font-size:13px;padding:8px 0;">${esc(j.error||('HTTP '+r.status))}</div>`; return; }
+    box.innerHTML=renderReportInsights(j);
+  }catch(e){ box.innerHTML='<div style="color:#ff6584;font-size:13px;padding:8px 0;">Could not reach the insights service.</div>'; }
+}
+function renderReportInsights(d){
+  const sent=d.sentiment||{positive:0,neutral:0,negative:0};
+  const sc={positive:'#43e97b',neutral:'#f7b731',negative:'#ff6584'};
+  const bar=`<div style="display:flex;height:9px;border-radius:100px;overflow:hidden;margin:8px 0 4px;background:rgba(255,255,255,.08);">
+      <div style="width:${sent.positive}%;background:${sc.positive}"></div><div style="width:${sent.neutral}%;background:${sc.neutral}"></div><div style="width:${sent.negative}%;background:${sc.negative}"></div></div>
+    <div style="font-size:11.5px;" class="muted">🟢 ${sent.positive}% positive · 🟡 ${sent.neutral}% neutral · 🔴 ${sent.negative}% negative</div>`;
+  const themes=(d.themes||[]).map(t=>`<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06);">
+      <span style="font-size:13px;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${sc[t.sentiment]||sc.neutral};margin-right:7px;"></span><b>${esc(t.label)}</b>${t.example?` <span class="muted" style="font-style:italic;">— “${esc(t.example)}”</span>`:''}</span>
+      <b style="color:#8b84ff;">${t.count}</b></div>`).join('') || '<div class="muted" style="font-size:12px;">No clear themes found.</div>';
+  return `<div style="border:1px solid rgba(108,99,255,.35);background:rgba(108,99,255,.06);border-radius:10px;padding:13px 15px;margin:6px 0 2px;">
+    <div style="font-weight:700;margin-bottom:6px;">✨ AI Insights <span class="muted" style="font-weight:400;font-size:11.5px;">· ${d.count} responses${d.source==='local'?' · private AI':''}</span></div>
+    ${d.summary?`<div style="font-size:13.5px;line-height:1.5;margin-bottom:8px;">${esc(d.summary)}</div>`:''}
+    ${bar}
+    <div style="margin-top:10px;">${themes}</div>
+  </div>`;
 }
 function renderByRespondent(data){
   const people={};
