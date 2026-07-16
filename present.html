@@ -129,18 +129,25 @@
   #notesArea{flex:1;background:var(--chrome2);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:inherit;font-size:13px;padding:7px 10px;resize:vertical;min-height:38px;max-height:120px;}
   .slide{width:100%;max-width:840px;aspect-ratio:16/9;border-radius:10px;overflow:hidden;box-shadow:0 16px 50px rgba(0,0,0,.45);position:relative;background:var(--slide-bg);}
   .slide-inner{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;padding:6%;font-family:var(--theme-font);}
+  /* Shrink-to-fit wrapper: content (question + response) is measured and scaled
+     down so it always fits inside the slide with a border, no matter how much was
+     imported. Only ever scales DOWN — the base/manual sizes are the ceiling. */
+  .fit{transform-origin:left center;width:100%;display:flex;flex-direction:column;justify-content:center;}
+  .fit.fit-c{transform-origin:center center;align-items:center;}   /* centred layouts (flashcards) */
   /* WYSIWYG: ALL slide typography is sized in cqw (percent of the slide's own
-     width), so the edit canvas is pixel-proportional to the present view. */
+     width), so the edit canvas is pixel-proportional to the present view.
+     Per-element scale vars (--q-scale/--r-scale/--qr-scale) let the presenter
+     resize question text, the response block and the QR independently. */
   .s-eyebrow{font-family:var(--theme-font);font-weight:700;font-size:1.9cqw;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:1.7cqw;}
-  .s-title{font-family:var(--theme-font);font-weight:800;font-size:6.2cqw;color:var(--slide-text,#fff);line-height:1.12;outline:none;}
+  .s-title{font-family:var(--theme-font);font-weight:800;font-size:calc(6.2cqw * var(--q-scale,1));color:var(--slide-text,#fff);line-height:1.12;outline:none;}
   .s-sub{font-family:'DM Sans',sans-serif;font-weight:500;font-size:2.9cqw;color:var(--slide-muted,var(--muted));margin-top:1.8cqw;outline:none;}
-  .s-body{font-family:'DM Sans',sans-serif;font-weight:500;font-size:2.7cqw;color:var(--slide-body,#e7e7f5);margin-top:1.6cqw;line-height:1.5;outline:none;}
+  .s-body{font-family:'DM Sans',sans-serif;font-weight:500;font-size:calc(2.7cqw * var(--q-scale,1));color:var(--slide-body,#e7e7f5);margin-top:1.6cqw;line-height:1.5;outline:none;}
   .s-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;}
-  .s-opts{margin-top:2.4cqw;display:flex;flex-direction:column;gap:1.2cqw;max-width:70%;}
-  .s-opt{display:flex;align-items:center;gap:1.3cqw;background:var(--opt-bg,rgba(255,255,255,.08));border:1px solid var(--opt-border,rgba(255,255,255,.14));border-radius:1.2cqw;padding:1.2cqw 1.8cqw;font-family:'DM Sans',sans-serif;font-weight:600;font-size:2.4cqw;color:var(--slide-text,#fff);}
-  .s-opt .ltr{width:3.2cqw;height:3.2cqw;border-radius:.8cqw;background:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.7cqw;flex-shrink:0;}
+  .s-opts{margin-top:2.4cqw;display:flex;flex-direction:column;gap:calc(1.2cqw * var(--r-scale,1));max-width:70%;}
+  .s-opt{display:flex;align-items:center;gap:1.3cqw;background:var(--opt-bg,rgba(255,255,255,.08));border:1px solid var(--opt-border,rgba(255,255,255,.14));border-radius:1.2cqw;padding:calc(1.2cqw * var(--r-scale,1)) 1.8cqw;font-family:'DM Sans',sans-serif;font-weight:600;font-size:calc(2.4cqw * var(--r-scale,1));color:var(--slide-text,#fff);}
+  .s-opt .ltr{width:calc(3.2cqw * var(--r-scale,1));height:calc(3.2cqw * var(--r-scale,1));border-radius:.8cqw;background:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:calc(1.7cqw * var(--r-scale,1));flex-shrink:0;}
   .s-opt[contenteditable]{outline:none;}
-  .qr-card{position:absolute;right:5%;bottom:7%;width:13cqw;background:#fff;padding:1.1cqw;border-radius:1.6cqw;text-align:center;box-shadow:0 12px 36px rgba(0,0,0,.45);}
+  .qr-card{position:absolute;right:5%;bottom:7%;width:calc(13cqw * var(--qr-scale,1));background:#fff;padding:1.1cqw;border-radius:1.6cqw;text-align:center;box-shadow:0 12px 36px rgba(0,0,0,.45);z-index:6;}
   .qr-card .qrbox canvas,.qr-card .qrbox img{width:100%!important;height:auto!important;display:block;}
   .qr-card .qrl{font-family:'DM Sans',sans-serif;font-weight:700;font-size:1.35cqw;color:#0b0b15;margin-top:.7cqw;}
   .qr-card .qrn{font-family:'DM Sans',sans-serif;font-weight:500;font-size:0.95cqw;color:#555;margin-top:.4cqw;line-height:1.35;}
@@ -178,7 +185,12 @@
   #present.show{display:flex;}
   .p-progress{height:3px;background:rgba(255,255,255,.08);flex-shrink:0;}
   #pProg{height:100%;width:0;background:linear-gradient(90deg,var(--accent),#a78bfa);transition:width .3s;}
-  .p-stage{flex:1;position:relative;overflow:hidden;}
+  /* The stage is letterboxed to a 16:9 slide centred in the black frame, so a
+     presentation always renders landscape/WYSIWYG regardless of screen or window
+     aspect (fixes portrait rendering on non-16:9 displays). JS sizes it in px;
+     aspect-ratio is the CSS fallback. */
+  .p-frame{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;background:#000;}
+  .p-stage{aspect-ratio:16/9;width:100%;max-width:100%;max-height:100%;position:relative;overflow:hidden;background:var(--slide-bg);box-shadow:0 0 70px rgba(0,0,0,.6);}
   .p-stage.tr-fade > *:not(.p-logo){animation:pfade .42s ease;}
   .p-stage.tr-push > *:not(.p-logo){animation:ppush .45s cubic-bezier(.2,.7,.2,1);}
   .p-stage.tr-wipe > *:not(.p-logo){animation:pwipe .5s ease;}
@@ -194,18 +206,19 @@
   .p-logo{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:7px;opacity:.85;font-family:'Syne';font-weight:800;font-size:14px;color:#fff;z-index:5;pointer-events:none;}
   .p-bar{display:flex;align-items:center;gap:12px;padding:9px 16px;background:rgba(0,0,0,.55);border-top:1px solid var(--border);}
   .p-bar .pos{color:var(--muted);font-size:12px;}
-  .live{width:min(1000px,90vw);position:absolute;top:50%;left:50%;transform:translate(-50%,-52%);font-family:var(--theme-font);}
-  .live{padding-right:16cqw;} /* clearance so results never collide with the QR card */
-  .live .lq{font-family:var(--theme-font);font-weight:800;font-size:5.4cqw;color:var(--slide-text,#fff);line-height:1.12;margin-bottom:1cqw;}
+  /* Live results block — centred inside the .fit wrapper (which handles shrink-to-fit)
+     rather than absolutely positioned, so long questions/many options can't overflow. */
+  .live{width:100%;padding-right:16cqw;font-family:var(--theme-font);} /* padding-right = QR clearance */
+  .live .lq{font-family:var(--theme-font);font-weight:800;font-size:calc(5.4cqw * var(--q-scale,1));color:var(--slide-text,#fff);line-height:1.12;margin-bottom:1cqw;}
   .live .tag{font-family:'DM Sans',sans-serif;font-weight:700;font-size:1.6cqw;letter-spacing:.08em;color:var(--muted);margin-bottom:2cqw;}
   .live .tag.rev{color:var(--accent3);}
-  .bar{margin-bottom:1.7cqw;}
-  .bar-top{display:flex;justify-content:space-between;font-family:'DM Sans',sans-serif;font-weight:600;font-size:2.2cqw;margin-bottom:.6cqw;}
-  .bar-track{height:1.7cqw;background:rgba(255,255,255,.1);border-radius:100px;overflow:hidden;}
+  .bar{margin-bottom:calc(1.7cqw * var(--r-scale,1));}
+  .bar-top{display:flex;justify-content:space-between;font-family:'DM Sans',sans-serif;font-weight:600;font-size:calc(2.2cqw * var(--r-scale,1));margin-bottom:.6cqw;}
+  .bar-track{height:calc(1.7cqw * var(--r-scale,1));background:rgba(255,255,255,.1);border-radius:100px;overflow:hidden;}
   .bar-fill{height:100%;border-radius:100px;background:linear-gradient(90deg,var(--accent),#a78bfa);transition:width .5s;}
   .bar-fill.correct{background:linear-gradient(90deg,var(--accent3),#6effb0);}
   .bar-fill.detractor{background:linear-gradient(90deg,#ff6584,#ff8fa3);}
-  .metric{font-family:var(--theme-font);font-weight:800;font-size:4.2cqw;margin-bottom:1.4cqw;}
+  .metric{font-family:var(--theme-font);font-weight:800;font-size:calc(4.2cqw * var(--r-scale,1));margin-bottom:1.4cqw;}
   .metric span{font-size:1.8cqw;color:var(--muted);font-weight:400;}
   .txt-wall{display:flex;flex-wrap:wrap;gap:8px;}
   .txt-resp{background:rgba(255,255,255,.07);border:1px solid var(--border);border-radius:1cqw;padding:1cqw 1.3cqw;font-size:1.8cqw;max-width:30cqw;}
@@ -383,8 +396,10 @@
 <!-- ── PRESENT OVERLAY ──────────────────────────────────────────────────────── -->
 <div id="present">
   <div class="p-progress"><div id="pProg"></div></div>
-  <div class="p-stage" id="pStage">
-    <div class="p-logo"><svg viewBox="0 0 100 100" width="22" height="22" style="border-radius:6px;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/></svg>PollSlide</div>
+  <div class="p-frame" id="pFrame">
+    <div class="p-stage" id="pStage">
+      <div class="p-logo"><svg viewBox="0 0 100 100" width="22" height="22" style="border-radius:6px;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/></svg>PollSlide</div>
+    </div>
   </div>
   <div class="p-bar">
     <button class="pill-btn ghost" onclick="presentNav(-1)">← Prev</button>
@@ -771,6 +786,7 @@ function duplicateSlide(){ if(currentIdx<0)return; pushUndo('Duplicate slide'); 
 function renderCanvas(){
   const slide=document.getElementById('canvasSlide'); const tools=document.getElementById('stageTools');
   applyThemeTo(slide, (deck.slides[currentIdx]&&deck.slides[currentIdx].theme)||deck.theme);
+  applySizes(slide, deck.slides[currentIdx]);
   slide.style.background=(deck.slides[currentIdx]&&deck.slides[currentIdx].bgColor)||'';
   const na=document.getElementById('notesArea'); if(na) na.value=(currentIdx>=0&&deck.slides[currentIdx])?(deck.slides[currentIdx].notes||''):'';
   if(currentIdx<0||!deck.slides[currentIdx]){ slide.innerHTML=`<div class="slide-inner placeholder-q">Select or add a slide to begin.</div>`; tools.innerHTML=''; return; }
@@ -784,6 +800,7 @@ function renderCanvas(){
     ${(s.kind==='title'||s.kind==='content')?`<button class="st-btn" onclick="bgImgInput.click()" title="Background image for this slide">🌄 BG</button>${s.bgImg?`<input type="range" min="0" max="0.7" step="0.05" value="${s.bgDim!=null?s.bgDim:.35}" oninput="setBgDim(this.value)" title="Darken background" style="width:52px;accent-color:var(--accent);"><button class="st-btn" onclick="clearBg()" title="Remove background image">✕BG</button>`:''}`:''}
     <span id="fmtBar" style="display:none;align-items:center;gap:5px;"></span>
     ${((s.kind==='poll'||s.kind==='quiz')&&(s.question.type||'').indexOf('multiple_choice')===0)?`<select class="st-btn" onchange="setDisplay(this.value)" title="How results are shown"><option value="bars"${(s.question.displayMode||'bars')==='bars'?' selected':''}>▭ Bars</option><option value="column"${s.question.displayMode==='column'?' selected':''}>▮ Columns</option><option value="donut"${s.question.displayMode==='donut'?' selected':''}>◐ Donut</option><option value="bignum"${s.question.displayMode==='bignum'?' selected':''}># Big numbers</option></select>`:''}
+    ${sizeControls(s)}
     <select class="st-btn" onchange="setSlideTheme(this.value)" title="Theme for THIS slide (Theme menu sets the whole deck)"><option value="">🎨 Deck theme</option>${Object.entries(THEMES).map(([k,th])=>`<option value="${k}"${s.theme===k?" selected":""}>${th.name}</option>`).join("")}</select>
     <select class="st-btn" onchange="setTransition(this.value)" title="Slide transition"><option value="fade"${(s.transition||'fade')==='fade'?' selected':''}>⇋ Fade</option><option value="push"${s.transition==='push'?' selected':''}>→ Push</option><option value="wipe"${s.transition==='wipe'?' selected':''}>◧ Wipe</option><option value="zoom"${s.transition==='zoom'?' selected':''}>⤢ Zoom</option><option value="none"${s.transition==='none'?' selected':''}>∅ None</option></select>
     <span class="spacer" style="flex:1;"></span>
@@ -799,7 +816,33 @@ function renderCanvas(){
   slide.insertAdjacentHTML('beforeend','<div class="guide" id="vGuide"></div><div class="guide" id="hGuide"></div>'); // smart guides live inside the canvas — recreate after every render
   wireElementDrag(); renderFmtBar();
   if(hasQR(s)){ const box=slide.querySelector('.qr-card .qrbox'); if(box) renderQR(box, answerUrl(s)); }
+  scheduleFit(slide);   // shrink-to-fit after layout + fonts settle
 }
+/* Apply the presenter's per-element size choices (question / response / QR) as CSS
+   vars on a slide-scope element; the cqw type sizes multiply by these. Default 1. */
+function applySizes(el, s){ const z=(s&&s.sz)||{};
+  el.style.setProperty('--q-scale', z.q||1);
+  el.style.setProperty('--r-scale', z.r||1);
+  el.style.setProperty('--qr-scale', z.qr||1); }
+/* Shrink-to-fit: scale the .fit block down so a slide's question + response always
+   fit inside the slide with a border, however much was imported. Only scales DOWN —
+   the base/manual sizes are the ceiling, so it never fights the presenter's resize. */
+function fitSlide(scope){ if(!scope) return;
+  const inner = scope.querySelector('.slide-inner') || scope;
+  const fit = scope.querySelector('.fit'); if(!fit) return;
+  fit.style.transform='';                                   // reset before measuring
+  const cs=getComputedStyle(inner);
+  const padY=(parseFloat(cs.paddingTop)||0)+(parseFloat(cs.paddingBottom)||0);
+  const padX=(parseFloat(cs.paddingLeft)||0)+(parseFloat(cs.paddingRight)||0);
+  const availH=(inner.clientHeight-padY)*0.98, availW=(inner.clientWidth-padX)*0.98;
+  const natH=fit.scrollHeight, natW=fit.scrollWidth;
+  if(!natH||!natW||availH<=0||availW<=0) return;
+  const k=Math.min(1, availH/natH, availW/natW);
+  if(k<0.997) fit.style.transform='scale('+k+')'; }
+// Fit after layout AND again once web fonts finish loading (font metrics change the
+// measured height, so a cold-load fit could otherwise be slightly off).
+function scheduleFit(el){ requestAnimationFrame(()=>fitSlide(el));
+  if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>fitSlide(el)); }
 function bind(field, idx){ return `oninput="deck.slides[${idx}].${field}=this.innerHTML;scheduleSave()" `; }
 function bindQ(field, idx){ return `oninput="deck.slides[${idx}].question.${field}=this.innerHTML;scheduleSave();schedulePublish()" `; }
 function bgLayer(s){ if(!s.bgImg)return ''; const dim=s.bgDim!=null?s.bgDim:.35;
@@ -816,13 +859,13 @@ function editHtml(s){
     ? `<img class="s-img" src="${s.img}" alt="">`
     : `<div class="slide-inner placeholder-q" style="flex-direction:column;gap:10px;"><div>No image yet</div><button class="st-btn" onclick="imgInput.click()">Choose image…</button></div>`;
   if(s.kind==='study') return `<div class="slide-inner" style="align-items:center;text-align:center;">
-    <div class="s-eyebrow">Flashcard</div>
+    <div class="fit fit-c"><div class="s-eyebrow">Flashcard</div>
     <div class="s-title" contenteditable="true" oninput="deck.slides[${i}].question.front=this.innerHTML;scheduleSave();schedulePublish()">${rich(s.question.front||'')}</div>
-    <div class="s-body" style="color:var(--accent3);" contenteditable="true" oninput="deck.slides[${i}].question.back=this.innerHTML;scheduleSave();schedulePublish()">${rich(s.question.back||'')}</div>
+    <div class="s-body" style="color:var(--accent3);" contenteditable="true" oninput="deck.slides[${i}].question.back=this.innerHTML;scheduleSave();schedulePublish()">${rich(s.question.back||'')}</div></div>
     ${qrCard(s)}</div>`;
   if(s.kind==='qa') return `<div class="slide-inner">
-    <div class="s-eyebrow">Audience Q&amp;A</div>
-    <div class="s-title" contenteditable="true" ${bindQ('text',i)}>${rich(s.question.text||'')}</div>
+    <div class="fit"><div class="s-eyebrow">Audience Q&amp;A</div>
+    <div class="s-title" contenteditable="true" ${bindQ('text',i)}>${rich(s.question.text||'')}</div></div>
     ${qrCard(s)}</div>`;
   // poll / quiz / survey
   const opts=(s.question.options||[]);
@@ -834,12 +877,34 @@ function editHtml(s){
         ${(s.kind==='quiz')?`<span style="font-size:11px;color:${s.question.correctAnswer===oi?'var(--accent3)':'var(--muted)'};cursor:pointer;" onclick="setCorrect(${oi})">${s.question.correctAnswer===oi?'✓ correct':'mark'}</span>`:''}
       </div>`).join('')}</div>`;
   return `<div class="slide-inner">
-    <div class="s-eyebrow">${SLIDE_TYPES[s.kind].label}${s.kind==='quiz'?' · tap "mark" to set the answer':''}</div>
+    <div class="fit"><div class="s-eyebrow">${SLIDE_TYPES[s.kind].label}${s.kind==='quiz'?' · tap "mark" to set the answer':''}</div>
     <div class="s-title" contenteditable="true" ${bindQ('text',i)}>${rich(s.question.text||'')}</div>
-    ${optsHtml}${qrCard(s)}</div>`;
+    ${optsHtml}</div>${qrCard(s)}</div>`;
 }
 function setCorrect(oi){ deck.slides[currentIdx].question.correctAnswer=oi; renderCanvas(); scheduleSave(); schedulePublish(); }
 function setDisplay(v){ const s=deck.slides[currentIdx]; if(s&&s.question){ s.question.displayMode=v; scheduleSave(); toast('Results shown as: '+v); } }
+/* Per-element resize (question / response / QR). Stored on s.sz and applied as CSS
+   vars (--q/-r/-qr-scale) in both editor and present. Auto-fit still guarantees the
+   slide never overflows, so enlarging one element gracefully shrinks the whole block. */
+function setSize(which, delta){ const s=deck.slides[currentIdx]; if(!s) return;
+  if(!s.sz) s.sz={}; const cur=s.sz[which]||1;
+  let v=Math.max(0.5, Math.min(2, Math.round((cur+delta)*20)/20));
+  s.sz[which]=v; if(v===1) delete s.sz[which];
+  renderCanvas(); scheduleSave(); if(isInteractive(s)) schedulePublish(); }
+function resetSizes(){ const s=deck.slides[currentIdx]; if(!s) return; delete s.sz; renderCanvas(); scheduleSave(); toast('Element sizes reset'); }
+// Toolbar resize controls, shown for question-type slides.
+function sizeControls(s){
+  if(!['poll','quiz','survey','study','qa'].includes(s.kind)) return '';
+  const z=s.sz||{}; const pct=k=>Math.round((z[k]||1)*100)+'%';
+  const grp=(label,key)=>`<span style="font-size:11px;color:var(--muted);margin-left:6px;">${label} <span style="color:var(--text);">${pct(key)}</span></span>`
+    +`<button class="st-btn" onclick="setSize('${key}',-0.1)" title="Smaller">－</button>`
+    +`<button class="st-btn" onclick="setSize('${key}',0.1)" title="Bigger">＋</button>`;
+  let h=`<span style="font-size:11px;color:var(--accent3);border-left:1px solid var(--border2);padding-left:10px;margin-left:6px;">↔ Resize:</span>`+grp(s.kind==='study'?'Card':'Question','q');
+  if(s.question && (s.question.options||[]).length && s.kind!=='study') h+=grp('Answers','r');
+  if(hasQR(s)) h+=grp('QR','qr');
+  if(s.sz && Object.keys(s.sz).length) h+=`<button class="st-btn" onclick="resetSizes()" title="Reset element sizes">↺</button>`;
+  return h;
+}
 function toggleSkip(){ const s=deck.slides[currentIdx]; if(!s)return; s.skip=!s.skip; if(!s.skip)delete s.skip; renderCanvas(); renderNav(); scheduleSave(); toast(s.skip?'⏭ Slide will be skipped when presenting':'Slide back in the show'); }
 function setTransition(v){ const s=deck.slides[currentIdx]; if(s){ s.transition=v; scheduleSave(); } }
 function setSlideTheme(v){ const s=deck.slides[currentIdx]; if(!s)return; pushUndo('Slide theme'); if(v&&THEMES[v]) s.theme=v; else delete s.theme; renderCanvas(); renderNav(); scheduleSave(); }
@@ -1210,6 +1275,22 @@ let presentIdx=0,_revealed=false,_kb=null,_liveUnsub=null,_liveSlide=null,_liveR
 let _buildStep=0;   // how many build-elements are revealed on the current slide
 function buildEls(sl){ return (sl&&sl.elements||[]).map((e,i)=>({e,i})).filter(x=>x.e.build); }
 function isPresenting(){ return document.getElementById('present').classList.contains('show'); }
+// Size the present stage to the largest 16:9 box that fits the frame (letterbox),
+// so it's always landscape/WYSIWYG regardless of window or screen aspect.
+function sizePresentStage(){
+  const frame=document.getElementById('pFrame'), st=document.getElementById('pStage');
+  if(!frame||!st) return;
+  const aw=frame.clientWidth, ah=frame.clientHeight; if(!aw||!ah) return;
+  let w=aw, h=w*9/16;
+  if(h>ah){ h=ah; w=h*16/9; }
+  st.style.width=Math.round(w)+'px'; st.style.height=Math.round(h)+'px';
+  if(isPresenting()) fitSlide(st);   // re-fit content into the new box
+}
+let _presentResizeWired=false;
+function wirePresentResize(){ if(_presentResizeWired) return; _presentResizeWired=true;
+  const on=()=>{ if(isPresenting()) sizePresentStage(); };
+  window.addEventListener('resize', on);
+  document.addEventListener('fullscreenchange', ()=>setTimeout(on,60)); }
 async function startPresent(i){ if(!deck.slides.length){toast('Add a slide first.');return;}
   if(typeof userId!=='undefined'&&userId&&deck.slides.some(s=>isInteractive(s)&&!(s.question&&s.question.imported))){ await publishDeck(); } // publish the latest so every QR (incl. Q&A) scans
   let st0=Math.max(0,Math.min(i||0,deck.slides.length-1));
@@ -1217,6 +1298,7 @@ async function startPresent(i){ if(!deck.slides.length){toast('Add a slide first
   if(st0>=deck.slides.length){ toast('Every slide is marked Skip.'); return; }
   presentIdx=st0; _revealed=false; _presentT0=Date.now();
   const el=document.getElementById('present'); el.classList.add('show'); try{ el.requestFullscreen&&el.requestFullscreen().catch(()=>{}); }catch(e){}
+  wirePresentResize(); sizePresentStage();   // lock the 16:9 letterbox before first paint
   renderPresentSlide(presentIdx);
   document.getElementById('pStage').onclick=(e)=>{ if(e.target.closest('.qr-card')||e.target.closest('button')||e.target.closest('a')||e.target.closest('video')||e.target.closest('audio'))return; presentNav(1); }; // click advances (Keynote)
   _kb=(e)=>{ if(e.key==='Escape')endPresent(); else if(e.key==='ArrowRight'||e.key===' '){presentNav(1);e.preventDefault();} else if(e.key==='ArrowLeft')presentNav(-1); else if(e.key==='r'||e.key==='R')doReveal(); };
@@ -1245,15 +1327,17 @@ function renderPresentSlide(i){ const s=deck.slides[i]; const st=document.getEle
   const _tr=(s&&s.transition)||'fade'; document.getElementById('pStage').className='p-stage'+(_tr!=='none'?' tr-'+_tr:'');
   updatePresenterView();
   st.style.background = (s&&s.kind==='image')?'#000':((s&&s.bgColor)||'var(--slide-bg)');
+  applySizes(st, s);   // presenter's per-element size choices
+  const _fit=()=>scheduleFit(st);
   // keep the logo node, replace the rest
   st.querySelectorAll(':scope > *:not(.p-logo)').forEach(n=>n.remove());
   const wrap=document.createElement('div'); st.insertBefore(wrap, st.firstChild);
   if(!s){ wrap.outerHTML=''; return; }
   if(s.kind==='image'){ wrap.outerHTML=`<img class="s-img" src="${s.img||''}" alt="">`+elLayer(s,false); return; }
-  if(s.kind==='title'){ wrap.outerHTML=bgLayer(s)+`<div class="slide-inner" style="font-family:var(--theme-font);"><div class="s-title">${rich(s.title||'')}</div><div class="s-sub">${rich(s.sub||'')}</div></div>`+elLayer(s,false); return; }
-  if(s.kind==='content'){ wrap.outerHTML=bgLayer(s)+`<div class="slide-inner" style="font-family:var(--theme-font);"><div class="s-title">${rich(s.title||'')}</div><div class="s-body">${rich(s.body||'')}</div></div>`+elLayer(s,false); return; }
-  if(s.kind==='study'){ wrap.outerHTML=`<div class="slide-inner" style="align-items:center;text-align:center;font-family:var(--theme-font);"><div class="flashcard"><div class="fc-front">${rich(s.question.front||'')}</div>${_revealed?`<div class="fc-back">${rich(s.question.back||'')}</div>`:`<div class="fc-hint">${t('present.flip')}</div>`}</div></div>`+elLayer(s,false); return; }
-  if(s.kind==='qa'){ wrap.outerHTML=`<div class="slide-inner" style="font-family:var(--theme-font);"><div class="s-eyebrow">Q&amp;A</div><div class="s-title">${esc(s.question.text||'')}</div></div>`+elLayer(s,false)+qrPresent(s); afterPresentQR(s); return; }
+  if(s.kind==='title'){ wrap.outerHTML=bgLayer(s)+`<div class="slide-inner" style="font-family:var(--theme-font);"><div class="fit"><div class="s-title">${rich(s.title||'')}</div><div class="s-sub">${rich(s.sub||'')}</div></div></div>`+elLayer(s,false); _fit(); return; }
+  if(s.kind==='content'){ wrap.outerHTML=bgLayer(s)+`<div class="slide-inner" style="font-family:var(--theme-font);"><div class="fit"><div class="s-title">${rich(s.title||'')}</div><div class="s-body">${rich(s.body||'')}</div></div></div>`+elLayer(s,false); _fit(); return; }
+  if(s.kind==='study'){ wrap.outerHTML=`<div class="slide-inner" style="align-items:center;text-align:center;font-family:var(--theme-font);"><div class="fit fit-c"><div class="flashcard"><div class="fc-front">${rich(s.question.front||'')}</div>${_revealed?`<div class="fc-back">${rich(s.question.back||'')}</div>`:`<div class="fc-hint">${t('present.flip')}</div>`}</div></div></div>`+elLayer(s,false); _fit(); return; }
+  if(s.kind==='qa'){ wrap.outerHTML=`<div class="slide-inner" style="font-family:var(--theme-font);"><div class="fit"><div class="s-eyebrow">Q&amp;A</div><div class="s-title">${esc(s.question.text||'')}</div></div></div>`+elLayer(s,false)+qrPresent(s); afterPresentQR(s); _fit(); return; }
   // poll/quiz/survey → live results
   wrap.remove(); attachLive(s); paintLive(s);
 }
@@ -1265,13 +1349,15 @@ function attachLive(s){ const fx=window.__PRESENT_FIXTURE; if(fx&&fx.responses&&
   const fn=ref.on('value',sn=>{ _liveResp[s.id]=sn.exists()?Object.values(sn.val()):[]; if(deck.slides[presentIdx]&&deck.slides[presentIdx].id===s.id)paintLive(s); }); _liveUnsub=()=>ref.off('value',fn); }
 function detachLive(){ if(_liveUnsub){_liveUnsub();_liveUnsub=null;} _liveSlide=null; }
 function paintLive(s){ const st=document.getElementById('pStage'); st.querySelectorAll(':scope > *:not(.p-logo)').forEach(n=>n.remove());
+  applySizes(st, s);
   const q=s.question, r=respFor(s), tot=r.length; const node=document.createElement('div'); node.innerHTML=`
     <div class="respc">${tot?t('present.responses',{n:tot}):t('present.waiting')}</div>
-    <div class="live"><div class="tag ${_revealed?'rev':''}">${_revealed?t('present.revealed'):t('present.live')}</div>
-      <div class="lq">${rich(q.text||'')}</div>${buildResult(q,r)}</div>
+    <div class="slide-inner" style="font-family:var(--theme-font);"><div class="fit"><div class="live"><div class="tag ${_revealed?'rev':''}">${_revealed?t('present.revealed'):t('present.live')}</div>
+      <div class="lq">${rich(q.text||'')}</div>${buildResult(q,r)}</div></div></div>
     ${qrPresent(s)}`;
   while(node.firstChild) st.insertBefore(node.firstChild, st.querySelector('.p-logo'));
-  const box=st.querySelector('.qr-card .qrbox'); if(box)renderQR(box, answerUrl(s)); }
+  const box=st.querySelector('.qr-card .qrbox'); if(box)renderQR(box, answerUrl(s));
+  scheduleFit(st); }
 function doReveal(){ const s=deck.slides[presentIdx]; if(!s)return; if(s.kind==='study'){_revealed=!_revealed;} else if(slideHasPoll(s)){_revealed=true;} else return; renderPresentSlide(presentIdx); }
 
 /* ─── Polly modal (per-type) ──────────────────────────────────────────────────*/
