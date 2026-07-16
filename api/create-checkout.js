@@ -77,7 +77,7 @@ module.exports = async function handler(req, res) {
     }
 
     // Create the Checkout Session
-    const session = await stripe.checkout.sessions.create({
+    const params = {
       customer:             customer.id,
       payment_method_types: ['card'],
       line_items:           [{ price: priceId, quantity: 1 }],
@@ -97,7 +97,26 @@ module.exports = async function handler(req, res) {
           plan:         plan,
         },
       },
-    });
+    };
+
+    // Consumer-law compliance, each opt-in via env so checkout never breaks
+    // before the Stripe Dashboard is configured for it:
+    //   STRIPE_COLLECT_CONSENT=1 — adds the "I agree to the Terms" checkbox
+    //     (records acceptance on the Checkout Session). REQUIRES the Terms of
+    //     Service URL set first: Dashboard → Settings → Business → Public details.
+    //   STRIPE_AUTOMATIC_TAX=1 — VAT/GST/sales tax via Stripe Tax + business
+    //     tax-ID field. REQUIRES Stripe Tax enabled in the Dashboard first.
+    if (process.env.STRIPE_COLLECT_CONSENT === '1') {
+      params.consent_collection = { terms_of_service: 'required' };
+    }
+    if (process.env.STRIPE_AUTOMATIC_TAX === '1') {
+      params.automatic_tax = { enabled: true };
+      params.customer_update = { address: 'auto' };
+      params.tax_id_collection = { enabled: true };
+      params.billing_address_collection = 'required';
+    }
+
+    const session = await stripe.checkout.sessions.create(params);
 
     return res.status(200).json({ url: session.url });
 

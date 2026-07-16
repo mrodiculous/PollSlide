@@ -62,6 +62,11 @@
   .muted{color:var(--muted);} .empty{color:var(--muted);text-align:center;padding:36px;}
   .overlay{position:fixed;inset:0;background:rgba(7,7,15,.92);z-index:1500;display:flex;align-items:center;justify-content:center;}
   @media print{ .filters,.tabs,.topbar .btn,#authOverlay{display:none!important;} body{background:#fff;color:#000;} }
+  /* Accessibility (WCAG 2.1 AA): keyboard focus visibility + reduced motion */
+  :focus-visible { outline:3px solid var(--accent,#6c63ff); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important; scroll-behavior:auto !important; }
+  }
 </style>
 </head>
 <body>

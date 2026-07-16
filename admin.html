@@ -1018,6 +1018,10 @@ function renderLegal(){
     <div id="policyPanel" style="padding:14px;"><div class="loader">Loading…</div></div>
   </div>
   <div class="card" style="margin-bottom:14px;">
+    <div class="card-hd"><h2>Compliance sweep</h2><span style="font-size:11px;color:var(--muted);">Automated self-audit: legal pages live with required sections, consent machinery armed, regulation watch running. Monthly cron + on demand</span></div>
+    <div id="compliancePanel" style="padding:14px;"><div class="loader">Loading…</div></div>
+  </div>
+  <div class="card" style="margin-bottom:14px;">
     <div class="card-hd"><h2>Legal quick actions</h2><span style="font-size:11px;color:var(--muted);">One-click fulfilment of legal promises from Terms of Service & Privacy Policy</span></div>
     <div class="qa-grid">
       ${LEGAL_ACTIONS.map((a,i)=>`<div class="qa-btn" onclick="legalActions[${i}].action()"><div class="qa-btn-icon">${a.icon}</div><div class="qa-btn-title">${a.title}</div><div class="qa-btn-desc">${a.desc}</div></div>`).join('')}
@@ -1028,7 +1032,53 @@ function renderLegal(){
     <div id="legalLog"><div class="loader">Loading…</div></div>
   </div>`;
   loadPolicyPanel();
+  loadCompliancePanel();
   loadLegalLog();
+}
+
+// ─── COMPLIANCE SWEEP (worldwide marketing & sale readiness) ─────────────────
+// Renders the last /api/compliance-sweep report (monthly cron) and lets you run
+// one on demand. The sweep verifies OUR side (pages + sections + consent
+// machinery); legal-watch covers the EXTERNAL side (vendor policies + laws).
+const COMP_ICON={pass:'✅',warn:'⚠️',fail:'❌',info:'ℹ️'};
+async function loadCompliancePanel(){
+  const el=document.getElementById('compliancePanel');if(!el)return;
+  let rep=null,watch={};
+  try{ const s=await db.ref('admin/compliance/last').get(); rep=s.exists()?s.val():null; }catch(e){}
+  try{ const s=await db.ref('admin/legal_watch').get(); watch=s.exists()?s.val():{}; }catch(e){}
+  const regs=Object.values(watch||{}).filter(w=>w&&w.kind==='regulation');
+  const watchHtml=Object.keys(watch).length?`<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;">⚖️ Legal watcher covers ${Object.keys(watch).length} sources${regs.length?` incl. ${regs.length} laws/regulations: ${regs.map(w=>w.label).join(' · ')}`:''}</div>`:'';
+  let body;
+  if(!rep){
+    body=`<div class="empty">No sweep has run yet — run the first one now (takes ~10 seconds).</div>`;
+  }else{
+    const t=rep.totals||{};
+    const rows=(rep.checks||[]).map(c=>`
+      <div style="display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-bottom:1px solid var(--border);">
+        <div style="flex-shrink:0;">${COMP_ICON[c.status]||'•'}</div>
+        <div style="min-width:0;">
+          <div style="font-size:12.5px;font-weight:600;">${c.label} <span style="font-weight:400;color:var(--muted);font-size:11px;">· ${c.area}</span></div>
+          <div style="font-size:11.5px;color:var(--muted);">${c.detail||''}</div>
+          ${(c.fix&&c.status!=='pass')?`<div style="font-size:11.5px;color:var(--accent4);">Fix: ${c.fix}</div>`:''}
+        </div>
+      </div>`).join('');
+    body=`<div style="font-size:12px;margin-bottom:8px;color:var(--muted);">Last run ${timeAgo(rep.ranAt)} by ${rep.by||'?'} — <b>${t.pass||0} pass</b>${t.fail?` · <b style="color:var(--accent2);">${t.fail} fail</b>`:''}${t.warn?` · <b style="color:var(--accent4);">${t.warn} warn</b>`:''}${t.info?` · ${t.info} info`:''}</div>${rows}`;
+  }
+  el.innerHTML=`${body}
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <button class="btn btn-primary btn-sm" id="compRunBtn" onclick="runComplianceSweep()">▶ Run sweep now</button>
+    </div>${watchHtml}`;
+}
+async function runComplianceSweep(){
+  const btn=document.getElementById('compRunBtn');
+  if(btn){btn.disabled=true;btn.textContent='Running…';}
+  try{
+    const t=await auth.currentUser.getIdToken();
+    const r=await fetch('/api/compliance-sweep',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t}});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    toast('Compliance sweep complete.','success');
+  }catch(e){ toast('Sweep failed: '+e.message,'danger'); }
+  loadCompliancePanel();
 }
 
 // ─── POLICY UPDATES & RE-CONSENT ──────────────────────────────────────────────
@@ -1039,9 +1089,13 @@ const POLICY_DOCS={
   terms:  {label:'Terms of Service', url:'https://pollslide.com/terms'},
   privacy:{label:'Privacy Policy',   url:'https://pollslide.com/privacy'},
   cookies:{label:'Cookie Policy',    url:'https://pollslide.com/cookies'},
+  trust:  {label:'Trust & Safety',   url:'https://pollslide.com/trust-safety'},
+  a11y:   {label:'Accessibility Statement', url:'https://pollslide.com/accessibility'},
 };
 // legal-watch keys for OUR docs → POLICY_DOCS keys (vendor changes don't need re-consent)
-const OURS_KEYMAP={ours_terms:'terms',ours_privacy:'privacy',ours_cookies:'cookies'};
+const OURS_KEYMAP={ours_terms:'terms',ours_privacy:'privacy',ours_cookies:'cookies',ours_trust:'trust',ours_a11y:'a11y'};
+// A watch key is a law/regulation if legal-watch tagged it, or by its reg_ prefix.
+function isRegChange(c){ return c && (c.kind==='regulation' || String(c.key||'').indexOf('reg_')===0); }
 
 async function loadPolicyPanel(){
   const el=document.getElementById('policyPanel');if(!el)return;
@@ -1055,13 +1109,15 @@ async function loadPolicyPanel(){
     : `No policy version pushed yet — the re-consent banner is inactive for all users until you push one.`;
   const alertHtml=open.length? open.map(([ts,a])=>{
     const ours=(a.changes||[]).filter(c=>OURS_KEYMAP[c.key]);
-    const vendor=(a.changes||[]).filter(c=>!OURS_KEYMAP[c.key]);
+    const regs=(a.changes||[]).filter(c=>!OURS_KEYMAP[c.key]&&isRegChange(c));
+    const vendor=(a.changes||[]).filter(c=>!OURS_KEYMAP[c.key]&&!isRegChange(c));
     const oursHtml=ours.length?`<div style="font-size:12px;margin:4px 0;"><b>Your docs changed:</b> ${ours.map(c=>`<a href="${c.url}" target="_blank">${c.label}</a>`).join(', ')}</div>`:'';
+    const regsHtml=regs.length?`<div style="font-size:12px;margin:4px 0;color:var(--accent4);"><b>⚖️ Law / regulation changed</b> — review whether product practices or legal docs need updating: ${regs.map(c=>`<a href="${c.url}" target="_blank">${c.label}</a>`).join(', ')}</div>`:'';
     const vendorHtml=vendor.length?`<div style="font-size:11px;color:var(--muted);margin:4px 0;">Vendor pages changed (no user re-consent needed): ${vendor.map(c=>c.label).join(', ')}</div>`:'';
     const canNotify=ours.length>0;
     return `<div style="border:1px solid var(--border2);border-radius:10px;padding:12px;margin-bottom:10px;">
       <div style="font-size:12px;color:var(--muted);margin-bottom:2px;">Detected ${timeAgo(a.createdAt)}</div>
-      ${oursHtml}${vendorHtml}
+      ${oursHtml}${regsHtml}${vendorHtml}
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
         ${canNotify?`<button class="btn btn-sm btn-amber" onclick="notifyPolicyUpdate('${ts}')">Notify all users of this update</button>`:''}
         <button class="btn btn-sm btn-ghost" onclick="resolveAlertOnly('${ts}')">Dismiss (no user impact)</button>

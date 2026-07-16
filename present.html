@@ -242,6 +242,11 @@
   .err{color:var(--accent2);font-size:12px;min-height:15px;margin-top:8px;}
   #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(50px);background:var(--chrome2);border:1px solid var(--border2);border-radius:9px;padding:9px 16px;font-size:13px;transition:transform .2s;z-index:2000;pointer-events:none;}
   #toast.show{transform:translateX(-50%) translateY(0);}
+  /* Accessibility (WCAG 2.1 AA): keyboard focus visibility + reduced motion */
+  :focus-visible { outline:3px solid var(--accent,#6c63ff); outline-offset:2px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important; scroll-behavior:auto !important; }
+  }
 </style>
 </head>
 <body>

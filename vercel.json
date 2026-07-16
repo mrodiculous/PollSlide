@@ -9,7 +9,8 @@
   },
   "crons": [
     { "path": "/api/legal-watch", "schedule": "0 9 * * 1" },
-    { "path": "/api/comp-sweep", "schedule": "0 8 * * *" }
+    { "path": "/api/comp-sweep", "schedule": "0 8 * * *" },
+    { "path": "/api/compliance-sweep", "schedule": "0 10 1 * *" }
   ],
   "headers": [
     {
