@@ -71,8 +71,8 @@ module.exports = async function handler(req, res) {
 
   // ── 1. Required public legal pages + their load-bearing sections ──────────
   const pages = await Promise.all([
-    pageCheck('terms', 'Legal pages', 'Terms of Service (incl. EU withdrawal, minors, notice-and-action)', SITE + '/terms',
-      ['money-back guarantee', 'right of withdrawal', 'Audience participants and minors', 'Reporting content'],
+    pageCheck('terms', 'Legal pages', 'Terms of Service (incl. EU withdrawal, minors, notice-and-action, AI transparency)', SITE + '/terms',
+      ['money-back guarantee', 'right of withdrawal', 'Audience participants and minors', 'Reporting content', 'Artificial intelligence features'],
       'Restore the missing section in terms.html (website repo) and redeploy.'),
     pageCheck('privacy', 'Legal pages', "Privacy Policy (GDPR + CCPA + children + participants)", SITE + '/privacy',
       ['GDPR', 'CCPA', "Children's privacy", 'Audience participants'],
@@ -86,6 +86,15 @@ module.exports = async function handler(req, res) {
     pageCheck('a11y', 'Accessibility (EAA)', 'Accessibility Statement (WCAG 2.1 AA / EN 301 549)', SITE + '/accessibility',
       ['WCAG', 'EN 301 549', 'help@pollslide.com'],
       'Restore accessibility.html (website repo) and redeploy. Required for EU marketing under the European Accessibility Act.'),
+    pageCheck('vpat', 'Accessibility (EAA)', 'VPAT / Accessibility Conformance Report (procurement)', SITE + '/vpat',
+      ['VPAT', 'Section 508', 'Level AA'],
+      'Restore vpat.html (website repo) and redeploy. Schools/gov procurement asks for this.'),
+    pageCheck('dpa', 'Data protection', 'Data Processing Agreement (GDPR Art. 28)', SITE + '/dpa',
+      ['Article 28', 'Subprocessors', 'within 72 hours', 'Standard Contractual Clauses'],
+      'Restore dpa.html (website repo) and redeploy. B2B/EDU customers require a DPA.'),
+    pageCheck('subprocessors', 'Data protection', 'Public subprocessor list (GDPR Art. 28(2))', SITE + '/subprocessors',
+      ['Subprocessors', 'Stripe', '30 days'],
+      'Restore subprocessors.html (website repo) and redeploy. Required to keep customers informed of subprocessors.'),
     pageCheck('join', 'Participant access', 'No-camera join path (pollslide.com/join)', SITE + '/join', [],
       'join.html redirect is down — laptop/desktop participants cannot join.'),
     pageCheck('answer', 'Participant access', 'Participant answer page', APP + '/answer', [],
@@ -103,7 +112,7 @@ module.exports = async function handler(req, res) {
       detail: home.text.includes('consent.js') ? 'consent.js is loaded on the homepage' : 'consent.js is NOT referenced on the homepage — EU visitors get no cookie notice',
       fix: 'Re-add <script src="/consent.js"></script> before </body> in index.html.' });
     // Footer must link the legal pages (EAA statement + terms/privacy discoverability)
-    const missingLinks = ['/terms', '/privacy', '/accessibility', '/trust-safety'].filter(h => !home.text.includes('href="' + h + '"'));
+    const missingLinks = ['/terms', '/privacy', '/accessibility', '/trust-safety', '/dpa', '/subprocessors', '/vpat'].filter(h => !home.text.includes('href="' + h + '"'));
     checks.push({ id: 'footer', area: 'Legal pages', label: 'Homepage footer links to all legal pages',
       status: missingLinks.length ? 'fail' : 'pass',
       detail: missingLinks.length ? 'Footer missing links: ' + missingLinks.join(', ') : 'Terms, Privacy, Accessibility, Trust & Safety all linked',

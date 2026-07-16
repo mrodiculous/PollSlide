@@ -587,6 +587,21 @@ function beginRevealCountdown() {
 }
 
 // ── Rendering ──
+/* Brand a rendered qrcode.js box: bake the PollSlide mark into the canvas centre.
+   correctLevel:H recovers the covered modules — verified to still decode. Skips <90px. */
+function psBrandQR(box, opts){ try{
+  opts=opts||{}; var c=box&&box.querySelector&&box.querySelector('canvas'); if(!c) return false;
+  var W=c.width; if(W<(opts.min||90)) return false;
+  var g=c.getContext('2d'), s=Math.round(W*(opts.pct||0.24)), x=Math.round((W-s)/2), y=x, r=Math.round(s*0.22);
+  function rr(px,py,pw,ph,rad){ g.beginPath(); g.moveTo(px+rad,py); g.arcTo(px+pw,py,px+pw,py+ph,rad);
+    g.arcTo(px+pw,py+ph,px,py+ph,rad); g.arcTo(px,py+ph,px,py,rad); g.arcTo(px,py,px+pw,py,rad); g.closePath(); }
+  g.fillStyle='#fff'; rr(x,y,s,s,r); g.fill();
+  var p=Math.round(s*0.14), ix=x+p, iy=y+p, is=s-p*2, ir=Math.round(is*0.22);
+  g.fillStyle='#0d0d18'; rr(ix,iy,is,is,ir); g.fill();
+  var bw=is*0.16, gp=is*0.10, by=iy+is*0.80, bx=ix+is*0.16, bars=[['#ff6584',0.28],['#f7b731',0.48],['#6c63ff',0.66]];
+  for(var i=0;i<3;i++){ var h=is*bars[i][1]; g.fillStyle=bars[i][0]; rr(bx+i*(bw+gp),by-h,bw,h,Math.max(1,bw*0.28)); g.fill(); }
+  return true;
+}catch(e){ return false; } }
 function renderAll() {
   if (!curQ) return;
   maybeStartAutoPostReveal(); // companion runs its OWN post-reveal once revealed (set before render so the badge shows this pass)
@@ -683,6 +698,7 @@ function renderAll() {
     if (box && window.QRCode) {
       box.innerHTML = '';
       new QRCode(box, { text: answerUrl, width: 96, height: 96, colorDark:'#0b0b15', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.H });
+      psBrandQR(box);
     }
   }
 

@@ -1091,9 +1091,12 @@ const POLICY_DOCS={
   cookies:{label:'Cookie Policy',    url:'https://pollslide.com/cookies'},
   trust:  {label:'Trust & Safety',   url:'https://pollslide.com/trust-safety'},
   a11y:   {label:'Accessibility Statement', url:'https://pollslide.com/accessibility'},
+  vpat:   {label:'VPAT / Accessibility Conformance Report', url:'https://pollslide.com/vpat'},
+  dpa:    {label:'Data Processing Agreement (DPA)', url:'https://pollslide.com/dpa'},
+  subprocessors:{label:'Subprocessor list', url:'https://pollslide.com/subprocessors'},
 };
 // legal-watch keys for OUR docs → POLICY_DOCS keys (vendor changes don't need re-consent)
-const OURS_KEYMAP={ours_terms:'terms',ours_privacy:'privacy',ours_cookies:'cookies',ours_trust:'trust',ours_a11y:'a11y'};
+const OURS_KEYMAP={ours_terms:'terms',ours_privacy:'privacy',ours_cookies:'cookies',ours_trust:'trust',ours_a11y:'a11y',ours_vpat:'vpat',ours_dpa:'dpa',ours_subprocessors:'subprocessors'};
 // A watch key is a law/regulation if legal-watch tagged it, or by its reg_ prefix.
 function isRegChange(c){ return c && (c.kind==='regulation' || String(c.key||'').indexOf('reg_')===0); }
 
@@ -1131,7 +1134,7 @@ async function loadPolicyPanel(){
     <h3 style="font-size:13px;margin:16px 0 8px;">Or push an update manually</h3>
     <p style="font-size:11px;color:var(--muted);margin:0 0 8px;">Use this when you've edited a policy yourself. Tick what changed and add a one-line summary users will see.</p>
     <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px;">
-      ${Object.entries(POLICY_DOCS).map(([k,d])=>`<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="pol_${k}" ${k!=='cookies'?'checked':''}> ${d.label}</label>`).join('')}
+      ${Object.entries(POLICY_DOCS).map(([k,d])=>`<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="pol_${k}" ${!['cookies','vpat','dpa','subprocessors'].includes(k)?'checked':''}> ${d.label}</label>`).join('')}
     </div>
     <textarea id="polSummary" placeholder="e.g. We've updated our Terms and Privacy Policy to clarify how AI-generated content is handled." style="width:100%;min-height:60px;margin-bottom:8px;"></textarea>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -2039,6 +2042,34 @@ const RUNBOOK = [
       steps:[
         'The companion only follows when you PRESENT (launch a question). Confirm the presenter actually launched it.',
         'Stuck session? Users → open the owner → <b>Reset all response tallies</b>.',
+      ] },
+  ]},
+  { cat:'⚖️ Data breach & compliance', items:[
+    { sym:'Suspected personal-data breach (GDPR 72-hour clock)',
+      cause:'Any unauthorised access, loss, or disclosure of user/audience personal data starts a clock: GDPR Art. 33 requires notifying the supervisory authority without undue delay and within 72 hours of becoming AWARE; our DPA commits us to telling affected business customers within 72 hours too.',
+      steps:[
+        '<b>0. Note the exact time you became aware</b> — the 72h clock starts now, not when the breach happened.',
+        '<b>1. Contain first.</b> Rotate any exposed secrets/keys (Vercel → Settings → Environment Variables → redeploy), revoke leaked tokens, and lock affected accounts. If a Firebase rule is the hole, see "Firebase rules & data" above.',
+        '<b>2. Scope it.</b> What data, whose (presenters vs audience participants), how many records, and is it still exposed? Write it down as you go.',
+        '<b>3. Log it.</b> Legal → Quick Actions → <b>Security breach</b> (logs the incident). Record findings in <code>COMPLIANCE-LOG.md</code>.',
+        '<b>4. Notify authority if required.</b> If the breach is likely to risk individuals\' rights, report to the lead EU supervisory authority within 72h (and ICO for UK). Low-risk breaches still get logged with a reasoned "no-notify" decision.',
+        '<b>5. Notify affected people/customers.</b> If high risk to individuals (Art. 34), tell them without undue delay. Use Legal → <b>Policy updates & re-consent</b> / Send Message to reach users; for B2B customers use the DPA contact.',
+        '<b>6. Draft counsel review.</b> Have the notification wording reviewed before external send. Purchases/notifications to authorities and users are outward-facing — confirm before sending.',
+        'Reference: the DPA breach clause is public at <a href="https://pollslide.com/dpa#breach" target="_blank">pollslide.com/dpa</a>. Keep all notices factual: what happened, likely consequences, measures taken, contact point.',
+      ] },
+    { sym:'A watched law or vendor policy changed (legal-watch alert)',
+      cause:'The legal-watch cron flagged that one of our own docs, a vendor policy, or a worldwide regulation (EAA, GDPR, DSA, AI Act, COPPA, CCPA…) changed since the last check.',
+      steps:[
+        'Open Legal → the alert lists what changed and its kind (our page / vendor / ⚖️ LAW).',
+        '<b>Law/regulation change</b> → review whether our PRODUCT practices AND our legal docs need updating, edit the docs in the website repo, redeploy, THEN push re-consent below.',
+        '<b>Vendor change</b> (e.g. a subprocessor updated its terms) → check whether our Privacy Policy or <a href="https://pollslide.com/subprocessors" target="_blank">Subprocessor list</a> needs updating. New/changed subprocessor → give customers 30 days\' notice.',
+        'Push to users: Legal → <b>Policy updates & re-consent</b> → tick the changed docs → write the one-line summary → Preview → Push. This bumps the version and shows the in-app re-consent banner.',
+      ] },
+    { sym:'Run the self-audit (are we still compliant?)',
+      steps:[
+        'Legal → <b>Compliance sweep</b> → Run. It checks every public legal page is live and still contains its load-bearing sections (Terms/Privacy/Cookies/Trust/Accessibility/VPAT/DPA/Subprocessors), the footer links, the consent banner, the re-consent push system, the legal-watch cron freshness, and checkout consent.',
+        'Any <b>FAIL</b> tells you the exact page and the missing section — fix it in the website repo and redeploy.',
+        'This also runs automatically on a cron and emails you if anything fails.',
       ] },
   ]},
 ];

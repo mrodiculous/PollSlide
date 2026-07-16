@@ -603,6 +603,10 @@
     <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Language <span style="font-weight:400;text-transform:none;letter-spacing:0;">(questions are written in this language; your audience’s answer page matches it)</span></label>
     <select id="pollyLang" onchange="setPresLanguage(this.value)" style="width:100%;margin-bottom:12px;"></select>
     <div id="pollyStatus" style="display:none;margin-top:12px;padding:9px 12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border2);font-size:13px;color:var(--text);"></div>
+    <div style="display:flex;gap:7px;align-items:flex-start;margin-top:12px;font-size:11px;line-height:1.5;color:var(--muted);">
+      <span aria-hidden="true">🤖</span>
+      <span>You're using AI. Questions are <b>AI-generated drafts</b> — please review and edit them before you present. <a href="https://pollslide.com/terms#ai" target="_blank" rel="noopener" style="color:var(--accent);">How we use AI</a></span>
+    </div>
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="closePolly()">Cancel</button>
       <button class="btn btn-primary" id="pollyGoBtn" onclick="runPolly()">✨ Generate</button>
@@ -2989,12 +2993,29 @@ function renderLiveView(idx, qId, q) {
 
   setTimeout(() => {
     const el = document.getElementById(`qrInline_${idx}`);
-    if (el) { el.innerHTML=''; new QRCode(el,{text:qUrl,width:110,height:110,colorDark:'#ffffff',colorLight:'#18182a',correctLevel:QRCode.CorrectLevel.H}); }
+    if (el) { el.innerHTML=''; new QRCode(el,{text:qUrl,width:110,height:110,colorDark:'#ffffff',colorLight:'#18182a',correctLevel:QRCode.CorrectLevel.H}); psBrandQR(el); }
   }, 50);
 }
 
 // ─── COPY HELPERS (for pasting into the user's presentation) ──────────────────
 // Download the QR + caption as a PNG image to drag into Keynote/PowerPoint.
+/* Brand a rendered qrcode.js box: bake the PollSlide mark into the canvas centre.
+   Works on-screen AND for the copyQRBox/toBlob export (both read this canvas).
+   correctLevel:H (every QR here) recovers the covered modules — verified to still
+   decode to the exact URL. Skips tiny watermark QRs (<90px). Never throws. */
+function psBrandQR(box, opts){ try{
+  opts=opts||{}; var c=box&&box.querySelector&&box.querySelector('canvas'); if(!c) return false;
+  var W=c.width; if(W<(opts.min||90)) return false;
+  var g=c.getContext('2d'), s=Math.round(W*(opts.pct||0.24)), x=Math.round((W-s)/2), y=x, r=Math.round(s*0.22);
+  function rr(px,py,pw,ph,rad){ g.beginPath(); g.moveTo(px+rad,py); g.arcTo(px+pw,py,px+pw,py+ph,rad);
+    g.arcTo(px+pw,py+ph,px,py+ph,rad); g.arcTo(px,py+ph,px,py,rad); g.arcTo(px,py,px+pw,py,rad); g.closePath(); }
+  g.fillStyle='#fff'; rr(x,y,s,s,r); g.fill();
+  var p=Math.round(s*0.14), ix=x+p, iy=y+p, is=s-p*2, ir=Math.round(is*0.22);
+  g.fillStyle='#0d0d18'; rr(ix,iy,is,is,ir); g.fill();
+  var bw=is*0.16, gp=is*0.10, by=iy+is*0.80, bx=ix+is*0.16, bars=[['#ff6584',0.28],['#f7b731',0.48],['#6c63ff',0.66]];
+  for(var i=0;i<3;i++){ var h=is*bars[i][1]; g.fillStyle=bars[i][0]; rr(bx+i*(bw+gp),by-h,bw,h,Math.max(1,bw*0.28)); g.fill(); }
+  return true;
+}catch(e){ return false; } }
 function copyQRBox(idx) {
   const qUrl = getQuestionURL(idx);
   const code = presentations[activePresId]?.sessionCode || '';
@@ -3046,6 +3067,7 @@ function copyQRBox(idx) {
   };
 
   setTimeout(() => {
+    psBrandQR(qrDiv);   // bake the logo before we snapshot the canvas into the slide image
     const qrCanvas = qrDiv.querySelector('canvas');
     const qrImg   = qrDiv.querySelector('img');
     const src = qrCanvas || qrImg;
@@ -4622,7 +4644,7 @@ function renderEditor(idx) {
 
   setTimeout(()=>{
     const el=document.getElementById(`qrEditor_${idx}`);
-    if(el){el.innerHTML='';new QRCode(el,{text:qUrl,width:110,height:110,colorDark:'#ffffff',colorLight:'#18182a',correctLevel:QRCode.CorrectLevel.H});}
+    if(el){el.innerHTML='';new QRCode(el,{text:qUrl,width:110,height:110,colorDark:'#ffffff',colorLight:'#18182a',correctLevel:QRCode.CorrectLevel.H});psBrandQR(el);}
   },50);
 }
 
@@ -4952,7 +4974,7 @@ function openQAShare() {
   document.getElementById('qrModalDesc').textContent  = 'Scan or share — your audience can ask questions and upvote.';
   document.getElementById('qrModalURL').textContent   = url;
   const el = document.getElementById('qrModalCode'); el.innerHTML = '';
-  new QRCode(el, { text:url, width:210, height:210, colorDark:'#ffffff', colorLight:'#10101a', correctLevel:QRCode.CorrectLevel.H });
+  new QRCode(el, { text:url, width:210, height:210, colorDark:'#ffffff', colorLight:'#10101a', correctLevel:QRCode.CorrectLevel.H }); psBrandQR(el);
   const eb = document.getElementById('qrEmailBtn'); if (eb) eb.style.display = 'none';
   document.getElementById('qrModal').classList.remove('hidden');
 }
@@ -4971,7 +4993,7 @@ function openShareModal() {
   document.getElementById('qrModalDesc').textContent  = `Anyone with this link can ${verb}: "${pres.name}".`;
   document.getElementById('qrModalURL').textContent   = url;
   const el = document.getElementById('qrModalCode'); el.innerHTML = '';
-  new QRCode(el, { text:url, width:210, height:210, colorDark:'#ffffff', colorLight:'#10101a', correctLevel:QRCode.CorrectLevel.H });
+  new QRCode(el, { text:url, width:210, height:210, colorDark:'#ffffff', colorLight:'#10101a', correctLevel:QRCode.CorrectLevel.H }); psBrandQR(el);
   // Email-it is for async products (people answer on their own time).
   const emailBtn = document.getElementById('qrEmailBtn');
   if (emailBtn) emailBtn.style.display = ['survey','study','quiz'].includes(pt) ? '' : 'none';
@@ -5064,7 +5086,7 @@ function showQRModal(idx){
   document.getElementById('qrModalDesc').textContent=`Scan to answer Question ${idx+1}`;
   document.getElementById('qrModalURL').textContent=url;
   const el=document.getElementById('qrModalCode');el.innerHTML='';
-  new QRCode(el,{text:url,width:210,height:210,colorDark:'#ffffff',colorLight:'#10101a',correctLevel:QRCode.CorrectLevel.H});
+  new QRCode(el,{text:url,width:210,height:210,colorDark:'#ffffff',colorLight:'#10101a',correctLevel:QRCode.CorrectLevel.H}); psBrandQR(el);
   setSlideSnippet();
   document.getElementById('qrModal').classList.remove('hidden');
 }
@@ -6135,7 +6157,7 @@ function startPresentQa() {
   // Scan-to-ask QR
   try {
     const qrEl = document.getElementById('presentQaQr');
-    if (qrEl) { qrEl.innerHTML = ''; new QRCode(qrEl, { text: getQAUrl(), width: 120, height: 120, colorDark:'#000000', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.H }); }
+    if (qrEl) { qrEl.innerHTML = ''; new QRCode(qrEl, { text: getQAUrl(), width: 120, height: 120, colorDark:'#000000', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.H }); psBrandQR(qrEl); }
   } catch(e) {}
   const ref = db.ref('sessions/' + code + '/qa');
   ref.on('value', snap => {
@@ -6476,6 +6498,7 @@ function renderPresentSlide(idx) {
   if (qrEl && typeof QRCode !== 'undefined') {
     qrEl.innerHTML = '';
     new QRCode(qrEl, { text: qUrl, width: 124, height: 124, colorDark:'#0d0d18', colorLight:'#ffffff', correctLevel: QRCode.CorrectLevel.H });
+    psBrandQR(qrEl);
   }
 }
 
