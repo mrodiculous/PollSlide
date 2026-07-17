@@ -4,7 +4,9 @@
       ".read": "auth != null && auth.token.email == 'help@pollslide.com'",
       "$uid": {
         ".read": "auth != null && (auth.uid == $uid || auth.token.email == 'help@pollslide.com')",
-        ".write": "auth != null && (auth.uid == $uid || auth.token.email == 'help@pollslide.com')"
+        ".write": "auth != null && (auth.uid == $uid || auth.token.email == 'help@pollslide.com')",
+        "aiUsedThisMonth": { ".validate": "!data.exists() || newData.val() === data.val()" },
+        "aiQuotaMonth":    { ".validate": "!data.exists() || newData.val() === data.val()" }
       }
     },
 

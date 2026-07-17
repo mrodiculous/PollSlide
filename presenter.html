@@ -402,6 +402,10 @@
 
     <input type="email" id="authEmail" placeholder="Email address" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:15px;outline:none;margin-bottom:10px;">
     <input type="password" id="authPass" placeholder="Password" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:15px;outline:none;margin-bottom:14px;">
+    <label id="ageGateRow" style="display:none;align-items:flex-start;gap:8px;margin:0 0 14px;font-size:12px;color:var(--muted);line-height:1.45;cursor:pointer;text-align:left;">
+      <input type="checkbox" id="ageConfirm" style="margin-top:2px;flex-shrink:0;">
+      <span>I'm at least 16 years old, and I agree to the <a href="https://pollslide.com/terms" target="_blank" rel="noopener" style="color:var(--accent);">Terms</a> and <a href="https://pollslide.com/privacy" target="_blank" rel="noopener" style="color:var(--accent);">Privacy Policy</a>.</span>
+    </label>
     <button id="authSubmitBtn" onclick="submitAuth()" style="width:100%;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Sign In</button>
 
     <p id="authError" style="color:var(--accent2);font-size:13px;margin-top:12px;text-align:center;min-height:18px;"></p>
@@ -496,6 +500,7 @@
       </div>
       <div style="padding:8px;border-top:1px solid var(--border);flex-shrink:0;">
         <button class="btn btn-primary" id="createPresBtn" style="width:100%;justify-content:center;padding:9px 14px;font-size:12px;" onclick="createPresentation()">+ Create New</button>
+        <button class="btn btn-ghost" id="trashBtn" style="width:100%;justify-content:center;padding:6px 14px;font-size:11px;margin-top:6px;color:var(--muted);" onclick="openTrash()" title="Restore a deleted presentation">🗑 Recently deleted</button>
       </div>
     </div>
 
@@ -694,10 +699,22 @@
 <div class="overlay hidden" id="deletePresModal">
   <div class="modal" style="max-width:400px;">
     <h2>Delete Presentation?</h2>
-    <p>This permanently deletes <strong id="deletePresName" style="color:var(--text);"></strong> and all its questions. This cannot be undone.</p>
+    <p>This moves <strong id="deletePresName" style="color:var(--text);"></strong> and all its questions to <strong style="color:var(--text);">Recently deleted</strong>. You can restore it for 30 days.</p>
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="document.getElementById('deletePresModal').classList.add('hidden')">Cancel</button>
       <button class="btn btn-danger" onclick="doDeletePres()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Recently deleted (trash) Modal -->
+<div class="overlay hidden" id="trashModal">
+  <div class="modal" style="max-width:460px;">
+    <h2>🗑 Recently deleted</h2>
+    <p style="color:var(--muted);font-size:13px;margin-top:-4px;">Deleted presentations are kept here for 30 days so you can undo a mistake.</p>
+    <div id="trashList" style="max-height:340px;overflow-y:auto;margin:12px 0;"></div>
+    <div class="modal-btns">
+      <button class="btn btn-ghost" onclick="document.getElementById('trashModal').classList.add('hidden')">Close</button>
     </div>
   </div>
 </div>
@@ -1636,6 +1653,8 @@ function toggleAuthMode() {
   document.getElementById('authSubmitBtn').textContent = isSignup ? 'Create Account' : 'Sign In';
   document.getElementById('authToggleText').textContent= isSignup ? 'Already have an account?' : 'New to PollSlide?';
   document.getElementById('authToggleLink').textContent= isSignup ? 'Sign in' : 'Create an account';
+  document.getElementById('ageGateRow').style.display  = isSignup ? 'flex' : 'none';  // age affirmation only at signup
+  const ac = document.getElementById('ageConfirm'); if (ac) ac.checked = false;
   authError('');
 }
 
@@ -1645,6 +1664,9 @@ async function submitAuth() {
   authError('');
   if (!email || !pass) { authError('Please enter your email and password.'); return; }
   if (pass.length < 6) { authError('Password must be at least 6 characters.'); return; }
+  if (authMode === 'signup' && !document.getElementById('ageConfirm').checked) {
+    authError('Please confirm you are at least 16 and agree to the Terms & Privacy Policy.'); return;
+  }
   try {
     if (authMode === 'signup') {
       await auth.createUserWithEmailAndPassword(email, pass);
@@ -1669,6 +1691,9 @@ async function submitAuth() {
 
 async function signInGoogle() {
   authError('');
+  if (authMode === 'signup' && !document.getElementById('ageConfirm').checked) {
+    authError('Please confirm you are at least 16 and agree to the Terms & Privacy Policy.'); return;
+  }
   const provider = new firebase.auth.GoogleAuthProvider();
   try { await auth.signInWithPopup(provider); }
   catch(e) { if (e.code !== 'auth/popup-closed-by-user') authError(friendlyAuthError(e.code)); }
@@ -1953,6 +1978,7 @@ function scheduleSave() { markSaving(); clearTimeout(saveTimeout); saveTimeout=s
 
 // ─── PRESENTATIONS — LOAD / SAVE ─────────────────────────────────────────────
 async function loadPresentations() {
+  purgeOldTrash();   // clear trash older than 30 days (fire-and-forget)
   try {
     const snap = await db.ref(`users/${userId}/presentations`).get();
     if (snap.exists()) {
@@ -2117,12 +2143,17 @@ function openDeletePres(id) {
 
 async function doDeletePres() {
   if (!deletePresTarget) return;
+  const id = deletePresTarget;
   document.getElementById('deletePresModal').classList.add('hidden');
 
-  await db.ref(`users/${userId}/presentations/${deletePresTarget}`).remove();
-  delete presentations[deletePresTarget];
+  // Soft-delete: move to a recoverable trash bucket (owner-only path) instead of
+  // hard-deleting, so an accidental delete can be undone or restored for 30 days.
+  const snapshot = presentations[id];
+  try { await db.ref(`users/${userId}/trash/${id}`).set(Object.assign({}, snapshot, { _deletedAt: Date.now() })); } catch (e) {}
+  await db.ref(`users/${userId}/presentations/${id}`).remove();
+  delete presentations[id];
 
-  if (activePresId === deletePresTarget) {
+  if (activePresId === id) {
     activePresId = null;
     questions = [];
     selIdx = null;
@@ -2138,7 +2169,65 @@ async function doDeletePres() {
 
   deletePresTarget = null;
   renderPresList();
-  toast('Presentation deleted.', 'warn');
+  toast(`Deleted “${snapshot?.name || 'presentation'}”`, 'warn', { label:'↶ Undo', timeout:12000, onClick: async () => {
+    try {
+      await db.ref(`users/${userId}/presentations/${id}`).set(snapshot);
+      await db.ref(`users/${userId}/trash/${id}`).remove();
+      presentations[id] = snapshot;
+      renderPresList();
+      toast('Presentation restored', 'success');
+    } catch (e) { toast('Could not restore — check Recently deleted', 'danger'); }
+  }});
+}
+
+// ─── RECENTLY DELETED (trash) — recover soft-deleted presentations for 30 days ──
+const TRASH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+async function purgeOldTrash() {
+  if (!userId) return;
+  try {
+    const snap = await db.ref(`users/${userId}/trash`).get();
+    if (!snap.exists()) return;
+    const now = Date.now(), items = snap.val() || {};
+    await Promise.all(Object.entries(items)
+      .filter(([, v]) => v && v._deletedAt && (now - v._deletedAt) > TRASH_TTL_MS)
+      .map(([tid]) => db.ref(`users/${userId}/trash/${tid}`).remove()));
+  } catch (e) {}
+}
+async function openTrash() {
+  const m = document.getElementById('trashModal');
+  const list = document.getElementById('trashList');
+  list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px;">Loading…</div>';
+  m.classList.remove('hidden');
+  let items = {};
+  try { const s = await db.ref(`users/${userId}/trash`).get(); items = s.exists() ? s.val() : {}; } catch (e) {}
+  const rows = Object.entries(items).sort((a, b) => (b[1]._deletedAt || 0) - (a[1]._deletedAt || 0));
+  if (!rows.length) { list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:8px;">Nothing here. Deleted items are recoverable for 30 days.</div>'; return; }
+  list.innerHTML = rows.map(([tid, v]) => {
+    const days = Math.max(0, 30 - Math.floor((Date.now() - (v._deletedAt || 0)) / 86400000));
+    const nq = (v.questions && v.questions.length) || 0;
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border:1px solid var(--border2);border-radius:10px;margin-bottom:8px;">
+      <div style="min-width:0;"><div style="font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${(v.name||'Untitled').replace(/</g,'&lt;')}</div>
+      <div style="font-size:11px;color:var(--muted);">${nq} question${nq===1?'':'s'} · ${days} day${days===1?'':'s'} left to restore</div></div>
+      <div style="display:flex;gap:6px;flex-shrink:0;">
+        <button class="btn btn-primary btn-sm" onclick="restoreFromTrash('${tid}')">Restore</button>
+        <button class="btn btn-ghost btn-sm" onclick="deleteForever('${tid}')" title="Delete permanently">🗑</button>
+      </div></div>`;
+  }).join('');
+}
+async function restoreFromTrash(tid) {
+  try {
+    const s = await db.ref(`users/${userId}/trash/${tid}`).get();
+    if (!s.exists()) { toast('Item no longer available', 'warn'); return; }
+    const v = s.val(); delete v._deletedAt;
+    await db.ref(`users/${userId}/presentations/${tid}`).set(v);
+    await db.ref(`users/${userId}/trash/${tid}`).remove();
+    presentations[tid] = v; renderPresList(); openTrash();
+    toast('Restored', 'success');
+  } catch (e) { toast('Could not restore', 'danger'); }
+}
+async function deleteForever(tid) {
+  if (!confirm('Permanently delete this? This cannot be undone.')) return;
+  try { await db.ref(`users/${userId}/trash/${tid}`).remove(); openTrash(); toast('Permanently deleted', 'info'); } catch (e) {}
 }
 
 function openRenamePres(id) {
@@ -4872,12 +4961,19 @@ function removeOpt(idx,oi){
   saveBack();renderEditor(idx);
 }
 function deleteQ(idx){
+  const removed=questions[idx], prevLiveIdx=liveQIdx, prevLiveId=liveQId;   // keep for Undo
   questions.splice(idx,1);
   if(liveQIdx===idx){liveQIdx=null;liveQId=null;}
   else if(liveQIdx>idx) liveQIdx--;
   selIdx=Math.min(idx,questions.length-1);
   saveBack();renderQList();
   if(questions.length>0) renderEditor(selIdx); else showSetup();
+  toast('Question deleted','info',{label:'↶ Undo',timeout:10000,onClick:()=>{
+    questions.splice(Math.min(idx,questions.length),0,removed);
+    liveQIdx=prevLiveIdx; liveQId=prevLiveId; selIdx=idx;
+    saveBack();renderQList();renderEditor(idx);
+    toast('Question restored','success');
+  }});
 }
 function moveQ(idx,dir){
   const ni=idx+dir;if(ni<0||ni>=questions.length)return;
@@ -5098,9 +5194,18 @@ async function copyURL(idx){await navigator.clipboard.writeText(getQuestionURL(i
 function genCode(){ return Math.random().toString(36).substr(2,7).toUpperCase().replace(/[01IO]/g,'X'); }
 function safeJ(str){ try{return JSON.parse(str);}catch(e){return str;} }
 
-function toast(msg,type='info'){
+function toast(msg,type='info',action){
   const el=document.createElement('div');el.className=`toast ${type}`;el.textContent=msg;
-  document.body.appendChild(el);setTimeout(()=>el.remove(),3500);
+  let ttl=3500;
+  if(action&&action.label&&typeof action.onClick==='function'){
+    ttl=action.timeout||9000;
+    const btn=document.createElement('button');btn.type='button';btn.textContent=action.label;
+    btn.style.cssText='margin-left:14px;background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:7px;padding:4px 12px;font-family:inherit;font-weight:800;font-size:12px;cursor:pointer;';
+    btn.onclick=()=>{ el.remove(); try{action.onClick();}catch(e){} };
+    el.appendChild(btn);
+  }
+  document.body.appendChild(el);setTimeout(()=>el.remove(),ttl);
+  return el;
 }
 
 // ─── POLICY RE-CONSENT BANNER ─────────────────────────────────────────────────

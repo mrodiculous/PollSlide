@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Daily local backup of the PollSlide database on your always-on Mac.
+
+  INSTALL:
+    1. Edit the two paths below marked <<EDIT>>:
+         - the repo path (where scripts/backup.js + service-account.json live)
+         - keep the `-lc` login shell so `node` (incl. nvm) is found.
+    2. Copy this file to:  ~/Library/LaunchAgents/com.pollslide.backup.plist
+    3. Load it:            launchctl load ~/Library/LaunchAgents/com.pollslide.backup.plist
+    4. Test it now:        launchctl start com.pollslide.backup
+       then check:         cat /tmp/pollslide-backup.log
+    Unload later with:     launchctl unload ~/Library/LaunchAgents/com.pollslide.backup.plist
+
+  Runs every day at 03:30 local time. Missed runs (Mac asleep) fire on wake.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.pollslide.backup</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>cd "/Users/Rod/Documents/GitHub/PollSlide" &amp;&amp; node scripts/backup.js</string>
+  </array>
+
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key><integer>3</integer>
+    <key>Minute</key><integer>30</integer>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/pollslide-backup.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/pollslide-backup.log</string>
+</dict>
+</plist>

@@ -1,0 +1,14 @@
+# Secrets — NEVER commit these
+service-account.json
+serviceAccount*.json
+*.serviceaccount.json
+.env
+.env.*
+
+# Local backups (can be large + contain user data)
+backups/
+*.backup.json
+
+node_modules/
+.DS_Store
+.vercel
