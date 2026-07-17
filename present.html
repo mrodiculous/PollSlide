@@ -97,6 +97,16 @@
   .editing .el.sel .el-rz.sw{left:-8px;bottom:-8px;cursor:nesw-resize;}
   .editing .el.sel .el-rz.se{right:-8px;bottom:-8px;cursor:nwse-resize;}
   .editing .el.sel{outline:1.5px solid var(--accent);outline-offset:2px;}
+  /* Drag-to-resize the built-in slide elements (question / answers / QR) — editor only.
+     Same white-circle handle as free-form elements so it feels native. Outline (not a
+     border) is used for the hover ring so it never affects the shrink-to-fit measurement. */
+  .editing .rz-region:not(.qr-card){position:relative;}  /* qr-card is already positioned */
+  .editing .rz-region:hover{outline:1.5px dashed var(--accent);outline-offset:7px;border-radius:4px;}
+  .rz-grip{display:none;}
+  .editing .rz-grip{display:block;position:absolute;right:-9px;bottom:-9px;width:15px;height:15px;border-radius:50%;background:#fff;border:2.5px solid var(--accent);box-shadow:0 1px 6px rgba(0,0,0,.5);cursor:nwse-resize;z-index:41;opacity:0;transition:opacity .12s,transform .1s;touch-action:none;}
+  .editing .rz-region:hover .rz-grip,.rz-grip.rz-active{opacity:1;}
+  .rz-grip:hover,.rz-grip.rz-active{transform:scale(1.25);}
+  .rz-grip.qr{right:auto;left:-9px;cursor:nesw-resize;}
   /* zoom controls + add-between-thumbs */
   .zoomctl{display:flex;align-items:center;gap:6px;margin-left:auto;flex-shrink:0;}
   .zoomctl button{background:var(--chrome2);border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:4px 9px;font-size:12px;cursor:pointer;}
@@ -814,7 +824,7 @@ function renderCanvas(){
   slide.classList.add('editing');
   slide.insertAdjacentHTML('beforeend', elLayer(s, true));  // free-form elements on top
   slide.insertAdjacentHTML('beforeend','<div class="guide" id="vGuide"></div><div class="guide" id="hGuide"></div>'); // smart guides live inside the canvas — recreate after every render
-  wireElementDrag(); renderFmtBar();
+  wireElementDrag(); renderFmtBar(); wireSlideResize();
   if(hasQR(s)){ const box=slide.querySelector('.qr-card .qrbox'); if(box) renderQR(box, answerUrl(s)); }
   scheduleFit(slide);   // shrink-to-fit after layout + fonts settle
 }
@@ -843,6 +853,9 @@ function fitSlide(scope){ if(!scope) return;
 // measured height, so a cold-load fit could otherwise be slightly off).
 function scheduleFit(el){ requestAnimationFrame(()=>fitSlide(el));
   if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>fitSlide(el)); }
+// Drag handle for the built-in slide elements (question/answers/QR). Hidden in present.
+function rzGrip(key){ const tip={q:'question',r:'answers',qr:'QR'}[key]||'';
+  return `<span class="rz-grip${key==='qr'?' qr':''}" data-rzkey="${key}" title="Drag to resize the ${tip}"></span>`; }
 function bind(field, idx){ return `oninput="deck.slides[${idx}].${field}=this.innerHTML;scheduleSave()" `; }
 function bindQ(field, idx){ return `oninput="deck.slides[${idx}].question.${field}=this.innerHTML;scheduleSave();schedulePublish()" `; }
 function bgLayer(s){ if(!s.bgImg)return ''; const dim=s.bgDim!=null?s.bgDim:.35;
@@ -860,25 +873,25 @@ function editHtml(s){
     : `<div class="slide-inner placeholder-q" style="flex-direction:column;gap:10px;"><div>No image yet</div><button class="st-btn" onclick="imgInput.click()">Choose image…</button></div>`;
   if(s.kind==='study') return `<div class="slide-inner" style="align-items:center;text-align:center;">
     <div class="fit fit-c"><div class="s-eyebrow">Flashcard</div>
-    <div class="s-title" contenteditable="true" oninput="deck.slides[${i}].question.front=this.innerHTML;scheduleSave();schedulePublish()">${rich(s.question.front||'')}</div>
-    <div class="s-body" style="color:var(--accent3);" contenteditable="true" oninput="deck.slides[${i}].question.back=this.innerHTML;scheduleSave();schedulePublish()">${rich(s.question.back||'')}</div></div>
+    <div class="q-wrap rz-region"><div class="s-title" contenteditable="true" oninput="deck.slides[${i}].question.front=this.innerHTML;scheduleSave();schedulePublish()">${rich(s.question.front||'')}</div>
+    <div class="s-body" style="color:var(--accent3);" contenteditable="true" oninput="deck.slides[${i}].question.back=this.innerHTML;scheduleSave();schedulePublish()">${rich(s.question.back||'')}</div>${rzGrip('q')}</div></div>
     ${qrCard(s)}</div>`;
   if(s.kind==='qa') return `<div class="slide-inner">
     <div class="fit"><div class="s-eyebrow">Audience Q&amp;A</div>
-    <div class="s-title" contenteditable="true" ${bindQ('text',i)}>${rich(s.question.text||'')}</div></div>
+    <div class="q-wrap rz-region"><div class="s-title" contenteditable="true" ${bindQ('text',i)}>${rich(s.question.text||'')}</div>${rzGrip('q')}</div></div>
     ${qrCard(s)}</div>`;
   // poll / quiz / survey
   const opts=(s.question.options||[]);
   const optsHtml = (s.question.type==='rating')
-    ? `<div class="s-sub">★ Rating 1–${s.question.ratingMax||5}</div>`
-    : `<div class="s-opts">${opts.map((o,oi)=>`<div class="s-opt">
+    ? `<div class="s-sub rz-region">★ Rating 1–${s.question.ratingMax||5}${rzGrip('r')}</div>`
+    : `<div class="s-opts rz-region">${opts.map((o,oi)=>`<div class="s-opt">
         <span class="ltr">${letters[oi]}</span>
         <span contenteditable="true" oninput="deck.slides[${i}].question.options[${oi}].text=this.innerHTML;scheduleSave();schedulePublish()" style="flex:1;">${rich(o.text||'')}</span>
         ${(s.kind==='quiz')?`<span style="font-size:11px;color:${s.question.correctAnswer===oi?'var(--accent3)':'var(--muted)'};cursor:pointer;" onclick="setCorrect(${oi})">${s.question.correctAnswer===oi?'✓ correct':'mark'}</span>`:''}
-      </div>`).join('')}</div>`;
+      </div>`).join('')}${rzGrip('r')}</div>`;
   return `<div class="slide-inner">
     <div class="fit"><div class="s-eyebrow">${SLIDE_TYPES[s.kind].label}${s.kind==='quiz'?' · tap "mark" to set the answer':''}</div>
-    <div class="s-title" contenteditable="true" ${bindQ('text',i)}>${rich(s.question.text||'')}</div>
+    <div class="q-wrap rz-region"><div class="s-title" contenteditable="true" ${bindQ('text',i)}>${rich(s.question.text||'')}</div>${rzGrip('q')}</div>
     ${optsHtml}</div>${qrCard(s)}</div>`;
 }
 function setCorrect(oi){ deck.slides[currentIdx].question.correctAnswer=oi; renderCanvas(); scheduleSave(); schedulePublish(); }
@@ -905,6 +918,38 @@ function sizeControls(s){
   if(s.sz && Object.keys(s.sz).length) h+=`<button class="st-btn" onclick="resetSizes()" title="Reset element sizes">↺</button>`;
   return h;
 }
+// Drag the corner grip on the question / answers / QR to resize it — same s.sz scale
+// as the toolbar. Anchored to the region's opposite corner so "pull the corner out =
+// bigger" feels natural; auto-fit keeps everything inside the slide live during the drag.
+function wireSlideResize(){
+  const slide=document.getElementById('canvasSlide');
+  slide.querySelectorAll('.rz-grip').forEach(grip=>{
+    grip.onpointerdown=(e)=>{
+      e.preventDefault(); e.stopPropagation();
+      const key=grip.dataset.rzkey, region=grip.closest('.rz-region');
+      const s=deck.slides[currentIdx]; if(!s||!region) return;
+      if(!s.sz) s.sz={};
+      const startScale=s.sz[key]||1;
+      const r=region.getBoundingClientRect();
+      const ax=(key==='qr')?r.right:r.left, ay=r.top;   // anchor = corner opposite the grip
+      const startDist=Math.hypot(e.clientX-ax,e.clientY-ay)||1;
+      let v=startScale;
+      grip.classList.add('rz-active'); region.classList.add('rz-on');
+      try{ grip.setPointerCapture(e.pointerId); }catch(_){}
+      const move=(ev)=>{ const d=Math.hypot(ev.clientX-ax,ev.clientY-ay);
+        v=Math.max(0.5,Math.min(2,Math.round(startScale*(d/startDist)*100)/100));
+        slide.style.setProperty('--'+key+'-scale',v); fitSlide(slide); };
+      const up=()=>{ grip.removeEventListener('pointermove',move);
+        grip.removeEventListener('pointerup',up); grip.removeEventListener('pointercancel',up);
+        grip.classList.remove('rz-active');
+        if(Math.abs(v-1)<0.03) delete s.sz[key]; else s.sz[key]=v;
+        renderCanvas(); scheduleSave(); if(isInteractive(s)) schedulePublish(); };
+      grip.addEventListener('pointermove',move);
+      grip.addEventListener('pointerup',up);
+      grip.addEventListener('pointercancel',up);
+    };
+  });
+}
 function toggleSkip(){ const s=deck.slides[currentIdx]; if(!s)return; s.skip=!s.skip; if(!s.skip)delete s.skip; renderCanvas(); renderNav(); scheduleSave(); toast(s.skip?'⏭ Slide will be skipped when presenting':'Slide back in the show'); }
 function setTransition(v){ const s=deck.slides[currentIdx]; if(s){ s.transition=v; scheduleSave(); } }
 function setSlideTheme(v){ const s=deck.slides[currentIdx]; if(!s)return; pushUndo('Slide theme'); if(v&&THEMES[v]) s.theme=v; else delete s.theme; renderCanvas(); renderNav(); scheduleSave(); }
@@ -914,7 +959,7 @@ function qrLabel(s){ if(s.question&&s.question.sessionCode) return t('present.sc
 function qrCard(s){ if(!hasQR(s)) return '';
   const c = s.question && s.question.sessionCode;   // laptop path: type the code at the answer URL
   const nocam = c ? `<div class="qrn">${t('present.nocam')} <b>pollslide.com/join</b><br>· ${c} ·</div>` : '';
-  return `<div class="qr-card"><div class="qrbox"></div><div class="qrl">${qrLabel(s)}</div>${nocam}</div>`; }
+  return `<div class="qr-card rz-region"><div class="qrbox"></div><div class="qrl">${qrLabel(s)}</div>${nocam}${rzGrip('qr')}</div>`; }
 function answerUrl(s){ const c=s.question&&s.question.sessionCode; const i=(s.question&&s.question.qIndex)||0;
   if(!c) return 'https://app.pollslide.com/answer';
   if(s.kind==='qa') return 'https://app.pollslide.com/answer#'+c+'/qa';   // Slido-style ask+upvote page (answer.html qa mode)
