@@ -39,7 +39,21 @@ async function pageCheck(id, area, label, url, markers, fix) {
   const r = await fetchText(url);
   if (!r.ok) return { id, area, label, status: 'fail', detail: `${url} unreachable (HTTP ${r.status}${r.err ? ' — ' + r.err : ''})`, fix };
   const missing = (markers || []).filter(m => !r.text.toLowerCase().includes(m.toLowerCase()));
-  if (missing.length) return { id, area, label, status: 'fail', detail: `${url} is live but missing required content: "${missing.join('", "')}"`, fix };
+  if (missing.length) {
+    // A missing EMAIL marker is usually not a missing section — it's Cloudflare's
+    // "Email Address Obfuscation" (Scrape Shield) rewriting mailto: links into
+    // /cdn-cgi/l/email-protection at the edge. The page is fine for humans with JS,
+    // but the address is absent from the served HTML (bad for no-JS users, some
+    // assistive tech and crawlers — and it IS the required contact channel here).
+    const emailMissing = missing.some(m => m.includes('@'));
+    const obfuscated = /cdn-cgi\/l\/email-protection|email\s*protected/i.test(r.text);
+    if (emailMissing && obfuscated) {
+      return { id, area, label, status: 'fail',
+        detail: `${url} is live, but the contact address is stripped from the served HTML by Cloudflare Email Address Obfuscation (found /cdn-cgi/l/email-protection).`,
+        fix: 'Wrap the address in <!--email_off-->…<!--email_on--> in the page source (already applied to the legal pages), or turn off Cloudflare → Scrape Shield → Email Address Obfuscation. Redeploy, then re-run this sweep.' };
+    }
+    return { id, area, label, status: 'fail', detail: `${url} is live but missing required content: "${missing.join('", "')}"`, fix };
+  }
   return { id, area, label, status: 'pass', detail: `${url} live, all required sections present` };
 }
 
