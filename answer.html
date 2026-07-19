@@ -411,12 +411,29 @@ async function joinByCode(){
   }
 }
 
-// Code-joiners can't rescan a new QR when the presenter moves to the next
-// question — follow the live pointer instead and hop automatically. QR scanners
-// keep today's behavior (they stay on the question they scanned).
-function followLive(){
+// Nobody should have to rescan a QR for every question — the phone rides along
+// with the presenter. Two ways to earn the follow:
+//   • joined by code (no camera) — flagged at join time
+//   • scanned the QR for the question that is live RIGHT NOW — the normal
+//     scan-and-play case, and the one the audience actually complained about
+// A QR that deliberately points at a DIFFERENT question than the live one is the
+// Keynote/PowerPoint per-slide workflow (every slide carries its own question's
+// QR). Those scans stay pinned — following would drag the scanner off the slide
+// they're standing in front of.
+// The flag is sticky once earned: once you're in the live flow, you stay in it.
+async function followLive(){
   if (QA_MODE || SURVEY_MODE || isNaN(Q_INDEX) || Q_INDEX < 0) return;
   let follow = false; try { follow = sessionStorage.getItem('ql_follow_' + SESSION) === '1'; } catch(e){}
+  if (!follow) {
+    try {
+      const cur = await db.ref(`sessions/${SESSION}/currentQuestion`).get();
+      const cq  = cur.exists() ? cur.val() : null;
+      if (cq && cq.qIndex != null && Number(cq.qIndex) === Q_INDEX) {
+        follow = true;
+        try { sessionStorage.setItem('ql_follow_' + SESSION, '1'); } catch(e){}
+      }
+    } catch(e){}
+  }
   if (!follow) return;
   db.ref(`sessions/${SESSION}/currentQuestion/qIndex`).on('value', snap => {
     const idx = snap.exists() ? Number(snap.val()) : NaN;

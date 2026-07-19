@@ -22,6 +22,19 @@ const OPENAI_BASE       = 'https://api.openai.com/v1';
 const LOCAL_LLM_URL     = process.env.LOCAL_LLM_URL || '';   // empty = skip local, go straight to OpenAI
 const LOCAL_LLM_MODEL   = process.env.LOCAL_LLM_MODEL || 'qwen3:14b';
 
+// Translation gets its OWN model knob, separate from Polly's. The two jobs have
+// very different shapes: Polly emits hundreds of tokens (so it wants a small fast
+// model), translation emits ~60 (so it can afford a bigger, more faithful one).
+// Measured warm on the M4 against 8 real audience strings:
+//   llama3.2:3b   1.0s  — drops emoji entirely; rendered "Draft it with Polly AI"
+//                         as "Delete it with Polly AI" (and "Download it" on a rerun)
+//   gemma4        10.5-12.9s — clean: emoji, brand names and proper nouns all intact
+//   qwen3:14b     23.5-25.5s — clean, but past LOCAL_TIMEOUT_MS, so it would fall
+//                         through to OpenAI on every single call
+// Defaults to whatever Polly uses so this deploy changes nothing on its own; set
+// LOCAL_TRANSLATE_MODEL to move translation onto a better model independently.
+const LOCAL_TRANSLATE_MODEL = process.env.LOCAL_TRANSLATE_MODEL || LOCAL_LLM_MODEL;
+
 // Cloudflare Access service-token headers — same as Polly, so the Mac tunnel
 // only answers PollSlide's own server.
 const CF_ACCESS_HEADERS = (process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACCESS_CLIENT_SECRET)
@@ -78,6 +91,28 @@ function parseTranslations(raw, expectedLen) {
   return arr.map(String);
 }
 
+// Mechanical-corruption gate for LOCAL output.
+// Small models silently drop emoji or translate the product name — both were
+// measured on the real audience payload (🔴 vanished in Spanish, both emoji came
+// back as "□" in German). A translation that mangles either is worse than none,
+// so it's rejected here and the request falls through to the cloud provider.
+// This deliberately only catches MECHANICAL damage — a wrong-but-well-formed
+// translation ("Delete it" for "Draft it") still gets through. Only a competent
+// model fixes that, which is what LOCAL_TRANSLATE_MODEL is for.
+const BRAND_TERMS = ['PollSlide','SurveySlide','QuizSlide','StudySlide','PresentSlide','Polly'];
+const EMOJI_RE    = /\p{Extended_Pictographic}/gu;
+
+function qualityOk(sources, out) {
+  if (!Array.isArray(out) || out.length !== sources.length) return false;
+  for (let i = 0; i < sources.length; i++) {
+    const s = String(sources[i] == null ? '' : sources[i]);
+    const o = String(out[i]     == null ? '' : out[i]);
+    for (const e of (s.match(EMOJI_RE) || [])) if (!o.includes(e)) return false;
+    for (const b of BRAND_TERMS) if (s.includes(b) && !o.includes(b)) return false;
+  }
+  return true;
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -102,7 +137,10 @@ module.exports = async function handler(req, res) {
     if (target === source)     return res.status(200).json({ ok:true, translations: texts });
 
     const system = `You are a professional translator. Translate each input string into ${targetName}. ` +
-      `Keep it natural and concise. Preserve emojis, numbers, and proper nouns. Do NOT add explanations. ` +
+      `Keep it natural and concise. Preserve numbers and proper nouns. ` +
+      `Copy every emoji through EXACTLY as it appears — never drop one, never replace it with a different character. ` +
+      `NEVER translate these product names, reproduce them verbatim: ${BRAND_TERMS.join(', ')}. ` +
+      `Do NOT add explanations. ` +
       `Return ONLY a JSON object of the form {"translations": [...]} whose array has the SAME order and length as the input.`;
     const messages = [{ role:'system', content: system }, { role:'user', content: JSON.stringify(texts) }];
 
@@ -111,15 +149,24 @@ module.exports = async function handler(req, res) {
     // 1) Try the local Mac (Ollama) first, exactly like Polly.
     if (LOCAL_LLM_URL) {
       try {
-        raw = await callChat({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_LLM_MODEL, messages, timeoutMs: LOCAL_TIMEOUT_MS, extraHeaders: CF_ACCESS_HEADERS });
+        // Bigger translation models need more headroom than the flat 20s, and the
+        // budget should track how much there is to translate.
+        const localBudget = Math.min(28000, Math.max(LOCAL_TIMEOUT_MS, 12000 + texts.length * 1200));
+        raw = await callChat({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_TRANSLATE_MODEL, messages, timeoutMs: localBudget, extraHeaders: CF_ACCESS_HEADERS });
         provider = 'local';
       } catch (err) {
         console.warn('Translate: local LLM unreachable → OpenAI fallback:', err.message);
       }
     }
 
-    // 2) Fall back to OpenAI.
+    // 2) Fall back to OpenAI — either because local failed outright, or because it
+    //    came back corrupted (emoji dropped / brand name translated).
     let translations = parseTranslations(raw, texts.length);
+    if (translations && provider === 'local' && !qualityOk(texts, translations)) {
+      console.warn(`Translate: ${LOCAL_TRANSLATE_MODEL} returned corrupted output → OpenAI fallback`);
+      translations = null;
+      provider = '';
+    }
     if (!translations && OPENAI_API_KEY) {
       try {
         raw = await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS });
