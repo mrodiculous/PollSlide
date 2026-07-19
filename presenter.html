@@ -4282,10 +4282,21 @@ async function runPolly() {
   status.textContent = source ? '✨ Polly is reading your material…' : '✨ Polly is thinking…';
   try {
     const focus = [topic, style ? `style: ${style}` : ''].filter(Boolean).join(' — ');
+    // Tell Polly what this deck already contains. Without it every "generate more"
+    // starts blank and reaches for the same canonical questions on the topic.
+    const avoid = (questions || []).map(q => {
+      const opts = (q.options || []).map(o => (typeof o === 'string' ? o : (o && o.text) || ''));
+      const ca   = q.correctAnswer;
+      const idxs = (ca === undefined || ca === null || ca === '') ? [] : (Array.isArray(ca) ? ca : [ca]).map(Number);
+      return {
+        text:    q.text || q.front || '',
+        answers: q.back ? [q.back] : idxs.map(i => opts[i]).filter(Boolean),
+      };
+    }).filter(a => String(a.text).trim());
     const idToken = currentUser ? await currentUser.getIdToken().catch(()=>null) : null; // server verifies + enforces the quota
     const r = await fetch('/api/polly', {
       method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, idToken ? { 'Authorization': 'Bearer ' + idToken } : {}),
-      body: JSON.stringify({ topic: focus, type: activeProduct, count, difficulty, source, language: (presentations[activePresId]?.language || 'en') })
+      body: JSON.stringify({ topic: focus, type: activeProduct, count, difficulty, source, avoid, language: (presentations[activePresId]?.language || 'en') })
     });
     // Parse defensively: a crashed/undeployed function returns non-JSON, which would
     // otherwise throw a cryptic "string did not match the expected pattern".

@@ -111,7 +111,7 @@ function normalizeDeck(raw) {
   }).filter(Boolean);
 }
 
-function buildMessages({ topic, type, count, difficulty, audience, source, language }) {
+function buildMessages({ topic, type, count, difficulty, audience, source, language, avoid }) {
   const isStudy  = type === 'study';
   const isSurvey = type === 'survey';
   const guide = TYPE_GUIDE[type] || TYPE_GUIDE.quiz;
@@ -151,18 +151,36 @@ function buildMessages({ topic, type, count, difficulty, audience, source, langu
       `${answerRule} Every value in "answers" must match one of the options word-for-word.${langRule} ` +
       `Return ONLY valid JSON in exactly this shape — no markdown, no commentary:\n${schema}`;
 
-  const user = source
+  // Within a batch: spell out that the questions must differ. Across batches: a
+  // model can only avoid repeating itself if it can SEE what it already produced,
+  // so the caller passes the deck's existing questions and they go in verbatim.
+  // Without this, "generate 10 more" on the same topic returns the same canonical
+  // set every time — the repetition users actually notice.
+  const diversityRule = count > 1
+    ? ` All ${count} questions must be clearly distinct from one another — never test the same fact twice, reuse the same answer, or repeat a phrasing pattern. Spread them across different subject areas.`
+    : '';
+  const avoidList = (Array.isArray(avoid) ? avoid : [])
+    .map(a => (typeof a === 'string' ? a : a && a.text)).filter(Boolean);
+  const avoidBlock = avoidList.length
+    ? `\n\nALREADY IN THIS DECK — do not repeat any of these, or any reworded version of them:\n` +
+      avoidList.map(t => `- ${t}`).join('\n')
+    : '';
+
+  const user = (source
     ? // Grounded generation: questions must come from the supplied material (PDF / notes).
       `Create ${count} ${type} question(s) based ONLY on the source material below. ` +
       `Do not invent facts that aren't supported by it.` +
       (topic ? ` Focus on: ${topic}.` : '') +
       (difficulty ? ` Difficulty: ${difficulty}.` : '') +
       (audience ? ` Audience: ${audience}.` : '') +
+      diversityRule +
       `\n\nSOURCE MATERIAL:\n"""\n${source}\n"""`
     : `Topic: ${topic}\n` +
       `Create ${count} ${type} question(s).` +
       (difficulty ? ` Difficulty: ${difficulty}.` : '') +
-      (audience ? ` Audience: ${audience}.` : '');
+      (audience ? ` Audience: ${audience}.` : '') +
+      diversityRule
+  ) + avoidBlock;
 
   return [
     { role: 'system', content: system },
@@ -246,6 +264,70 @@ function resolveCorrectIndices(q, options) {
 //   study  → { front, back, emoji }
 //   survey → { text, kind, options, correctAnswers: [] }   (no correct answer)
 //   poll/quiz → { text, kind, options, correctAnswers: [indices] }  (answer marked)
+// ─── REPETITION CONTROL ───────────────────────────────────────────────────────
+// Polly generates a whole batch in ONE call and has no memory of earlier batches,
+// so asking for "10 more" on the same topic reliably returns the same greatest
+// hits ("Which planet is known as the Red Planet?"). Measured: two models each
+// produced ZERO duplicates *within* a batch — the repetition users notice is
+// ACROSS generations. The client now sends what's already in the deck as `avoid`,
+// the prompt lists it, and this is the net for what the model repeats anyway.
+//
+// Matching on question text ALONE is unsafe: "capital of France" and "capital of
+// Spain" share 71% of their words and are perfectly good separate questions. So a
+// duplicate needs a meaningful text overlap AND the same answer. Where there's no
+// answer to compare, only near-identical text counts. Surveys are skipped outright
+// — parallel phrasings ("How satisfied are you with X / with Y") are the point.
+function wordSet(s) {
+  return new Set(String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean));
+}
+function jaccard(a, b) {
+  if (!a.size || !b.size) return 0;
+  let shared = 0;
+  for (const w of a) if (b.has(w)) shared++;
+  return shared / (a.size + b.size - shared);
+}
+// How much of the SHORTER text is inside the longer one. Jaccard under-detects when
+// the two differ a lot in length — a flashcard front ("Mitochondria") against a
+// question-phrased one ("What are mitochondria?") scores only 0.33 — so this is the
+// second opinion. Only ever consulted when the answers already match, which keeps
+// it from firing on genuinely different questions that share a word or two.
+function containment(a, b) {
+  if (!a.size || !b.size) return 0;
+  let shared = 0;
+  for (const w of a) if (b.has(w)) shared++;
+  return shared / Math.min(a.size, b.size);
+}
+function answerKey(ans) {
+  return (Array.isArray(ans) ? ans : [ans])
+    .map(a => String(a == null ? '' : a).toLowerCase().trim())
+    .filter(Boolean).sort().join('|');
+}
+function dropRepeats(questions, avoid, type) {
+  if (type === 'survey') return questions;
+  const isStudy = type === 'study';
+  const seen = (Array.isArray(avoid) ? avoid : []).map(a => (typeof a === 'string'
+    ? { w: wordSet(a), k: '' }
+    : { w: wordSet(a && (a.text || a.front)), k: answerKey(a && (a.answers || a.back)) }
+  )).filter(x => x.w.size);
+
+  const kept = [];
+  for (const q of questions) {
+    const w = wordSet(isStudy ? q.front : q.text);
+    const k = isStudy
+      ? answerKey(q.back)
+      : answerKey((q.correctAnswers || []).map(i => (q.options || [])[i]));
+    const dupe = seen.some(s => {
+      if (s.k && k) {
+        if (s.k !== k) return false;                                    // different answer = different question
+        return jaccard(w, s.w) > 0.35 || containment(w, s.w) > 0.8;     // same answer + related wording
+      }
+      return jaccard(w, s.w) > 0.85;                                    // nothing to compare: near-identical text only
+    });
+    if (!dupe) { kept.push(q); seen.push({ w, k }); }
+  }
+  return kept;
+}
+
 function normalizeQuestions(raw, type) {
   let parsed;
   try { parsed = JSON.parse(raw); }
@@ -306,6 +388,15 @@ module.exports = async function handler(req, res) {
   const count      = Math.min(Math.max(parseInt(body.count, 10) || 1, 1), 30);   // clamp 1–10
   const difficulty = body.difficulty ? String(body.difficulty).slice(0, 40) : '';
   const audience   = body.audience   ? String(body.audience).slice(0, 80)   : '';
+  // What's already in the deck, so a second "generate" doesn't return the same
+  // greatest hits. Accepts plain strings or {text|front, answers|back}.
+  const avoid = (Array.isArray(body.avoid) ? body.avoid : []).slice(0, 60).map(a => (
+    typeof a === 'string' ? String(a).slice(0, 300) : {
+      text:    String((a && (a.text || a.front)) || '').slice(0, 300),
+      answers: (Array.isArray(a && a.answers) ? a.answers : [a && a.back])
+                 .map(x => String(x == null ? '' : x).slice(0, 120)).filter(Boolean),
+    }
+  )).filter(a => (typeof a === 'string' ? a.trim() : a.text.trim()));
   const language   = body.language   ? String(body.language).slice(0, 8)    : 'en';
   // Optional source material (PDF text / pasted notes) — ground questions in it.
   // NOTE: named sourceMaterial to avoid colliding with the provider `source` below.
@@ -320,7 +411,7 @@ module.exports = async function handler(req, res) {
 
   const messages = type === 'deck'
     ? buildDeckMessages({ topic, count, includePolls, includeImages, source: sourceMaterial, language })
-    : buildMessages({ topic, type, count, difficulty, audience, source: sourceMaterial, language });
+    : buildMessages({ topic, type, count, difficulty, audience, source: sourceMaterial, language, avoid });
 
   let raw = '';
   let source = '';
@@ -354,7 +445,7 @@ module.exports = async function handler(req, res) {
       try { await consumeQuota(quota); } catch (e) { /* never fail the response over the counter */ }
       return res.status(200).json({ source, type, topic, slides });
     }
-    const questions = normalizeQuestions(raw, type);
+    const questions = dropRepeats(normalizeQuestions(raw, type), avoid, type);
     try { await consumeQuota(quota); } catch (e) { /* never fail the response over the counter */ }
     return res.status(200).json({ source, type, topic, questions });
   } catch (err) {
