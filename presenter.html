@@ -549,6 +549,7 @@
       <span style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Live Results</span>
       <div style="display:flex;align-items:center;gap:8px;">
         <span id="respCounter" style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent);font-size:12px;">—</span>
+        <button onclick="toggleLiveDetail()" id="liveDetailBtn" title="Live results are showing — click to hide them until you reveal" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">👁</button>
         <button onclick="toggleSfx()" id="sfxBtn" title="Sound effects on/off" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">🔊</button>
         <button onclick="toggleMaximize()" id="maxBtn" title="Maximize results (great for projecting)" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">⛶</button>
       </div>
@@ -558,10 +559,7 @@
       <div style="padding-top:28px;text-align:center;color:var(--muted);font-size:13px;">Launch a question<br>to see live results here.</div>
     </div>
     <div class="right-foot">
-      <div class="sect-title" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-        <span>Respondents (<span id="pCount">0</span>)</span>
-        <button onclick="toggleRespDetail()" id="respDetailBtn" title="Show or hide who answered what" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;height:22px;padding:0 8px;cursor:pointer;color:var(--muted);font-size:11px;font-family:inherit;letter-spacing:0.03em;">👁 Names</button>
-      </div>
+      <div class="sect-title">Respondents (<span id="pCount">0</span>)</div>
       <div id="pList" style="max-height:180px;overflow-y:auto;">
         <div style="color:var(--muted);font-size:12px;">No responses yet.</div>
       </div>
@@ -3709,27 +3707,41 @@ function donutPieChartHTML(mode, counts, total, correct, revealed, opts) {
   </div>${legend}`;
 }
 
-// ─── RESPONDENT LIST ──────────────────────────────────────────────────────────
-// The footer list names who answered what. That's useful when you're reviewing,
-// and awkward when the panel is on a projector in front of the people it names —
-// so it's a toggle. OFF keeps the headline count and drops the per-person detail.
-// One renderer for every call site, so the toggle can't drift between them.
-let showRespDetail = true;
-try { showRespDetail = localStorage.getItem('ps_resp_detail') !== '0'; } catch(e){}
+// ─── LIVE RESULTS DETAIL ──────────────────────────────────────────────────────
+// Two ways to run a live question:
+//   • Showing (default) — results update as answers land, exactly as before.
+//   • Hidden            — only the respondent COUNT while people answer, then
+//                         everything unlocks on reveal: the correct answer, the
+//                         distribution, and who got it right.
+// Hiding matters equally for quizzes and polls: a visible leading bar pulls later
+// answers toward it, and it gives the reveal away. Remembered across sessions.
+//
+// Detail is withheld only WHILE answering — a reveal always shows everything, so
+// the presenter can never get stuck looking at a bare count. That also means this
+// naturally does nothing on free_text/rating, which armReveal() marks revealed
+// immediately (they have no reveal event that could ever un-hide them).
+let showLiveDetail = true;
+try { showLiveDetail = localStorage.getItem('ps_live_detail') !== '0'; } catch(e){}
 
-function syncRespDetailBtn() {
-  const b = document.getElementById('respDetailBtn');
+function liveDetailHidden() { return !showLiveDetail && !revealed; }
+
+function syncLiveDetailBtn() {
+  const b = document.getElementById('liveDetailBtn');
   if (!b) return;
-  b.textContent = showRespDetail ? '👁 Names' : '🙈 Count only';
-  b.style.color = showRespDetail ? 'var(--text)' : 'var(--muted)';
+  b.textContent = showLiveDetail ? '👁' : '🙈';
+  b.title = showLiveDetail
+    ? 'Live results are showing — click to hide them until you reveal'
+    : 'Results stay hidden until you reveal — click to show them live';
+  b.style.color = showLiveDetail ? 'var(--text)' : 'var(--muted)';
 }
-if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', syncRespDetailBtn);
-else syncRespDetailBtn();
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', syncLiveDetailBtn);
+else syncLiveDetailBtn();
 
-function toggleRespDetail() {
-  showRespDetail = !showRespDetail;
-  try { localStorage.setItem('ps_resp_detail', showRespDetail ? '1' : '0'); } catch(e){}
-  syncRespDetailBtn();
+function toggleLiveDetail() {
+  showLiveDetail = !showLiveDetail;
+  try { localStorage.setItem('ps_live_detail', showLiveDetail ? '1' : '0'); } catch(e){}
+  syncLiveDetailBtn();
+  if (liveQIdx !== null && questions[liveQIdx]) renderRightPanel(questions[liveQIdx], _lastResponses || []);
   renderPList(_lastResponses || []);
 }
 
@@ -3739,8 +3751,8 @@ function renderPList(responses) {
   const pList  = document.getElementById('pList');
   if (pCount) pCount.textContent = responses.length;
   if (!pList) return;
-  if (!showRespDetail) {
-    pList.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:2px 0;">${responses.length} ${responses.length === 1 ? 'person has' : 'people have'} answered · names hidden</div>`;
+  if (liveDetailHidden()) {
+    pList.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:2px 0;">${responses.length} ${responses.length === 1 ? 'person has' : 'people have'} answered · names show on reveal</div>`;
     return;
   }
   if (!responses.length) {
@@ -3776,6 +3788,25 @@ function renderRightPanel(q, responses) {
 
   const total = responses.length;
   const letters = ['A','B','C','D','E','F'];
+
+  // Suspense mode: while people are answering, show nothing but the count — no
+  // distribution, no names, nothing that hints at the answer. On reveal this falls
+  // through to the normal renderers below, which already highlight the correct
+  // option, and renderPList() brings back who got it right.
+  if (liveDetailHidden()) {
+    if (q.type === 'free_text') {
+      // Keep the insights payload fresh so ✨ AI Insights is ready the moment results open up.
+      const _itexts = responses.map(r=>r.answer).filter(a=>a && a!=='__none__');
+      window._psInsights = { question:q.text||'', texts:_itexts, language:(presentations[activePresId]||{}).language||'en' };
+    }
+    rs.innerHTML = `<div class="resp-big" id="liveRespCount">${total} <span>${total===1?'response':'responses'}</span></div>
+      <div style="margin-top:12px;padding:16px 14px;border:1px dashed var(--border2);border-radius:10px;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.55;">
+        <div style="font-size:20px;margin-bottom:6px;">🙈</div>
+        Results hidden until you reveal
+        <div style="font-size:11.5px;opacity:0.75;margin-top:3px;">so early answers don't sway the room</div>
+      </div>`;
+    return;
+  }
 
   if (q.type === 'free_text') {
     // Stash the current answers so the on-demand ✨ AI Insights panel always analyzes live data.
