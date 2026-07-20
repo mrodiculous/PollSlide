@@ -234,16 +234,21 @@ let answerStartTime = null;
 const STABLE_QID = `q${Q_INDEX}_stable_${SESSION}`;
 
 // ─── RENDER ───────────────────────────────────────────────────────────────────
-function render(html) { document.getElementById('app').innerHTML = html; }
+function render(html) {
+  document.getElementById('app').innerHTML = html;
+  // Every screen change re-evaluates the "See original" pill (it hides itself when
+  // the new screen has no translated question). Guarded so it's safe before mount.
+  if (typeof syncOrigToggle === 'function') syncOrigToggle();
+}
 
 // ── i18n: the audience page matches the deck's language (set by the presenter) ──
 let LANG = 'en';
 const I18N = {
-  es:{enterName:'Escribe tu nombre',nameOnce:'Solo necesitas hacerlo una vez por sesión.',yourName:'Tu nombre',continue:'Continuar →',enterNamePlease:'Por favor, escribe tu nombre.',submitAnswer:'Enviar respuesta',submitRating:'Enviar valoración',submitAnswers:'Enviar respuestas',submitted:'✓ ¡Enviado!',alreadyAnswered:'¡Ya respondiste esta pregunta!',selectAll:'✓ Marca todas las que correspondan',submitSurvey:'Enviar encuesta',submitQuiz:'Enviar y ver puntuación',thankYou:'¡Gracias!',recorded:'Tus respuestas se han guardado.',qaTitle:'Preguntas del público',qaSub:'Haz una pregunta — o vota las que quieras que respondan.',ask:'Preguntar',typeQuestion:'Escribe tu pregunta…',loading:'Cargando…',responses:'respuestas',question:'Pregunta',typeAnswer:'Escribe tu respuesta…',tapToFlip:'TOCA PARA GIRAR',answerFace:'RESPUESTA',showAnswer:'Mostrar respuesta',again:'Otra vez',hard:'Difícil',good:'Bien',easy:'Fácil',yourAnswer:'Tu respuesta',correctWas:'Correcta',skipped:'(omitida)',joinTitle:'Únete a una sesión',joinSub:'Escribe el código que aparece junto al código QR.',joinBtn:'Unirse →',joinShort:'Ese código parece demasiado corto: revísalo e inténtalo de nuevo.',joinNotFound:'No se encontró ninguna sesión con ese código. Verifícalo con tu presentador.',joinFail:'No se pudo comprobar el código: revisa tu conexión.'},
-  de:{enterName:'Gib deinen Namen ein',nameOnce:'Nur einmal pro Sitzung nötig.',yourName:'Dein Name',continue:'Weiter →',enterNamePlease:'Bitte gib deinen Namen ein.',submitAnswer:'Antwort senden',submitRating:'Bewertung senden',submitAnswers:'Antworten senden',submitted:'✓ Gesendet!',alreadyAnswered:'Du hast diese Frage bereits beantwortet!',selectAll:'✓ Alle Zutreffenden auswählen',submitSurvey:'Umfrage senden',submitQuiz:'Senden & Punktzahl ansehen',thankYou:'Danke!',recorded:'Deine Antworten wurden gespeichert.',qaTitle:'Publikumsfragen',qaSub:'Stelle eine Frage — oder stimme für andere ab.',ask:'Fragen',typeQuestion:'Schreibe deine Frage…',loading:'Lädt…',responses:'Antworten',question:'Frage',typeAnswer:'Schreibe deine Antwort…',tapToFlip:'ZUM UMDREHEN TIPPEN',answerFace:'ANTWORT',showAnswer:'Antwort zeigen',again:'Nochmal',hard:'Schwer',good:'Gut',easy:'Leicht',yourAnswer:'Deine Antwort',correctWas:'Richtig',skipped:'(übersprungen)',joinTitle:'Sitzung beitreten',joinSub:'Gib den Code ein, der neben dem QR-Code angezeigt wird.',joinBtn:'Beitreten →',joinShort:'Dieser Code sieht zu kurz aus — prüfe ihn und versuche es erneut.',joinNotFound:'Keine Sitzung mit diesem Code gefunden — frag deinen Präsentator.',joinFail:'Code konnte nicht geprüft werden — prüfe deine Verbindung.'},
-  fr:{enterName:'Entrez votre nom',nameOnce:'À faire une seule fois par session.',yourName:'Votre nom',continue:'Continuer →',enterNamePlease:'Veuillez entrer votre nom.',submitAnswer:'Envoyer la réponse',submitRating:'Envoyer la note',submitAnswers:'Envoyer les réponses',submitted:'✓ Envoyé !',alreadyAnswered:'Vous avez déjà répondu à cette question !',selectAll:'✓ Sélectionnez tout ce qui s’applique',submitSurvey:'Envoyer le sondage',submitQuiz:'Envoyer et voir le score',thankYou:'Merci !',recorded:'Vos réponses ont été enregistrées.',qaTitle:'Questions du public',qaSub:'Posez une question — ou votez pour celles à traiter.',ask:'Demander',typeQuestion:'Écrivez votre question…',loading:'Chargement…',responses:'réponses',question:'Question',typeAnswer:'Écrivez votre réponse…',tapToFlip:'TOUCHEZ POUR RETOURNER',answerFace:'RÉPONSE',showAnswer:'Voir la réponse',again:'Encore',hard:'Difficile',good:'Bien',easy:'Facile',yourAnswer:'Votre réponse',correctWas:'Bonne réponse',skipped:'(passée)',joinTitle:'Rejoindre une session',joinSub:'Saisissez le code affiché à côté du QR code.',joinBtn:'Rejoindre →',joinShort:'Ce code semble trop court — vérifiez-le et réessayez.',joinNotFound:'Aucune session trouvée avec ce code — vérifiez auprès de votre présentateur.',joinFail:'Impossible de vérifier le code — vérifiez votre connexion.'},
-  pt:{enterName:'Digite seu nome',nameOnce:'Só precisa fazer isso uma vez por sessão.',yourName:'Seu nome',continue:'Continuar →',enterNamePlease:'Por favor, digite seu nome.',submitAnswer:'Enviar resposta',submitRating:'Enviar avaliação',submitAnswers:'Enviar respostas',submitted:'✓ Enviado!',alreadyAnswered:'Você já respondeu a esta pergunta!',selectAll:'✓ Marque todas as aplicáveis',submitSurvey:'Enviar pesquisa',submitQuiz:'Enviar e ver pontuação',thankYou:'Obrigado!',recorded:'Suas respostas foram registradas.',qaTitle:'Perguntas do público',qaSub:'Faça uma pergunta — ou vote nas que quer ver respondidas.',ask:'Perguntar',typeQuestion:'Escreva sua pergunta…',loading:'Carregando…',responses:'respostas',question:'Pergunta',typeAnswer:'Digite sua resposta…',tapToFlip:'TOQUE PARA VIRAR',answerFace:'RESPOSTA',showAnswer:'Mostrar resposta',again:'De novo',hard:'Difícil',good:'Bom',easy:'Fácil',yourAnswer:'Sua resposta',correctWas:'Correta',skipped:'(pulada)',joinTitle:'Entrar em uma sessão',joinSub:'Digite o código exibido ao lado do QR code.',joinBtn:'Entrar →',joinShort:'Esse código parece curto demais — confira e tente novamente.',joinNotFound:'Nenhuma sessão encontrada com esse código — confirme com seu apresentador.',joinFail:'Não foi possível verificar o código — verifique sua conexão.'},
-  it:{enterName:'Inserisci il tuo nome',nameOnce:'Da fare una sola volta per sessione.',yourName:'Il tuo nome',continue:'Continua →',enterNamePlease:'Inserisci il tuo nome.',submitAnswer:'Invia risposta',submitRating:'Invia valutazione',submitAnswers:'Invia risposte',submitted:'✓ Inviato!',alreadyAnswered:'Hai già risposto a questa domanda!',selectAll:'✓ Seleziona tutte quelle pertinenti',submitSurvey:'Invia sondaggio',submitQuiz:'Invia e vedi punteggio',thankYou:'Grazie!',recorded:'Le tue risposte sono state registrate.',qaTitle:'Domande del pubblico',qaSub:'Fai una domanda — o vota quelle da trattare.',ask:'Chiedi',typeQuestion:'Scrivi la tua domanda…',loading:'Caricamento…',responses:'risposte',question:'Domanda',typeAnswer:'Scrivi la tua risposta…',tapToFlip:'TOCCA PER GIRARE',answerFace:'RISPOSTA',showAnswer:'Mostra risposta',again:'Di nuovo',hard:'Difficile',good:'Bene',easy:'Facile',yourAnswer:'La tua risposta',correctWas:'Corretta',skipped:'(saltata)',joinTitle:'Partecipa a una sessione',joinSub:'Digita il codice mostrato accanto al codice QR.',joinBtn:'Partecipa →',joinShort:'Questo codice sembra troppo corto — controllalo e riprova.',joinNotFound:'Nessuna sessione trovata con questo codice — verifica con il tuo presentatore.',joinFail:'Impossibile verificare il codice — controlla la connessione.'},
+  es:{enterName:'Escribe tu nombre',nameOnce:'Solo necesitas hacerlo una vez por sesión.',yourName:'Tu nombre',continue:'Continuar →',enterNamePlease:'Por favor, escribe tu nombre.',submitAnswer:'Enviar respuesta',submitRating:'Enviar valoración',submitAnswers:'Enviar respuestas',submitted:'✓ ¡Enviado!',alreadyAnswered:'¡Ya respondiste esta pregunta!',selectAll:'✓ Marca todas las que correspondan',submitSurvey:'Enviar encuesta',submitQuiz:'Enviar y ver puntuación',thankYou:'¡Gracias!',recorded:'Tus respuestas se han guardado.',qaTitle:'Preguntas del público',qaSub:'Haz una pregunta — o vota las que quieras que respondan.',ask:'Preguntar',typeQuestion:'Escribe tu pregunta…',loading:'Cargando…',responses:'respuestas',question:'Pregunta',typeAnswer:'Escribe tu respuesta…',tapToFlip:'TOCA PARA GIRAR',answerFace:'RESPUESTA',showAnswer:'Mostrar respuesta',again:'Otra vez',hard:'Difícil',good:'Bien',easy:'Fácil',yourAnswer:'Tu respuesta',correctWas:'Correcta',skipped:'(omitida)',joinTitle:'Únete a una sesión',joinSub:'Escribe el código que aparece junto al código QR.',joinBtn:'Unirse →',joinShort:'Ese código parece demasiado corto: revísalo e inténtalo de nuevo.',joinNotFound:'No se encontró ninguna sesión con ese código. Verifícalo con tu presentador.',joinFail:'No se pudo comprobar el código: revisa tu conexión.',seeOriginal:'Ver original',seeTranslation:'Ver traducción'},
+  de:{enterName:'Gib deinen Namen ein',nameOnce:'Nur einmal pro Sitzung nötig.',yourName:'Dein Name',continue:'Weiter →',enterNamePlease:'Bitte gib deinen Namen ein.',submitAnswer:'Antwort senden',submitRating:'Bewertung senden',submitAnswers:'Antworten senden',submitted:'✓ Gesendet!',alreadyAnswered:'Du hast diese Frage bereits beantwortet!',selectAll:'✓ Alle Zutreffenden auswählen',submitSurvey:'Umfrage senden',submitQuiz:'Senden & Punktzahl ansehen',thankYou:'Danke!',recorded:'Deine Antworten wurden gespeichert.',qaTitle:'Publikumsfragen',qaSub:'Stelle eine Frage — oder stimme für andere ab.',ask:'Fragen',typeQuestion:'Schreibe deine Frage…',loading:'Lädt…',responses:'Antworten',question:'Frage',typeAnswer:'Schreibe deine Antwort…',tapToFlip:'ZUM UMDREHEN TIPPEN',answerFace:'ANTWORT',showAnswer:'Antwort zeigen',again:'Nochmal',hard:'Schwer',good:'Gut',easy:'Leicht',yourAnswer:'Deine Antwort',correctWas:'Richtig',skipped:'(übersprungen)',joinTitle:'Sitzung beitreten',joinSub:'Gib den Code ein, der neben dem QR-Code angezeigt wird.',joinBtn:'Beitreten →',joinShort:'Dieser Code sieht zu kurz aus — prüfe ihn und versuche es erneut.',joinNotFound:'Keine Sitzung mit diesem Code gefunden — frag deinen Präsentator.',joinFail:'Code konnte nicht geprüft werden — prüfe deine Verbindung.',seeOriginal:'Original ansehen',seeTranslation:'Übersetzung ansehen'},
+  fr:{enterName:'Entrez votre nom',nameOnce:'À faire une seule fois par session.',yourName:'Votre nom',continue:'Continuer →',enterNamePlease:'Veuillez entrer votre nom.',submitAnswer:'Envoyer la réponse',submitRating:'Envoyer la note',submitAnswers:'Envoyer les réponses',submitted:'✓ Envoyé !',alreadyAnswered:'Vous avez déjà répondu à cette question !',selectAll:'✓ Sélectionnez tout ce qui s’applique',submitSurvey:'Envoyer le sondage',submitQuiz:'Envoyer et voir le score',thankYou:'Merci !',recorded:'Vos réponses ont été enregistrées.',qaTitle:'Questions du public',qaSub:'Posez une question — ou votez pour celles à traiter.',ask:'Demander',typeQuestion:'Écrivez votre question…',loading:'Chargement…',responses:'réponses',question:'Question',typeAnswer:'Écrivez votre réponse…',tapToFlip:'TOUCHEZ POUR RETOURNER',answerFace:'RÉPONSE',showAnswer:'Voir la réponse',again:'Encore',hard:'Difficile',good:'Bien',easy:'Facile',yourAnswer:'Votre réponse',correctWas:'Bonne réponse',skipped:'(passée)',joinTitle:'Rejoindre une session',joinSub:'Saisissez le code affiché à côté du QR code.',joinBtn:'Rejoindre →',joinShort:'Ce code semble trop court — vérifiez-le et réessayez.',joinNotFound:'Aucune session trouvée avec ce code — vérifiez auprès de votre présentateur.',joinFail:'Impossible de vérifier le code — vérifiez votre connexion.',seeOriginal:'Voir l’original',seeTranslation:'Voir la traduction'},
+  pt:{enterName:'Digite seu nome',nameOnce:'Só precisa fazer isso uma vez por sessão.',yourName:'Seu nome',continue:'Continuar →',enterNamePlease:'Por favor, digite seu nome.',submitAnswer:'Enviar resposta',submitRating:'Enviar avaliação',submitAnswers:'Enviar respostas',submitted:'✓ Enviado!',alreadyAnswered:'Você já respondeu a esta pergunta!',selectAll:'✓ Marque todas as aplicáveis',submitSurvey:'Enviar pesquisa',submitQuiz:'Enviar e ver pontuação',thankYou:'Obrigado!',recorded:'Suas respostas foram registradas.',qaTitle:'Perguntas do público',qaSub:'Faça uma pergunta — ou vote nas que quer ver respondidas.',ask:'Perguntar',typeQuestion:'Escreva sua pergunta…',loading:'Carregando…',responses:'respostas',question:'Pergunta',typeAnswer:'Digite sua resposta…',tapToFlip:'TOQUE PARA VIRAR',answerFace:'RESPOSTA',showAnswer:'Mostrar resposta',again:'De novo',hard:'Difícil',good:'Bom',easy:'Fácil',yourAnswer:'Sua resposta',correctWas:'Correta',skipped:'(pulada)',joinTitle:'Entrar em uma sessão',joinSub:'Digite o código exibido ao lado do QR code.',joinBtn:'Entrar →',joinShort:'Esse código parece curto demais — confira e tente novamente.',joinNotFound:'Nenhuma sessão encontrada com esse código — confirme com seu apresentador.',joinFail:'Não foi possível verificar o código — verifique sua conexão.',seeOriginal:'Ver original',seeTranslation:'Ver tradução'},
+  it:{enterName:'Inserisci il tuo nome',nameOnce:'Da fare una sola volta per sessione.',yourName:'Il tuo nome',continue:'Continua →',enterNamePlease:'Inserisci il tuo nome.',submitAnswer:'Invia risposta',submitRating:'Invia valutazione',submitAnswers:'Invia risposte',submitted:'✓ Inviato!',alreadyAnswered:'Hai già risposto a questa domanda!',selectAll:'✓ Seleziona tutte quelle pertinenti',submitSurvey:'Invia sondaggio',submitQuiz:'Invia e vedi punteggio',thankYou:'Grazie!',recorded:'Le tue risposte sono state registrate.',qaTitle:'Domande del pubblico',qaSub:'Fai una domanda — o vota quelle da trattare.',ask:'Chiedi',typeQuestion:'Scrivi la tua domanda…',loading:'Caricamento…',responses:'risposte',question:'Domanda',typeAnswer:'Scrivi la tua risposta…',tapToFlip:'TOCCA PER GIRARE',answerFace:'RISPOSTA',showAnswer:'Mostra risposta',again:'Di nuovo',hard:'Difficile',good:'Bene',easy:'Facile',yourAnswer:'La tua risposta',correctWas:'Corretta',skipped:'(saltata)',joinTitle:'Partecipa a una sessione',joinSub:'Digita il codice mostrato accanto al codice QR.',joinBtn:'Partecipa →',joinShort:'Questo codice sembra troppo corto — controllalo e riprova.',joinNotFound:'Nessuna sessione trovata con questo codice — verifica con il tuo presentatore.',joinFail:'Impossibile verificare il codice — controlla la connessione.',seeOriginal:'Vedi originale',seeTranslation:'Vedi traduzione'},
 };
 function t(key, fallback){ return (I18N[LANG] && I18N[LANG][key]) || fallback; }
 
@@ -280,24 +285,172 @@ async function translateTexts(texts){
   return out;
 }
 
-// Translate a question's visible text + option labels in place (safe: indices unchanged).
+// ── "See original" support ───────────────────────────────────────────────────
+// Translation used to overwrite the question in place, which threw the source text
+// away — so there was nothing to show if a viewer wanted the original (the way X /
+// Instagram / YouTube all let you). Now every translated question keeps BOTH views:
+//   q._orig  = the deck-language source (captured once, before the first translate)
+//   q._trans = the viewer-language translation
+// The live fields (q.text / q.options[i].text / …) always hold whichever the viewer
+// is currently looking at, so nothing downstream had to change.
+let _showOriginal = false;   // true = viewer chose "See original" (show DECK_LANG source)
+
+function _viewFromFields(q){
+  const labels = q.ratingLabels || {};
+  return { text:q.text, front:q.front, back:q.back, low:labels.low, high:labels.high,
+           opts:(q.options||[]).map(o => o.text) };
+}
+function _applyView(q, v){
+  if (!q || !v) return;
+  const labels = q.ratingLabels || {};
+  if (q.text  && v.text  != null) q.text  = v.text;
+  if (q.front && v.front != null) q.front = v.front;
+  if (q.back  && v.back  != null) q.back  = v.back;
+  if (labels.low  && v.low  != null) labels.low  = v.low;
+  if (labels.high && v.high != null) labels.high = v.high;
+  (q.options||[]).forEach((o,i) => { if (v.opts && v.opts[i] != null) o.text = v.opts[i]; });
+}
+// Is there a MEANINGFUL translation to toggle to? (A failed/passthrough translation
+// returns the originals unchanged — no point offering "See original" then.)
+function _hasTranslation(q){
+  if (!q || !q._orig || !q._trans) return false;
+  if (q._orig.text !== q._trans.text) return true;
+  if (q._orig.front !== q._trans.front || q._orig.back !== q._trans.back) return true;
+  return (q._orig.opts||[]).some((o,i) => o !== (q._trans.opts||[])[i]);
+}
+
+// Translate a question's visible text + option labels, keeping both views (see above).
 // Covers every content field a card can carry: question text, flashcard front AND back
 // (the back is the study answer — it must follow the viewer's language too), and the
 // rating scale's end labels. One batch per question so it's a single API round-trip.
 async function translateQuestion(q){
   if (!q || LANG === DECK_LANG) return q;
-  const opts = q.options || [];
-  const labels = q.ratingLabels || {};
-  const tr = await translateTexts([ q.text || '', q.front || '', q.back || '',
-                                    labels.low || '', labels.high || '',
-                                    ...opts.map(o => o.text || '') ]);
-  if (q.text)      q.text      = tr[0];
-  if (q.front)     q.front     = tr[1];
-  if (q.back)      q.back      = tr[2];
-  if (labels.low)  labels.low  = tr[3];
-  if (labels.high) labels.high = tr[4];
-  opts.forEach((o,i) => { o.text = tr[i+5]; });
+  if (!q._orig) q._orig = _viewFromFields(q);   // capture the source once
+  const o = q._orig;
+  const tr = await translateTexts([ o.text || '', o.front || '', o.back || '',
+                                    o.low || '', o.high || '',
+                                    ...(o.opts||[]).map(x => x || '') ]);
+  q._trans = { text:  o.text  ? tr[0] : o.text,
+               front: o.front ? tr[1] : o.front,
+               back:  o.back  ? tr[2] : o.back,
+               low:   o.low   ? tr[3] : o.low,
+               high:  o.high  ? tr[4] : o.high,
+               opts:  (o.opts||[]).map((x,i) => x ? tr[i+5] : x) };
+  _applyView(q, _showOriginal ? q._orig : q._trans);
   return q;
+}
+
+// Translate a whole SET in as few round-trips as possible.
+// Looping translateQuestion() costs one model call PER QUESTION — a 10-question
+// form meant 10 sequential calls, which is fine on a fast/sloppy model and minutes
+// of blank screen on a good one. This gathers every visible string across every
+// question, sends them in chunks, and writes them back in place.
+async function translateQuestions(list){
+  if (!Array.isArray(list) || !list.length || LANG === DECK_LANG) return;
+  // Snapshot each question's source, and seed _trans from it so untranslated fields
+  // keep the original. Translations are written into _trans, then applied to the live
+  // fields — so "See original" (below) can swap back to _orig without a re-fetch.
+  list.forEach(q => {
+    if (!q._orig)  q._orig  = _viewFromFields(q);
+    if (!q._trans) q._trans = { text:q._orig.text, front:q._orig.front, back:q._orig.back,
+                                low:q._orig.low, high:q._orig.high, opts:(q._orig.opts||[]).slice() };
+  });
+  const slots = [], texts = [];
+  list.forEach(q => {
+    const o = q._orig;
+    const push = (field, val, optIdx) => {
+      const s = String(val == null ? '' : val);
+      if (s.trim()) { slots.push({ q, field, optIdx }); texts.push(s); }
+    };
+    push('text', o.text); push('front', o.front); push('back', o.back);
+    push('low', o.low); push('high', o.high);
+    (o.opts || []).forEach((tx, i) => push('opt', tx, i));
+  });
+  if (!texts.length) return;
+  const CHUNK = 30;                                   // stays under the endpoint's 40-text cap
+  for (let i = 0; i < texts.length; i += CHUNK) {
+    const tr = await translateTexts(texts.slice(i, i + CHUNK));
+    tr.forEach((v, j) => {
+      const s = slots[i + j];
+      if (!s || v == null) return;
+      if (s.field === 'opt') { s.q._trans.opts[s.optIdx] = v; }
+      else                   { s.q._trans[s.field] = v; }
+    });
+  }
+  list.forEach(q => _applyView(q, _showOriginal ? q._orig : q._trans));
+}
+
+// ── The "See original" toggle ────────────────────────────────────────────────
+// One pill (near the globe) flips the whole current screen between the translation
+// and the deck-language source. It swaps the visible text IN PLACE — no re-render —
+// so a selection, a half-typed answer, the timer and the submitted state all survive.
+function _activeTranslatable(){
+  return SURVEY_MODE ? surveyQuestions : (questionData ? [questionData] : []);
+}
+function toggleSeeOriginal(){
+  _showOriginal = !_showOriginal;
+  _activeTranslatable().forEach(q => { if (q._orig && q._trans) _applyView(q, _showOriginal ? q._orig : q._trans); });
+  _syncTranslatedDom();
+  syncOrigToggle();
+}
+// Push the (already-swapped) question objects into the live DOM without disturbing
+// anything else on the card.
+function _syncTranslatedDom(){
+  const setText = (el, val) => { if (el && val != null) el.textContent = val; };
+  if (SURVEY_MODE){
+    surveyQuestions.forEach((q, idx) => {
+      const card = document.getElementById('surveyCard' + idx); if (!card) return;
+      setText(card.querySelector('.q-text'), q.text);
+      (q.options || []).forEach((o, i) => {
+        const b = document.getElementById('sq' + idx + '_opt' + i);
+        if (b) setText(b.querySelector('span:last-child'), o.text || '');
+      });
+    });
+  } else if (questionData){
+    setText(document.querySelector('.q-text'), questionData.text);
+    (questionData.options || []).forEach((o, i) => {
+      const b = document.getElementById('opt' + i);
+      if (b) setText(b.querySelector('span:last-child'), o.text || '');
+    });
+    const labels = questionData.ratingLabels || {};
+    setText(document.getElementById('ratingLow'),  labels.low  || '');
+    setText(document.getElementById('ratingHigh'), labels.high || '');
+  }
+}
+function mountOrigToggle(){
+  if (document.getElementById('seeOrigWrap')) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'seeOrigWrap';
+  wrap.style.cssText = 'position:fixed;top:47px;right:10px;z-index:9999;display:none;';
+  const btn = document.createElement('button');
+  btn.id = 'seeOrigBtn';
+  btn.style.cssText = 'background:rgba(13,13,24,0.92);color:#cfcff5;border:1px solid rgba(255,255,255,0.22);border-radius:9px;padding:5px 11px;font-size:12px;font-family:inherit;cursor:pointer;white-space:nowrap;';
+  btn.addEventListener('click', toggleSeeOriginal);
+  wrap.appendChild(btn);
+  document.body.appendChild(wrap);
+}
+// Show the pill only on a question screen that actually has a translation to toggle.
+// The `.q-text` check quietly hides it on the name / join / thank-you screens.
+function syncOrigToggle(){
+  const wrap = document.getElementById('seeOrigWrap');
+  const btn  = document.getElementById('seeOrigBtn');
+  if (!wrap || !btn) return;
+  const onQuestionScreen = !!document.querySelector('.q-text');
+  const show = onQuestionScreen && LANG !== DECK_LANG && _activeTranslatable().some(_hasTranslation);
+  wrap.style.display = show ? 'block' : 'none';
+  btn.textContent = _showOriginal ? ('↩ ' + t('seeTranslation', 'See translation'))
+                                   : ('🌐 ' + t('seeOriginal', 'See original'));
+}
+
+// Has this person started answering? Translations arriving must never redraw the
+// screen out from under a finger — that would wipe a selection or a half-typed answer.
+function answerUntouched(){
+  if (answered || submitting) return false;
+  if (selectedOptions && selectedOptions.size) return false;
+  if (window._rating) return false;
+  const ta = document.getElementById('txtAns');
+  if (ta && String(ta.value || '').trim()) return false;
+  return true;
 }
 
 // Fixed globe selector — lives outside #app so render() never wipes it.
@@ -316,10 +469,12 @@ function mountLangSelector(){
   });
   sel.addEventListener('change', () => setViewerLang(sel.value));
   wrap.appendChild(sel); document.body.appendChild(wrap);
+  mountOrigToggle();   // the "See original" pill sits just below the globe
 }
 function setViewerLang(code){
   if (!LANGUAGES[code]) return;
   LANG = code; try { localStorage.setItem('ql_viewer_lang', code); } catch(e){}
+  _showOriginal = false;   // picking a language means "show me this language", not the source
   if (typeof _currentRenderer === 'function') _currentRenderer();
 }
 
@@ -512,8 +667,16 @@ async function loadQuestion() {
 
   answered = false;
   answerStartTime = Date.now();
-  if (LANG !== DECK_LANG) await translateQuestion(questionData);  // viewer reads in their own language
+  // Paint NOW, in the deck's language. Translation used to be awaited here, which
+  // meant the whole room stared at a blank screen for however long the model took —
+  // and the better the model, the longer the stall. The viewer's language is swapped
+  // in as soon as it lands, and only if they haven't started answering yet.
   showQuestion(questionData);
+  if (LANG !== DECK_LANG) {
+    translateQuestion(questionData)
+      .then(() => { if (answerUntouched()) showQuestion(questionData); })
+      .catch(() => {});
+  }
 }
 
 // ─── SHOW QUESTION ────────────────────────────────────────────────────────────
@@ -559,7 +722,7 @@ function showQuestion(q) {
       <div class="rating-wrap" id="ratingWrap">
         ${Array.from({length:max},(_,i)=>`<button class="r-btn" id="rb${i+1}" onclick="selectRating(${i+1})">${i+1}</button>`).join('')}
       </div>
-      ${labels.low||labels.high ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:14px;"><span>${labels.low||''}</span><span>${labels.high||''}</span></div>` : ''}
+      ${labels.low||labels.high ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:14px;"><span id="ratingLow">${labels.low||''}</span><span id="ratingHigh">${labels.high||''}</span></div>` : ''}
       <button class="btn btn-primary" id="submitBtn" onclick="submitAnswer()" disabled>${t('submitRating','Submit Rating')}</button>`;
   } else {
     body = `
@@ -611,10 +774,16 @@ function showQuestion(q) {
 let timerInterval = null;
 function startTimer(seconds) {
   const total = seconds;
-  let remaining = seconds;
+  // Count down from when the question actually opened, not from "now". showQuestion()
+  // can run more than once for the same question (translations arriving), and a naive
+  // reset would silently hand that person a fresh full timer while everyone else's
+  // kept running. Also makes the clock honest about time spent loading.
+  const elapsed = Math.max(0, Math.floor((Date.now() - (answerStartTime || Date.now())) / 1000));
+  let remaining = Math.max(0, seconds - elapsed);
   const circle = document.getElementById('timerCircle');
   const text   = document.getElementById('timerText');
   const circumference = 100.5;
+  if (text) text.textContent = remaining + 's';   // paint the true value before the first tick
 
   if (timerInterval) clearInterval(timerInterval);
   timerInterval = setInterval(() => {
@@ -790,6 +959,7 @@ function showAlreadyAnswered() {
 // presenter's existing report & tally aggregate them with zero extra work.
 // ════════════════════════════════════════════════════════════════════════════
 let surveyQuestions = [];
+let _setTranslating = false; // a background set-translation is in flight (guards re-entry)
 let surveyAnswers   = {};   // { qIndex: answerValue }
 let formIsQuiz      = false; // graded (QuizSlide assignment) vs ungraded (SurveySlide)
 let formProduct     = 'survey'; // survey | quiz | study (from quiz_builder/<code>/productType)
@@ -814,7 +984,21 @@ async function loadSurvey() {
   formIsQuiz = formProduct === 'quiz';
 
   // Translate the whole set into the viewer's language (display-only; indices unchanged).
-  if (LANG !== DECK_LANG) { for (const q of surveyQuestions) { await translateQuestion(q); } }
+  // Batched and in the BACKGROUND: this used to await one model call per question, so
+  // a 10-question form was 10 sequential round-trips before anything appeared. The form
+  // paints in the deck language and upgrades in place. Because translateQuestions()
+  // mutates the question objects, anything rendered later (study cards, a re-render)
+  // picks up the translation with no extra work.
+  if (LANG !== DECK_LANG && !_setTranslating) {
+    _setTranslating = true;
+    translateQuestions(surveyQuestions)
+      .catch(() => {})
+      .then(() => {
+        _setTranslating = false;
+        // Only redraw a form nobody has started filling in.
+        if (document.getElementById('surveyCard0') && surveyUntouched()) showSurveyForm();
+      });
+  }
 
   if (surveyQuestions.length === 0) {
     const noun = formProduct === 'study' ? 'study set' : formProduct;
@@ -943,6 +1127,14 @@ function surveyIsAnswered(idx) {
   if (Array.isArray(a)) return a.length > 0;
   if (typeof a === 'string') return a.trim().length > 0;
   return true; // number (rating)
+}
+
+// Nobody has started filling the form in. Guards the background-translation
+// redraw — surveyAnswers is written on every keystroke (see the textarea's
+// oninput), so this is an honest read of whether anything would be lost.
+function surveyUntouched() {
+  try { return !surveyQuestions.some((_, i) => surveyIsAnswered(i)); }
+  catch(e) { return false; }
 }
 
 async function submitSurvey() {

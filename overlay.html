@@ -130,6 +130,7 @@ const db = firebase.database();
 
 let sessionCode = '';
 let currentQId  = null;
+let _overlayCorrect = [];   // correct indices for the live question; applied only on reveal (never at render — would leak the answer)
 let respOff     = null;
 
 // Auto-connect from URL ?session=CODE
@@ -183,14 +184,18 @@ function showLive(q) {
   const correct = Array.isArray(q.correctAnswer) ? q.correctAnswer : [q.correctAnswer];
   const qIdx    = q.qIndex !== undefined ? q.qIndex : (q.index - 1);
 
+  // Do NOT paint the correct answer green here — this runs the moment the question
+  // goes live, so colouring the right bar would leak the answer to the room before
+  // anyone has voted. markRevealed() applies it when the presenter actually reveals.
   let barsHTML = '';
   if (q.type !== 'free_text' && q.type !== 'rating' && q.options) {
     barsHTML = q.options.map((o,i) => `
-      <div class="bar-item">
+      <div class="bar-item" id="bi${i}">
         <div class="bar-top"><span class="bar-n">${letters[i]}. ${o.text}</span><span class="bar-v" id="bv${i}">—</span></div>
-        <div class="bar-bg"><div class="bar-fill ${correct.includes(i)?'correct':''}" id="bf${i}" style="width:0%"></div></div>
+        <div class="bar-bg"><div class="bar-fill" id="bf${i}" style="width:0%"></div></div>
       </div>`).join('');
   }
+  _overlayCorrect = correct;
 
   setContent(`
     <div class="q-strip">
@@ -237,6 +242,21 @@ function showLive(q) {
 function markRevealed() {
   const badge = document.getElementById('statusBadge');
   if (badge) { badge.textContent = '✓ Revealed'; badge.className = 'status revealed'; }
+  // Now it's safe to show the answer: green the correct bar(s), fade the rest.
+  const correct = _overlayCorrect || [];
+  const hasC = correct.length > 0 && correct.every(c => c != null);
+  document.querySelectorAll('[id^="bi"]').forEach(item => {
+    const i = Number(item.id.slice(2));
+    const bf = document.getElementById('bf' + i);
+    if (correct.includes(i)) {
+      if (bf) bf.classList.add('correct');
+      item.style.opacity = '1';
+    } else if (hasC) {
+      item.style.transition = 'opacity .4s,filter .4s';
+      item.style.opacity = '0.32';
+      item.style.filter = 'grayscale(0.85)';
+    }
+  });
 }
 
 function showWait(msg) {

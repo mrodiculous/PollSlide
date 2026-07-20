@@ -1285,8 +1285,10 @@ const LET=['A','B','C','D','E','F','G','H'];
 function _counts(q,r){ const c=(q.options||[]).map(()=>0); r.forEach(x=>{try{const a=JSON.parse(x.answer);(Array.isArray(a)?a:[a]).forEach(v=>{if(c[v]!=null)c[v]++;});}catch(e){}}); return c; }
 function _corr(q){ const a=q.correctAnswer; return (a!=null&&a!=='')?(Array.isArray(a)?a.map(Number):[Number(a)]):[]; }
 function _txt(r){ let a=r.answer; try{const v=JSON.parse(a);a=(typeof v==='string')?v:a;}catch(e){} return a; }
-function renderBars(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q); return (q.options||[]).map((o,i)=>{const p=tot?Math.round(c[i]/tot*100):0,sc=_revealed&&cor.includes(i);
-  return `<div class="bar"><div class="bar-top"><span>${LET[i]}. ${rich(o.text||'')}${sc?' ✓':''}</span><span>${c[i]} (${p}%)</span></div><div class="bar-track"><div class="bar-fill ${sc?'correct':''}" style="width:${p}%"></div></div></div>`;}).join(''); }
+// At reveal the wrong options step back (dim + desaturate) so the correct one carries
+// the screen. A green fill alone can't do it — green is also a normal palette colour.
+function renderBars(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q),hasC=cor.length>0; return (q.options||[]).map((o,i)=>{const p=tot?Math.round(c[i]/tot*100):0,sc=_revealed&&cor.includes(i),wr=_revealed&&hasC&&!cor.includes(i);
+  return `<div class="bar" style="transition:opacity .4s,filter .4s,transform .4s;${wr?'opacity:0.28;filter:grayscale(0.9);':''}${sc?'transform:scale(1.02);':''}"><div class="bar-top"><span>${LET[i]}. ${rich(o.text||'')}${sc?' ✓':''}</span><span>${c[i]} (${p}%)</span></div><div class="bar-track"><div class="bar-fill ${sc?'correct':''}" style="width:${p}%"></div></div></div>`;}).join(''); }
 function renderRating(q,r){ const m=q.ratingMax||5,tot=r.length,c={}; for(let i=1;i<=m;i++)c[i]=0; r.forEach(x=>{try{const v=JSON.parse(x.answer);if(v&&c[v]!=null)c[v]++;}catch(e){}}); const avg=tot?(Object.entries(c).reduce((s,[k,v])=>s+(+k*v),0)/tot).toFixed(1):'—';
   return `<div class="metric">★ ${avg} <span>avg of ${tot}</span></div>`+Object.entries(c).map(([v,n])=>{const p=tot?Math.round(n/tot*100):0;return `<div class="bar"><div class="bar-top"><span>★ ${v}</span><span>${n} (${p}%)</span></div><div class="bar-track"><div class="bar-fill" style="width:${p}%"></div></div></div>`;}).join(''); }
 function renderFree(q,r){ if(q.displayMode==='word_cloud')return renderWC(q,r); const it=r.map(_txt).filter(a=>a&&a!=='__none__'); if(!it.length)return `<div style="color:var(--muted)">${t('present.waiting')}</div>`;

@@ -31,9 +31,12 @@ const LOCAL_LLM_MODEL   = process.env.LOCAL_LLM_MODEL || 'qwen3:14b';
 //   gemma4        10.5-12.9s — clean: emoji, brand names and proper nouns all intact
 //   qwen3:14b     23.5-25.5s — clean, but past LOCAL_TIMEOUT_MS, so it would fall
 //                         through to OpenAI on every single call
-// Defaults to whatever Polly uses so this deploy changes nothing on its own; set
-// LOCAL_TRANSLATE_MODEL to move translation onto a better model independently.
-const LOCAL_TRANSLATE_MODEL = process.env.LOCAL_TRANSLATE_MODEL || LOCAL_LLM_MODEL;
+// Defaults to gemma4: the audience page no longer AWAITS translation before painting
+// (answer.html renders in the deck language and swaps the viewer's language in when it
+// lands), so the extra seconds cost nobody a blank screen. Override with
+// LOCAL_TRANSLATE_MODEL if you want translation on a different model to Polly's.
+// ⚠️ Keep gemma4 warm alongside Polly's model — a cold load measured ~18s.
+const LOCAL_TRANSLATE_MODEL = process.env.LOCAL_TRANSLATE_MODEL || 'gemma4:latest';
 
 // Cloudflare Access service-token headers — same as Polly, so the Mac tunnel
 // only answers PollSlide's own server.
@@ -136,10 +139,17 @@ module.exports = async function handler(req, res) {
     if (!targetName)           return res.status(400).json({ error: 'Unsupported target language.' });
     if (target === source)     return res.status(200).json({ ok:true, translations: texts });
 
+    // ⚠️ The "titles are FACTS" sentence is load-bearing, not padding. Without it,
+    // gemma4 rewrote "Who wrote the novel To Kill a Mockingbird?" as "…Gone with the
+    // Wind?" in 3 of 3 German runs — silently turning a quiz question into one whose
+    // listed answer is wrong. With it, 3 of 3 runs kept the title. No output check can
+    // catch this (nothing is malformed), so the prompt is the only defence. Re-test
+    // this exact case if you ever touch this string or change LOCAL_TRANSLATE_MODEL.
     const system = `You are a professional translator. Translate each input string into ${targetName}. ` +
       `Keep it natural and concise. Preserve numbers and proper nouns. ` +
       `Copy every emoji through EXACTLY as it appears — never drop one, never replace it with a different character. ` +
       `NEVER translate these product names, reproduce them verbatim: ${BRAND_TERMS.join(', ')}. ` +
+      `Titles of books, films, songs and albums are FACTS, not phrases to translate: reproduce every title EXACTLY as written in the source, character for character. Never substitute a different work. ` +
       `Do NOT add explanations. ` +
       `Return ONLY a JSON object of the form {"translations": [...]} whose array has the SAME order and length as the input.`;
     const messages = [{ role:'system', content: system }, { role:'user', content: JSON.stringify(texts) }];

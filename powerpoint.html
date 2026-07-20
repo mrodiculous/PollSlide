@@ -502,9 +502,12 @@ function renderResults(q, responses) {
   const total = count || 1;
   el.innerHTML = counts.map(({i, count: c}) => {
     const showC = revealed && correct.includes(i);
+    // Wrong options fade back at reveal so the correct one stands out — a green fill
+    // alone is easy to miss on a slide from across a room.
+    const isWrong = revealed && hasC && !correct.includes(i);
     const pct   = Math.round(c / total * 100);
-    const badge = showC ? '<span style="font-size:9px;background:rgba(67,233,123,.2);color:var(--accent3);padding:1px 5px;border-radius:100px;margin-left:4px;">✓</span>' : '';
-    return `<div class="bar-wrap">
+    const badge = showC ? '<span style="font-size:9px;background:rgba(67,233,123,.2);color:var(--accent3);padding:1px 5px;border-radius:100px;margin-left:4px;">✓ Correct</span>' : '';
+    return `<div class="bar-wrap" style="transition:opacity .4s,filter .4s;${isWrong?'opacity:0.3;filter:grayscale(0.85);':''}${showC?'font-weight:600;':''}">
       <div class="bar-label">
         <span>${letters[i]}. ${escHtml((q.options[i]||{}).text||'')}${badge}</span>
         <span>${c} (${pct}%)</span>

@@ -1115,10 +1115,13 @@ function renderResults() {
   // ── Numbers ────────────────────────────────────────────────────────────────
   } else if (viewMode === 'number') {
     inner = counts.map(({i,count})=>{
-      const color = (revealed&&correct.includes(i)) ? '#43e97b' : PS_COLORS[i%PS_COLORS.length];
-      return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+      const showCorrect = revealed && correct.includes(i);
+      const isWrong = revealed && correct.length > 0 && !showCorrect;
+      const color = showCorrect ? '#43e97b' : PS_COLORS[i%PS_COLORS.length];
+      const pill = showCorrect ? ` <span style="font-size:10px;font-weight:800;color:#43e97b;background:rgba(67,233,123,0.18);border:1px solid #43e97b77;padding:1px 7px;border-radius:100px;">✓</span>` : '';
+      return `<div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;transition:opacity .4s,filter .4s;${isWrong?'opacity:0.34;filter:grayscale(0.85);':''}">
         <div style="font-family:'Syne',sans-serif;font-weight:900;font-size:28px;color:${color};min-width:48px;text-shadow:0 0 12px ${color}88;">${count}</div>
-        <div><div style="font-size:13px;font-weight:600;">${letters[i]}. ${escapeHtml((curQ.options[i]||{}).text||'')}</div>
+        <div><div style="font-size:13px;font-weight:600;">${letters[i]}. ${escapeHtml((curQ.options[i]||{}).text||'')}${pill}</div>
         <div style="font-size:11px;color:var(--muted);">${pct(count)}%</div></div>
       </div>`;
     }).join('');
