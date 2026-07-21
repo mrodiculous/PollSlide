@@ -1590,7 +1590,7 @@ function openPlanPicker() {
         : isDowngradeToFree ? 'Downgrade (cancel plan)'
         : 'Upgrade to ' + p.name;
       const ctaOnclick_billing = isCurrent && isPaidUser ? "openBillingPortal()" : null;
-      const ctaOnclick = ctaOnclick_billing || (isCurrent ? '' : isDowngradeToFree ? "openBillingPortal()" : "pickerCheckout('" + p.key + "')");
+      const ctaOnclick = ctaOnclick_billing || (isCurrent ? '' : isDowngradeToFree ? "openBillingPortal()" : "pickerCheckout('" + p.key + "', event)");
 
       card.innerHTML =
         (p.popular ? '<div style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:'+D.accent+';color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:0 0 8px 8px;">★ Most popular</div>' : '') +
@@ -1619,30 +1619,36 @@ function openPlanPicker() {
   }
 
   window.pickerSetBilling = function(b) { pickerBilling = b; render(); };
-  window.pickerCheckout = async function(plan) {
+  window.pickerCheckout = async function(plan, ev) {
     if (!currentUser) return;
-    const btn = event.target;
-    const origText = btn.textContent;
-    btn.textContent = 'Redirecting…'; btn.disabled = true;
+    const btn = (ev && ev.target && ev.target.closest) ? ev.target.closest('button') : null;
+    const origText = btn ? btn.textContent : '';
+    if (btn) { btn.textContent = 'Redirecting…'; btn.disabled = true; }
+    const restore = () => { if (btn) { btn.textContent = origText; btn.disabled = false; } };
     try {
       const r = await fetch('/api/create-checkout', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ email:currentUser.email, uid:currentUser.uid, plan, billing:pickerBilling })
       });
-      const data = await r.json();
-      if (data.url) { window.location.href = data.url; }
-      else {
-        btn.textContent = origText; btn.disabled = false;
-        const msg = data.error || 'Unknown error';
-        if (msg.includes('commit') || msg.includes('404') || msg.includes('not found')) {
-          toast('API not deployed yet — commit api/create-checkout.js to GitHub first.','danger');
-        } else {
-          toast('Checkout error: ' + msg,'danger');
-        }
+      // Parse defensively: a missing/crashed function returns non-JSON.
+      const text = await r.text();
+      let data; try { data = JSON.parse(text); } catch(_) { data = null; }
+      if (data && data.url) { window.location.href = data.url; return; }
+      restore();
+      if (!data) {
+        // Genuinely no JSON body → the endpoint isn't deployed / crashed.
+        toast(r.status === 404 ? 'Checkout endpoint not found — is api/create-checkout.js deployed?' : 'Checkout server error (' + r.status + ').', 'danger');
+      } else if (data.fix) {
+        // Actionable Stripe-config error (e.g. a lookup key not set on the price).
+        // Lead with the concise cause; log the full fix so it's not lost in 3.5s.
+        console.warn('Checkout config error:', data.error, '\nFix:', data.fix);
+        toast('This plan isn\'t set up in Stripe yet — ' + (data.error || '') + ' (see console for the fix).', 'danger');
+      } else {
+        toast('Checkout error: ' + (data.error || 'Unknown error'), 'danger');
       }
     } catch(e) {
-      btn.textContent = origText; btn.disabled = false;
-      toast('Could not connect to checkout. Check api/create-checkout.js is deployed.','danger');
+      restore();
+      toast('Could not connect to checkout. Check your connection.', 'danger');
     }
   };
 
