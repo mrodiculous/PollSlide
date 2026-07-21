@@ -585,6 +585,7 @@
   <div class="modal" style="max-width:460px;">
     <h2 id="pollyTitle">✨ Polly</h2>
     <p id="pollySub" style="color:var(--muted);">Describe a topic and Polly drafts ready-to-go questions.</p>
+    <div id="pollyBalance" style="font-size:12px;color:var(--muted);margin-bottom:12px;display:none;"></div>
     <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Topic or focus</label>
     <input type="text" id="pollyTopic" maxlength="140" placeholder="e.g. The water cycle (optional if you add material below)" style="margin-bottom:12px;" onkeydown="if(event.key==='Enter')runPolly()">
     <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">From your material <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);">(optional — drop a PDF or paste notes; Polly builds questions from it)</span></label>
@@ -1792,8 +1793,21 @@ function toggleUserMenu() {
   const presLimitTxt = lim.maxPresentations === Infinity ? '∞' : lim.maxPresentations;
   const partLimitTxt = lim.maxParticipants === Infinity ? '∞' : lim.maxParticipants;
   const infoEl = document.getElementById('userMenuPlan');
-  if (infoEl) infoEl.textContent =
-    lim.name + ' plan · ' + presCount + '/' + presLimitTxt + ' presentations · ' + partLimitTxt + ' participants/poll';
+  if (infoEl) {
+    infoEl.textContent =
+      lim.name + ' plan · ' + presCount + '/' + presLimitTxt + ' presentations · ' + partLimitTxt + ' participants/poll';
+    // Append live Polly allowance + credit balance (async read).
+    aiUsage().then(u => {
+      let polly;
+      if (u.limit < 0) polly = ' · Polly: unlimited';
+      else {
+        const left = Math.max(0, u.limit - u.used);
+        polly = ' · Polly: ' + left + '/' + u.limit + ' left this month';
+        if (u.credits > 0) polly += ' + ' + u.credits + ' credits';
+      }
+      infoEl.textContent += polly;
+    }).catch(() => {});
+  }
   // Populate menu action items
   const itemsEl = document.getElementById('userMenuItems');
   if (itemsEl) {
@@ -4302,6 +4316,20 @@ function openPolly() {
   document.getElementById('pollySub').textContent = `Give Polly a topic and she'll draft ${p.short.toLowerCase()} you can drop straight in.`;
   document.getElementById('pollyStatus').style.display = 'none';
   document.getElementById('pollyGoBtn').disabled = false;
+  // Show remaining monthly allowance + credit balance right where they'll spend it.
+  const balEl = document.getElementById('pollyBalance');
+  if (balEl) {
+    balEl.style.display = 'none';
+    aiUsage().then(u => {
+      if (u.limit < 0) { balEl.innerHTML = '⚡ Unlimited Polly on your plan.'; balEl.style.display = 'block'; return; }
+      const left = Math.max(0, u.limit - u.used);
+      let html = '⚡ <strong style="color:var(--text);">' + left + '</strong> of ' + u.limit + ' monthly left';
+      if (u.credits > 0) html += ' · <strong style="color:var(--accent3);">' + u.credits + '</strong> credits';
+      html += ' · <a onclick="openPlanPicker()" style="color:var(--accent);cursor:pointer;">' + ((left + u.credits > 0) ? 'top up' : 'get more') + '</a>';
+      balEl.innerHTML = html;
+      balEl.style.display = 'block';
+    }).catch(() => {});
+  }
   // Reset the "from material" inputs each open.
   const notes = document.getElementById('pollyNotes'); if (notes) notes.value = '';
   const pdf = document.getElementById('pollyPdf'); if (pdf) pdf.value = '';
