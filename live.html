@@ -460,11 +460,15 @@ function subscribeCurrentQuestion() {
     // Same question — only phase changed; don't reset the full UI
     if (currentQ && currentQ.id === q.id) {
       const newPhase = q.phase || 'live';
-      if (newPhase !== presentPhase) {
+      const hideChanged = !!q.hideResults !== !!currentQ.hideResults;
+      if (newPhase !== presentPhase || hideChanged) {
         presentPhase = newPhase;
-        currentQ = q; // pick up latest postReveal config
+        currentQ = q; // pick up latest postReveal config + hideResults
         if (presentPhase === 'post_reveal' && q.postReveal?.enabled) {
           showPostRevealOverlay(q);
+        } else if (hideChanged) {
+          // Presenter flipped the hide toggle mid-question → repaint with current data.
+          renderChart(currentQ, window._lastLiveResponses || []);
         }
       }
       return;
@@ -682,6 +686,14 @@ function renderChart(q, responses) {
   const count = responses.length;
   document.getElementById('respCountBig').innerHTML = `${count} <span>response${count!==1?'s':''}</span>`;
   const el = document.getElementById('chartArea'); if (!el) return;
+
+  // Hide-until-reveal: presenter chose to keep the distribution hidden while answering.
+  // Show only the big count until reveal; then fall through to the full chart.
+  if (q.hideResults && !revealed) {
+    el.innerHTML = `<div style="text-align:center;color:var(--muted);font-size:clamp(14px,2vw,20px);padding:24px 12px;line-height:1.5;">🙈 Results hidden until the presenter reveals</div>`;
+    return;
+  }
+
   const displayType = q.displayType || 'bar';
 
   const isChoice = q.type === 'multiple_choice' || q.type === 'multiple_choice_multi';

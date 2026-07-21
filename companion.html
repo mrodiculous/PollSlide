@@ -257,6 +257,8 @@ let curQ = null;
 let responses = [];
 let viewMode = 'bars';
 let revealed = false;
+let hideResults = false;   // presenter's "hide results until reveal" preference (from Firebase)
+let _companionTally = false; // presentation reached the Final Results card (showTally on currentQuestion)
 let revealArmed = false;
 let revealTimer = null;
 let revealRemaining = 0;
@@ -433,6 +435,7 @@ function showTargetedQuestion(session, qIdx) {
       curQId = qId;
       resetReveal(qObj);
       viewMode = qObj.displayMode || 'bars';
+      hideResults = !!q.hideResults;   // honor presenter's hide-until-reveal from the first paint
       presentPhase = 'live';
       liveStartedAt = q.launchedAt || 0;
       watchResponses(qId);
@@ -457,11 +460,14 @@ function showTargetedQuestion(session, qIdx) {
       const newPhase = src.phase || 'live';
       const oldPrAt = (curQ && curQ.postRevealAt) || null;
       const newPrAt = src.postRevealAt || null;
+      // Presenter's hide-until-reveal preference (published on the live question).
+      const newHide = (src.hideResults !== undefined) ? !!src.hideResults : hideResults;
       if (curQ) {
         curQ = Object.assign({}, curQ, { phase: newPhase, postRevealAt: newPrAt });
         if (src.postReveal) curQ.postReveal = src.postReveal;
       }
-      if (newPhase !== presentPhase || newPrAt !== oldPrAt) {
+      if (newPhase !== presentPhase || newPrAt !== oldPrAt || newHide !== hideResults) {
+        hideResults = newHide;
         presentPhase = newPhase;
         if (presentPhase === 'revealed' || presentPhase === 'post_reveal') {
           if (!revealed) { revealed = true; if (revealTimer) { clearInterval(revealTimer); revealTimer = null; } }
@@ -504,6 +510,9 @@ function watchLiveQuestion() {
       showWaiting('Waiting for a question to go live…');
       return;
     }
+    // Presentation reached the Final Results card → show a compact tally + QR.
+    if (q.showTally) { if (!_companionTally) { _companionTally = true; renderCompanionTally(); } return; }
+    if (_companionTally) _companionTally = false;   // resumed a question → back to live results
     if (curQId !== q.id) {
       curQId = q.id;
       resetReveal(q);
@@ -997,6 +1006,51 @@ function donutPieChartHTML(mode, counts, total, correct, revealed, opts) {
     <svg viewBox="0 0 42 42" style="width:${sizePx}px;height:${sizePx}px;filter:drop-shadow(0 0 6px rgba(108,99,255,0.3));">${segs}</svg></div>${legend}`;
 }
 
+// ── Final Results tally (compact, for the companion overlay) ─────────────────
+function compTally(questions, all, code) {
+  all = all || {}; const qs = Array.isArray(questions) ? questions : [];
+  const byPerson = {}; let hasCorrect = false;
+  qs.forEach((q, i) => {
+    const _ca = q.correctAnswer;
+    if (_ca !== undefined && _ca !== null && _ca !== '' && !(Array.isArray(_ca) && _ca.length === 0)) hasCorrect = true;
+    const bucket = all['q' + i + '_stable_' + code] || {};
+    Object.entries(bucket).forEach(([pid, r]) => {
+      if (!byPerson[pid]) byPerson[pid] = { name: (r && r.name) || 'Anonymous', score: 0, elapsed: 0 };
+      if (r && r.name) byPerson[pid].name = r.name;
+      byPerson[pid].elapsed += (r && r.elapsed) || 0;
+      if (r && r.isCorrect === true) byPerson[pid].score += 1;
+      else if (r && typeof r.isCorrect === 'number') byPerson[pid].score += r.isCorrect;
+    });
+  });
+  const leaderboard = Object.values(byPerson).sort((a, b) => (b.score - a.score) || (a.elapsed - b.elapsed));
+  return { respondents: Object.keys(byPerson).length, hasCorrect, leaderboard };
+}
+function buildCompanionTallyHtml(t, code, pubOn) {
+  const medals = ['🥇','🥈','🥉'];
+  const lb = t.leaderboard.slice(0, 6);
+  const list = (t.hasCorrect && lb.length)
+    ? lb.map((p, i) => `<div class="p-row"><span class="p-rank">${i<3?medals[i]:'#'+(i+1)}</span><span class="p-name">${escapeHtml(p.name)}</span><span class="p-score" style="color:var(--accent3)">${Math.round(p.score*10)/10}</span></div>`).join('')
+    : `<div style="color:var(--muted);font-size:13px;text-align:center;padding:12px;">${t.respondents} took part 🎉</div>`;
+  const qr = pubOn ? `<div style="display:flex;flex-direction:column;align-items:center;gap:5px;margin-top:10px;"><div id="compTallyQR" style="background:#fff;border-radius:8px;padding:6px;width:96px;height:96px;"></div><div style="font-size:10px;color:var(--muted);text-align:center;">Scan for full results · ${escapeHtml(code)}</div></div>` : '';
+  return `<div class="resp-big" style="text-align:center;">🏆 <span>Final results</span></div>${list}${qr}`;
+}
+function renderCompanionTally() {
+  const area = document.getElementById('resultsArea'); if (!area) return;
+  Promise.all([
+    db.ref(`sessions/${sessionCode}/responses`).get(),
+    db.ref(`quiz_builder/${sessionCode}/questions`).get(),
+    db.ref(`quiz_builder/${sessionCode}/resultsPublic`).get().catch(() => null),
+  ]).then(([rs, qs, pub]) => {
+    const all = rs.exists() ? rs.val() : {};
+    const questions = qs.exists() ? (Array.isArray(qs.val()) ? qs.val() : Object.values(qs.val())) : [];
+    const t = compTally(questions, all, sessionCode);
+    const pubOn = !!(pub && pub.exists && pub.exists() && pub.val());
+    area.innerHTML = buildCompanionTallyHtml(t, sessionCode, pubOn);
+    if (pubOn) { const el = document.getElementById('compTallyQR'); if (el && window.QRCode) { try { new QRCode(el, { text: 'https://app.pollslide.com/results#' + sessionCode, width: 88, height: 88, colorDark: '#0b0b15', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H }); psBrandQR(el); } catch (e) {} } }
+    requestFitToContent();
+  }).catch(() => { area.innerHTML = `<div style="color:var(--muted);text-align:center;padding:20px;">Could not load results.</div>`; });
+}
+
 function renderResults() {
   const area = document.getElementById('resultsArea');
   if (!area || !curQ) return;
@@ -1012,6 +1066,16 @@ function renderResults() {
     const label = {leaderboard:'Leaderboard',podium:'Podium',scorecard:'Score Card',explainer:'Explainer'}[pr.type] || 'Post-Reveal';
     const qForPR = Object.assign({}, curQ, { postReveal: pr });
     area.innerHTML = `<div style="animation:fadeInScale .4s ease;" class="resp-big">${responses.length} <span>responses · ${label}</span></div>${buildPostRevealContent(qForPR, responses)}`;
+    requestFitToContent();
+    return;
+  }
+
+  // Hide-until-reveal: the presenter chose to keep the distribution hidden while people
+  // answer (published on the live question). Show only the count until they reveal — then
+  // this falls through to the full results + correct-answer highlight below.
+  if (hideResults && !revealed) {
+    area.innerHTML = `<div class="resp-big">${responses.length} <span>response${responses.length!==1?'s':''}</span></div>` +
+      `<div style="text-align:center;color:var(--muted);font-size:12px;padding:10px 6px;line-height:1.5;">🙈 Results hidden until reveal</div>`;
     requestFitToContent();
     return;
   }

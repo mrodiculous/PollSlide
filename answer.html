@@ -194,7 +194,10 @@ function parseLocation() {
     qa: params.get('qa') === '1'
   };
 }
-const { session: SESSION, qIndex: Q_INDEX, qa: QA_FLAG } = parseLocation();
+const _loc0 = parseLocation();
+const SESSION = _loc0.session;
+let   Q_INDEX = _loc0.qIndex;   // mutable: followLive advances it IN PLACE (no full page reload)
+const QA_FLAG = _loc0.qa;
 const QA_MODE = !!SESSION && !!QA_FLAG;
 // No question index (and not Q&A) → answer the whole set as one async form.
 const SURVEY_MODE = !!SESSION && !QA_MODE && (isNaN(Q_INDEX) || Q_INDEX < 0);
@@ -231,7 +234,7 @@ let answerStartTime = null;
 
 // stableQId is the Firebase key for this question's response bucket
 // Path: sessions/SESSION/responses/STABLE_QID/PARTICIPANT_ID
-const STABLE_QID = `q${Q_INDEX}_stable_${SESSION}`;
+let STABLE_QID = `q${Q_INDEX}_stable_${SESSION}`;   // recomputed by goToQuestion on advance
 
 // ─── RENDER ───────────────────────────────────────────────────────────────────
 function render(html) {
@@ -593,9 +596,27 @@ async function followLive(){
   db.ref(`sessions/${SESSION}/currentQuestion/qIndex`).on('value', snap => {
     const idx = snap.exists() ? Number(snap.val()) : NaN;
     if (!isNaN(idx) && idx >= 0 && idx !== Q_INDEX) {
-      location.hash = SESSION + '/' + idx;   // hashchange listener reloads into the new question
+      goToQuestion(idx);   // IN-PLACE swap — no full page reload (fast + reliable on mobile)
     }
   });
+}
+
+// Advance to a new live question WITHOUT reloading the page. A full reload re-inited
+// Firebase, re-authed, and re-fetched everything on every advance — slow and flaky on
+// phones (Rod: "taking forever, had to reload"). This swaps the question in place.
+function goToQuestion(idx){
+  if (idx === Q_INDEX) return;
+  Q_INDEX = idx;
+  STABLE_QID = `q${idx}_stable_${SESSION}`;
+  // Clean per-question interaction state so the new question starts fresh.
+  answered = false; submitting = false;
+  selectedOptions = new Set();
+  window._rating = null;
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  // Keep the URL correct but DON'T trigger the hashchange→reload path (replaceState
+  // doesn't fire hashchange), so the follow is instant.
+  try { history.replaceState(null, '', '#' + SESSION + '/' + idx); } catch(e){}
+  loadQuestion();
 }
 
 // ─── NAME ENTRY ───────────────────────────────────────────────────────────────

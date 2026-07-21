@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Results — PollSlide</title>
+<meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<style>
+  :root{--bg:#0d0d18;--surface:rgba(255,255,255,0.05);--surface2:rgba(255,255,255,0.08);--border:rgba(255,255,255,0.10);--text:#f4f4fc;--muted:#9090b8;--accent:#6c63ff;--accent3:#43e97b;--accent4:#f7b731;--accent2:#ff6584;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:radial-gradient(ellipse at 25% 15%,#1a1040 0%,#0d0d18 65%);color:var(--text);font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;padding:18px 14px 40px;}
+  .wrap{max-width:520px;margin:0 auto;}
+  .logo{display:flex;align-items:center;gap:8px;font-family:'Syne',sans-serif;font-weight:800;font-size:18px;margin-bottom:6px;}
+  h1{font-family:'Syne',sans-serif;font-weight:900;font-size:26px;margin:14px 0 2px;}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:18px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:14px;}
+  .lb-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:11px;margin-bottom:7px;background:var(--surface);border:1px solid var(--border);}
+  .lb-row.top{background:rgba(67,233,123,0.10);border-color:rgba(67,233,123,0.30);}
+  .lb-rank{min-width:30px;text-align:center;font-family:'Syne',sans-serif;font-weight:800;}
+  .lb-name{flex:1;font-family:'Syne',sans-serif;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .lb-score{font-family:'Syne',sans-serif;font-weight:900;color:var(--accent3);}
+  .stat-row{display:flex;gap:10px;margin-bottom:16px;}
+  .stat{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 8px;text-align:center;}
+  .stat b{font-family:'Syne',sans-serif;font-weight:900;font-size:22px;display:block;}
+  .stat span{font-size:11px;color:var(--muted);}
+  .qrow{padding:11px 0;border-bottom:1px solid var(--border);}
+  .qrow:last-child{border-bottom:none;}
+  .qtext{font-weight:600;font-size:14px;margin-bottom:6px;}
+  .qbar-bg{height:7px;background:rgba(255,255,255,0.08);border-radius:100px;overflow:hidden;}
+  .qbar-fill{height:100%;background:linear-gradient(90deg,var(--accent3),#6bffb5);border-radius:100px;}
+  .qmeta{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:5px;}
+  .center{text-align:center;color:var(--muted);padding:40px 16px;font-size:14px;line-height:1.6;}
+  .sect{font-family:'Syne',sans-serif;font-weight:800;font-size:13px;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin:20px 0 10px;}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="center">Loading results…</div>
+</div>
+
+<script>
+const FB_CONFIG = {
+  apiKey: "AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME",
+  authDomain: "echonest-live-survey.firebaseapp.com",
+  databaseURL: "https://echonest-live-survey-default-rtdb.firebaseio.com",
+  projectId: "echonest-live-survey",
+  storageBucket: "echonest-live-survey.firebasestorage.app",
+  messagingSenderId: "285529140046",
+  appId: "1:285529140046:web:983c1ee8000a2ca8f80c1f"
+};
+firebase.initializeApp(FB_CONFIG);
+const db = firebase.database();
+
+const CODE = (location.hash.replace('#','').split('/')[0] || new URLSearchParams(location.search).get('code') || '').toUpperCase().trim();
+const app = document.getElementById('app');
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+const logo = '<div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="20" height="20"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/></svg>PollSlide</div>';
+function shell(inner){ app.innerHTML = logo + inner; }
+
+// Same scoring as the presenter (computeTally) — leaderboard + per-question stats.
+function computeTally(questions, all, code) {
+  all = all || {}; const qs = Array.isArray(questions) ? questions : [];
+  const byPerson = {}; let hasCorrect = false; const perQuestion = [];
+  qs.forEach((q, i) => {
+    const isChoice = q.type === 'multiple_choice' || q.type === 'multiple_choice_multi';
+    const _ca = q.correctAnswer;
+    const qHasCorrect = _ca !== undefined && _ca !== null && _ca !== '' && !(Array.isArray(_ca) && _ca.length === 0);
+    if (qHasCorrect) hasCorrect = true;
+    const bucket = all['q' + i + '_stable_' + code] || {};
+    let correctSum = 0, total = 0; const optCounts = {};
+    Object.entries(bucket).forEach(([pid, r]) => {
+      total++;
+      if (!byPerson[pid]) byPerson[pid] = { name: (r && r.name) || 'Anonymous', score: 0, correct: 0, answered: 0, elapsed: 0 };
+      if (r && r.name) byPerson[pid].name = r.name;
+      byPerson[pid].answered += 1; byPerson[pid].elapsed += (r && r.elapsed) || 0;
+      if (r && r.isCorrect === true) { byPerson[pid].score += 1; byPerson[pid].correct += 1; correctSum += 1; }
+      else if (r && typeof r.isCorrect === 'number') { byPerson[pid].score += r.isCorrect; byPerson[pid].correct += r.isCorrect; correctSum += r.isCorrect; }
+      if (isChoice && r && r.answer !== undefined) { try { const a = JSON.parse(r.answer); (Array.isArray(a) ? a : [a]).forEach(v => { optCounts[v] = (optCounts[v] || 0) + 1; }); } catch (e) {} }
+    });
+    let topLabel = '';
+    if (isChoice && total > 0) { const top = Object.entries(optCounts).sort((a, b) => b[1] - a[1])[0]; if (top) topLabel = (((q.options || [])[Number(top[0])]) || {}).text || ''; }
+    perQuestion.push({ idx: i, text: q.text || ('Question ' + (i + 1)), type: q.type, total, correctPct: (qHasCorrect && total > 0) ? Math.round(correctSum / total * 100) : null, topLabel });
+  });
+  const leaderboard = Object.values(byPerson).sort((a, b) => (b.score - a.score) || (a.elapsed - b.elapsed));
+  return { respondents: Object.keys(byPerson).length, hasCorrect, totalQuestions: qs.length, leaderboard, perQuestion };
+}
+
+function render(questions, all){
+  const t = computeTally(questions, all, CODE);
+  const medals = ['🥇','🥈','🥉'];
+  let html = '<h1>Results</h1><div class="sub">Session ' + esc(CODE) + '</div>';
+  html += '<div class="stat-row"><div class="stat"><b>' + t.respondents + '</b><span>' + (t.respondents===1?'person':'people') + '</span></div><div class="stat"><b>' + t.totalQuestions + '</b><span>questions</span></div></div>';
+
+  if (t.hasCorrect) {
+    html += '<div class="sect">🏆 Leaderboard</div>';
+    if (!t.leaderboard.length) html += '<div class="center">No answers yet.</div>';
+    else html += t.leaderboard.slice(0, 50).map((p, i) =>
+      '<div class="lb-row' + (i<3?' top':'') + '"><div class="lb-rank">' + (i<3?medals[i]:'#'+(i+1)) + '</div><div class="lb-name">' + esc(p.name) + '</div><div class="lb-score">' + (Math.round(p.score*10)/10) + '</div></div>').join('');
+  } else {
+    html += '<div class="sect">Responses</div>';
+  }
+
+  html += '<div class="sect">By question</div><div class="card">';
+  html += t.perQuestion.map(q => {
+    const pct = q.correctPct;
+    return '<div class="qrow"><div class="qtext">' + esc(q.text) + '</div>' +
+      (pct !== null
+        ? '<div class="qbar-bg"><div class="qbar-fill" style="width:' + pct + '%"></div></div><div class="qmeta"><span>' + pct + '% correct</span><span>' + q.total + ' answered</span></div>'
+        : '<div class="qmeta"><span>' + (q.topLabel ? 'Top: ' + esc(q.topLabel) : 'Open responses') + '</span><span>' + q.total + ' answered</span></div>') +
+      '</div>';
+  }).join('') + '</div>';
+
+  html += '<div class="center" style="padding:18px 0 0;font-size:12px;">Live results · updates automatically</div>';
+  shell(html);
+}
+
+function boot(){
+  if (!CODE) { shell('<div class="center">No session code. Scan the QR again or open<br><b>pollslide.com/results</b> with a code.</div>'); return; }
+  // Gate on the presenter's opt-in flag.
+  db.ref('quiz_builder/' + CODE + '/resultsPublic').get().then(pub => {
+    if (!(pub.exists() && pub.val())) {
+      shell('<div class="center">🔒 The results for this session aren\'t shared.<br><br>The presenter can turn on <b>"Let the audience see results"</b> to publish them here.</div>');
+      return;
+    }
+    db.ref('quiz_builder/' + CODE + '/questions').get().then(qs => {
+      const questions = qs.exists() ? (Array.isArray(qs.val()) ? qs.val() : Object.values(qs.val())) : [];
+      if (!questions.length) { shell('<div class="center">No questions found for this session.</div>'); return; }
+      // Live-updating responses.
+      db.ref('sessions/' + CODE + '/responses').on('value', snap => {
+        render(questions, snap.exists() ? snap.val() : {});
+      });
+    });
+  }).catch(() => shell('<div class="center">Could not load results. Check your connection.</div>'));
+}
+boot();
+</script>
+</body>
+</html>
