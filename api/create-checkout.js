@@ -9,6 +9,13 @@
 //   Team Small Annual:   pollslide_team_small_annual
 //   Team Large Monthly:  pollslide_team_large_monthly
 //   Team Large Annual:   pollslide_team_large_annual
+//   Credit pack 20:      pollslide_credits_20     (one-time)
+//   Credit pack 100:     pollslide_credits_100    (one-time)
+//   Credit pack 200:     pollslide_credits_200    (one-time)
+//   Credit pack 500:     pollslide_credits_500    (one-time)
+//
+// Two purchase types: a subscription PLAN (mode:'subscription') or a one-time
+// CREDIT PACK (mode:'payment') — the request body decides which.
 //
 // Vercel Environment Variables needed (only 3):
 //   STRIPE_SECRET_KEY     = sk_test_... (sandbox) or sk_live_... (production)
@@ -34,18 +41,41 @@ module.exports = async function handler(req, res) {
   const stripe  = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2026-05-27.dahlia' });
   const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com';
 
-  const { email, uid, plan, billing } = req.body || {};
+  const { email, uid, plan, billing, credits } = req.body || {};
 
-  // Validate inputs
-  if (!email || !uid || !plan) {
-    return res.status(400).json({ error: 'Missing required fields: email, uid, plan' });
-  }
-  if (!['pro', 'team_small', 'team_large'].includes(plan)) {
-    return res.status(400).json({ error: 'plan must be "pro", "team_small" or "team_large"' });
+  // Validate the always-required fields
+  if (!email || !uid) {
+    return res.status(400).json({ error: 'Missing required fields: email, uid' });
   }
 
-  const cycle = billing === 'annual' ? 'annual' : 'monthly';
-  const lookupKey = 'pollslide_' + plan + '_' + cycle;
+  // Decide what's being bought: a one-time CREDIT PACK or a subscription PLAN.
+  const CREDIT_PACKS = { 20: true, 100: true, 200: true, 500: true };
+  const isCredits = credits !== undefined && credits !== null && String(credits) !== '';
+
+  let lookupKey, mode, successUrl, sessionMeta, extra;
+  if (isCredits) {
+    const n = parseInt(credits, 10);
+    if (!CREDIT_PACKS[n]) {
+      return res.status(400).json({ error: 'credits must be one of 20, 100, 200, 500' });
+    }
+    lookupKey   = 'pollslide_credits_' + n;
+    mode        = 'payment';                                  // one-time, NOT recurring
+    successUrl  = APP_URL + '/presenter?credits=' + n;
+    sessionMeta = { firebase_uid: uid, kind: 'credits', credits: String(n) };
+    // Stamp the payment intent too, so the webhook can read it from either object.
+    extra       = { payment_intent_data: { metadata: { firebase_uid: uid, kind: 'credits', credits: String(n) } } };
+  } else {
+    if (!plan) return res.status(400).json({ error: 'Missing required field: plan (or credits)' });
+    if (!['pro', 'team_small', 'team_large'].includes(plan)) {
+      return res.status(400).json({ error: 'plan must be "pro", "team_small" or "team_large"' });
+    }
+    const cycle = billing === 'annual' ? 'annual' : 'monthly';
+    lookupKey   = 'pollslide_' + plan + '_' + cycle;
+    mode        = 'subscription';
+    successUrl  = APP_URL + '/presenter?upgrade=success&plan=' + plan;
+    sessionMeta = { firebase_uid: uid, plan: plan, billing: cycle };
+    extra       = { subscription_data: { metadata: { firebase_uid: uid, plan: plan } } };
+  }
 
   try {
     // Fetch price by lookup key — this is set directly in Stripe dashboard
@@ -76,27 +106,18 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // Create the Checkout Session
+    // Create the Checkout Session (mode + metadata + success URL vary by purchase type)
     const params = {
       customer:             customer.id,
       payment_method_types: ['card'],
       line_items:           [{ price: priceId, quantity: 1 }],
-      mode:                 'subscription',
-      success_url:          APP_URL + '/presenter?upgrade=success&plan=' + plan,
+      mode:                 mode,
+      success_url:          successUrl,
       cancel_url:           APP_URL + '/presenter?upgrade=cancelled',
       allow_promotion_codes: true,
       billing_address_collection: 'auto',
-      metadata: {
-        firebase_uid: uid,
-        plan:         plan,
-        billing:      cycle,
-      },
-      subscription_data: {
-        metadata: {
-          firebase_uid: uid,
-          plan:         plan,
-        },
-      },
+      metadata:             sessionMeta,
+      ...extra,
     };
 
     // Consumer-law compliance, each opt-in via env so checkout never breaks

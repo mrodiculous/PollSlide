@@ -71,6 +71,26 @@ async function updateUserTier(uid, tier, stripeCustomerId) {
   await syncWorkspaceTier(db, uid, tier);
 }
 
+// One-time credit-pack purchase → add credits to users/<uid>/aiCredits.
+// IDEMPOTENT: Stripe may deliver checkout.session.completed more than once, so we
+// atomically CLAIM the session id first (only the first delivery wins). If the credit
+// write then fails, we release the claim so Stripe's automatic retry re-processes it —
+// so a purchase is never double-credited and never silently lost.
+async function addCredits(uid, credits, sessionId) {
+  const db = admin.database(getFirebaseApp());
+  const guardRef = db.ref(`admin/credit_purchases/${sessionId}`);
+  const claim = await guardRef.transaction(cur => (cur ? undefined : { uid, credits, at: Date.now(), status: 'claimed' }));
+  if (!claim.committed) { console.log(`Credit purchase ${sessionId} already processed — skipping`); return; }
+  try {
+    await db.ref(`users/${uid}/aiCredits`).transaction(n => (n || 0) + credits);
+    await guardRef.update({ status: 'done', doneAt: Date.now() });
+    console.log(`Added ${credits} credits to ${uid} (session ${sessionId})`);
+  } catch (e) {
+    await guardRef.remove().catch(() => {});   // release the claim so the retry can re-process
+    throw e;
+  }
+}
+
 // If this user OWNS a team workspace, keep the workspace and its members in
 // step with the owner's subscription: workspaces/<id>/tier drives the seat
 // limit in api/team.js, and members inherit their tier because the owner pays.
@@ -150,12 +170,24 @@ module.exports = async function handler(req, res) {
     switch (event.type) {
 
       case 'checkout.session.completed': {
-        // User completed checkout — activate their plan
         const session = event.data.object;
         const uid = session.metadata?.firebase_uid;
-        const plan = session.metadata?.plan || 'pro';
         const email = session.customer_details?.email || session.customer_email;
 
+        // One-time CREDIT-PACK purchase — add credits, do NOT touch the subscription tier.
+        if (session.metadata?.kind === 'credits') {
+          const n = parseInt(session.metadata.credits, 10) || 0;
+          if (uid && n > 0) {
+            await addCredits(uid, n, session.id);
+            if (email) await sendEmailNotification('receipt', email, {
+              plan: n + ' Polly credits', amount: (session.amount_total / 100).toFixed(2), period: 'One-time',
+            });
+          }
+          break;
+        }
+
+        // Subscription checkout — activate their plan
+        const plan = session.metadata?.plan || 'pro';
         if (uid) {
           await updateUserTier(uid, plan, session.customer);
           if (email) {

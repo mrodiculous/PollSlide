@@ -1004,28 +1004,61 @@ function tierLimits() { return TIERS[normalizeTier(userTier)] || TIERS.free; }
 function aiQuotaLimit() { const t = TIERS[normalizeTier(userTier)] || TIERS.free; return (typeof t.aiMonthly === 'number') ? t.aiMonthly : 5; }
 function aiMonthKey()   { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1); }
 async function aiUsage() {
-  if (!userId) return { used: 0, limit: aiQuotaLimit() };
+  if (!userId) return { used: 0, limit: aiQuotaLimit(), credits: 0 };
   try {
     const s = await db.ref('users/' + userId).get();
     const v = s.exists() ? s.val() : {};
     const used = (v.aiQuotaMonth === aiMonthKey()) ? (v.aiUsedThisMonth || 0) : 0; // new month → 0
-    return { used, limit: aiQuotaLimit() };
-  } catch (e) { return { used: 0, limit: aiQuotaLimit() }; }
+    const credits = Math.max(0, Math.floor(v.aiCredits || 0));                     // purchased, carry over
+    return { used, limit: aiQuotaLimit(), credits };
+  } catch (e) { return { used: 0, limit: aiQuotaLimit(), credits: 0 }; }
 }
-// Returns true if the user may generate; otherwise toasts + opens the upgrade picker.
+// Returns true if the user may generate. Mirrors the server rule (lib/quota): allow
+// when the monthly allowance has room OR purchased credits remain. When BOTH are empty,
+// offer the top-up / upgrade picker. (The server is the real gate; this is a friendly
+// pre-check that avoids a wasted round-trip.)
 async function aiQuotaOK() {
-  const { used, limit } = await aiUsage();
+  const { used, limit, credits } = await aiUsage();
   if (limit < 0) return true; // unlimited
-  if (used >= limit) {
-    toast(`You've used all ${limit} Polly generations on your ${ (TIERS[normalizeTier(userTier)]||TIERS.free).name } plan this month. Upgrade for more.`, 'warn');
-    try { openPlanPicker(); } catch (e) {}
-    return false;
-  }
-  return true;
+  const monthlyLeft = Math.max(0, limit - used);
+  if (monthlyLeft > 0 || credits > 0) return true;
+  toast(`You're out of Polly generations this month. Add credits or upgrade to keep going.`, 'warn');
+  try { openPlanPicker(); } catch (e) {}
+  return false;
 }
 // NOTE: the counter is incremented SERVER-SIDE (api/polly* via lib/quota) and the fields
 // are locked from client writes by DB rules — so there is intentionally no client aiBump().
 // aiUsage()/aiQuotaOK() above only READ the counter for an instant pre-check.
+
+// ── Buy Polly credit packs (one-time top-ups; carry over, never expire) ──────
+// Server-fulfilled: /api/create-checkout (mode:'payment') → Stripe → webhook adds to
+// users/<uid>/aiCredits. Credits are spent only AFTER the monthly allowance runs out.
+const CREDIT_PACKS = [ { n:20, price:8 }, { n:100, price:30 }, { n:200, price:50 }, { n:500, price:100 } ];
+async function buyCredits(n, ev) {
+  if (!currentUser) { toast('Please sign in first.', 'warn'); return; }
+  const btn = (ev && ev.target && ev.target.closest) ? ev.target.closest('button') : null;
+  const orig = btn ? btn.innerHTML : null;
+  if (btn) { btn.innerHTML = 'Redirecting…'; btn.disabled = true; }
+  try {
+    const r = await fetch('/api/create-checkout', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: currentUser.email, uid: currentUser.uid, credits: n })
+    });
+    const data = await r.json().catch(() => null);
+    if (data && data.url) { window.location.href = data.url; return; }
+    if (btn) { btn.innerHTML = orig; btn.disabled = false; }
+    toast('Credit checkout error: ' + ((data && data.error) || 'API not deployed yet'), 'danger');
+  } catch (e) {
+    if (btn) { btn.innerHTML = orig; btn.disabled = false; }
+    toast('Could not connect to checkout.', 'danger');
+  }
+}
+// Refresh any on-screen credit balance (picker balance + optional near-Polly badge). Safe if absent.
+function refreshCreditBadge() {
+  aiUsage().then(u => {
+    document.querySelectorAll('#ppCreditBal, #pollyCreditBadge').forEach(el => { el.textContent = u.credits; });
+  }).catch(() => {});
+}
 
 // Safari ITP (Intelligent Tracking Prevention) aggressively clears indexedDB and
 // localStorage, which Firebase LOCAL persistence uses. This causes random sign-outs.
@@ -1040,8 +1073,12 @@ const _isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
     const params = new URLSearchParams(window.location.search);
     const upgrade = params.get('upgrade');
     const plan = params.get('plan');
+    const credits = params.get('credits');
     if (upgrade === 'success' && plan) {
       sessionStorage.setItem('ps_upgrade_success', plan);
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (credits) {
+      sessionStorage.setItem('ps_credits_success', credits);
       window.history.replaceState({}, '', window.location.pathname);
     } else if (upgrade === 'cancelled') {
       window.history.replaceState({}, '', window.location.pathname);
@@ -1082,6 +1119,17 @@ auth.onAuthStateChanged(user => {
         setTimeout(function() {
           const planName = upgradedPlan.charAt(0).toUpperCase() + upgradedPlan.slice(1);
           toast('🎉 Welcome to ' + planName + '! Your plan is now active.', 'success');
+        }, 1800);
+      }
+    } catch(e) {}
+    // Post-Stripe credit-pack toast (returned from a one-time credit purchase)
+    try {
+      const boughtCredits = sessionStorage.getItem('ps_credits_success');
+      if (boughtCredits) {
+        sessionStorage.removeItem('ps_credits_success');
+        setTimeout(function() {
+          toast('⚡ ' + boughtCredits + ' Polly credits added — they never expire!', 'success');
+          refreshCreditBadge();
         }, 1800);
       }
     } catch(e) {}
@@ -1499,6 +1547,16 @@ function openPlanPicker() {
         </div>
       </div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding:0;" id="ppCards"></div>
+      <div style="padding:16px 26px;border-top:1px solid rgba(255,255,255,0.08);">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
+          <div style="font-family:Syne,sans-serif;font-weight:800;font-size:15px;color:#f4f4fc;">⚡ Polly credit top-ups</div>
+          <div style="font-size:12px;color:#9090b8;">Balance: <strong id="ppCreditBal" style="color:#43e97b;">…</strong> credits</div>
+        </div>
+        <div style="font-size:12px;color:#9090b8;line-height:1.5;margin-bottom:12px;">Credits <strong style="color:#f4f4fc;">never expire</strong> — they roll over month to month. We always use your monthly credits first, so top-ups are only touched once this month's run out.</div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
+          ${CREDIT_PACKS.map(function(p){return '<button onclick="buyCredits('+p.n+', event)" style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.15);border-radius:12px;padding:14px 8px;cursor:pointer;text-align:center;color:#f4f4fc;"><div style="font-family:Syne,sans-serif;font-weight:800;font-size:22px;">'+p.n+'</div><div style="font-size:11px;color:#9090b8;margin-bottom:6px;">credits</div><div style="font-family:Syne,sans-serif;font-weight:700;font-size:15px;color:#43e97b;">$'+p.price+'</div></button>';}).join('')}
+        </div>
+      </div>
       <div style="padding:14px 26px;border-top:1px solid var(--border);text-align:center;">
         <a href="https://pollslide.com/pricing" target="_blank" style="font-size:12px;color:'+D.muted+';">'See full comparison at pollslide.com/pricing →</a>
       </div>
@@ -1555,6 +1613,8 @@ function openPlanPicker() {
     const existing = overlay.querySelector('[data-pp-box]');
     if (existing) existing.replaceWith(box);
     else { box.dataset.ppBox = '1'; overlay.appendChild(box); }
+    // Fill in the live credit balance (async read; the '…' placeholder shows meanwhile).
+    aiUsage().then(u => { const el = document.getElementById('ppCreditBal'); if (el) el.textContent = u.credits; }).catch(()=>{});
   }
 
   window.pickerSetBilling = function(b) { pickerBilling = b; render(); };
