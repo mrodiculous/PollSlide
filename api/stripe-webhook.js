@@ -53,6 +53,10 @@ const PRICE_TO_TIER = {
 };
 const VALID_TIERS = ['pro', 'team_small', 'team_large'];
 
+// Pretty tier names for emails — the naive charAt-uppercase produced "Team_small".
+const TIER_LABELS = { free: 'Free', pro: 'Pro', team_small: 'Team Small', team_large: 'Team Large' };
+function planLabel(plan) { return TIER_LABELS[plan] || (plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : 'Pro'); }
+
 function getTierFromPriceId(priceId) {
   return PRICE_TO_TIER[priceId] || null; // null = unknown (let callers fall through)
 }
@@ -236,9 +240,9 @@ module.exports = async function handler(req, res) {
         if (uid) {
           await updateUserTier(uid, plan, session.customer);
           if (email) {
-            await sendEmailNotification('upgrade', email, { plan: plan.charAt(0).toUpperCase() + plan.slice(1) });
+            await sendEmailNotification('upgrade', email, { plan: planLabel(plan), planKey: plan });
             await sendEmailNotification('receipt', email, {
-              plan: plan.charAt(0).toUpperCase() + plan.slice(1),
+              plan: planLabel(plan),
               amount: (session.amount_total / 100).toFixed(2),
               period: session.metadata?.billing === 'annual' ? 'Annual' : 'Monthly',
             });
@@ -267,7 +271,15 @@ module.exports = async function handler(req, res) {
 
         if (uid) {
           if (status === 'active') {
+            // This event also fires on renewals / card updates, so only email when the
+            // PLAN actually changed (e.g. a Customer-Portal switch) — not every renewal.
+            const db = admin.database(getFirebaseApp());
+            const prevTier = (await db.ref(`users/${uid}/tier`).get()).val();
             await updateUserTier(uid, tier, sub.customer);
+            if (prevTier && prevTier !== tier && VALID_TIERS.includes(tier)) {
+              const to = (await db.ref(`users/${uid}/email`).get()).val();
+              if (to) await sendEmailNotification('upgrade', to, { plan: planLabel(tier), planKey: tier });
+            }
           } else if (status === 'past_due') {
             // Don't downgrade yet — give them the 7-day grace period
             await admin.database(getFirebaseApp()).ref(`users/${uid}/subscriptionStatus`).set('past_due');
@@ -289,7 +301,7 @@ module.exports = async function handler(req, res) {
           const emailSnap = await db.ref(`users/${uid}/email`).get();
           if (emailSnap.val()) {
             await sendEmailNotification('downgrade', emailSnap.val(), {
-              oldPlan: oldPlan.charAt(0).toUpperCase() + oldPlan.slice(1),
+              oldPlan: planLabel(oldPlan),
             });
           }
         }
@@ -301,10 +313,10 @@ module.exports = async function handler(req, res) {
         const invoice = event.data.object;
         const uid = invoice.subscription_details?.metadata?.firebase_uid;
         const email = invoice.customer_email;
-        const plan = getTierFromPriceId(invoice.lines?.data[0]?.price?.id) || 'Pro';
+        const plan = getTierFromPriceId(invoice.lines?.data[0]?.price?.id) || 'pro';
         if (email) {
           await sendEmailNotification('payment_failed', email, {
-            plan: plan.charAt(0).toUpperCase() + plan.slice(1),
+            plan: planLabel(plan),
           });
         }
         if (uid) {

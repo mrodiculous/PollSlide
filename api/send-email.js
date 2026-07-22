@@ -127,19 +127,27 @@ const TEMPLATES = {
     `, 'https://app.pollslide.com/presenter', 'Create your first poll →')
   }),
 
-  upgrade: (data) => ({
-    subject: `You're now on PollSlide ${data.plan || 'Pro'}!`,
-    html: baseLayout('Upgrade Confirmation', `
-      <h1 style="font-size:24px;font-weight:800;margin:0 0 12px;color:#15152a;">You're on ${data.plan || 'Pro'}! 🎉</h1>
-      <p style="font-size:16px;color:#5a5a78;margin:0 0 18px;">Your upgrade is active. Here's what you now have:</p>
-      <table width="100%" cellpadding="0" cellspacing="0">
-        <tr><td style="padding:10px 14px;border-bottom:1px solid #f0f0f4;"><span style="color:${BRAND_GREEN};">✓</span> Unlimited participants</td></tr>
-        <tr><td style="padding:10px 14px;border-bottom:1px solid #f0f0f4;"><span style="color:${BRAND_GREEN};">✓</span> Unlimited presentations</td></tr>
-        <tr><td style="padding:10px 14px;border-bottom:1px solid #f0f0f4;"><span style="color:${BRAND_GREEN};">✓</span> Response reports & CSV export</td></tr>
-        <tr><td style="padding:10px 14px;"><span style="color:${BRAND_GREEN};">✓</span> Polly AI question designer</td></tr>
-      </table>
-    `, 'https://app.pollslide.com/presenter', 'Open PollSlide')
-  }),
+  upgrade: (data) => {
+    // Tier-aware feature list so a Team subscriber doesn't get Pro's benefits (or the
+    // wrong Polly limit). planKey is the raw tier ('pro'|'team_small'|'team_large').
+    const FEATS = {
+      pro:        ['Unlimited participants & presentations', 'Response reports, CSV export & data history', 'Polly AI — 20 generations / month', 'Mac companion on any platform'],
+      team_small: ['Everything in Pro', 'Up to 5 team members', 'Shared question & deck library', 'Team admin panel & roles', 'Polly AI — 100 generations / month'],
+      team_large: ['Everything in Team Small', 'Up to 25 team members', 'Org-wide usage analytics', 'Bulk member management', 'Polly AI — 300 generations / month'],
+    };
+    const feats = FEATS[data.planKey] || FEATS.pro;
+    const rows = feats.map((f, i) =>
+      `<tr><td style="padding:10px 14px;${i < feats.length - 1 ? 'border-bottom:1px solid #f0f0f4;' : ''}"><span style="color:${BRAND_GREEN};">✓</span> ${f}</td></tr>`
+    ).join('');
+    return {
+      subject: `You're now on PollSlide ${data.plan || 'Pro'}!`,
+      html: baseLayout('Plan Confirmation', `
+        <h1 style="font-size:24px;font-weight:800;margin:0 0 12px;color:#15152a;">You're on ${data.plan || 'Pro'}! 🎉</h1>
+        <p style="font-size:16px;color:#5a5a78;margin:0 0 18px;">Your plan is active. Here's what you now have:</p>
+        <table width="100%" cellpadding="0" cellspacing="0">${rows}</table>
+      `, 'https://app.pollslide.com/presenter', 'Open PollSlide')
+    };
+  },
 
   receipt: (data) => ({
     subject: `PollSlide receipt — $${data.amount || '12.00'}`,
