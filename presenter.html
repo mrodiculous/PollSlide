@@ -1141,6 +1141,17 @@ auth.onAuthStateChanged(user => {
       userTier = ['pro','team','white','team_small','team_large'].includes(t) ? t : 'free';
       try { await acceptPendingInvite(); await validateMembership(); } catch(e) {}
       loadPresentations();
+      // Keep the plan LIVE so a Stripe change (e.g. a Customer-Portal plan switch) shows
+      // up without a manual reload. Attached AFTER userTier is set, so the immediate fire
+      // is a no-op; only a real change toasts. Reads-of-userTier elsewhere pick up the new
+      // value automatically (menu/picker/quota all read it at call time).
+      db.ref(`users/${userId}/tier`).on('value', s => {
+        const nt = s.val();
+        const next = ['pro','team','white','team_small','team_large'].includes(nt) ? nt : 'free';
+        if (next === userTier) return;
+        userTier = next;
+        try { toast('Your plan is now ' + (TIERS[normalizeTier(next)] || TIERS.free).name + '.', 'success'); } catch(e) {}
+      });
     }).catch(() => { userTier = 'free'; loadPresentations(); });
 
     // Write email + metadata to users/{uid} directly (needed for admin panel reads)

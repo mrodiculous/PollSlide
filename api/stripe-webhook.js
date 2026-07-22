@@ -54,7 +54,30 @@ const PRICE_TO_TIER = {
 const VALID_TIERS = ['pro', 'team_small', 'team_large'];
 
 function getTierFromPriceId(priceId) {
-  return PRICE_TO_TIER[priceId] || 'pro'; // default to pro if unknown
+  return PRICE_TO_TIER[priceId] || null; // null = unknown (let callers fall through)
+}
+
+// The price's lookup key IS the current plan — e.g. "pollslide_team_small_monthly" →
+// "team_small". This reflects the REAL plan after a Customer-Portal switch, unlike the
+// subscription's metadata.plan (stamped at checkout, never updated on a switch).
+function planFromLookupKey(lookupKey) {
+  if (!lookupKey || lookupKey.indexOf('pollslide_') !== 0) return null;
+  const plan = lookupKey.replace('pollslide_', '').replace(/_(monthly|annual)$/, '');
+  return VALID_TIERS.includes(plan) ? plan : null;
+}
+
+// Resolve the true current tier for a subscription: prefer the live price's lookup key,
+// then the price-ID env map, and only as a last resort the (possibly stale) metadata.
+async function tierForSubscription(stripe, sub) {
+  const priceItem = sub.items && sub.items.data && sub.items.data[0] && sub.items.data[0].price;
+  const priceId = priceItem && priceItem.id;
+  let lookupKey = priceItem && priceItem.lookup_key;
+  if (!lookupKey && priceId) {
+    try { const p = await stripe.prices.retrieve(priceId); lookupKey = p.lookup_key; } catch (e) {}
+  }
+  return planFromLookupKey(lookupKey)
+      || getTierFromPriceId(priceId)
+      || (VALID_TIERS.includes(sub.metadata && sub.metadata.plan) ? sub.metadata.plan : 'pro');
 }
 
 async function updateUserTier(uid, tier, stripeCustomerId) {
@@ -231,11 +254,15 @@ module.exports = async function handler(req, res) {
       case 'customer.subscription.updated': {
         // Subscription changed (upgrade, downgrade, renewal)
         const sub = event.data.object;
-        const uid = sub.metadata?.firebase_uid;
-        const priceId = sub.items?.data[0]?.price?.id;
-        // Prefer the plan we stamped at checkout; fall back to the price-ID map.
-        const metaPlan = sub.metadata?.plan;
-        const tier = VALID_TIERS.includes(metaPlan) ? metaPlan : getTierFromPriceId(priceId);
+        // uid from the sub metadata, or fall back to the customer's metadata (portal
+        // switches keep both, but be defensive).
+        let uid = sub.metadata?.firebase_uid;
+        if (!uid && sub.customer) {
+          try { const cust = await stripe.customers.retrieve(sub.customer); uid = cust && cust.metadata && cust.metadata.firebase_uid; } catch (e) {}
+        }
+        // Derive the tier from the CURRENT price (lookup key) — NOT the stale metadata.plan,
+        // which doesn't change on a Customer-Portal plan switch.
+        const tier = await tierForSubscription(stripe, sub);
         const status = sub.status; // active, past_due, canceled, etc.
 
         if (uid) {
