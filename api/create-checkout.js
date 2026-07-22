@@ -106,6 +106,22 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    // ── DUPLICATE-SUBSCRIPTION GUARD ─────────────────────────────────────────
+    // A new subscription checkout must NOT run if this customer already has a live
+    // one — otherwise switching plans (or a double-click) creates a SECOND active
+    // subscription and charges them twice. Plan changes go through the Customer
+    // Portal (Stripe prorates the switch). Credit packs (mode:'payment') are exempt.
+    if (mode === 'subscription') {
+      const existing = await stripe.subscriptions.list({ customer: customer.id, status: 'all', limit: 100 });
+      const live = existing.data.filter(s => ['active', 'trialing', 'past_due', 'unpaid'].includes(s.status));
+      if (live.length > 0) {
+        return res.status(200).json({
+          alreadySubscribed: true,
+          message: 'You already have an active subscription. Use "Manage billing" to switch plans — that keeps a single subscription and prorates the change.'
+        });
+      }
+    }
+
     // Create the Checkout Session (mode + metadata + success URL vary by purchase type)
     const params = {
       customer:             customer.id,

@@ -1585,12 +1585,18 @@ function openPlanPicker() {
       // The Free card, for a paying user, is a DOWNGRADE → cancel via the billing
       // portal (you can't "checkout" for $0). Stripe drops them to Free at period end.
       const isDowngradeToFree = p.key === 'free' && isPaidUser;
+      // A paying user moving to a DIFFERENT paid plan is a SWITCH — it MUST go through
+      // the billing portal (Stripe changes the one subscription with proration). Running
+      // a fresh checkout would create a SECOND active subscription = double billing.
+      const isPaidSwitch = isPaidUser && !isCurrent && p.key !== 'free';
       const ctaText = isCurrent
         ? (isPaidUser ? 'Manage billing' : 'Current plan')
         : isDowngradeToFree ? 'Downgrade (cancel plan)'
+        : isPaidSwitch ? 'Switch to ' + p.name
         : 'Upgrade to ' + p.name;
       const ctaOnclick_billing = isCurrent && isPaidUser ? "openBillingPortal()" : null;
-      const ctaOnclick = ctaOnclick_billing || (isCurrent ? '' : isDowngradeToFree ? "openBillingPortal()" : "pickerCheckout('" + p.key + "', event)");
+      // Only FREE users ever hit checkout (they have no subscription to duplicate).
+      const ctaOnclick = ctaOnclick_billing || (isCurrent ? '' : (isDowngradeToFree || isPaidSwitch) ? "openBillingPortal()" : "pickerCheckout('" + p.key + "', event)");
 
       card.innerHTML =
         (p.popular ? '<div style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:'+D.accent+';color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:0 0 8px 8px;">★ Most popular</div>' : '') +
@@ -1634,6 +1640,13 @@ function openPlanPicker() {
       const text = await r.text();
       let data; try { data = JSON.parse(text); } catch(_) { data = null; }
       if (data && data.url) { window.location.href = data.url; return; }
+      // Server refused a 2nd subscription → send them to the portal to switch instead.
+      if (data && data.alreadySubscribed) {
+        restore();
+        toast(data.message || 'You already have a subscription — opening billing to switch plans.', 'info');
+        try { openBillingPortal(); } catch(e) {}
+        return;
+      }
       restore();
       if (!data) {
         // Genuinely no JSON body → the endpoint isn't deployed / crashed.
@@ -6967,8 +6980,13 @@ function renderPresentSlide(idx) {
 <!-- ── PRESENT MODE OVERLAY ───────────────────────────────────────────────── -->
 <div id="presentOverlay" style="display:none;position:fixed;inset:0;z-index:99990;background:var(--p-bg);flex-direction:column;padding:18px 22px 14px;">
   <button onclick="closePresentMode()" style="position:absolute;top:12px;left:50%;transform:translateX(-50%);background:var(--p-card-05);border:1px solid var(--p-line-10);border-radius:20px;color:var(--p-30);font-size:11px;font-family:'DM Sans',sans-serif;padding:4px 14px;cursor:pointer;z-index:1;letter-spacing:0.04em;">✕ Exit <kbd style="font-size:9px;opacity:0.6;">ESC</kbd></button>
-  <button id="presentThemeBtn" onclick="togglePresentTheme()" title="Light / dark mode" style="position:absolute;bottom:14px;right:16px;background:var(--p-card-05);border:1px solid var(--p-line-10);border-radius:20px;font-size:15px;line-height:1;padding:5px 10px;cursor:pointer;z-index:3;">☀️</button>
-  <button id="presentTallyBtn" onclick="togglePresentTally()" title="Show a Final Results card after the last question" style="position:absolute;bottom:14px;left:16px;background:var(--p-card-05);border:1px solid var(--p-line-10);border-radius:20px;font-size:12px;font-family:Syne,sans-serif;font-weight:700;color:var(--p-text);line-height:1;padding:6px 12px;cursor:pointer;z-index:3;">🏆 Final card</button>
+  <!-- Bottom-right control cluster: tally toggle sits just LEFT of the light-mode toggle.
+       Flex so they never overlap the centre nav bar / each other, keep a fixed size, and
+       wrap onto a second line if the screen gets narrow (dynamic on resize). -->
+  <div id="presentBottomControls" style="position:absolute;bottom:14px;right:16px;z-index:3;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;max-width:calc(50% - 24px);">
+    <button id="presentTallyBtn" onclick="togglePresentTally()" title="Show a Final Results card after the last question" style="background:var(--p-card-05);border:1px solid var(--p-line-10);border-radius:20px;font-size:12px;font-family:Syne,sans-serif;font-weight:700;color:var(--p-text);line-height:1;padding:6px 12px;cursor:pointer;white-space:nowrap;flex-shrink:0;">🏆 Final card</button>
+    <button id="presentThemeBtn" onclick="togglePresentTheme()" title="Light / dark mode" style="background:var(--p-card-05);border:1px solid var(--p-line-10);border-radius:20px;font-size:15px;line-height:1;padding:5px 10px;cursor:pointer;flex-shrink:0;">☀️</button>
+  </div>
   <button id="presentQaBtn" onclick="togglePresentQA()" title="Show audience questions (Q)" style="position:absolute;top:10px;right:calc(50% + 70px);background:var(--p-card-05);border:1px solid var(--p-line-10);border-radius:20px;font-size:13px;font-family:Syne,sans-serif;font-weight:700;color:var(--p-text);line-height:1;padding:7px 14px;cursor:pointer;z-index:3;">💬 Questions</button>
   <!-- Audience Q&A — projected, ranked by votes, with a scan-to-ask QR -->
   <div id="presentQaPanel" style="display:none;position:absolute;inset:0;background:var(--p-bg);z-index:2;flex-direction:column;padding:46px 7vw 72px;">

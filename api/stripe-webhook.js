@@ -71,6 +71,24 @@ async function updateUserTier(uid, tier, stripeCustomerId) {
   await syncWorkspaceTier(db, uid, tier);
 }
 
+// Defense in depth against duplicate subscriptions: when a new subscription checkout
+// completes, cancel any OTHER active/trialing subscriptions on that customer, keeping
+// only the newest (keepSubId). The create-checkout guard already blocks a 2nd checkout,
+// so this only fires on a race or legacy duplicates — a customer must never carry two.
+async function cancelOtherSubscriptions(stripe, customerId, keepSubId) {
+  if (!customerId) return;
+  try {
+    const list = await stripe.subscriptions.list({ customer: customerId, status: 'all', limit: 100 });
+    const live = list.data.filter(s => ['active', 'trialing', 'past_due', 'unpaid'].includes(s.status));
+    for (const s of live) {
+      if (s.id !== keepSubId) {
+        await stripe.subscriptions.cancel(s.id).catch(e => console.error('cancel dup sub failed:', s.id, e.message));
+        console.log(`Cancelled duplicate subscription ${s.id} for customer ${customerId} (kept ${keepSubId})`);
+      }
+    }
+  } catch (e) { console.error('cancelOtherSubscriptions error:', e.message); }
+}
+
 // One-time credit-pack purchase → add credits to users/<uid>/aiCredits.
 // IDEMPOTENT: Stripe may deliver checkout.session.completed more than once, so we
 // atomically CLAIM the session id first (only the first delivery wins). If the credit
@@ -188,6 +206,10 @@ module.exports = async function handler(req, res) {
 
         // Subscription checkout — activate their plan
         const plan = session.metadata?.plan || 'pro';
+        // Ensure a single active subscription — cancel any others (keep the new one).
+        if (session.mode === 'subscription' && session.customer) {
+          await cancelOtherSubscriptions(stripe, session.customer, session.subscription);
+        }
         if (uid) {
           await updateUserTier(uid, plan, session.customer);
           if (email) {
