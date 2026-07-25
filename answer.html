@@ -320,7 +320,7 @@ async function _translateApiQuestions(apiQs){
   if (need.length){
     try {
       const r = await fetch('/api/translate', { method:'POST', headers:{'content-type':'application/json'},
-        body: JSON.stringify({ questions: need, target: LANG, source: DECK_LANG }) });
+        body: JSON.stringify({ questions: need, target: LANG, source: DECK_LANG, session: SESSION || '' }) });
       const d = await r.json().catch(() => null);
       const arr = (d && Array.isArray(d.questions)) ? d.questions : [];
       need.forEach((qq, j) => {

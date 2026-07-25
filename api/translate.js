@@ -15,6 +15,8 @@
 //
 // POST { texts:[...], target:'es', source:'en' } → { translations:[...] } (same order)
 
+const admin = require('firebase-admin');   // shared cross-viewer translation cache (best-effort)
+
 const OPENAI_API_KEY    = process.env.OPENAI_API_KEY;
 const OPENAI_TEXT_MODEL = process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini';
 const OPENAI_BASE       = 'https://api.openai.com/v1';
@@ -213,6 +215,66 @@ function buildStructuredSystem(targetName) {
     `Return ONLY a JSON object {"questions":[...]} whose array has the SAME length and order as the input, each question object with the SAME keys and the SAME number of "options" in the same positions.`;
 }
 
+// ── Shared translation cache (Admin SDK; best-effort) ────────────────────────
+// Reuses the app's existing firebase-admin pattern (see api/status.js). Returns null
+// when Admin creds aren't configured, so caching cleanly no-ops in that case.
+function getAdminDb() {
+  try {
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+    if (!privateKey || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PROJECT_ID) return null;
+    const app = admin.apps.length ? admin.apps[0] : admin.initializeApp({
+      credential: admin.credential.cert({
+        projectId:   process.env.FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey,
+      }),
+      databaseURL: process.env.FIREBASE_DATABASE_URL,
+    });
+    return admin.database(app);
+  } catch (e) { return null; }
+}
+
+// A stable, RTDB-key-safe id for one source question in one source language. A 32-bit
+// FNV-1a is plenty: the keyspace is a single deck's questions, namespaced by target
+// language in the path.
+function fnv1a(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return (h >>> 0).toString(36);
+}
+function cacheKey(source, q) {
+  return 'q' + fnv1a(source + ' ' + JSON.stringify(q));
+}
+
+// Run the local→OpenAI provider chain for a set of questions. Returns {outQs, provider}
+// where outQs is the normalised translation set, or null when both providers failed.
+async function translateStructuredViaProviders(questions, targetName) {
+  const units    = flattenQuestions(questions).length || questions.length;
+  const messages = [{ role:'system', content: buildStructuredSystem(targetName) },
+                    { role:'user',   content: JSON.stringify({ questions }) }];
+  let raw = '', provider = '';
+  if (LOCAL_LLM_URL) {
+    try {
+      const localBudget = Math.min(45000, Math.max(LOCAL_TIMEOUT_MS, 12000 + units * 1400));
+      raw = await callChat({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_TRANSLATE_MODEL, messages, timeoutMs: localBudget, extraHeaders: CF_ACCESS_HEADERS });
+      provider = 'local';
+    } catch (err) { console.warn('Translate(structured): local LLM unreachable → OpenAI fallback:', err.message); }
+  }
+  let outQs = parseStructured(raw, questions);
+  if (outQs && provider === 'local' && !qualityOkStructured(questions, outQs)) {
+    console.warn(`Translate(structured): ${LOCAL_TRANSLATE_MODEL} returned corrupted output → OpenAI fallback`);
+    outQs = null; provider = '';
+  }
+  if (!outQs && OPENAI_API_KEY) {
+    try {
+      raw = await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS });
+      provider = 'openai';
+      outQs = parseStructured(raw, questions);
+    } catch (err) { console.error('Translate(structured): OpenAI error:', err.message); }
+  }
+  return { outQs, provider };
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -240,32 +302,48 @@ module.exports = async function handler(req, res) {
       if (!OPENAI_API_KEY && !LOCAL_LLM_URL)
         return res.status(200).json({ ok:true, questions, fallback:true, error:'No AI configured (LOCAL_LLM_URL or OPENAI_API_KEY).' });
 
-      const units    = flattenQuestions(questions).length || questions.length;
-      const messages = [{ role:'system', content: buildStructuredSystem(targetName) },
-                        { role:'user',   content: JSON.stringify({ questions }) }];
+      // ── Shared cross-viewer cache ── One translation per (session, question, language)
+      // instead of one per VIEWER: 40 people picking Spanish now cost ONE model call, and
+      // everyone reads identical wording. It's server-owned (Admin SDK), so the audience
+      // never writes to Firebase — no new abuse surface, and no rules change (the cache
+      // lives under quiz_builder/$code, which is already per-code readable; Admin writes
+      // bypass rules). Best-effort throughout: if Admin creds are absent or a read/write
+      // fails, it silently degrades to translating every time, exactly as before.
+      const db        = getAdminDb();
+      const session   = String(req.body?.session || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+      const canCache  = !!(db && session);
+      const cacheRoot = canCache ? db.ref(`quiz_builder/${session}/_i18n/${target}`) : null;
 
-      let raw = '', provider = '';
-      if (LOCAL_LLM_URL) {
-        try {
-          const localBudget = Math.min(45000, Math.max(LOCAL_TIMEOUT_MS, 12000 + units * 1400));
-          raw = await callChat({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_TRANSLATE_MODEL, messages, timeoutMs: localBudget, extraHeaders: CF_ACCESS_HEADERS });
-          provider = 'local';
-        } catch (err) { console.warn('Translate(structured): local LLM unreachable → OpenAI fallback:', err.message); }
+      const results = new Array(questions.length);
+      const hit     = new Array(questions.length).fill(false);
+      if (canCache) {
+        await Promise.all(questions.map(async (q, i) => {
+          try {
+            const snap = await cacheRoot.child(cacheKey(source, q)).get();
+            if (snap.exists()) { results[i] = snap.val(); hit[i] = true; }
+          } catch (e) { /* treat as a miss */ }
+        }));
       }
-      let outQs = parseStructured(raw, questions);
-      if (outQs && provider === 'local' && !qualityOkStructured(questions, outQs)) {
-        console.warn(`Translate(structured): ${LOCAL_TRANSLATE_MODEL} returned corrupted output → OpenAI fallback`);
-        outQs = null; provider = '';
+      const missQs = [], missIdx = [];
+      questions.forEach((q, i) => { if (!hit[i]) { missIdx.push(i); missQs.push(q); } });
+
+      let provider = 'cache';
+      if (missQs.length) {
+        const r = await translateStructuredViaProviders(missQs, targetName);
+        provider = r.provider || provider;
+        if (r.outQs) {
+          r.outQs.forEach((oq, j) => {
+            results[missIdx[j]] = oq;
+            if (canCache) cacheRoot.child(cacheKey(source, missQs[j])).set(oq).catch(() => {});  // fire-and-forget
+          });
+        } else {
+          // Translation failed outright — fill the misses with their originals so the
+          // audience is never blocked, and DON'T cache a non-translation.
+          missIdx.forEach((idx, j) => { results[idx] = missQs[j]; });
+          return res.status(200).json({ ok:true, questions: results, fallback:true });
+        }
       }
-      if (!outQs && OPENAI_API_KEY) {
-        try {
-          raw = await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS });
-          provider = 'openai';
-          outQs = parseStructured(raw, questions);
-        } catch (err) { console.error('Translate(structured): OpenAI error:', err.message); }
-      }
-      if (!outQs) return res.status(200).json({ ok:true, questions, fallback:true });   // never block the audience
-      return res.status(200).json({ ok:true, questions: outQs, provider });
+      return res.status(200).json({ ok:true, questions: results, provider, cached: questions.length - missQs.length });
     }
 
     // ── Flat mode (legacy) ── independent strings, translated one at a time. ──
