@@ -4895,6 +4895,12 @@ function renderEditor(idx) {
           <textarea placeholder="e.g. The mitochondria" oninput="updateQ(${idx},'back',this.value)">${q.back||''}</textarea>
         </div>
         <div class="form-row" style="margin:0">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;text-transform:none;letter-spacing:0;">
+            <input type="checkbox" ${q.noTranslate?'checked':''} onchange="updateQ(${idx},'noTranslate',this.checked)" style="width:15px;height:15px;accent-color:#6c63ff;flex-shrink:0;">
+            <span>🔒 Keep in original language <span style="font-size:10px;color:var(--muted);">(don't auto-translate — for wordplay, spelling or language cards)</span></span>
+          </label>
+        </div>
+        <div class="form-row" style="margin:0">
           <label>Card Type</label>
           <select onchange="changeType(${idx},this.value)" style="width:100%;">
             <option value="flashcard" selected>Flashcard (front / back)</option>
@@ -4973,6 +4979,13 @@ function renderEditor(idx) {
             <option value="free_text"             ${q.type==='free_text'?'selected':''}>Free Text</option>
             <option value="rating"                ${q.type==='rating'?'selected':''}>Rating Scale</option>
           </select>
+        </div>
+
+        <div class="form-row" style="margin:0">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;text-transform:none;letter-spacing:0;">
+            <input type="checkbox" ${q.noTranslate?'checked':''} onchange="updateQ(${idx},'noTranslate',this.checked)" style="width:15px;height:15px;accent-color:#6c63ff;flex-shrink:0;">
+            <span>🔒 Keep in original language <span style="font-size:10px;color:var(--muted);">(don't auto-translate for the audience — for wordplay, anagrams, spelling or "which word…" questions)</span></span>
+          </label>
         </div>
 
         ${q.type==='free_text' ? `

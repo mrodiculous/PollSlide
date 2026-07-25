@@ -116,6 +116,103 @@ function qualityOk(sources, out) {
   return true;
 }
 
+// ── Structured translation (whole questions) ─────────────────────────────────
+// The audience page sends an array of question objects — {stem, options:[…], and
+// optionally front/back/low/high}. Translating a question as ONE unit (instead of a
+// bag of unrelated strings) is what stops the output reading word-for-word: the model
+// sees each option IN THE CONTEXT of its question, so short answers land in the right
+// sense and the options stay parallel to one another.
+const STRUCT_KEYS = ['stem', 'front', 'back', 'low', 'high'];
+
+// Trust nothing from the client: keep only known keys, coerce to strings, cap sizes,
+// and cap how many questions / options one call carries. Option slots (including empty
+// ones) are preserved in place so answer INDICES line up end-to-end.
+function sanitizeQuestions(list) {
+  const out = [];
+  for (const raw of list.slice(0, 20)) {
+    if (!raw || typeof raw !== 'object') continue;
+    const q = {};
+    for (const k of STRUCT_KEYS) {
+      if (typeof raw[k] === 'string' && raw[k].length) q[k] = raw[k].slice(0, 600);
+    }
+    if (Array.isArray(raw.options)) {
+      q.options = raw.options.slice(0, 12).map(s => String(s == null ? '' : s).slice(0, 600));
+    }
+    out.push(q);
+  }
+  return out;
+}
+
+// Flatten a questions array to its strings in a fixed order — used by the quality gate
+// to compare source vs. output character-preservation (emoji, brand names).
+function flattenQuestions(qs) {
+  const arr = [];
+  for (const q of (qs || [])) {
+    for (const k of STRUCT_KEYS) if (typeof q[k] === 'string') arr.push(q[k]);
+    if (Array.isArray(q.options)) for (const o of q.options) arr.push(String(o == null ? '' : o));
+  }
+  return arr;
+}
+
+// Pull the translated questions out of the model reply and normalise them back to the
+// EXACT shape of the input — same count, same keys, same option positions. Anything the
+// model dropped falls back to the source string. A mismatched option count fails the
+// whole batch (returns null → OpenAI fallback): options are index-critical, so a
+// half-aligned set is worse than none.
+function parseStructured(raw, inputQs) {
+  if (!raw) return null;
+  let obj;
+  try { obj = JSON.parse(raw); }
+  catch { const m = raw.match(/\{[\s\S]*\}/); try { obj = m ? JSON.parse(m[0]) : null; } catch { obj = null; } }
+  let arr = null;
+  if (Array.isArray(obj)) arr = obj;
+  else if (obj && Array.isArray(obj.questions)) arr = obj.questions;
+  else if (obj && Array.isArray(obj.items))     arr = obj.items;
+  if (!Array.isArray(arr) || arr.length !== inputQs.length) return null;
+
+  const out = [];
+  for (let i = 0; i < inputQs.length; i++) {
+    const src = inputQs[i] || {};
+    const got = (arr[i] && typeof arr[i] === 'object' && !Array.isArray(arr[i])) ? arr[i] : {};
+    const q = {};
+    for (const k of STRUCT_KEYS) {
+      if (typeof src[k] === 'string') q[k] = (typeof got[k] === 'string') ? got[k] : src[k];
+    }
+    if (Array.isArray(src.options)) {
+      const g = Array.isArray(got.options) ? got.options : [];
+      if (g.length !== src.options.length) return null;   // index-critical — reject the batch
+      q.options = src.options.map((s, j) => (typeof g[j] === 'string') ? g[j] : String(s));
+    }
+    out.push(q);
+  }
+  return out;
+}
+
+// Same mechanical-corruption gate as the flat path (emoji dropped / brand translated),
+// run over the flattened strings. A wrong-but-well-formed translation still passes —
+// only the prompt (titles-are-FACTS) defends against that.
+function qualityOkStructured(inQs, outQs) {
+  return qualityOk(flattenQuestions(inQs), flattenQuestions(outQs));
+}
+
+// The structured system prompt. Carries EVERY defence the flat prompt earned the hard
+// way (see the ⚠️ note on the flat prompt below) — titles-are-FACTS, emoji pass-through,
+// brand verbatim — plus the one thing the flat path can't express: translate each
+// question's stem together WITH its options, as a unit.
+function buildStructuredSystem(targetName) {
+  return `You are a professional translator localising LIVE quiz, poll and survey questions into ${targetName}. ` +
+    `You receive a JSON object {"questions":[...]}. Translate the string fields of EACH question into ${targetName}, keeping every key and every array position exactly as given. ` +
+    `Translate each question's "stem" TOGETHER WITH its "options" as one unit: use the stem to choose the correct sense of every option, especially short or one-word answers (a single word like "Orange" can be a fruit, a colour or a place — the stem tells you which). ` +
+    `Make it sound natural, the way a native ${targetName} quizmaster would say it aloud — NOT word for word. Keep the options parallel to one another in form, tense and length so none stands out. ` +
+    `Preserve numbers. ` +
+    `Titles of books, films, songs and albums are FACTS, not phrases to translate: reproduce every title EXACTLY as written in the source, character for character. Never substitute a different work. ` +
+    `Reproduce other proper nouns exactly too. ` +
+    `Copy every emoji through EXACTLY as it appears — never drop one, never replace it with a different character. ` +
+    `NEVER translate these product names, reproduce them verbatim: ${BRAND_TERMS.join(', ')}. ` +
+    `Do NOT add explanations, and never answer the question. ` +
+    `Return ONLY a JSON object {"questions":[...]} whose array has the SAME length and order as the input, each question object with the SAME keys and the SAME number of "options" in the same positions.`;
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -127,15 +224,57 @@ module.exports = async function handler(req, res) {
   const originals = (req.body && Array.isArray(req.body.texts)) ? req.body.texts.map(String) : [];
 
   try {
+    const target = String(req.body?.target || '').slice(0, 8);
+    const source = String(req.body?.source || '').slice(0, 8);
+    const targetName = LANG_NAMES[target];
+
+    // ── Structured mode ── translate whole questions, stem + options as ONE unit, so
+    // the model can pick the right sense of every option (a one-word "Orange" is a
+    // fruit, a colour or a place — the stem is what tells it which). This is the path
+    // the audience page uses; the flat path below stays for any simple string list.
+    if (Array.isArray(req.body?.questions) && req.body.questions.length) {
+      const questions = sanitizeQuestions(req.body.questions);
+      if (!questions.length)   return res.status(400).json({ error: 'No questions to translate.' });
+      if (!targetName)         return res.status(400).json({ error: 'Unsupported target language.' });
+      if (target === source)   return res.status(200).json({ ok:true, questions });
+      if (!OPENAI_API_KEY && !LOCAL_LLM_URL)
+        return res.status(200).json({ ok:true, questions, fallback:true, error:'No AI configured (LOCAL_LLM_URL or OPENAI_API_KEY).' });
+
+      const units    = flattenQuestions(questions).length || questions.length;
+      const messages = [{ role:'system', content: buildStructuredSystem(targetName) },
+                        { role:'user',   content: JSON.stringify({ questions }) }];
+
+      let raw = '', provider = '';
+      if (LOCAL_LLM_URL) {
+        try {
+          const localBudget = Math.min(45000, Math.max(LOCAL_TIMEOUT_MS, 12000 + units * 1400));
+          raw = await callChat({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_TRANSLATE_MODEL, messages, timeoutMs: localBudget, extraHeaders: CF_ACCESS_HEADERS });
+          provider = 'local';
+        } catch (err) { console.warn('Translate(structured): local LLM unreachable → OpenAI fallback:', err.message); }
+      }
+      let outQs = parseStructured(raw, questions);
+      if (outQs && provider === 'local' && !qualityOkStructured(questions, outQs)) {
+        console.warn(`Translate(structured): ${LOCAL_TRANSLATE_MODEL} returned corrupted output → OpenAI fallback`);
+        outQs = null; provider = '';
+      }
+      if (!outQs && OPENAI_API_KEY) {
+        try {
+          raw = await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS });
+          provider = 'openai';
+          outQs = parseStructured(raw, questions);
+        } catch (err) { console.error('Translate(structured): OpenAI error:', err.message); }
+      }
+      if (!outQs) return res.status(200).json({ ok:true, questions, fallback:true });   // never block the audience
+      return res.status(200).json({ ok:true, questions: outQs, provider });
+    }
+
+    // ── Flat mode (legacy) ── independent strings, translated one at a time. ──
     if (!OPENAI_API_KEY && !LOCAL_LLM_URL) {
       return res.status(200).json({ ok:true, translations: originals, fallback:true, error:'No AI configured (LOCAL_LLM_URL or OPENAI_API_KEY).' });
     }
 
     const texts  = (Array.isArray(req.body?.texts) ? req.body.texts : []).map(s => String(s == null ? '' : s).slice(0, 600)).slice(0, 40);
-    const target = String(req.body?.target || '').slice(0, 8);
-    const source = String(req.body?.source || '').slice(0, 8);
     if (!texts.length)         return res.status(400).json({ error: 'No texts to translate.' });
-    const targetName = LANG_NAMES[target];
     if (!targetName)           return res.status(400).json({ error: 'Unsupported target language.' });
     if (target === source)     return res.status(200).json({ ok:true, translations: texts });
 

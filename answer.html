@@ -263,27 +263,72 @@ function t(key, fallback){ return (I18N[LANG] && I18N[LANG][key]) || fallback; }
 let DECK_LANG = 'en';
 const LANGUAGES = { en:'English', es:'Español', de:'Deutsch', fr:'Français', pt:'Português', it:'Italiano', nl:'Nederlands', ja:'日本語', zh:'中文', ar:'العربية', hi:'हिन्दी' };
 let _currentRenderer = null;       // re-runs the active screen when the viewer switches language
-const _transCache = {};            // key: "src>tgt:text" -> translation (reused across questions)
+// Question-level cache — the key includes the WHOLE source question, so a short option
+// ("Orange") translated in one question's context is never reused in another where the
+// context (and therefore the right sense) differs.
+const _transQCache = {};           // key: "src>tgt:"+JSON(apiQuestion) -> translated apiQuestion
 
-async function translateTexts(texts){
-  if (!Array.isArray(texts) || !texts.length || LANG === DECK_LANG) return (texts||[]).slice();
-  const out = texts.slice();
+// Turn a captured source view (_viewFromFields) into the compact object the API
+// translates as ONE unit: the stem travels WITH its options so the model can pick the
+// right sense of each answer. Empty option slots are kept (as '') so answer INDICES
+// line up end-to-end — answers submit by index, never by text.
+function _apiQFromOrig(o){
+  if (!o) return null;
+  const q = {};
+  if (o.text)  q.stem  = o.text;
+  if (o.front) q.front = o.front;
+  if (o.back)  q.back  = o.back;
+  if (o.low)   q.low   = o.low;
+  if (o.high)  q.high  = o.high;
+  const opts = (o.opts || []).map(x => x == null ? '' : String(x));
+  if (opts.length) q.options = opts;
+  const hasText = q.stem || q.front || q.back || q.low || q.high;
+  const hasOpt  = opts.some(x => x.trim());
+  return (hasText || hasOpt) ? q : null;
+}
+
+// Fold one translated api-question back into q._trans, field by field. Any field the
+// model left out (or a failed/passthrough call) keeps the deck-language source, so a
+// partial translation degrades gracefully instead of blanking a field.
+function _writeTransFromApi(q, out){
+  const o = q._orig, d = (out && typeof out === 'object') ? out : {};
+  q._trans = {
+    text:  o.text  ? (d.stem  != null ? String(d.stem)  : o.text ) : o.text,
+    front: o.front ? (d.front != null ? String(d.front) : o.front) : o.front,
+    back:  o.back  ? (d.back  != null ? String(d.back)  : o.back ) : o.back,
+    low:   o.low   ? (d.low   != null ? String(d.low)   : o.low  ) : o.low,
+    high:  o.high  ? (d.high  != null ? String(d.high)  : o.high ) : o.high,
+    opts:  (o.opts || []).map((x, i) => {
+      if (!x) return x;
+      const arr = Array.isArray(d.options) ? d.options : [];
+      return arr[i] != null ? String(arr[i]) : x;
+    }),
+  };
+}
+
+// POST a batch of api-questions to /api/translate and return the translated ones in the
+// same order. Cached per source-question, and NEVER throws — on any failure it returns
+// the originals so the audience is never blocked on a translation.
+async function _translateApiQuestions(apiQs){
+  const out = new Array(apiQs.length);
   const need = [], needIdx = [];
-  texts.forEach((s,i) => {
-    const str = String(s == null ? '' : s);
-    if (!str.trim()) { out[i] = str; return; }
-    const k = DECK_LANG+'>'+LANG+':'+str;
-    if (_transCache[k] != null) out[i] = _transCache[k];
-    else { need.push(str); needIdx.push(i); }
+  apiQs.forEach((qq, i) => {
+    const k = DECK_LANG + '>' + LANG + ':' + JSON.stringify(qq);
+    if (_transQCache[k] != null) out[i] = _transQCache[k];
+    else { need.push(qq); needIdx.push(i); }
   });
   if (need.length){
     try {
       const r = await fetch('/api/translate', { method:'POST', headers:{'content-type':'application/json'},
-        body: JSON.stringify({ texts: need, target: LANG, source: DECK_LANG }) });
-      const d = await r.json().catch(()=>null);
-      const tr = (d && Array.isArray(d.translations)) ? d.translations : need;
-      need.forEach((s,j) => { const v = (tr[j] != null) ? String(tr[j]) : s; _transCache[DECK_LANG+'>'+LANG+':'+s] = v; out[needIdx[j]] = v; });
-    } catch(e){ need.forEach((s,j)=>{ out[needIdx[j]] = s; }); }  // never block the audience on a translation failure
+        body: JSON.stringify({ questions: need, target: LANG, source: DECK_LANG }) });
+      const d = await r.json().catch(() => null);
+      const arr = (d && Array.isArray(d.questions)) ? d.questions : [];
+      need.forEach((qq, j) => {
+        const v = (arr[j] && typeof arr[j] === 'object') ? arr[j] : qq;   // passthrough on any miss
+        _transQCache[DECK_LANG + '>' + LANG + ':' + JSON.stringify(qq)] = v;
+        out[needIdx[j]] = v;
+      });
+    } catch(e){ need.forEach((qq, j) => { out[needIdx[j]] = qq; }); }  // never block the audience on a failure
   }
   return out;
 }
@@ -322,63 +367,53 @@ function _hasTranslation(q){
   return (q._orig.opts||[]).some((o,i) => o !== (q._trans.opts||[])[i]);
 }
 
-// Translate a question's visible text + option labels, keeping both views (see above).
-// Covers every content field a card can carry: question text, flashcard front AND back
-// (the back is the study answer — it must follow the viewer's language too), and the
-// rating scale's end labels. One batch per question so it's a single API round-trip.
+// Translate a question as ONE unit (stem + its options together), keeping both views
+// (see above). Covers every content field a card can carry: question text, flashcard
+// front AND back (the back is the study answer — it must follow the viewer's language
+// too), and the rating scale's end labels. One API round-trip per question.
 async function translateQuestion(q){
   if (!q || LANG === DECK_LANG) return q;
   if (!q._orig) q._orig = _viewFromFields(q);   // capture the source once
-  const o = q._orig;
-  const tr = await translateTexts([ o.text || '', o.front || '', o.back || '',
-                                    o.low || '', o.high || '',
-                                    ...(o.opts||[]).map(x => x || '') ]);
-  q._trans = { text:  o.text  ? tr[0] : o.text,
-               front: o.front ? tr[1] : o.front,
-               back:  o.back  ? tr[2] : o.back,
-               low:   o.low   ? tr[3] : o.low,
-               high:  o.high  ? tr[4] : o.high,
-               opts:  (o.opts||[]).map((x,i) => x ? tr[i+5] : x) };
+  // Presenter opted this one out (wordplay, anagrams, spelling / "which word…" Qs):
+  // keep it verbatim in the deck language for everyone — no prompt can translate those.
+  if (q.noTranslate){ _writeTransFromApi(q, {}); _applyView(q, q._orig); return q; }
+  const apiQ = _apiQFromOrig(q._orig);
+  if (!apiQ) return q;
+  const outs = await _translateApiQuestions([apiQ]);
+  _writeTransFromApi(q, outs[0]);
   _applyView(q, _showOriginal ? q._orig : q._trans);
   return q;
 }
 
-// Translate a whole SET in as few round-trips as possible.
-// Looping translateQuestion() costs one model call PER QUESTION — a 10-question
-// form meant 10 sequential calls, which is fine on a fast/sloppy model and minutes
-// of blank screen on a good one. This gathers every visible string across every
-// question, sends them in chunks, and writes them back in place.
+// Translate a whole SET, still preserving each question's own context. Each question
+// goes to the model as its own unit (stem + its options), but several ride in one API
+// call so a 10-question form isn't 10 sequential round-trips.
 async function translateQuestions(list){
   if (!Array.isArray(list) || !list.length || LANG === DECK_LANG) return;
   // Snapshot each question's source, and seed _trans from it so untranslated fields
-  // keep the original. Translations are written into _trans, then applied to the live
-  // fields — so "See original" (below) can swap back to _orig without a re-fetch.
+  // (and opted-out questions) keep the original. Translations overwrite _trans, which
+  // is then applied to the live fields — so "See original" (below) can swap back to
+  // _orig without a re-fetch.
   list.forEach(q => {
     if (!q._orig)  q._orig  = _viewFromFields(q);
     if (!q._trans) q._trans = { text:q._orig.text, front:q._orig.front, back:q._orig.back,
                                 low:q._orig.low, high:q._orig.high, opts:(q._orig.opts||[]).slice() };
   });
-  const slots = [], texts = [];
+  // One api-question per translatable question. noTranslate questions are skipped
+  // entirely — they stay in the deck language for everyone.
+  const jobs = [];
   list.forEach(q => {
-    const o = q._orig;
-    const push = (field, val, optIdx) => {
-      const s = String(val == null ? '' : val);
-      if (s.trim()) { slots.push({ q, field, optIdx }); texts.push(s); }
-    };
-    push('text', o.text); push('front', o.front); push('back', o.back);
-    push('low', o.low); push('high', o.high);
-    (o.opts || []).forEach((tx, i) => push('opt', tx, i));
+    if (q.noTranslate) return;
+    const apiQ = _apiQFromOrig(q._orig);
+    if (apiQ) jobs.push({ q, apiQ });
   });
-  if (!texts.length) return;
-  const CHUNK = 30;                                   // stays under the endpoint's 40-text cap
-  for (let i = 0; i < texts.length; i += CHUNK) {
-    const tr = await translateTexts(texts.slice(i, i + CHUNK));
-    tr.forEach((v, j) => {
-      const s = slots[i + j];
-      if (!s || v == null) return;
-      if (s.field === 'opt') { s.q._trans.opts[s.optIdx] = v; }
-      else                   { s.q._trans[s.field] = v; }
-    });
+  // A few questions per call — small enough that a structured JSON reply stays reliable
+  // on the local model, and under the endpoint's per-call caps.
+  const CHUNK = 8;
+  for (let i = 0; i < jobs.length; i += CHUNK) {
+    const batch = jobs.slice(i, i + CHUNK);
+    const outs  = await _translateApiQuestions(batch.map(b => b.apiQ));
+    batch.forEach((b, k) => _writeTransFromApi(b.q, outs[k]));
   }
   list.forEach(q => _applyView(q, _showOriginal ? q._orig : q._trans));
 }
