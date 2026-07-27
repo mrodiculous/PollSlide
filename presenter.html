@@ -4572,6 +4572,28 @@ async function pollyReadPdf(input){
 }
 function closePolly() { document.getElementById('pollyModal').classList.add('hidden'); }
 
+// Cross-session variety: remember what Polly has generated across ALL runs on this
+// device (not just the current deck) and feed it back as `avoid`, so a later "pub quiz
+// across all genres" doesn't re-serve the questions it gave an hour ago. Device-local
+// (no server round-trip), capped, keyed by question text.
+const POLLY_RECENT_KEY = 'ql_pollyRecent', POLLY_RECENT_MAX = 120;
+function _pollyRecentGet() {
+  try { const v = JSON.parse(localStorage.getItem(POLLY_RECENT_KEY) || '[]'); return Array.isArray(v) ? v : []; }
+  catch (e) { return []; }
+}
+function _pollyRecentAdd(items) {
+  try {
+    const cur = _pollyRecentGet();
+    const seen = new Set(cur.map(a => String((a && a.text) || '').toLowerCase().trim()));
+    for (const it of (items || [])) {
+      const key = String((it && it.text) || '').toLowerCase().trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key); cur.push(it);
+    }
+    localStorage.setItem(POLLY_RECENT_KEY, JSON.stringify(cur.slice(-POLLY_RECENT_MAX)));
+  } catch (e) { /* storage full/blocked — cross-session variety just degrades to deck-only */ }
+}
+
 async function runPolly() {
   if (!activePresId) return;
   const topic = document.getElementById('pollyTopic').value.trim();
@@ -4591,7 +4613,7 @@ async function runPolly() {
     const focus = [topic, style ? `style: ${style}` : ''].filter(Boolean).join(' — ');
     // Tell Polly what this deck already contains. Without it every "generate more"
     // starts blank and reaches for the same canonical questions on the topic.
-    const avoid = (questions || []).map(q => {
+    const deckAvoid = (questions || []).map(q => {
       const opts = (q.options || []).map(o => (typeof o === 'string' ? o : (o && o.text) || ''));
       const ca   = q.correctAnswer;
       const idxs = (ca === undefined || ca === null || ca === '') ? [] : (Array.isArray(ca) ? ca : [ca]).map(Number);
@@ -4600,6 +4622,16 @@ async function runPolly() {
         answers: q.back ? [q.back] : idxs.map(i => opts[i]).filter(Boolean),
       };
     }).filter(a => String(a.text).trim());
+    // Merge this deck (most relevant) with what Polly made in earlier sessions on this
+    // device, de-duped by text and capped so the prompt stays lean.
+    const avoid = [];
+    const _seenAvoid = new Set();
+    for (const a of [...deckAvoid, ..._pollyRecentGet()]) {
+      const key = String(a.text || '').toLowerCase().trim();
+      if (!key || _seenAvoid.has(key)) continue;
+      _seenAvoid.add(key); avoid.push(a);
+      if (avoid.length >= 50) break;
+    }
     const idToken = currentUser ? await currentUser.getIdToken().catch(()=>null) : null; // server verifies + enforces the quota
     const r = await fetch('/api/polly', {
       method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, idToken ? { 'Authorization': 'Bearer ' + idToken } : {}),
@@ -4628,6 +4660,15 @@ async function runPolly() {
       questions.push(q);
       added++;
     }
+    // Remember these across sessions so future runs don't repeat them (see _pollyRecentAdd).
+    _pollyRecentAdd(data.questions.map(gq => {
+      const opts = (gq.options || []).map(o => (typeof o === 'string' ? o : (o && o.text) || ''));
+      return {
+        text:    (gq.text || gq.front || '').slice(0, 200),
+        answers: gq.back ? [String(gq.back).slice(0, 120)]
+                         : (gq.correctAnswers || []).map(i => opts[i]).filter(Boolean).slice(0, 4),
+      };
+    }));
     presentations[activePresId].questions = questions;
     selIdx = questions.length - 1;   // the server counts this generation toward the quota
     renderQList();

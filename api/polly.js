@@ -32,6 +32,14 @@ const OPENAI_BASE       = 'https://api.openai.com/v1';
 const LOCAL_LLM_URL     = process.env.LOCAL_LLM_URL || '';      // empty = skip local, go straight to OpenAI
 const LOCAL_LLM_MODEL   = process.env.LOCAL_LLM_MODEL || 'qwen3:14b';
 
+// Reasoning models (gpt-oss, qwen3, …) burn a large hidden reasoning budget by default,
+// which makes generation far too slow for interactive Polly (gpt-oss:20b measured 8-13×
+// slower at default effort than at 'low' on an M4 Pro). Set this to 'low' when
+// LOCAL_LLM_MODEL is a reasoning model. Sent ONLY to the local provider (OpenAI's
+// non-reasoning models reject the param) and only when non-empty, so it's a safe no-op
+// otherwise. Valid: 'low' | 'medium' | 'high'.
+const LOCAL_REASONING_EFFORT = process.env.LOCAL_REASONING_EFFORT || '';
+
 const { checkQuota, consumeQuota } = require('../lib/quota');   // server-enforced Polly quota
 
 // Cloudflare Access service-token headers — proves to Cloudflare's edge that this
@@ -44,8 +52,12 @@ const CF_ACCESS_HEADERS = (process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACC
     }
   : {};
 
-const LOCAL_TIMEOUT_MS  = 30000;  // give the Mac plenty of room to win before falling back to the cloud
-const CLOUD_TIMEOUT_MS  = 20000;  // keep LOCAL + CLOUD under the 60s serverless function budget
+// Env-overridable so a slower local model (gpt-oss:20b measured ~10-25s at low reasoning)
+// gets room to win before falling back. Keep LOCAL + CLOUD comfortably under the 60s
+// serverless budget (vercel.json). Recommended for gpt-oss:20b: LOCAL_TIMEOUT_MS=42000
+// and CLOUD_TIMEOUT_MS=15000 (= 57s, leaves margin).
+const LOCAL_TIMEOUT_MS  = parseInt(process.env.LOCAL_TIMEOUT_MS, 10) || 30000;  // Mac's head-start before cloud fallback
+const CLOUD_TIMEOUT_MS  = parseInt(process.env.CLOUD_TIMEOUT_MS, 10) || 20000;
 
 // Supported content types → how Polly should think about each.
 // Forward-feature: matches the Poll/Survey/Quiz/Study product suite.
@@ -87,11 +99,30 @@ function buildDeckMessages({ topic, count, includePolls, includeImages, source, 
   return [ { role: 'system', content: system }, { role: 'user', content: user } ];
 }
 
+// Parse model JSON leniently. Reasoning/chatty models (gpt-oss especially) sometimes
+// wrap the JSON in prose or a ```json fence, or emit a stray token before it. Try a
+// strict parse first, then fall back to the outermost {...} or [...] slice. A deeper
+// break — a missing comma mid-object — still fails here, which is intended: it triggers
+// the OpenAI fallback in the handler rather than surfacing garbage.
+function parseJsonLoose(raw) {
+  const s = String(raw == null ? '' : raw).trim();
+  if (!s) return null;
+  try { return JSON.parse(s); } catch {}
+  const oi = s.indexOf('{'), ai = s.indexOf('[');
+  let start = -1;
+  if (oi >= 0 && (ai < 0 || oi < ai)) start = oi;
+  else if (ai >= 0) start = ai;
+  if (start < 0) return null;
+  const close = s[start] === '{' ? '}' : ']';
+  const end = s.lastIndexOf(close);
+  if (end > start) { try { return JSON.parse(s.slice(start, end + 1)); } catch {} }
+  return null;
+}
+
 // Shape a deck response: content slides (title required) + polls (options resolved).
 function normalizeDeck(raw) {
-  let parsed;
-  try { parsed = JSON.parse(raw); }
-  catch { throw new Error('Model did not return valid JSON'); }
+  const parsed = parseJsonLoose(raw);
+  if (parsed == null) throw new Error('Model did not return valid JSON');
   const list = Array.isArray(parsed) ? parsed : (parsed.slides || []);
   if (!Array.isArray(list) || list.length === 0) throw new Error('No slides in model output');
   return list.map((s) => {
@@ -109,6 +140,32 @@ function normalizeDeck(raw) {
       notes: String(s.notes || s.speakerNotes || '').trim(),
       imagePrompt: String(s.imagePrompt || '').trim() };
   }).filter(Boolean);
+}
+
+// Per-run steering to break cross-request sameness. A broad ask ("pub quiz across all
+// genres") otherwise returns the model's greatest hits every time; nudging each call
+// toward a RANDOM handful of domains + lenses spreads successive runs across the space.
+// Only for open-ended generation — grounded (source material) and surveys are left
+// alone, since there the phrasing is meant to stay faithful.
+function varietyNudge(topic) {
+  const pick = (arr, n) => {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+    return a.slice(0, n);
+  };
+  const LENSES = ['surprising firsts', 'origins & etymology', 'record holders', 'lesser-known facts',
+    'unexpected connections between fields', 'everyday things seen closely', 'numbers & measurements',
+    'the very recent', 'the distant past', 'beyond the Western world'];
+  const lenses = pick(LENSES, 2).join(' and ');
+  const broad = !topic || /general|mixed|misc|any|all\s*genres?|pub\s*quiz|trivia|random|variety/i.test(topic);
+  if (broad) {
+    const GENRES = ['history', 'world geography', 'physics & chemistry', 'biology & nature', 'sport',
+      'music', 'film & television', 'literature', 'visual art', 'food & drink', 'technology & computing',
+      'mythology & religion', 'language & words', 'space & astronomy', 'inventions & discovery',
+      'architecture', 'games & toys', 'economics & money', 'the human body', 'notable people'];
+    return ` For freshness on THIS run (do not mention this instruction): draw especially from ${pick(GENRES, 5).join(', ')}, through the lens of ${lenses}. Prefer specific, concrete facts over the most famous textbook examples.`;
+  }
+  return ` For freshness on THIS run (do not mention this instruction): explore ${topic} through the lens of ${lenses}, favouring specific, less-obvious facts over the most famous textbook examples.`;
 }
 
 function buildMessages({ topic, type, count, difficulty, audience, source, language, avoid }) {
@@ -166,6 +223,10 @@ function buildMessages({ topic, type, count, difficulty, audience, source, langu
       avoidList.map(t => `- ${t}`).join('\n')
     : '';
 
+  // Randomised per-run steering — only for open-ended generation (never for grounded
+  // source material or surveys), so identical asks diverge instead of repeating.
+  const nudge = (!isSurvey && !source) ? varietyNudge(topic) : '';
+
   const user = (source
     ? // Grounded generation: questions must come from the supplied material (PDF / notes).
       `Create ${count} ${type} question(s) based ONLY on the source material below. ` +
@@ -180,7 +241,7 @@ function buildMessages({ topic, type, count, difficulty, audience, source, langu
       (difficulty ? ` Difficulty: ${difficulty}.` : '') +
       (audience ? ` Audience: ${audience}.` : '') +
       diversityRule
-  ) + avoidBlock;
+  ) + avoidBlock + nudge;
 
   return [
     { role: 'system', content: system },
@@ -189,7 +250,7 @@ function buildMessages({ topic, type, count, difficulty, audience, source, langu
 }
 
 // One helper for BOTH local Ollama and OpenAI — identical request shape.
-async function callChat({ baseURL, apiKey, model, messages, timeoutMs, extraHeaders = {} }) {
+async function callChat({ baseURL, apiKey, model, messages, timeoutMs, extraHeaders = {}, seed, reasoningEffort }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -200,6 +261,8 @@ async function callChat({ baseURL, apiKey, model, messages, timeoutMs, extraHead
         model,
         messages,
         temperature: 0.8,
+        ...(seed != null ? { seed } : {}),
+        ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
         response_format: { type: 'json_object' },
       }),
       signal: controller.signal,
@@ -329,9 +392,8 @@ function dropRepeats(questions, avoid, type) {
 }
 
 function normalizeQuestions(raw, type) {
-  let parsed;
-  try { parsed = JSON.parse(raw); }
-  catch { throw new Error('Model did not return valid JSON'); }
+  const parsed = parseJsonLoose(raw);
+  if (parsed == null) throw new Error('Model did not return valid JSON');
 
   const list = Array.isArray(parsed) ? parsed : (parsed.questions || []);
   if (!Array.isArray(list) || list.length === 0) throw new Error('No questions in model output');
@@ -413,24 +475,38 @@ module.exports = async function handler(req, res) {
     ? buildDeckMessages({ topic, count, includePolls, includeImages, source: sourceMaterial, language })
     : buildMessages({ topic, type, count, difficulty, audience, source: sourceMaterial, language, avoid });
 
-  let raw = '';
-  let source = '';
+  // A fresh random seed each call nudges the sampler off any deterministic default, so
+  // successive generations don't collapse onto the same answers.
+  const seed = Math.floor(Math.random() * 2147483647);
 
-  // 1) Try the user's own Mac first (if configured).
+  // Shape whatever a provider returned into the final payload. Throws on unparseable
+  // output — which is deliberately caught below to fall through to the cloud provider.
+  const shape = (raw) => (type === 'deck')
+    ? { slides: normalizeDeck(raw) }
+    : { questions: dropRepeats(normalizeQuestions(raw, type), avoid, type) };
+
+  let shaped = null;
+  let source  = '';
+
+  // 1) Try the user's own Mac first (if configured). Accept it only if the output also
+  //    PARSES — a reasoning model that emits malformed JSON should fall through to the
+  //    cloud rather than surface an error to the presenter.
   if (LOCAL_LLM_URL) {
     try {
-      raw = await callChat({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_LLM_MODEL, messages, timeoutMs: LOCAL_TIMEOUT_MS, extraHeaders: CF_ACCESS_HEADERS });
+      const raw = await callChat({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_LLM_MODEL, messages, timeoutMs: LOCAL_TIMEOUT_MS, extraHeaders: CF_ACCESS_HEADERS, seed, reasoningEffort: LOCAL_REASONING_EFFORT });
+      shaped = shape(raw);
       source = 'local';
     } catch (err) {
-      console.warn('Polly: local LLM unreachable → OpenAI fallback:', err.message);
+      console.warn('Polly: local LLM failed (' + err.message + ') → OpenAI fallback');
     }
   }
 
-  // 2) Fall back to OpenAI.
-  if (!raw) {
-    if (!OPENAI_API_KEY) return res.status(502).json({ error: 'Local LLM unreachable and no OpenAI key set.' });
+  // 2) Fall back to OpenAI — on local unreachable OR local output unparseable.
+  if (!shaped) {
+    if (!OPENAI_API_KEY) return res.status(502).json({ error: 'Local LLM unavailable and no OpenAI key set.' });
     try {
-      raw = await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS });
+      const raw = await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS, seed });
+      shaped = shape(raw);
       source = 'openai';
     } catch (err) {
       console.error('Polly: OpenAI error:', err.message);
@@ -438,20 +514,9 @@ module.exports = async function handler(req, res) {
     }
   }
 
-  // 3) Shape the result.
-  try {
-    if (type === 'deck') {
-      const slides = normalizeDeck(raw);
-      try { await consumeQuota(quota); } catch (e) { /* never fail the response over the counter */ }
-      return res.status(200).json({ source, type, topic, slides });
-    }
-    const questions = dropRepeats(normalizeQuestions(raw, type), avoid, type);
-    try { await consumeQuota(quota); } catch (e) { /* never fail the response over the counter */ }
-    return res.status(200).json({ source, type, topic, questions });
-  } catch (err) {
-    console.error('Polly: parse error:', err.message, '\nRaw:', String(raw || '').slice(0, 300));
-    return res.status(502).json({ error: 'Could not read AI output', detail: err.message });
-  }
+  // 3) Success — bill the quota (never fail the response over the counter) and return.
+  try { await consumeQuota(quota); } catch (e) { /* never fail the response over the counter */ }
+  return res.status(200).json({ source, type, topic, ...shaped });
   } catch (fatal) {
     // Anything unhandled (e.g. a provider hang/crash) → JSON, not a non-JSON 502.
     console.error('Polly fatal:', fatal && fatal.message);
