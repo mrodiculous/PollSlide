@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Session recap — PollSlide</title>
+<meta name="description" content="A shareable recap of a live PollSlide session — winner, highlights and the question that fooled everyone.">
+<meta property="og:title" content="Session recap — PollSlide">
+<meta property="og:description" content="See how the room did: winner, toughest question and the highlights.">
+<meta property="og:type" content="website">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<style>
+  :root{--bg:#0d0d18;--surface:rgba(255,255,255,0.05);--surface2:rgba(255,255,255,0.08);--border:rgba(255,255,255,0.10);--text:#f4f4fc;--muted:#9090b8;--accent:#6c63ff;--accent3:#43e97b;--accent4:#f7b731;--accent2:#ff6584;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:radial-gradient(ellipse at 25% 15%,#1a1040 0%,#0d0d18 65%);color:var(--text);font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased;min-height:100vh;padding:18px 14px 44px;}
+  .wrap{max-width:560px;margin:0 auto;}
+  .logo{display:flex;align-items:center;gap:8px;font-family:'Syne',sans-serif;font-weight:800;font-size:18px;margin-bottom:6px;}
+  h1{font-family:'Syne',sans-serif;font-weight:900;font-size:clamp(24px,6vw,30px);margin:14px 0 2px;line-height:1.2;}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:18px;}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:15px;margin-bottom:14px;}
+  .winner{background:linear-gradient(135deg,rgba(247,183,49,0.16),rgba(108,99,255,0.10));border:1px solid rgba(247,183,49,0.35);border-radius:16px;padding:20px 16px;text-align:center;margin-bottom:16px;}
+  .winner .crown{font-size:34px;line-height:1;}
+  .winner .who{font-family:'Syne',sans-serif;font-weight:900;font-size:clamp(20px,5.5vw,26px);margin-top:6px;word-break:break-word;}
+  .winner .meta{font-size:12px;color:var(--muted);margin-top:4px;}
+  .lb-row{display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:11px;margin-bottom:6px;background:var(--surface);border:1px solid var(--border);}
+  .lb-row.top{background:rgba(67,233,123,0.10);border-color:rgba(67,233,123,0.30);}
+  .lb-rank{min-width:28px;text-align:center;font-family:'Syne',sans-serif;font-weight:800;font-size:14px;}
+  .lb-name{flex:1;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .lb-score{font-family:'Syne',sans-serif;font-weight:900;color:var(--accent3);font-size:15px;}
+  .stat-row{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;}
+  .stat{flex:1;min-width:88px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 8px;text-align:center;}
+  .stat b{font-family:'Syne',sans-serif;font-weight:900;font-size:22px;display:block;}
+  .stat span{font-size:11px;color:var(--muted);}
+  .qrow{padding:11px 0;border-bottom:1px solid var(--border);}
+  .qrow:last-child{border-bottom:none;}
+  .qtext{font-weight:600;font-size:14px;margin-bottom:6px;line-height:1.45;}
+  .qbar-bg{height:7px;background:rgba(255,255,255,0.08);border-radius:100px;overflow:hidden;}
+  .qbar-fill{height:100%;background:linear-gradient(90deg,var(--accent3),#6bffb5);border-radius:100px;}
+  .qmeta{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:5px;gap:10px;}
+  .sect{font-family:'Syne',sans-serif;font-weight:800;font-size:13px;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin:20px 0 10px;}
+  .center{text-align:center;color:var(--muted);padding:44px 16px;font-size:14px;line-height:1.6;}
+  .tough{background:rgba(255,101,132,0.10);border:1px solid rgba(255,101,132,0.30);border-radius:14px;padding:14px 15px;margin-bottom:14px;}
+  .summary{background:rgba(108,99,255,0.10);border:1px solid rgba(108,99,255,0.32);border-radius:14px;padding:14px 15px;margin-bottom:14px;font-size:14px;line-height:1.6;}
+  .cta{display:block;text-align:center;background:linear-gradient(120deg,var(--accent),#a78bfa);color:#fff;text-decoration:none;font-family:'Syne',sans-serif;font-weight:800;font-size:15px;padding:14px;border-radius:13px;margin-top:22px;}
+  .foot{text-align:center;color:var(--muted);font-size:11.5px;margin-top:14px;line-height:1.6;}
+  .foot a{color:var(--accent);text-decoration:none;}
+  .pill{display:inline-block;font-size:10px;padding:2px 8px;border-radius:20px;background:rgba(255,255,255,0.07);color:var(--muted);margin-left:6px;}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="center"><div style="font-size:26px;margin-bottom:8px;">🎁</div>Loading the recap…</div>
+</div>
+
+<script>
+/* PollSlide — public session recap.
+   Reads recaps/<id> (public read of an unguessable id, owner-only write — see
+   database-rules.json). No sign-in, no personal data beyond the display names people
+   already chose for the live session. Everything here was computed when the presenter
+   pressed "Share recap"; this page only renders it. */
+const FB_CONFIG = { apiKey:"AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME", authDomain:"echonest-live-survey.firebaseapp.com",
+  databaseURL:"https://echonest-live-survey-default-rtdb.firebaseio.com", projectId:"echonest-live-survey",
+  storageBucket:"echonest-live-survey.firebasestorage.app", messagingSenderId:"285529140046", appId:"1:285529140046:web:983c1ee8000a2ca8f80c1f" };
+firebase.initializeApp(FB_CONFIG);
+const db = firebase.database();
+
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function el(id){ return document.getElementById(id); }
+
+const RID = (location.hash || '').replace(/^#/, '').replace(/[^A-Za-z0-9_-]/g, '');
+
+const LOGO = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>';
+
+function showError(msg){
+  el('app').innerHTML = `<div class="logo">${LOGO}PollSlide</div>
+    <div class="center"><div style="font-size:26px;margin-bottom:10px;">🔍</div>${esc(msg)}
+    <div style="margin-top:16px;"><a href="https://pollslide.com" style="color:var(--accent);text-decoration:none;">What is PollSlide? →</a></div></div>`;
+}
+
+function render(d){
+  const teams = Array.isArray(d.teams) && d.teams.length ? d.teams : null;
+  const board = teams || (Array.isArray(d.leaderboard) ? d.leaderboard : []);
+  const isTeam = !!teams;
+  const champion = (d.graded && board.length) ? board[0] : null;
+
+  const winnerCard = champion ? `
+    <div class="winner">
+      <div class="crown">🏆</div>
+      <div class="who">${isTeam?'👥 ':''}${esc(champion.name)}</div>
+      <div class="meta">${isTeam ? 'Winning team · '+champion.n+' player'+(champion.n===1?'':'s')+' · ' : 'Top scorer · '}${champion.score} point${champion.score===1?'':'s'}</div>
+    </div>` : `
+    <div class="winner" style="background:linear-gradient(135deg,rgba(108,99,255,0.16),rgba(67,233,123,0.10));border-color:rgba(108,99,255,0.35);">
+      <div class="crown">🎉</div>
+      <div class="who">Thanks for taking part!</div>
+      <div class="meta">${d.respondents||0} people joined in</div>
+    </div>`;
+
+  const stats = `<div class="stat-row">
+    <div class="stat"><b>${d.respondents||0}</b><span>${(d.respondents===1)?'person':'people'}</span></div>
+    <div class="stat"><b>${(d.questions||[]).length}</b><span>questions</span></div>
+    <div class="stat"><b>${d.responses||0}</b><span>answers</span></div>
+  </div>`;
+
+  const summary = d.summary ? `<div class="summary"><strong>✨ In a nutshell:</strong> ${esc(d.summary)}</div>` : '';
+
+  const tough = d.toughest ? `<div class="tough">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:#ff6584;margin-bottom:7px;">😬 THE ONE THAT FOOLED EVERYONE</div>
+      <div style="font-weight:600;font-size:14.5px;line-height:1.45;">${esc(d.toughest.text)}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px;">Only ${d.toughest.correctPct}% got it right</div>
+    </div>` : '';
+
+  const lbRows = board.slice(0,10).map((p,i)=>`
+    <div class="lb-row${i<3?' top':''}">
+      <div class="lb-rank">${['🥇','🥈','🥉'][i] || ('#'+(i+1))}</div>
+      <div class="lb-name">${isTeam?'👥 ':''}${esc(p.name)}${isTeam?`<span class="pill">${p.n} player${p.n===1?'':'s'}</span>`:''}</div>
+      <div class="lb-score">${p.score}</div>
+    </div>`).join('');
+  const lbBlock = (d.graded && board.length) ? `<div class="sect">${isTeam?'Team standings':'Leaderboard'}</div>${lbRows}` : '';
+
+  const qRows = (d.questions||[]).map(q=>`
+    <div class="qrow">
+      <div class="qtext">${esc(q.text)}</div>
+      ${q.correctPct!==null && q.correctPct!==undefined ? `<div class="qbar-bg"><div class="qbar-fill" style="width:${Math.max(0,Math.min(100,q.correctPct))}%"></div></div>` : ''}
+      <div class="qmeta">
+        <span>${q.n} answer${q.n===1?'':'s'}${q.topAnswer?' · most picked: '+esc(q.topAnswer):''}</span>
+        ${q.correctPct!==null && q.correctPct!==undefined ? `<span>${q.correctPct}% correct</span>` : ''}
+      </div>
+    </div>`).join('');
+  const qBlock = qRows ? `<div class="sect">Question by question</div><div class="card">${qRows}</div>` : '';
+
+  const when = d.at ? new Date(d.at).toLocaleDateString(undefined,{ year:'numeric', month:'long', day:'numeric' }) : '';
+
+  el('app').innerHTML = `
+    <div class="logo">${LOGO}PollSlide</div>
+    <h1>${esc(d.title || 'Session recap')}</h1>
+    <div class="sub">${when ? when + ' · ' : ''}Here's how the room did 👇</div>
+    ${winnerCard}
+    ${stats}
+    ${summary}
+    ${tough}
+    ${lbBlock}
+    ${qBlock}
+    <a class="cta" href="https://pollslide.com">Run your own live quiz — free →</a>
+    <div class="foot">Made with <a href="https://pollslide.com">PollSlide</a> · live polls, quizzes &amp; surveys for any presentation</div>
+  `;
+}
+
+if (!RID) {
+  showError('This recap link looks incomplete. Ask the presenter to send it again.');
+} else {
+  db.ref('recaps/'+RID).get()
+    .then(s => { if (!s.exists()) { showError('This recap has expired or the link is wrong.'); return; } render(s.val() || {}); })
+    .catch(() => showError('Could not load this recap — check your connection and try again.'));
+}
+</script>
+</body>
+</html>

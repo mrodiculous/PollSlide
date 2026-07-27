@@ -226,6 +226,11 @@ function moderateName(s){
 // It is NOT stored in Firebase participants node — only in per-question responses
 let participantId   = null;
 let participantName = null;
+// Team play (enabled per deck by the presenter). The team NAME rides on every response,
+// so every reader (presenter, big screen, report, recap) can group without extra joins.
+let TEAM_MODE          = false;
+let participantTeamId  = null;
+let participantTeam    = null;
 let questionData    = null;
 let answered        = false;
 let submitting      = false; // prevent double-submit on slow connections
@@ -247,11 +252,11 @@ function render(html) {
 // ── i18n: the audience page matches the deck's language (set by the presenter) ──
 let LANG = 'en';
 const I18N = {
-  es:{enterName:'Escribe tu nombre',nameOnce:'Solo necesitas hacerlo una vez por sesión.',yourName:'Tu nombre',continue:'Continuar →',enterNamePlease:'Por favor, escribe tu nombre.',submitAnswer:'Enviar respuesta',submitRating:'Enviar valoración',submitAnswers:'Enviar respuestas',submitted:'✓ ¡Enviado!',alreadyAnswered:'¡Ya respondiste esta pregunta!',selectAll:'✓ Marca todas las que correspondan',submitSurvey:'Enviar encuesta',submitQuiz:'Enviar y ver puntuación',thankYou:'¡Gracias!',recorded:'Tus respuestas se han guardado.',qaTitle:'Preguntas del público',qaSub:'Haz una pregunta — o vota las que quieras que respondan.',ask:'Preguntar',typeQuestion:'Escribe tu pregunta…',loading:'Cargando…',responses:'respuestas',question:'Pregunta',typeAnswer:'Escribe tu respuesta…',tapToFlip:'TOCA PARA GIRAR',answerFace:'RESPUESTA',showAnswer:'Mostrar respuesta',again:'Otra vez',hard:'Difícil',good:'Bien',easy:'Fácil',yourAnswer:'Tu respuesta',correctWas:'Correcta',skipped:'(omitida)',joinTitle:'Únete a una sesión',joinSub:'Escribe el código que aparece junto al código QR.',joinBtn:'Unirse →',joinShort:'Ese código parece demasiado corto: revísalo e inténtalo de nuevo.',joinNotFound:'No se encontró ninguna sesión con ese código. Verifícalo con tu presentador.',joinFail:'No se pudo comprobar el código: revisa tu conexión.',seeOriginal:'Ver original',seeTranslation:'Ver traducción'},
-  de:{enterName:'Gib deinen Namen ein',nameOnce:'Nur einmal pro Sitzung nötig.',yourName:'Dein Name',continue:'Weiter →',enterNamePlease:'Bitte gib deinen Namen ein.',submitAnswer:'Antwort senden',submitRating:'Bewertung senden',submitAnswers:'Antworten senden',submitted:'✓ Gesendet!',alreadyAnswered:'Du hast diese Frage bereits beantwortet!',selectAll:'✓ Alle Zutreffenden auswählen',submitSurvey:'Umfrage senden',submitQuiz:'Senden & Punktzahl ansehen',thankYou:'Danke!',recorded:'Deine Antworten wurden gespeichert.',qaTitle:'Publikumsfragen',qaSub:'Stelle eine Frage — oder stimme für andere ab.',ask:'Fragen',typeQuestion:'Schreibe deine Frage…',loading:'Lädt…',responses:'Antworten',question:'Frage',typeAnswer:'Schreibe deine Antwort…',tapToFlip:'ZUM UMDREHEN TIPPEN',answerFace:'ANTWORT',showAnswer:'Antwort zeigen',again:'Nochmal',hard:'Schwer',good:'Gut',easy:'Leicht',yourAnswer:'Deine Antwort',correctWas:'Richtig',skipped:'(übersprungen)',joinTitle:'Sitzung beitreten',joinSub:'Gib den Code ein, der neben dem QR-Code angezeigt wird.',joinBtn:'Beitreten →',joinShort:'Dieser Code sieht zu kurz aus — prüfe ihn und versuche es erneut.',joinNotFound:'Keine Sitzung mit diesem Code gefunden — frag deinen Präsentator.',joinFail:'Code konnte nicht geprüft werden — prüfe deine Verbindung.',seeOriginal:'Original ansehen',seeTranslation:'Übersetzung ansehen'},
-  fr:{enterName:'Entrez votre nom',nameOnce:'À faire une seule fois par session.',yourName:'Votre nom',continue:'Continuer →',enterNamePlease:'Veuillez entrer votre nom.',submitAnswer:'Envoyer la réponse',submitRating:'Envoyer la note',submitAnswers:'Envoyer les réponses',submitted:'✓ Envoyé !',alreadyAnswered:'Vous avez déjà répondu à cette question !',selectAll:'✓ Sélectionnez tout ce qui s’applique',submitSurvey:'Envoyer le sondage',submitQuiz:'Envoyer et voir le score',thankYou:'Merci !',recorded:'Vos réponses ont été enregistrées.',qaTitle:'Questions du public',qaSub:'Posez une question — ou votez pour celles à traiter.',ask:'Demander',typeQuestion:'Écrivez votre question…',loading:'Chargement…',responses:'réponses',question:'Question',typeAnswer:'Écrivez votre réponse…',tapToFlip:'TOUCHEZ POUR RETOURNER',answerFace:'RÉPONSE',showAnswer:'Voir la réponse',again:'Encore',hard:'Difficile',good:'Bien',easy:'Facile',yourAnswer:'Votre réponse',correctWas:'Bonne réponse',skipped:'(passée)',joinTitle:'Rejoindre une session',joinSub:'Saisissez le code affiché à côté du QR code.',joinBtn:'Rejoindre →',joinShort:'Ce code semble trop court — vérifiez-le et réessayez.',joinNotFound:'Aucune session trouvée avec ce code — vérifiez auprès de votre présentateur.',joinFail:'Impossible de vérifier le code — vérifiez votre connexion.',seeOriginal:'Voir l’original',seeTranslation:'Voir la traduction'},
-  pt:{enterName:'Digite seu nome',nameOnce:'Só precisa fazer isso uma vez por sessão.',yourName:'Seu nome',continue:'Continuar →',enterNamePlease:'Por favor, digite seu nome.',submitAnswer:'Enviar resposta',submitRating:'Enviar avaliação',submitAnswers:'Enviar respostas',submitted:'✓ Enviado!',alreadyAnswered:'Você já respondeu a esta pergunta!',selectAll:'✓ Marque todas as aplicáveis',submitSurvey:'Enviar pesquisa',submitQuiz:'Enviar e ver pontuação',thankYou:'Obrigado!',recorded:'Suas respostas foram registradas.',qaTitle:'Perguntas do público',qaSub:'Faça uma pergunta — ou vote nas que quer ver respondidas.',ask:'Perguntar',typeQuestion:'Escreva sua pergunta…',loading:'Carregando…',responses:'respostas',question:'Pergunta',typeAnswer:'Digite sua resposta…',tapToFlip:'TOQUE PARA VIRAR',answerFace:'RESPOSTA',showAnswer:'Mostrar resposta',again:'De novo',hard:'Difícil',good:'Bom',easy:'Fácil',yourAnswer:'Sua resposta',correctWas:'Correta',skipped:'(pulada)',joinTitle:'Entrar em uma sessão',joinSub:'Digite o código exibido ao lado do QR code.',joinBtn:'Entrar →',joinShort:'Esse código parece curto demais — confira e tente novamente.',joinNotFound:'Nenhuma sessão encontrada com esse código — confirme com seu apresentador.',joinFail:'Não foi possível verificar o código — verifique sua conexão.',seeOriginal:'Ver original',seeTranslation:'Ver tradução'},
-  it:{enterName:'Inserisci il tuo nome',nameOnce:'Da fare una sola volta per sessione.',yourName:'Il tuo nome',continue:'Continua →',enterNamePlease:'Inserisci il tuo nome.',submitAnswer:'Invia risposta',submitRating:'Invia valutazione',submitAnswers:'Invia risposte',submitted:'✓ Inviato!',alreadyAnswered:'Hai già risposto a questa domanda!',selectAll:'✓ Seleziona tutte quelle pertinenti',submitSurvey:'Invia sondaggio',submitQuiz:'Invia e vedi punteggio',thankYou:'Grazie!',recorded:'Le tue risposte sono state registrate.',qaTitle:'Domande del pubblico',qaSub:'Fai una domanda — o vota quelle da trattare.',ask:'Chiedi',typeQuestion:'Scrivi la tua domanda…',loading:'Caricamento…',responses:'risposte',question:'Domanda',typeAnswer:'Scrivi la tua risposta…',tapToFlip:'TOCCA PER GIRARE',answerFace:'RISPOSTA',showAnswer:'Mostra risposta',again:'Di nuovo',hard:'Difficile',good:'Bene',easy:'Facile',yourAnswer:'La tua risposta',correctWas:'Corretta',skipped:'(saltata)',joinTitle:'Partecipa a una sessione',joinSub:'Digita il codice mostrato accanto al codice QR.',joinBtn:'Partecipa →',joinShort:'Questo codice sembra troppo corto — controllalo e riprova.',joinNotFound:'Nessuna sessione trovata con questo codice — verifica con il tuo presentatore.',joinFail:'Impossibile verificare il codice — controlla la connessione.',seeOriginal:'Vedi originale',seeTranslation:'Vedi traduzione'},
+  es:{enterName:'Escribe tu nombre',nameOnce:'Solo necesitas hacerlo una vez por sesión.',yourName:'Tu nombre',continue:'Continuar →',enterNamePlease:'Por favor, escribe tu nombre.',submitAnswer:'Enviar respuesta',submitRating:'Enviar valoración',submitAnswers:'Enviar respuestas',submitted:'✓ ¡Enviado!',alreadyAnswered:'¡Ya respondiste esta pregunta!',selectAll:'✓ Marca todas las que correspondan',submitSurvey:'Enviar encuesta',submitQuiz:'Enviar y ver puntuación',thankYou:'¡Gracias!',recorded:'Tus respuestas se han guardado.',qaTitle:'Preguntas del público',qaSub:'Haz una pregunta — o vota las que quieras que respondan.',ask:'Preguntar',typeQuestion:'Escribe tu pregunta…',loading:'Cargando…',responses:'respuestas',question:'Pregunta',typeAnswer:'Escribe tu respuesta…',tapToFlip:'TOCA PARA GIRAR',answerFace:'RESPUESTA',showAnswer:'Mostrar respuesta',again:'Otra vez',hard:'Difícil',good:'Bien',easy:'Fácil',yourAnswer:'Tu respuesta',correctWas:'Correcta',skipped:'(omitida)',joinTitle:'Únete a una sesión',joinSub:'Escribe el código que aparece junto al código QR.',joinBtn:'Unirse →',joinShort:'Ese código parece demasiado corto: revísalo e inténtalo de nuevo.',joinNotFound:'No se encontró ninguna sesión con ese código. Verifícalo con tu presentador.',joinFail:'No se pudo comprobar el código: revisa tu conexión.',seeOriginal:'Ver original',seeTranslation:'Ver traducción',teamTitle:'Únete a un equipo',teamSub:'Responded juntos: elige el equipo de tu mesa o crea uno.',teamNewLabel:'…o crea uno nuevo',teamFirst:'Crea el primer equipo',teamNew:'Nombre del nuevo equipo…',teamCreate:'Crear equipo',teamSolo:'Jugar solo (sin equipo)',teamMembers:'miembros',teamNamePlease:'Ponle un nombre a tu equipo.'},
+  de:{enterName:'Gib deinen Namen ein',nameOnce:'Nur einmal pro Sitzung nötig.',yourName:'Dein Name',continue:'Weiter →',enterNamePlease:'Bitte gib deinen Namen ein.',submitAnswer:'Antwort senden',submitRating:'Bewertung senden',submitAnswers:'Antworten senden',submitted:'✓ Gesendet!',alreadyAnswered:'Du hast diese Frage bereits beantwortet!',selectAll:'✓ Alle Zutreffenden auswählen',submitSurvey:'Umfrage senden',submitQuiz:'Senden & Punktzahl ansehen',thankYou:'Danke!',recorded:'Deine Antworten wurden gespeichert.',qaTitle:'Publikumsfragen',qaSub:'Stelle eine Frage — oder stimme für andere ab.',ask:'Fragen',typeQuestion:'Schreibe deine Frage…',loading:'Lädt…',responses:'Antworten',question:'Frage',typeAnswer:'Schreibe deine Antwort…',tapToFlip:'ZUM UMDREHEN TIPPEN',answerFace:'ANTWORT',showAnswer:'Antwort zeigen',again:'Nochmal',hard:'Schwer',good:'Gut',easy:'Leicht',yourAnswer:'Deine Antwort',correctWas:'Richtig',skipped:'(übersprungen)',joinTitle:'Sitzung beitreten',joinSub:'Gib den Code ein, der neben dem QR-Code angezeigt wird.',joinBtn:'Beitreten →',joinShort:'Dieser Code sieht zu kurz aus — prüfe ihn und versuche es erneut.',joinNotFound:'Keine Sitzung mit diesem Code gefunden — frag deinen Präsentator.',joinFail:'Code konnte nicht geprüft werden — prüfe deine Verbindung.',seeOriginal:'Original ansehen',seeTranslation:'Übersetzung ansehen',teamTitle:'Tritt einem Team bei',teamSub:'Antwortet zusammen — wähle das Team deines Tisches oder gründe eins.',teamNewLabel:'…oder gründe ein neues',teamFirst:'Gründe das erste Team',teamNew:'Name des neuen Teams…',teamCreate:'Team gründen',teamSolo:'Allein spielen (ohne Team)',teamMembers:'Mitglieder',teamNamePlease:'Gib deinem Team einen Namen.'},
+  fr:{enterName:'Entrez votre nom',nameOnce:'À faire une seule fois par session.',yourName:'Votre nom',continue:'Continuer →',enterNamePlease:'Veuillez entrer votre nom.',submitAnswer:'Envoyer la réponse',submitRating:'Envoyer la note',submitAnswers:'Envoyer les réponses',submitted:'✓ Envoyé !',alreadyAnswered:'Vous avez déjà répondu à cette question !',selectAll:'✓ Sélectionnez tout ce qui s’applique',submitSurvey:'Envoyer le sondage',submitQuiz:'Envoyer et voir le score',thankYou:'Merci !',recorded:'Vos réponses ont été enregistrées.',qaTitle:'Questions du public',qaSub:'Posez une question — ou votez pour celles à traiter.',ask:'Demander',typeQuestion:'Écrivez votre question…',loading:'Chargement…',responses:'réponses',question:'Question',typeAnswer:'Écrivez votre réponse…',tapToFlip:'TOUCHEZ POUR RETOURNER',answerFace:'RÉPONSE',showAnswer:'Voir la réponse',again:'Encore',hard:'Difficile',good:'Bien',easy:'Facile',yourAnswer:'Votre réponse',correctWas:'Bonne réponse',skipped:'(passée)',joinTitle:'Rejoindre une session',joinSub:'Saisissez le code affiché à côté du QR code.',joinBtn:'Rejoindre →',joinShort:'Ce code semble trop court — vérifiez-le et réessayez.',joinNotFound:'Aucune session trouvée avec ce code — vérifiez auprès de votre présentateur.',joinFail:'Impossible de vérifier le code — vérifiez votre connexion.',seeOriginal:'Voir l’original',seeTranslation:'Voir la traduction',teamTitle:'Rejoignez une équipe',teamSub:'Répondez ensemble — choisissez l’équipe de votre table ou créez-en une.',teamNewLabel:'…ou créez-en une nouvelle',teamFirst:'Créez la première équipe',teamNew:'Nom de la nouvelle équipe…',teamCreate:'Créer l’équipe',teamSolo:'Jouer seul (sans équipe)',teamMembers:'membres',teamNamePlease:'Donnez un nom à votre équipe.'},
+  pt:{enterName:'Digite seu nome',nameOnce:'Só precisa fazer isso uma vez por sessão.',yourName:'Seu nome',continue:'Continuar →',enterNamePlease:'Por favor, digite seu nome.',submitAnswer:'Enviar resposta',submitRating:'Enviar avaliação',submitAnswers:'Enviar respostas',submitted:'✓ Enviado!',alreadyAnswered:'Você já respondeu a esta pergunta!',selectAll:'✓ Marque todas as aplicáveis',submitSurvey:'Enviar pesquisa',submitQuiz:'Enviar e ver pontuação',thankYou:'Obrigado!',recorded:'Suas respostas foram registradas.',qaTitle:'Perguntas do público',qaSub:'Faça uma pergunta — ou vote nas que quer ver respondidas.',ask:'Perguntar',typeQuestion:'Escreva sua pergunta…',loading:'Carregando…',responses:'respostas',question:'Pergunta',typeAnswer:'Digite sua resposta…',tapToFlip:'TOQUE PARA VIRAR',answerFace:'RESPOSTA',showAnswer:'Mostrar resposta',again:'De novo',hard:'Difícil',good:'Bom',easy:'Fácil',yourAnswer:'Sua resposta',correctWas:'Correta',skipped:'(pulada)',joinTitle:'Entrar em uma sessão',joinSub:'Digite o código exibido ao lado do QR code.',joinBtn:'Entrar →',joinShort:'Esse código parece curto demais — confira e tente novamente.',joinNotFound:'Nenhuma sessão encontrada com esse código — confirme com seu apresentador.',joinFail:'Não foi possível verificar o código — verifique sua conexão.',seeOriginal:'Ver original',seeTranslation:'Ver tradução',teamTitle:'Entre em uma equipe',teamSub:'Respondam juntos — escolha a equipe da sua mesa ou crie uma.',teamNewLabel:'…ou crie uma nova',teamFirst:'Crie a primeira equipe',teamNew:'Nome da nova equipe…',teamCreate:'Criar equipe',teamSolo:'Jogar sozinho (sem equipe)',teamMembers:'membros',teamNamePlease:'Dê um nome à sua equipe.'},
+  it:{enterName:'Inserisci il tuo nome',nameOnce:'Da fare una sola volta per sessione.',yourName:'Il tuo nome',continue:'Continua →',enterNamePlease:'Inserisci il tuo nome.',submitAnswer:'Invia risposta',submitRating:'Invia valutazione',submitAnswers:'Invia risposte',submitted:'✓ Inviato!',alreadyAnswered:'Hai già risposto a questa domanda!',selectAll:'✓ Seleziona tutte quelle pertinenti',submitSurvey:'Invia sondaggio',submitQuiz:'Invia e vedi punteggio',thankYou:'Grazie!',recorded:'Le tue risposte sono state registrate.',qaTitle:'Domande del pubblico',qaSub:'Fai una domanda — o vota quelle da trattare.',ask:'Chiedi',typeQuestion:'Scrivi la tua domanda…',loading:'Caricamento…',responses:'risposte',question:'Domanda',typeAnswer:'Scrivi la tua risposta…',tapToFlip:'TOCCA PER GIRARE',answerFace:'RISPOSTA',showAnswer:'Mostra risposta',again:'Di nuovo',hard:'Difficile',good:'Bene',easy:'Facile',yourAnswer:'La tua risposta',correctWas:'Corretta',skipped:'(saltata)',joinTitle:'Partecipa a una sessione',joinSub:'Digita il codice mostrato accanto al codice QR.',joinBtn:'Partecipa →',joinShort:'Questo codice sembra troppo corto — controllalo e riprova.',joinNotFound:'Nessuna sessione trovata con questo codice — verifica con il tuo presentatore.',joinFail:'Impossibile verificare il codice — controlla la connessione.',seeOriginal:'Vedi originale',seeTranslation:'Vedi traduzione',teamTitle:'Unisciti a una squadra',teamSub:'Rispondete insieme — scegli la squadra del tuo tavolo o creane una.',teamNewLabel:'…o creane una nuova',teamFirst:'Crea la prima squadra',teamNew:'Nome della nuova squadra…',teamCreate:'Crea squadra',teamSolo:'Gioca da solo (senza squadra)',teamMembers:'membri',teamNamePlease:'Dai un nome alla tua squadra.'},
 };
 function t(key, fallback){ return (I18N[LANG] && I18N[LANG][key]) || fallback; }
 
@@ -530,6 +535,11 @@ async function bootApp() {
   // Load the deck's (source) language first.
   try { const s = await db.ref(`quiz_builder/${SESSION}/language`).get(); if (s.exists() && s.val()) DECK_LANG = String(s.val()); } catch(e) {}
 
+  // Team play (pub-quiz mode): presenter toggles it per deck. When on, everyone picks or
+  // creates a team after entering their name, and each response carries the team name.
+  try { const tm = await db.ref(`quiz_builder/${SESSION}/teamMode`).get(); TEAM_MODE = tm.exists() && tm.val() === true; } catch(e) {}
+  try { const tj = localStorage.getItem(`ql_team_${SESSION}`); if (tj) { const t = JSON.parse(tj); participantTeamId = t.id; participantTeam = t.name; } } catch(e) {}
+
   // The viewer reads in: their saved choice → their browser language (if supported) → the deck language.
   LANG = (saved && LANGUAGES[saved]) ? saved : (LANGUAGES[navL] ? navL : DECK_LANG);
   mountLangSelector();
@@ -541,11 +551,75 @@ async function bootApp() {
   if (storedId && storedName && storedName !== 'null' && storedName !== 'undefined') {
     participantId   = storedId;
     participantName = storedName;
-    QA_MODE ? loadQA() : SURVEY_MODE ? loadSurvey() : loadQuestion();
+    routeAfterIdentity();
   } else {
     showNameEntry();
   }
 }
+
+// One router for "identity is known" → team pick first when needed, then the screen.
+// (Covers both fresh joins and returning devices, including a presenter who turns
+// team mode ON after some people already joined.)
+function routeAfterIdentity() {
+  if (TEAM_MODE && !participantTeam && !QA_MODE) { showTeamPick(); return; }
+  QA_MODE ? loadQA() : SURVEY_MODE ? loadSurvey() : loadQuestion();
+}
+
+// ─── TEAM PICK (pub-quiz team play) ──────────────────────────────────────────
+// One decision, big targets: tap your table's team, or start one. "Play solo" keeps
+// the old individual flow, so teams never block anyone from answering.
+async function showTeamPick() {
+  _currentRenderer = showTeamPick;
+  let teams = {};
+  try { const s = await db.ref(`sessions/${SESSION}/teams`).get(); if (s.exists()) teams = s.val() || {}; } catch(e) {}
+  // NOTE: loop var must NOT be `t` — that would shadow the i18n t() helper.
+  const escT = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const rows = Object.entries(teams)
+    .map(([id, tv]) => ({ id, name: (tv && tv.name) || '', n: Object.keys((tv && tv.members) || {}).length }))
+    .filter(tm => tm.name)
+    .sort((a, b) => b.n - a.n)
+    .map(tm => `<button class="btn" style="width:100%;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border:1px solid var(--border);" onclick="joinTeam('${tm.id.replace(/[^A-Za-z0-9_-]/g,'')}')">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">👥 ${escT(tm.name)}</span>
+        <span style="font-size:11px;color:var(--muted);flex-shrink:0;margin-left:8px;">${tm.n} ${t('teamMembers','members')}</span>
+      </button>`).join('');
+  render(`
+    <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</div>
+    <h1>${t('teamTitle','Join a team')}</h1>
+    <p class="subtitle">${t('teamSub',"Answer together — pick your table's team or start one.")}</p>
+    ${rows ? `<div style="max-height:38vh;overflow-y:auto;margin-bottom:14px;">${rows}</div>` : ''}
+    <label>${rows ? t('teamNewLabel','…or start a new one') : t('teamFirst','Start the first team')}</label>
+    <input type="text" id="teamNameInput" maxlength="40" placeholder="${t('teamNew','New team name…')}">
+    <button class="btn btn-primary" onclick="createTeam()">${t('teamCreate','Create team')}</button>
+    <button class="btn" style="width:100%;margin-top:8px;background:none;border:none;color:var(--muted);font-size:13px;" onclick="skipTeam()">${t('teamSolo','Play solo (no team)')}</button>
+    <p id="teamErr" style="color:var(--accent2);font-size:13px;margin-top:8px;text-align:center;"></p>
+  `);
+  const inp = document.getElementById('teamNameInput');
+  if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') createTeam(); });
+}
+function _teamChosen(id, name) {
+  participantTeamId = id; participantTeam = name;
+  try { localStorage.setItem(`ql_team_${SESSION}`, JSON.stringify({ id, name })); } catch(e) {}
+  // Best-effort membership record — powers the "n members" count on the pick screen.
+  if (id) db.ref(`sessions/${SESSION}/teams/${id}/members/${participantId}`).set(participantName || true).catch(()=>{});
+  QA_MODE ? loadQA() : SURVEY_MODE ? loadSurvey() : loadQuestion();
+}
+async function joinTeam(id) {
+  try {
+    const s = await db.ref(`sessions/${SESSION}/teams/${id}/name`).get();
+    _teamChosen(id, s.exists() ? String(s.val()) : 'Team');
+  } catch(e) { document.getElementById('teamErr').textContent = t('joinFail','Could not join — check your connection.'); }
+}
+async function createTeam() {
+  const raw = (document.getElementById('teamNameInput')?.value || '').trim();
+  const name = moderateName(raw);   // same profanity/link guard as display names
+  if (!name) { document.getElementById('teamErr').textContent = t('teamNamePlease','Give your team a name.'); return; }
+  try {
+    const ref = db.ref(`sessions/${SESSION}/teams`).push();
+    await ref.set({ name: name.slice(0, 40), at: Date.now(), members: { [participantId]: participantName || true } });
+    _teamChosen(ref.key, name.slice(0, 40));
+  } catch(e) { document.getElementById('teamErr').textContent = t('joinFail','Could not join — check your connection.'); }
+}
+function skipTeam() { _teamChosen(null, null); }
 
 // ─── JOIN BY CODE (no camera needed) ─────────────────────────────────────────
 // Laptop/desktop participants can't scan a QR. They open the answer page with no
@@ -683,7 +757,7 @@ function joinSession() {
   localStorage.setItem(`ql_pid_${SESSION}`,  participantId);
   localStorage.setItem(`ql_pname_${SESSION}`, participantName);
 
-  QA_MODE ? loadQA() : SURVEY_MODE ? loadSurvey() : loadQuestion();
+  routeAfterIdentity();   // team pick first when the presenter enabled team play
 }
 
 // ─── LOAD QUESTION ────────────────────────────────────────────────────────────
@@ -974,6 +1048,7 @@ async function submitToDb(answer) {
     await db.ref(`sessions/${SESSION}/responses/${STABLE_QID}/${participantId}`).set({
       participantId,
       name: participantName,
+      team: participantTeam || null,   // team play: every response carries the team name
       answer: answer === null || answer === undefined ? '__none__' : JSON.stringify(answer),
       elapsed,
       isCorrect,
@@ -1217,6 +1292,7 @@ async function submitSurvey() {
       db.ref(`sessions/${SESSION}/responses/${stableQId}/${participantId}`).set({
         participantId,
         name: participantName,
+        team: participantTeam || null,   // team play: every response carries the team name
         answer: (answer === null || answer === undefined) ? '__none__' : JSON.stringify(answer),
         elapsed: 0,
         isCorrect,

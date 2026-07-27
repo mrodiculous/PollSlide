@@ -25,7 +25,7 @@
       ]
     },
     {
-      "source": "/(presenter|present|companion|answer|live|admin|setup|report|results|overlay|powerpoint|powerpoint-functions)",
+      "source": "/(presenter|present|companion|answer|live|admin|setup|report|results|recap|overlay|powerpoint|powerpoint-functions)",
       "headers": [
         { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" }
       ]

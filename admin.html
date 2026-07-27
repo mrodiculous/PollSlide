@@ -740,7 +740,11 @@ async function loadPollyLog(uid){
       const cnt = (r.delivered!=null && r.requested!=null) ? ` ${r.delivered}/${r.requested}` : '';
       const via = r.source ? ' · '+esc(String(r.source)) : '';
       const err = r.error ? ' — '+esc(String(r.error)) : '';
-      return `<div class="dp-row"><span>${esc(String(r.topic||r.type||'—')).slice(0,42)}<span style="color:var(--muted);">${cnt}${via}</span></span><span>${badge}</span></div>`
+      // Co-pilot runs share this log with question generation — label them so support can
+      // tell "Polly wrote me questions" apart from "Polly suggested a follow-up mid-session".
+      const kind = r.kind==='copilot' ? '<span style="color:#43e97b;">🎯 co-pilot · </span>' : '';
+      const what = r.kind==='copilot' ? (r.question||'—') : (r.topic||r.type||'—');
+      return `<div class="dp-row"><span>${kind}${esc(String(what)).slice(0,42)}<span style="color:var(--muted);">${cnt}${via}</span></span><span>${badge}</span></div>`
            + `<div style="font-size:10px;color:var(--muted);margin:-3px 0 5px;">${when}${err}</div>`;
     }).join('');
   }catch(e){ el.textContent='Could not load log ('+e.message+').'; }
@@ -2018,6 +2022,50 @@ function openArchDetail(layerKey,i){
 // Self-service "what broke → exact fix" so Rod can resolve common issues fast.
 // Each step is either an instruction (string) or a copyable command ({cmd}).
 const RUNBOOK = [
+  { cat:'👥 Team play, warm-up, co-pilot & recap', items:[
+    { sym:'"The team screen never appeared for my audience"',
+      cause:'Team play is a PER-PRESENTATION setting (quiz_builder/<code>/teamMode). Either it was never switched on for that deck, or the audience joined before it was.',
+      steps:[
+        'Ask which presentation, then check the flag for its session code:',
+        {cmd:'curl -s "https://echonest-live-survey-default-rtdb.firebaseio.com/quiz_builder/<CODE>/teamMode.json"'},
+        '<b>true</b> → the flag is set. Anyone who joined BEFORE it was set sees the team screen the next time they answer — tell them to reload the answer page.',
+        '<b>null / false</b> → they never turned it on. In the presenter top bar the button must read <b>👥 Teams: On</b> (it is per presentation, not global).',
+        'Note the audience page only reads the flag when it FIRST loads, so a reload is the fix for anyone already in.',
+      ] },
+    { sym:'"Our team scores look wrong / big teams should win"',
+      cause:'Not a bug — team score is deliberately the AVERAGE of member scores, not the sum, so a table of six has no advantage over a table of two.',
+      steps:[
+        'Explain the fairness rule: a 6-person team averaging 50% ranks below a 2-person team averaging 80%.',
+        'Solo players (who tapped "Play solo") appear on the same board as themselves — that is intended, not a duplicate.',
+        'If they truly want sum-based scoring, log it as a feature request; there is no toggle today.',
+      ] },
+    { sym:'"The co-pilot says unavailable" / no suggestions',
+      cause:'BOTH the local Mac LLM and OpenAI were unreachable at that moment. This is the designed fallback — it returns HTTP 200 with degraded:true so a live session is never interrupted by an error.',
+      steps:[
+        'This never breaks a session: questions, results, reveal, leaderboards, reports and CSV are all AI-free.',
+        'Check the providers:',
+        {cmd:'curl -s https://app.pollslide.com/api/ai-status | python3 -m json.tool'},
+        'Fix whichever provider is down using the "🤖 Polly / AI is down" section below.',
+        'Confirm it happened by looking at that user in <b>Users → (open user) → 🎫 Polly credits & log</b> — co-pilot runs are logged with kind:copilot.',
+      ] },
+    { sym:'"My recap link is broken / expired"',
+      cause:'Recap links carry the id AFTER the # (…/recap#r7x2…). Chat apps sometimes truncate long links, which drops the id.',
+      steps:[
+        'Ask them to paste the FULL link — it must contain a # followed by ~15 characters.',
+        'Verify the recap exists (replace with their id):',
+        {cmd:'curl -s "https://echonest-live-survey-default-rtdb.firebaseio.com/recaps/<RECAP_ID>.json" | head -c 300'},
+        'Data returned → the recap is fine, it is a link-truncation problem: tell them to re-copy it from Report → 🎁 Share recap.',
+        '<b>null</b> → that recap was never created or was deleted. They can rebuild it from the Report at any time; the underlying responses are still there.',
+        'If recaps fail to CREATE for everyone, the <b>recaps</b> rule may not be published — see "Database rules" below.',
+      ] },
+    { sym:'Warm-up trivia is not showing on the big screen',
+      cause:'It is a per-device toggle stored in that browser\'s localStorage, and it only runs in the WAITING state (never during a live question).',
+      steps:[
+        'On the big-screen view, look bottom-right: the button should read <b>🎪 Warm-up: On</b>. Click it to switch back on.',
+        'It hides itself the moment a question goes live — that is intended.',
+        'It needs no AI and no extra setup, so if the toggle says On and you are in the waiting state, do a hard reload of /live.',
+      ] },
+  ] },
   { cat:'🤖 Polly / AI is down', items:[
     { sym:'Polly errors — "server error (502)" or "check the AI key"',
       cause:'The Mac LLM tunnel is misrouted or asleep. Polly is supposed to fall back to OpenAI automatically, so a HARD error usually means the OpenAI backup key is invalid too.',

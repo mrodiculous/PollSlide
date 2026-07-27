@@ -78,6 +78,7 @@
     </div>
     <span id="acct" class="muted" style="font-size:12px;"></span>
     <button class="btn btn-ghost" onclick="exportCSV()" id="csvBtn" disabled>⤓ CSV</button>
+    <button class="btn btn-ghost" onclick="makeRecap()" id="recapBtn" disabled title="Build a shareable recap page for one session — winner, toughest question and the highlights — then send the link to everyone who took part">🎁 Share recap</button>
     <button class="btn btn-ghost" onclick="window.print()">🖨 Print</button>
     <button class="btn btn-ghost" id="signOutBtn" onclick="ppSignOut()" style="display:none;">Sign out</button>
   </div>
@@ -147,7 +148,7 @@ function pushDataset(out, presId, presName, source, date, questions, responses){
     Object.entries(byPid||{}).forEach(([pid, r]) => {
       out.push({ presId, presName, source, date: r.submittedAt || date || null,
         qIdx, qText:q.text||'', qType:q.type||'', options:q.options||null, correctAnswer:(q.correctAnswer!=null?q.correctAnswer:null),
-        pid: r.participantId || pid, name: r.name || 'Anonymous', answer: r.answer, isCorrect: r.isCorrect, elapsed: r.elapsed||0 });
+        pid: r.participantId || pid, name: r.name || 'Anonymous', team: r.team || null, answer: r.answer, isCorrect: r.isCorrect, elapsed: r.elapsed||0 });
     });
   });
 }
@@ -184,6 +185,7 @@ async function loadAll(){
   const pre = new URLSearchParams(location.search).get('pres');
   if (pre && PRES[pre]) { el('fPres').value = pre; onPresChange(); }
   el('csvBtn').disabled = RECORDS.length===0;
+  const _rb = el('recapBtn'); if (_rb) _rb.disabled = RECORDS.length===0;
   render();
 }
 
@@ -283,6 +285,124 @@ function renderByQuestion(data){
       ${insightsUI}
       <table style="margin-top:10px;"><thead><tr><th>Who</th><th>Answered</th><th>Correct</th><th>Time</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }).join('');
+}
+
+/* ─── 🎁 SHAREABLE SESSION RECAP ─────────────────────────────────────────────
+   Turns one session's data into a public page the presenter can send to everyone who
+   took part: winner (or winning team), the question that fooled the room, per-question
+   highlights, and an optional AI summary of the written answers.
+   Design notes:
+   • Built from the CURRENTLY FILTERED records, so "which session" is the filter you
+     already set — no second concept to learn.
+   • Works with NO AI. The summary is a bonus; if Polly is unreachable the recap still
+     publishes with every stat intact (see the try/catch around /api/insights).
+   • Stored at recaps/<id> with an unguessable id: public READ, owner-only WRITE.
+   • Names shown are the display names people already chose for the live session.       */
+async function makeRecap(){
+  const data = filtered();
+  if (!data.length) { alert('No responses in the current filter — pick a presentation first.'); return; }
+  const presIds = [...new Set(data.map(r=>r.presId))];
+  if (presIds.length > 1) { alert('Choose ONE presentation in the filter above, then build the recap.'); return; }
+
+  const btn = el('recapBtn'); const old = btn.textContent;
+  btn.disabled = true; btn.textContent = '🎁 Building…';
+  try {
+    const presId = presIds[0];
+    const title  = (PRES[presId] && PRES[presId].name) || data[0].presName || 'PollSlide session';
+
+    // Per-person + per-team scoring (mirrors the presenter's size-fair team average).
+    const byPerson = {};
+    data.forEach(r=>{
+      const p = byPerson[r.pid] || (byPerson[r.pid] = { name:r.name||'Anonymous', team:r.team||null, score:0, answered:0 });
+      if (r.name) p.name = r.name;
+      if (r.team) p.team = r.team;
+      p.answered++;
+      if (r.isCorrect===true) p.score += 1;
+      else if (typeof r.isCorrect === 'number') p.score += r.isCorrect;
+    });
+    const people = Object.values(byPerson);
+    const graded = data.filter(r=>r.isCorrect===true||r.isCorrect===false).length > 0;
+    const leaderboard = people.slice().sort((a,b)=>b.score-a.score).slice(0,10)
+      .map(p=>({ name:p.name, score:Math.round(p.score*10)/10 }));
+    let teams = null;
+    if (people.some(p=>p.team)) {
+      const g = {};
+      people.forEach(p=>{ if(!p.team) return; (g[p.team] = g[p.team] || { name:p.team, n:0, sum:0 }); g[p.team].n++; g[p.team].sum += p.score; });
+      teams = Object.values(g).map(t=>({ name:t.name, n:t.n, score:Math.round(t.sum/t.n*10)/10 }))
+        .sort((a,b)=>b.score-a.score).slice(0,10);
+    }
+
+    // Per-question stats → also finds the toughest question (the crowd-pleaser stat).
+    const qGroups = {};
+    data.forEach(r=>{ const k=r.qIdx; (qGroups[k] = qGroups[k] || { qIdx:r.qIdx, qText:r.qText, type:r.qType, options:r.options, recs:[] }).recs.push(r); });
+    const questions = Object.values(qGroups).sort((a,b)=>a.qIdx-b.qIdx).map(g=>{
+      const gradedRecs = g.recs.filter(r=>r.isCorrect===true||r.isCorrect===false);
+      const pct = gradedRecs.length ? Math.round(g.recs.filter(r=>r.isCorrect===true).length/gradedRecs.length*100) : null;
+      let top = '';
+      if (g.options && g.options.length) {
+        const counts = g.options.map(()=>0);
+        g.recs.forEach(r=>{ try{ const a=JSON.parse(r.answer); (Array.isArray(a)?a:[a]).forEach(v=>{ if(counts[v]!=null)counts[v]++; }); }catch(e){} });
+        const bi = counts.indexOf(Math.max(...counts));
+        if (bi>=0 && g.options[bi]) top = g.options[bi].text || '';
+      }
+      return { idx:g.qIdx, text:g.qText||('Question '+(g.qIdx+1)), n:g.recs.length, correctPct:pct, topAnswer:top };
+    });
+    const scored = questions.filter(q=>q.correctPct!==null);
+    const toughest = scored.length ? scored.slice().sort((a,b)=>a.correctPct-b.correctPct)[0] : null;
+
+    // Optional AI flavour — a one-line summary of the written answers. Best-effort ONLY:
+    // any failure (including Polly being offline) leaves summary null and the recap
+    // publishes regardless. The recap is never blocked on AI.
+    let summary = null;
+    try {
+      const texts = data.filter(r=>{
+        const g = qGroups[r.qIdx];
+        return g && (!g.options || !g.options.length);
+      }).map(r=>answerText({type:'free_text'}, r.answer)).filter(a=>a && a!=='—').slice(0,120);
+      if (texts.length >= 3) {
+        const token = (fbAuth && fbAuth.currentUser) ? await fbAuth.currentUser.getIdToken().catch(()=>null) : null;
+        const rr = await fetch('/api/insights', { method:'POST',
+          headers:Object.assign({'Content-Type':'application/json'}, token?{'Authorization':'Bearer '+token}:{}),
+          body: JSON.stringify({ question:'Overall session feedback', texts, language:'en' }) });
+        const jj = await rr.json().catch(()=>null);
+        if (rr.ok && jj && jj.summary) summary = String(jj.summary).slice(0,400);
+      }
+    } catch(e) { /* recap works fine without AI */ }
+
+    const rid = 'r' + Math.random().toString(36).slice(2,10) + Date.now().toString(36);
+    const payload = {
+      owner: userId, title, at: Date.now(),
+      respondents: people.length, responses: data.length,
+      graded, leaderboard, teams, questions, toughest, summary,
+    };
+    await fbDb.ref('recaps/'+rid).set(payload);
+    const url = location.origin + '/recap#' + rid;
+    showRecapDone(url);
+  } catch(e) {
+    alert('Could not build the recap: ' + (e && e.message ? e.message : e));
+  } finally {
+    btn.disabled = false; btn.textContent = old;
+  }
+}
+function showRecapDone(url){
+  let m = el('recapModal');
+  if (!m) { m = document.createElement('div'); m.id='recapModal'; m.className='overlay'; m.onclick=e=>{ if(e.target===m) m.style.display='none'; }; document.body.appendChild(m); }
+  m.innerHTML = `<div class="card" style="width:min(520px,92vw);">
+    <h3>🎁 Recap ready to share</h3>
+    <p class="muted" style="font-size:12.5px;line-height:1.6;margin-bottom:10px;">Send this link to everyone who took part. Anyone with the link can view it — no sign-in needed.</p>
+    <input id="recapUrl" readonly value="${esc(url)}" style="width:100%;margin-bottom:9px;font-size:12.5px;">
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="copyRecap()">📋 Copy link</button>
+      <a class="btn btn-ghost" style="flex:1;text-align:center;text-decoration:none;" href="${esc(url)}" target="_blank">Open recap ↗</a>
+    </div>
+    <button class="btn btn-ghost" style="width:100%;margin-top:9px;" onclick="document.getElementById('recapModal').style.display='none'">Close</button>
+  </div>`;
+  m.style.display = 'flex';
+}
+function copyRecap(){
+  const i = el('recapUrl'); if(!i) return;
+  i.select();
+  navigator.clipboard.writeText(i.value).then(()=>{ const b=event.target; const o=b.textContent; b.textContent='✓ Copied'; setTimeout(()=>b.textContent=o,1600); }).catch(()=>{});
 }
 
 /* ─── ✨ AI INSIGHTS in the report — themes + mood over a question's free-text answers ── */

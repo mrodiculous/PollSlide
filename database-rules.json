@@ -48,7 +48,13 @@
         "qstate":          { ".write": "auth != null" },
         "meta":            { ".write": "auth != null" },
         "qa":              { ".write": true },
-        "study":           { ".write": true }
+        "study":           { ".write": true },
+        "teams":           { ".write": true,
+          "$teamId": {
+            ".validate": "newData.hasChild('name')",
+            "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 40" }
+          }
+        }
       }
     },
 
@@ -76,6 +82,14 @@
         ".read": true,
         ".write": "auth != null && (!data.exists() || data.child('owner').val() === auth.uid)",
         ".validate": "newData.hasChildren(['owner','title','json','at'])"
+      }
+    },
+
+    "recaps": {
+      "$rid": {
+        ".read": true,
+        ".write": "auth != null && (!data.exists() || data.child('owner').val() === auth.uid)",
+        ".validate": "newData.hasChildren(['owner','title','at'])"
       }
     },
 

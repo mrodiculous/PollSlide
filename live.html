@@ -119,6 +119,7 @@
   #waitingState {
     flex:1; display:flex; flex-direction:column; align-items:center;
     justify-content:center; gap:14px; padding:36px 20px; text-align:center;
+    position:relative;   /* anchors the warm-up toggle in the corner */
   }
   #waitingState h2 { font-family:'Syne',sans-serif; font-weight:800; font-size:clamp(20px,3vw,30px); }
   #waitingState p  { color:var(--muted); font-size:15px; line-height:1.6; max-width:420px; }
@@ -305,6 +306,14 @@
   <div id="waitingState">
     <h2>You're in. Waiting for the presenter…</h2>
     <p>The first question appears here automatically the moment it goes live. Keep this screen up.</p>
+    <!-- Waiting-room warm-up: rotating icebreaker trivia so the screen entertains while
+         people join. Pure big-screen fun — separate from the deck, so no spoilers. -->
+    <div id="warmupCard" style="display:none;max-width:640px;width:90%;margin-top:26px;background:rgba(108,99,255,0.08);border:1px solid rgba(108,99,255,0.3);border-radius:18px;padding:26px 30px;text-align:center;">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.08em;color:#a78bfa;margin-bottom:12px;">🎪 WARM-UP · JUST FOR FUN</div>
+      <div id="warmupQ" style="font-family:'Syne',sans-serif;font-weight:800;font-size:clamp(18px,2.6vw,27px);line-height:1.35;"></div>
+      <div id="warmupA" style="font-size:clamp(15px,2vw,20px);color:#43e97b;font-weight:700;margin-top:14px;min-height:1.4em;"></div>
+    </div>
+    <button id="warmupToggle" onclick="toggleWarmup()" style="position:absolute;bottom:14px;right:14px;background:rgba(13,13,24,0.85);color:var(--muted);border:1px solid rgba(255,255,255,0.18);border-radius:9px;padding:6px 11px;font-size:12px;font-family:inherit;cursor:pointer;">🎪 Warm-up: On</button>
   </div>
 
   <!-- Active question -->
@@ -363,6 +372,7 @@ const letters    = ['A','B','C','D','E','F'];
 
 let db;
 let sessionCode  = null;
+let TEAM_MODE    = false;   // team play (pub-quiz mode) — read from quiz_builder on join
 let currentQListener  = null;
 let responsesListener = null;
 let currentQ     = null;
@@ -408,10 +418,74 @@ function startWatching(code) {
   document.getElementById('liveScreen').style.display = 'flex';
   document.getElementById('sessionBadge').textContent = code;
   renderJoinBanner(code);
+  // Team play flag — set per deck by the presenter; flips the post-reveal boards to teams.
+  db.ref(`quiz_builder/${code}/teamMode`).get()
+    .then(s => { TEAM_MODE = s.exists() && s.val() === true; }).catch(()=>{});
   // Update URL hash so the page can be bookmarked / shared
   history.replaceState(null, '', '#' + code);
   subscribeCurrentQuestion();
 }
+
+// ── Waiting-room warm-up ──────────────────────────────────────────────────────
+// Rotating icebreaker trivia while people join — the screen entertains instead of
+// sitting static. Runs ONLY in the waiting state, needs no Firebase and no AI (a
+// built-in bank), and the person at the projector can switch it off in the corner
+// (remembered on this device). Deliberately separate from the deck: no spoilers.
+const WARMUP_BANK = [
+  ['Which planet spins backwards compared to most others?', 'Venus 🔄'],
+  ['What is the only food that never spoils?', 'Honey 🍯'],
+  ['Which animal\'s fingerprints are nearly identical to humans\'?', 'The koala 🐨'],
+  ['How long did the shortest war in history last?', 'About 38 minutes (Anglo-Zanzibar, 1896) ⚔️'],
+  ['What was the first fruit eaten on the Moon?', 'A peach 🍑'],
+  ['Which country has the most time zones?', 'France — 12, thanks to its territories 🇫🇷'],
+  ['What do you call a group of flamingos?', 'A flamboyance 🦩'],
+  ['Which everyday drink was once prescribed as medicine?', 'Tonic water — quinine for malaria 🥤'],
+  ['How many hearts does an octopus have?', 'Three 🐙'],
+  ['Which board game was used to smuggle escape maps in WWII?', 'Monopoly 🎲'],
+  ['What is the national animal of Scotland?', 'The unicorn 🦄'],
+  ['Which language has the most words?', 'English — over a million 📚'],
+  ['What colour is a polar bear\'s skin?', 'Black — the fur is just translucent 🐻‍❄️'],
+  ['Which instrument was found in Tutankhamun\'s tomb and played on BBC radio in 1939?', 'A 3,000-year-old trumpet 🎺'],
+  ['How many times does the average person blink per day?', 'Around 15,000–20,000 👀'],
+  ['Which sea creature has existed longer than trees?', 'Sharks 🦈'],
+  ['What was Coca-Cola\'s original colour?', 'Green-tinged — the glass, not the drink 🥤'],
+  ['Which two countries share the longest border?', 'USA and Canada 🇺🇸🇨🇦'],
+  ['What is the loudest animal on Earth for its size?', 'The tiny snapping shrimp 🦐'],
+  ['Which planet rains diamonds?', 'Neptune (and Uranus) 💎'],
+  ['What did the first text message ever say?', '"Merry Christmas" (1992) 📱'],
+  ['How much of the ocean have humans explored?', 'Only about 5% 🌊'],
+  ['Which bird can sleep while flying?', 'The frigatebird 🐦'],
+  ['What is banned in public places in Florida after 6pm on Thursdays?', 'Singing in a swimsuit 🩱'],
+];
+let warmupTimer = null, warmupIdx = Math.floor(Math.random() * WARMUP_BANK.length), warmupPhase = 0;
+function warmupEnabled() { try { return localStorage.getItem('ql_warmup') !== 'off'; } catch(e) { return true; } }
+function toggleWarmup() {
+  try { localStorage.setItem('ql_warmup', warmupEnabled() ? 'off' : 'on'); } catch(e) {}
+  syncWarmup();
+}
+function syncWarmup() {
+  const on = warmupEnabled();
+  const btn = document.getElementById('warmupToggle');
+  if (btn) btn.textContent = on ? '🎪 Warm-up: On' : '🎪 Warm-up: Off';
+  const card = document.getElementById('warmupCard');
+  if (!on || !sessionCode) { if (card) card.style.display = 'none'; stopWarmup(); return; }
+  if (card) card.style.display = 'block';
+  if (!warmupTimer) { warmupPhase = 0; paintWarmup(); warmupTimer = setInterval(tickWarmup, 1000); }
+}
+let _warmupCount = 0;
+function tickWarmup() {
+  _warmupCount++;
+  // 9s question → answer appears → 5s later next question.
+  if (warmupPhase === 0 && _warmupCount >= 9) { warmupPhase = 1; _warmupCount = 0; paintWarmup(); }
+  else if (warmupPhase === 1 && _warmupCount >= 5) { warmupPhase = 0; _warmupCount = 0; warmupIdx = (warmupIdx + 1) % WARMUP_BANK.length; paintWarmup(); }
+}
+function paintWarmup() {
+  const [q, a] = WARMUP_BANK[warmupIdx];
+  const qe = document.getElementById('warmupQ'), ae = document.getElementById('warmupA');
+  if (qe) qe.textContent = q;
+  if (ae) ae.textContent = warmupPhase === 1 ? a : '…';
+}
+function stopWarmup() { if (warmupTimer) { clearInterval(warmupTimer); warmupTimer = null; } _warmupCount = 0; }
 
 /* Brand a rendered qrcode.js box: bake the PollSlide mark into the canvas centre.
    correctLevel:H recovers the covered modules — verified to still decode. Skips <90px. */
@@ -440,6 +514,7 @@ function renderJoinBanner(code) {
 
 function leaveSession() {
   cleanup();
+  stopWarmup();
   sessionCode = null;
   history.replaceState(null, '', location.pathname);
   document.getElementById('entryScreen').classList.remove('hidden');
@@ -488,10 +563,12 @@ function showWaiting() {
   document.getElementById('joinBanner').classList.remove('compact');
   document.getElementById('waitingState').style.display = 'flex';
   document.getElementById('questionState').style.display = 'none';
+  syncWarmup();   // waiting room = warm-up trivia time (if enabled on this device)
 }
 
 // ── Show active question ──────────────────────────────────────────────────────
 function showQuestion(q) {
+  stopWarmup(); const _wc = document.getElementById('warmupCard'); if (_wc) _wc.style.display = 'none';
   currentQ = q;
   const idx  = q.qIndex !== undefined ? q.qIndex : (q.index ? q.index - 1 : 0);
   const qId  = q.id || `q${idx}_stable_${sessionCode}`;
@@ -619,6 +696,20 @@ function showPostRevealOverlay(q) {
     `${lastResponses.length} <span>response${lastResponses.length!==1?'s':''}</span>`;
 }
 
+// Team standings: same size-fair grouping as the presenter (average member score);
+// solo players stay as their own rows so nobody vanishes from the board.
+function groupTeams(rows) {
+  const teams = {}, solo = [];
+  (rows || []).forEach(r => {
+    const tn = (r.team && String(r.team).trim()) || '';
+    if (!tn) { solo.push({ name: r.name || 'Player', n: 1, score: r.score || 0, elapsed: r.elapsed || 0, solo: true }); return; }
+    if (!teams[tn]) teams[tn] = { name: tn, n: 0, scoreSum: 0, elapsedSum: 0 };
+    teams[tn].n += 1; teams[tn].scoreSum += (r.score || 0); teams[tn].elapsedSum += (r.elapsed || 0);
+  });
+  const grouped = Object.values(teams).map(g => ({ name: g.name, n: g.n, score: g.scoreSum / g.n, elapsed: g.elapsedSum / g.n, solo: false }));
+  return [...grouped, ...solo].sort((a, b) => (b.score - a.score) || (a.elapsed - b.elapsed));
+}
+
 function buildPostRevealContent(q, resps) {
   const PS_COLORS = ['#6c63ff','#ff6584','#38d9f5','#f7b731','#a78bfa','#43e97b'];
   const type = q.postReveal?.type || 'leaderboard';
@@ -629,6 +720,41 @@ function buildPostRevealContent(q, resps) {
     return (a.elapsed||999999)-(b.elapsed||999999);
   });
   const medals=['🥇','🥈','🥉'];
+
+  // Team play: rank TEAMS (average member score this question), solo players inline.
+  const teamRows = TEAM_MODE
+    ? groupTeams(resps.map(r => ({ team: r.team, name: r.name, score: r.isCorrect===true?1:(typeof r.isCorrect==='number'?r.isCorrect:0), elapsed: r.elapsed || 0 })))
+    : null;
+  const useTeams = teamRows && teamRows.some(t => !t.solo);
+
+  if (type==='leaderboard' && useTeams) {
+    const rows = teamRows.map((tr,rank)=>{
+      const pct = Math.round(tr.score*100);
+      const label = tr.solo ? `🙋 ${escHtml(tr.name)}` : `👥 ${escHtml(tr.name)} <span style="font-size:11px;color:var(--muted);">×${tr.n}</span>`;
+      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);">
+        <span style="width:28px;text-align:center;font-size:14px;">${rank<3?medals[rank]:'#'+(rank+1)}</span>
+        <span style="flex:1;font-size:14px;font-weight:600;">${label}</span>
+        <span style="color:${pct>=100?'#43e97b':pct>0?'#f7b731':'#ff6584'};font-weight:700;">${pct}%</span></div>`;
+    }).join('')||'<div style="color:var(--muted);font-size:14px;">No responses yet.</div>';
+    return `<div style="font-size:12px;font-weight:700;color:#a78bfa;letter-spacing:.06em;margin-bottom:10px;">✦ TEAM LEADERBOARD</div>${rows}`;
+  }
+  if (type==='podium' && useTeams) {
+    const top3=teamRows.slice(0,3), order=[1,0,2];
+    const heights=['80px','120px','60px'], cols=['#ff6584','#6c63ff','#f7b731'];
+    const pods=order.map(i=>{
+      const tr=top3[i];
+      if(!tr)return`<div style="flex:1;"></div>`;
+      return`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;">
+        <div style="font-size:26px;">${medals[i]}</div>
+        <div style="font-size:13px;font-weight:700;color:#fff;text-align:center;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${tr.solo?'🙋':'👥'} ${escHtml(tr.name)}</div>
+        <div style="font-size:10px;color:var(--muted);">${Math.round(tr.score*100)}%${tr.solo?'':' · '+tr.n+' members'}</div>
+        <div style="width:100%;height:${heights[i]};background:${cols[i]};border-radius:8px 8px 0 0;box-shadow:0 0 18px ${cols[i]}88;"></div>
+      </div>`;
+    });
+    return`<div style="font-size:12px;font-weight:700;color:#a78bfa;letter-spacing:.06em;margin-bottom:14px;">✦ TOP TEAMS</div>
+      <div style="display:flex;align-items:flex-end;gap:10px;justify-content:center;">${pods.join('')}</div>
+      ${teamRows.length>3?`<div style="margin-top:14px;font-size:12px;color:var(--muted);text-align:center;">+ ${teamRows.length-3} more teams</div>`:''}`;
+  }
 
   if (type==='leaderboard') {
     const rows = sorted.map((r,rank)=>{
