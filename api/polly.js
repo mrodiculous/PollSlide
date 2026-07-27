@@ -40,7 +40,8 @@ const LOCAL_LLM_MODEL   = process.env.LOCAL_LLM_MODEL || 'qwen3:14b';
 // otherwise. Valid: 'low' | 'medium' | 'high'.
 const LOCAL_REASONING_EFFORT = process.env.LOCAL_REASONING_EFFORT || '';
 
-const { checkQuota, consumeQuota } = require('../lib/quota');   // server-enforced Polly quota
+const admin = require('firebase-admin');
+const { checkQuota, consumeQuota, getApp } = require('../lib/quota');   // server-enforced Polly quota + support log
 
 // Cloudflare Access service-token headers — proves to Cloudflare's edge that this
 // request is really PollSlide's server, so the Mac tunnel can reject everyone else.
@@ -58,6 +59,13 @@ const CF_ACCESS_HEADERS = (process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACC
 // and CLOUD_TIMEOUT_MS=15000 (= 57s, leaves margin).
 const LOCAL_TIMEOUT_MS  = parseInt(process.env.LOCAL_TIMEOUT_MS, 10) || 30000;  // Mac's head-start before cloud fallback
 const CLOUD_TIMEOUT_MS  = parseInt(process.env.CLOUD_TIMEOUT_MS, 10) || 20000;
+
+// Whole-request time budget for the top-up loop (below). Set to sit ~15s under the polly
+// function's maxDuration in vercel.json (currently 180s on the Pro plan), which is what lets
+// the local model carry a whole large batch itself instead of the cloud filling the shortfall.
+// The loop still EXITS as soon as it reaches `count`, so small generations stay fast — this is
+// only a ceiling for big ones. Env-overridable if maxDuration changes.
+const POLLY_BUDGET_MS   = parseInt(process.env.POLLY_BUDGET_MS, 10) || 165000;
 
 // Supported content types → how Polly should think about each.
 // Forward-feature: matches the Poll/Survey/Quiz/Study product suite.
@@ -428,6 +436,17 @@ function normalizeQuestions(raw, type) {
   }).filter((q) => q.text);
 }
 
+// Best-effort support log: one row per generation under admin/polly_log/<uid> (admin-read
+// only; Admin SDK write bypasses rules). Lets the founder answer "Polly gave me junk / it
+// didn't generate" by seeing exactly what ran — topic, how many were asked vs delivered,
+// which provider, and success/failure. Never throws and never blocks the response meaningfully.
+async function logGen(quota, entry) {
+  if (!quota || !quota.uid) return;   // no Firebase / anonymous → nothing to attribute it to
+  try {
+    await admin.database(getApp()).ref('admin/polly_log/' + quota.uid).push({ t: Date.now(), ...entry });
+  } catch (e) { /* logging must never affect the user */ }
+}
+
 module.exports = async function handler(req, res) {
   // CORS — same-origin in production, so this only matters for tooling/dev.
   res.setHeader('Access-Control-Allow-Origin', process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com');
@@ -489,6 +508,7 @@ module.exports = async function handler(req, res) {
       try { slides = normalizeDeck(await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS, seed })); source = 'openai'; }
       catch (err) { console.error('Polly: OpenAI error:', err.message); return res.status(502).json({ error: 'AI generation failed', detail: err.message }); }
     }
+    await logGen(quota, { topic: topic.slice(0, 120), type, requested: count, delivered: slides.length, source, ok: true });
     try { await consumeQuota(quota); } catch (e) { /* never fail the response over the counter */ }
     return res.status(200).json({ source, type, topic, slides });
   }
@@ -501,7 +521,7 @@ module.exports = async function handler(req, res) {
   // reliably and fast (asked 8 → got 8 in 12s) — keep what's new, and ask again for
   // whatever's still MISSING (feeding what we have as `avoid`) until we reach the number,
   // run low on the time budget, or a call adds nothing.
-  const DEADLINE     = Date.now() + 52000;   // whole-request budget, safely under the 60s serverless limit
+  const DEADLINE     = Date.now() + POLLY_BUDGET_MS;   // whole-request budget (env POLLY_BUDGET_MS); stays under maxDuration
   const MAX_ATTEMPTS = 6;
   const MAX_PER_CALL = 10;                    // reliable/fast batch size for the local model
   const CLOUD_RESERVE = OPENAI_API_KEY ? 15000 : 0;   // keep this much back so a slow local never starves the cloud fill
@@ -548,9 +568,13 @@ module.exports = async function handler(req, res) {
     if (acc.length === before) break;                    // nothing new landed — asking again won't help
   }
 
-  if (!acc.length) return res.status(502).json({ error: 'AI generation failed', detail: lastErr ? lastErr.message : 'no questions produced' });
+  if (!acc.length) {
+    await logGen(quota, { topic: topic.slice(0, 120), type, requested: count, delivered: 0, source: source || '', ok: false, error: (lastErr ? String(lastErr.message) : 'no questions produced').slice(0, 200) });
+    return res.status(502).json({ error: 'AI generation failed', detail: lastErr ? lastErr.message : 'no questions produced' });
+  }
 
   // Bill ONE quota unit for the whole generation, however many calls it took.
+  await logGen(quota, { topic: topic.slice(0, 120), type, requested: count, delivered: acc.length, source, ok: true, short: acc.length < count });
   try { await consumeQuota(quota); } catch (e) { /* never fail the response over the counter */ }
   return res.status(200).json({ source, type, topic, questions: acc, requested: count });
   } catch (fatal) {

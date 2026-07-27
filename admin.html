@@ -562,6 +562,17 @@ function renderDetailBody(uid){
     <button class="btn btn-sm btn-green" style="width:100%;" onclick="compUser('${uid}')">🎁 Grant free plan</button>`}
   </div>
   <div class="dp-sec">
+    <h3>🎫 Polly credits &amp; log</h3>
+    <div class="dp-row"><span class="lbl">Credits (extra generations)</span><span>${u.aiCredits||0}</span></div>
+    <p style="font-size:11.5px;color:var(--muted);margin:6px 0 8px;">Grant Polly generations to make up for a bad or failed one — spent only after the monthly allowance runs out.</p>
+    <div style="display:flex;gap:6px;align-items:center;margin-bottom:10px;">
+      <input type="number" id="grantAmt_${uid}" min="1" max="1000" value="5" style="width:70px;padding:6px 8px;">
+      <button class="btn btn-sm btn-green" style="flex:1;" onclick="grantCredits('${uid}')">🎫 Grant credits</button>
+    </div>
+    <label style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Recent Polly generations</label>
+    <div id="pollyLog_${uid}" style="font-size:11.5px;color:var(--muted);margin-top:4px;">Loading…</div>
+  </div>
+  <div class="dp-sec">
     <h3>Send message</h3>
     <select id="msgTypeDP" style="margin-bottom:6px;"><option value="info">Info</option><option value="warning">Warning</option><option value="success">Good news</option></select>
     <textarea id="msgTextDP" placeholder="Message shown as notification in the app…"></textarea>
@@ -589,6 +600,7 @@ function renderDetailBody(uid){
     </div>
   </div>`;
   loadNotes(uid);
+  loadPollyLog(uid);
 }
 function closeDetail(){document.getElementById('detailPanel').classList.remove('open');}
 
@@ -694,6 +706,44 @@ async function resetAIQuota(uid){
     if(allUsers[uid]) allUsers[uid].aiUsedThisMonth=0;
     toast('AI quota reset.','success'); renderDetailBody(uid);
   }catch(e){ toast('Reset failed: '+e.message,'danger'); }
+}
+
+// ─── GRANT POLLY CREDITS ──────────────────────────────────────────────────────
+// Compensate a user for a bad/failed generation. Credits are spent AFTER their monthly
+// allowance, so this tops them up without wiping their usage. Server-side via admin-quota.
+async function grantCredits(uid){
+  const amount = parseInt(document.getElementById('grantAmt_'+uid)?.value, 10) || 0;
+  if (amount < 1) { toast('Enter a credit amount.','danger'); return; }
+  try{
+    const tok = await auth.currentUser.getIdToken();
+    const r = await fetch('/api/admin-quota', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tok }, body: JSON.stringify({ uid, action:'credit', amount }) });
+    const d = await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(d.error || ('HTTP '+r.status));
+    if(allUsers[uid]) allUsers[uid].aiCredits = d.credits;
+    toast(`Granted ${d.granted} credits · ${d.credits} total.`,'success'); renderDetailBody(uid);
+  }catch(e){ toast('Grant failed: '+e.message,'danger'); }
+}
+
+// ─── POLLY GENERATION LOG ─────────────────────────────────────────────────────
+// So a "Polly gave me junk / it didn't generate" report can be checked: what was asked,
+// how many came back, which provider, ok/short/failed. Reads admin/polly_log/<uid>.
+async function loadPollyLog(uid){
+  const el = document.getElementById('pollyLog_'+uid); if(!el) return;
+  try{
+    const snap = await db.ref('admin/polly_log/'+uid).orderByKey().limitToLast(15).get();
+    if(!snap.exists()){ el.textContent='No generations recorded yet.'; return; }
+    const rows = Object.values(snap.val()).sort((a,b)=>(b.t||0)-(a.t||0));
+    el.innerHTML = rows.map(r=>{
+      const when = r.t ? new Date(r.t).toLocaleString() : '—';
+      const badge = (r.ok===false) ? '<span style="color:#e5484d;">failed</span>'
+                  : (r.short ? '<span style="color:#e0a800;">short</span>' : '<span style="color:#2ea043;">ok</span>');
+      const cnt = (r.delivered!=null && r.requested!=null) ? ` ${r.delivered}/${r.requested}` : '';
+      const via = r.source ? ' · '+esc(String(r.source)) : '';
+      const err = r.error ? ' — '+esc(String(r.error)) : '';
+      return `<div class="dp-row"><span>${esc(String(r.topic||r.type||'—')).slice(0,42)}<span style="color:var(--muted);">${cnt}${via}</span></span><span>${badge}</span></div>`
+           + `<div style="font-size:10px;color:var(--muted);margin:-3px 0 5px;">${when}${err}</div>`;
+    }).join('');
+  }catch(e){ el.textContent='Could not load log ('+e.message+').'; }
 }
 
 // ─── FLAG ─────────────────────────────────────────────────────────────────────

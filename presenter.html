@@ -4608,7 +4608,8 @@ async function runPolly() {
   const status = document.getElementById('pollyStatus');
   goBtn.disabled = true;
   status.style.display = 'block';
-  status.textContent = source ? '✨ Polly is reading your material…' : '✨ Polly is thinking…';
+  status.textContent = (source ? '✨ Polly is reading your material…' : '✨ Polly is thinking…')
+    + (count >= 12 ? ' a bigger set can take up to a minute.' : '');
   try {
     const focus = [topic, style ? `style: ${style}` : ''].filter(Boolean).join(' — ');
     // Tell Polly what this deck already contains. Without it every "generate more"

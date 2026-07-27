@@ -22,17 +22,31 @@ module.exports = async function handler(req, res) {
   try { who = await verifyToken(tok); } catch (e) { return res.status(401).json({ error: 'Invalid auth token' }); }
   if (!ADMIN_EMAILS.includes(who.email)) return res.status(403).json({ error: 'Admins only' });
 
-  const { uid, action } = req.body || {};
+  const { uid, action, amount } = req.body || {};
   if (!uid) return res.status(400).json({ error: 'Missing uid' });
 
   try {
     const ref = admin.database(getApp()).ref('users/' + uid);
+
+    // Grant Polly credits (spent AFTER the monthly allowance runs out) — the compensation
+    // path when a generation was junk or failed. Logged for accountability.
+    if (action === 'credit') {
+      const n = Math.max(1, Math.min(1000, Math.floor(Number(amount) || 0)));
+      const r = await ref.child('aiCredits').transaction(c => Math.max(0, Math.floor(c || 0)) + n);
+      const credits = (r && r.snapshot && r.snapshot.val()) || 0;
+      await admin.database(getApp()).ref('admin/credit_log/' + uid).push({ t: Date.now(), by: who.email, amount: n, credits }).catch(() => {});
+      return res.status(200).json({ ok: true, uid, granted: n, credits });
+    }
+
+    // Reset the monthly usage counter to zero (gives back this month's allowance).
     if (action === 'reset' || !action) {
       await ref.update({ aiUsedThisMonth: 0, aiQuotaMonth: monthKey() });
       // keep the admin index mirror in sync (it's read by the dashboard)
       await admin.database(getApp()).ref('admin/users_index/' + uid + '/aiUsedThisMonth').set(0).catch(() => {});
+      return res.status(200).json({ ok: true, uid, aiUsedThisMonth: 0 });
     }
-    return res.status(200).json({ ok: true, uid, aiUsedThisMonth: 0 });
+
+    return res.status(400).json({ error: 'Unknown action: ' + action });
   } catch (e) {
     return res.status(500).json({ error: String((e && e.message) || e) });
   }
