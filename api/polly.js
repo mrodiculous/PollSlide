@@ -443,7 +443,7 @@ module.exports = async function handler(req, res) {
   try { // top-level guard — guarantees a JSON response (never a non-JSON 502 crash)
   // ── Inputs (all optional except topic) ─────────────────────────────────────
   const body       = req.body || {};
-  const topic      = String(body.topic || '').trim();
+  const topic      = String(body.topic || '').trim().slice(0, 2000);
   const type       = ['poll', 'survey', 'quiz', 'study', 'presentation', 'deck'].includes(body.type) ? body.type : 'quiz';
   const includePolls  = body.includePolls  !== false;   // deck only: polls woven in (default on)
   const includeImages = body.includeImages !== false;   // deck only: imagePrompts (default on)
@@ -471,52 +471,88 @@ module.exports = async function handler(req, res) {
   try { quota = await checkQuota(req); }
   catch (e) { if (e && e.code) return res.status(e.code).json({ error: e.error, overLimit: !!e.overLimit, limit: e.limit, used: e.used }); throw e; }
 
-  const messages = type === 'deck'
-    ? buildDeckMessages({ topic, count, includePolls, includeImages, source: sourceMaterial, language })
-    : buildMessages({ topic, type, count, difficulty, audience, source: sourceMaterial, language, avoid });
+  // A fresh random seed each call nudges the sampler off any deterministic default.
+  const newSeed = () => Math.floor(Math.random() * 2147483647);
 
-  // A fresh random seed each call nudges the sampler off any deterministic default, so
-  // successive generations don't collapse onto the same answers.
-  const seed = Math.floor(Math.random() * 2147483647);
-
-  // Shape whatever a provider returned into the final payload. Throws on unparseable
-  // output — which is deliberately caught below to fall through to the cloud provider.
-  const shape = (raw) => (type === 'deck')
-    ? { slides: normalizeDeck(raw) }
-    : { questions: dropRepeats(normalizeQuestions(raw, type), avoid, type) };
-
-  let shaped = null;
-  let source  = '';
-
-  // 1) Try the user's own Mac first (if configured). Accept it only if the output also
-  //    PARSES — a reasoning model that emits malformed JSON should fall through to the
-  //    cloud rather than surface an error to the presenter.
-  if (LOCAL_LLM_URL) {
-    try {
-      const raw = await callChat({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_LLM_MODEL, messages, timeoutMs: LOCAL_TIMEOUT_MS, extraHeaders: CF_ACCESS_HEADERS, seed, reasoningEffort: LOCAL_REASONING_EFFORT });
-      shaped = shape(raw);
-      source = 'local';
-    } catch (err) {
-      console.warn('Polly: local LLM failed (' + err.message + ') → OpenAI fallback');
+  // ── Deck (PresentSlide): single shot. A deck is one structured artefact, not a count
+  //    of independent items, so the top-up loop below doesn't apply. ──
+  if (type === 'deck') {
+    const messages = buildDeckMessages({ topic, count, includePolls, includeImages, source: sourceMaterial, language });
+    const seed = newSeed();
+    let slides = null, source = '';
+    if (LOCAL_LLM_URL) {
+      try { slides = normalizeDeck(await callChat({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_LLM_MODEL, messages, timeoutMs: LOCAL_TIMEOUT_MS, extraHeaders: CF_ACCESS_HEADERS, seed, reasoningEffort: LOCAL_REASONING_EFFORT })); source = 'local'; }
+      catch (err) { console.warn('Polly: local deck failed (' + err.message + ') → OpenAI fallback'); }
     }
+    if (!slides) {
+      if (!OPENAI_API_KEY) return res.status(502).json({ error: 'Local LLM unavailable and no OpenAI key set.' });
+      try { slides = normalizeDeck(await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS, seed })); source = 'openai'; }
+      catch (err) { console.error('Polly: OpenAI error:', err.message); return res.status(502).json({ error: 'AI generation failed', detail: err.message }); }
+    }
+    try { await consumeQuota(quota); } catch (e) { /* never fail the response over the counter */ }
+    return res.status(200).json({ source, type, topic, slides });
   }
 
-  // 2) Fall back to OpenAI — on local unreachable OR local output unparseable.
-  if (!shaped) {
-    if (!OPENAI_API_KEY) return res.status(502).json({ error: 'Local LLM unavailable and no OpenAI key set.' });
-    try {
-      const raw = await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS, seed });
-      shaped = shape(raw);
-      source = 'openai';
-    } catch (err) {
-      console.error('Polly: OpenAI error:', err.message);
-      return res.status(502).json({ error: 'AI generation failed', detail: err.message });
+  // ── Questions (poll/quiz/survey/study/presentation): TOP-UP LOOP ──
+  // A single call is an unreliable way to get exactly `count`: reasoning models routinely
+  // stop early (measured on gpt-oss:20b — asked 12, returned 1; asked 20, returned 18;
+  // finish_reason "stop", not truncation) AND a big single ask is slow/variable enough to
+  // blow the timeout. So we ask for up to MAX_PER_CALL at a time — the size gpt-oss fills
+  // reliably and fast (asked 8 → got 8 in 12s) — keep what's new, and ask again for
+  // whatever's still MISSING (feeding what we have as `avoid`) until we reach the number,
+  // run low on the time budget, or a call adds nothing.
+  const DEADLINE     = Date.now() + 52000;   // whole-request budget, safely under the 60s serverless limit
+  const MAX_ATTEMPTS = 6;
+  const MAX_PER_CALL = 10;                    // reliable/fast batch size for the local model
+  const CLOUD_RESERVE = OPENAI_API_KEY ? 15000 : 0;   // keep this much back so a slow local never starves the cloud fill
+
+  // Generate ONE batch of ~`need` questions (local first, OpenAI fallback on
+  // unreachable/unparseable/too-slow). Returns { qs, src }; throws only if no provider
+  // works. Local is capped to leave CLOUD_RESERVE so a slow gpt-oss run always leaves the
+  // cloud enough time to fill the rest within the request budget.
+  const genBatch = async (need, avoidList) => {
+    const messages = buildMessages({ topic, type, count: need, difficulty, audience, source: sourceMaterial, language, avoid: avoidList });
+    const seed = newSeed();
+    if (LOCAL_LLM_URL) {
+      try {
+        const budget = Math.min(LOCAL_TIMEOUT_MS, Math.max(4000, DEADLINE - Date.now() - CLOUD_RESERVE));
+        return { qs: normalizeQuestions(await callChat({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_LLM_MODEL, messages, timeoutMs: budget, extraHeaders: CF_ACCESS_HEADERS, seed, reasoningEffort: LOCAL_REASONING_EFFORT }), type), src: 'local' };
+      } catch (err) { console.warn('Polly: local batch failed (' + err.message + ') → OpenAI fallback'); }
     }
+    if (OPENAI_API_KEY) {
+      const budget = Math.min(CLOUD_TIMEOUT_MS, Math.max(4000, DEADLINE - Date.now()));
+      return { qs: normalizeQuestions(await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: budget, seed }), type), src: 'openai' };
+    }
+    throw new Error('Local LLM unavailable and no OpenAI key set.');
+  };
+
+  // Compact avoid-entry for a shaped question, so top-up calls don't repeat what we have.
+  const asAvoid = (q) => ({
+    text:    q.text || q.front || '',
+    answers: q.back ? [q.back] : (q.correctAnswers || []).map(i => (q.options || [])[i]).filter(Boolean),
+  });
+
+  let acc = [];
+  let source = '';
+  let lastErr = null;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS && acc.length < count && Date.now() < DEADLINE; attempt++) {
+    const need = Math.min(count - acc.length, MAX_PER_CALL);
+    let batch;
+    try {
+      const r = await genBatch(need, [...avoid, ...acc.map(asAvoid)]);
+      batch = r.qs; source = source || r.src;
+    } catch (err) { lastErr = err; break; }              // no provider worked — return what we have
+    const before = acc.length;
+    // Dedup the batch against everything so far (dropRepeats seeds from `avoid`), then cap.
+    acc = dropRepeats([...acc, ...batch], avoid, type).slice(0, count);
+    if (acc.length === before) break;                    // nothing new landed — asking again won't help
   }
 
-  // 3) Success — bill the quota (never fail the response over the counter) and return.
+  if (!acc.length) return res.status(502).json({ error: 'AI generation failed', detail: lastErr ? lastErr.message : 'no questions produced' });
+
+  // Bill ONE quota unit for the whole generation, however many calls it took.
   try { await consumeQuota(quota); } catch (e) { /* never fail the response over the counter */ }
-  return res.status(200).json({ source, type, topic, ...shaped });
+  return res.status(200).json({ source, type, topic, questions: acc, requested: count });
   } catch (fatal) {
     // Anything unhandled (e.g. a provider hang/crash) → JSON, not a non-JSON 502.
     console.error('Polly fatal:', fatal && fatal.message);
