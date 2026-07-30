@@ -60,11 +60,19 @@ const CF_ACCESS_HEADERS = (process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACC
 const LOCAL_TIMEOUT_MS  = parseInt(process.env.LOCAL_TIMEOUT_MS, 10) || 30000;  // Mac's head-start before cloud fallback
 const CLOUD_TIMEOUT_MS  = parseInt(process.env.CLOUD_TIMEOUT_MS, 10) || 20000;
 
-// Whole-request time budget for the top-up loop (below). Set to sit ~15s under the polly
-// function's maxDuration in vercel.json (currently 180s on the Pro plan), which is what lets
-// the local model carry a whole large batch itself instead of the cloud filling the shortfall.
-// The loop still EXITS as soon as it reaches `count`, so small generations stay fast — this is
-// only a ceiling for big ones. Env-overridable if maxDuration changes.
+// Whole-request time budget for the top-up loop (below). Sits ~15s under the maxDuration in
+// vercel.json (180s on the Pro plan), which is what lets the local model carry a whole large
+// batch itself instead of the cloud filling the shortfall. The loop still EXITS as soon as it
+// reaches `count`, so small generations stay fast — this is only a ceiling for big ones.
+// Env-overridable if maxDuration changes.
+//
+// ⚠️ vercel.json DEPLOY TRAP (cost two failed production builds on 2026-07-27): the `functions`
+// block uses ONE pattern, "api/*.js", for every endpoint. Do NOT add a second, more specific
+// entry like "api/polly.js" to give this one a longer maxDuration — the broad glob already
+// claims every file, so the specific pattern matches nothing and Vercel HARD-FAILS the build
+// with "doesn't match any Serverless Functions inside the api directory". Raise the shared
+// maxDuration instead. That's safe here because every endpoint enforces its own, much shorter
+// AbortController timeout, so the higher ceiling only ever benefits this top-up loop.
 const POLLY_BUDGET_MS   = parseInt(process.env.POLLY_BUDGET_MS, 10) || 165000;
 
 // Supported content types → how Polly should think about each.
