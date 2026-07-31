@@ -111,12 +111,23 @@ function render(d){
       <div style="font-size:12px;color:var(--muted);margin-top:6px;">Only ${d.toughest.correctPct}% got it right</div>
     </div>` : '';
 
-  const lbRows = board.slice(0,10).map((p,i)=>`
+  // Game mode played — labels match what the room saw live (💀 out, 🔥 best streak).
+  const MODE_TAG = { speed:['⚡','Speed round'], streak:['🔥','Streak'], survival:['💀','Survival'], wager:['🎲','Wager round'] };
+  const modeTag = MODE_TAG[d.gameMode] || null;
+  const modeBadge = modeTag
+    ? `<div style="display:inline-block;font-size:11.5px;font-weight:700;padding:4px 11px;border-radius:20px;background:rgba(108,99,255,0.16);border:1px solid rgba(108,99,255,0.4);margin-bottom:14px;">${modeTag[0]} ${modeTag[1]}</div>`
+    : '';
+
+  const lbRows = board.slice(0,10).map((p,i)=>{
+    let extra = '';
+    if (!isTeam && p.alive === false) extra = '<span class="pill">💀 out</span>';
+    else if (!isTeam && p.streak) extra = `<span class="pill">🔥 best ${p.streak}</span>`;
+    return `
     <div class="lb-row${i<3?' top':''}">
       <div class="lb-rank">${['🥇','🥈','🥉'][i] || ('#'+(i+1))}</div>
-      <div class="lb-name">${isTeam?'👥 ':''}${esc(p.name)}${isTeam?`<span class="pill">${p.n} player${p.n===1?'':'s'}</span>`:''}</div>
+      <div class="lb-name"${(!isTeam && p.alive===false)?' style="opacity:.55;"':''}>${isTeam?'👥 ':''}${esc(p.name)}${isTeam?`<span class="pill">${p.n} player${p.n===1?'':'s'}</span>`:extra}</div>
       <div class="lb-score">${p.score}</div>
-    </div>`).join('');
+    </div>`;}).join('');
   const lbBlock = (d.graded && board.length) ? `<div class="sect">${isTeam?'Team standings':'Leaderboard'}</div>${lbRows}` : '';
 
   const qRows = (d.questions||[]).map(q=>`
@@ -136,6 +147,7 @@ function render(d){
     <div class="logo">${LOGO}PollSlide</div>
     <h1>${esc(d.title || 'Session recap')}</h1>
     <div class="sub">${when ? when + ' · ' : ''}Here's how the room did 👇</div>
+    ${modeBadge}
     ${winnerCard}
     ${stats}
     ${summary}

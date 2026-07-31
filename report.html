@@ -148,7 +148,7 @@ function pushDataset(out, presId, presName, source, date, questions, responses){
     Object.entries(byPid||{}).forEach(([pid, r]) => {
       out.push({ presId, presName, source, date: r.submittedAt || date || null,
         qIdx, qText:q.text||'', qType:q.type||'', options:q.options||null, correctAnswer:(q.correctAnswer!=null?q.correctAnswer:null),
-        pid: r.participantId || pid, name: r.name || 'Anonymous', team: r.team || null, answer: r.answer, isCorrect: r.isCorrect, elapsed: r.elapsed||0 });
+        pid: r.participantId || pid, name: r.name || 'Anonymous', team: r.team || null, wager: r.wager || null, answer: r.answer, isCorrect: r.isCorrect, elapsed: r.elapsed||0 });
     });
   });
 }
@@ -168,7 +168,7 @@ async function loadAll(){
     let presList = {};
     try { const s = await fbDb.ref('users/'+userId+'/presentations').get(); presList = s.exists()?(s.val()||{}):{}; } catch(e){}
     for (const p of Object.values(presList)){
-      PRES[p.id] = { name:p.name||'Untitled', questions:qArr(p.questions) };
+      PRES[p.id] = { name:p.name||'Untitled', questions:qArr(p.questions), sessionCode:p.sessionCode||null };
       if (!p.sessionCode) continue;
       let live = {}; try { const s = await fbDb.ref('sessions/'+p.sessionCode+'/responses').get(); live = s.exists()?(s.val()||{}):{}; } catch(e){}
       pushDataset(out, p.id, p.name||'Untitled', 'live', null, p.questions, live);
@@ -287,6 +287,169 @@ function renderByQuestion(data){
   }).join('');
 }
 
+// ===== PS_GAME_MODES_START (kept VERBATIM in live.html — edit both together) =====
+// Game modes change ONLY how points are counted and shown. Answering, reveal, timers,
+// translation, team play, reports and CSV are all untouched, so any mode works with any
+// deck and switching mode never risks the core session.
+const GAME_MODES = {
+  classic:  { icon:'🎯', name:'Classic',     blurb:'One point per correct answer. You reveal when you\'re ready.',            bestFor:'Any audience — the way it works today' },
+  speed:    { icon:'⚡', name:'Speed round', blurb:'Answer faster, score more — up to double points for the quickest.',       bestFor:'Parties and pub quizzes; lifts a flat room' },
+  streak:   { icon:'🔥', name:'Streak',      blurb:'Answers in a row build a multiplier up to 3×. One miss resets it.',      bestFor:'Classrooms and training — rewards consistency' },
+  survival: { icon:'💀', name:'Survival',    blurb:'One wrong answer and you\'re out. Last one standing wins.',              bestFor:'High drama on the big screen; great final round' },
+  wager:    { icon:'🎲', name:'Wager',       blurb:'Bet 1×, 2× or 3× before answering. Get it wrong and it costs you.',      bestFor:'Pub-quiz joker rounds and comeback moments' },
+};
+const SPEED_WINDOW_MS = 20000;              // answer inside this window to earn a speed bonus
+const STREAK_STEP = 0.5, STREAK_MAX = 3;    // 1×, 1.5×, 2×, 2.5×, capped at 3×
+const WAGER_CHOICES = [1, 2, 3];
+
+function psModeOk(m) { return Object.prototype.hasOwnProperty.call(GAME_MODES, m) ? m : 'classic'; }
+// Credit for one response: 1 for correct, a fraction for partial (multi-select), else 0.
+function psBasePoints(r) {
+  if (!r) return 0;
+  if (r.isCorrect === true) return 1;
+  if (typeof r.isCorrect === 'number' && r.isCorrect > 0) return r.isCorrect;
+  return 0;
+}
+// 0..1, linear on how quickly they answered. Unanswered/missing time earns nothing.
+function psSpeedBonus(r) {
+  const ms = (r && r.elapsed) || 0;
+  if (ms <= 0) return 0;
+  return Math.max(0, Math.min(1, 1 - ms / SPEED_WINDOW_MS));
+}
+function psWagerOf(r) {
+  const w = parseInt(r && r.wager, 10);
+  return (w >= 1 && w <= 3) ? w : 1;   // no wager recorded = risk-free 1×
+}
+
+// THE scoring function. Walks every question IN ORDER (streak and survival depend on
+// sequence) and returns one row per person. Pure — no DOM, no Firebase — so the presenter,
+// the big screen and the recap all derive identical numbers from the same raw responses.
+function psStandings(mode, questions, all, code) {
+  mode = psModeOk(mode);
+  const qs = Array.isArray(questions) ? questions : [];
+  const people = {};
+  const rowFor = (pid) => people[pid] || (people[pid] = {
+    pid, name: 'Anonymous', team: null, score: 0, correct: 0, answered: 0, elapsed: 0,
+    streak: 0, bestStreak: 0, alive: true, outAt: null,
+  });
+
+  qs.forEach((q, i) => {
+    const bucket = (all || {})['q' + i + '_stable_' + code] || {};
+    Object.entries(bucket).forEach(([pid, r]) => {
+      const p = rowFor(pid);
+      if (r && r.name) p.name = r.name;
+      if (r && r.team) p.team = r.team;
+      p.answered += 1;
+      p.elapsed += (r && r.elapsed) || 0;
+      const base = psBasePoints(r);
+      const fullyRight = base >= 1;
+      p.correct += base;
+
+      if (mode === 'speed') {
+        p.score += base > 0 ? base * (1 + psSpeedBonus(r)) : 0;
+      } else if (mode === 'streak') {
+        if (fullyRight) {
+          p.streak += 1;
+          if (p.streak > p.bestStreak) p.bestStreak = p.streak;
+          p.score += Math.min(1 + (p.streak - 1) * STREAK_STEP, STREAK_MAX);
+        } else {
+          p.streak = 0;
+          p.score += base;                       // partial credit still counts, flat
+        }
+      } else if (mode === 'survival') {
+        if (!p.alive) return;                    // already knocked out — later answers don't score
+        if (fullyRight) p.score += 1;
+        else { p.alive = false; p.outAt = i + 1; }
+      } else if (mode === 'wager') {
+        const w = psWagerOf(r);
+        p.score += fullyRight ? base * w : -(w - 1);
+        if (p.score < 0) p.score = 0;            // a bad round can't put you in debt
+      } else {
+        p.score += base;                         // classic
+      }
+    });
+  });
+
+  const rows = Object.values(people);
+  // Survival ranks survivors first, then whoever lasted longest. Everything else is
+  // score-first with the faster player ahead on a tie.
+  rows.sort(mode === 'survival'
+    ? (a, b) => (Number(b.alive) - Number(a.alive)) || (b.score - a.score) || (a.elapsed - b.elapsed)
+    : (a, b) => (b.score - a.score) || (a.elapsed - b.elapsed));
+  return rows;
+}
+
+// The moment the room reacts to. Given THIS question's responses, returns the headline
+// to slam on screen at reveal — fastest finger, who got knocked out, who bet big and won.
+// Returns null for classic (and whenever there's nothing worth shouting about), so the
+// classic reveal is completely unchanged. Data only — each screen renders it its own way.
+function psModeHeadline(mode, responses) {
+  mode = psModeOk(mode);
+  if (mode === 'classic') return null;
+  const rs = (responses || []).filter(Boolean);
+  if (!rs.length) return null;
+  const right = rs.filter(r => r.isCorrect === true);
+
+  if (mode === 'speed') {
+    const f = right.slice().sort((a, b) => (a.elapsed || 9e9) - (b.elapsed || 9e9))[0];
+    if (!f || !f.elapsed) return null;
+    return { icon: '⚡', label: 'FASTEST FINGER', name: f.name || 'Player', extra: (f.elapsed / 1000).toFixed(1) + 's', tone: '#38d9f5' };
+  }
+  if (mode === 'survival') {
+    const out = rs.filter(r => r.isCorrect === false).length;
+    return { icon: '💀', label: out ? 'KNOCKED OUT' : 'EVERYONE SURVIVES',
+             name: out ? (out + (out === 1 ? ' player out' : ' players out')) : 'Nobody went home',
+             extra: right.length + ' still standing', tone: '#ff6584' };
+  }
+  if (mode === 'wager') {
+    const bold = right.slice().sort((a, b) => (psWagerOf(b) - psWagerOf(a)) || ((a.elapsed || 0) - (b.elapsed || 0)))[0];
+    if (!bold) return { icon: '🎲', label: 'THE HOUSE WINS', name: 'Nobody got it', extra: 'big bets lost', tone: '#a78bfa' };
+    const w = psWagerOf(bold);
+    return { icon: '🎲', label: w > 1 ? 'BIGGEST CALL' : 'PLAYED IT SAFE', name: bold.name || 'Player',
+             extra: w + '× and nailed it', tone: '#a78bfa' };
+  }
+  if (mode === 'streak') {
+    if (!right.length) return { icon: '💔', label: 'STREAKS BROKEN', name: 'Everyone resets', extra: '', tone: '#f7b731' };
+    return { icon: '🔥', label: 'STILL ON A ROLL', name: right.length + (right.length === 1 ? ' player' : ' players'), extra: 'kept the streak alive', tone: '#f7b731' };
+  }
+  return null;
+}
+
+// Escalating heat, because a number alone doesn't feel like anything. 3 in a row earns a
+// flame, 5 earns two, 7+ earns "ON FIRE" — the visible momentum that makes a streak worth
+// protecting (and makes losing it hurt, which is the point).
+function psStreakFlair(streak) {
+  if (streak >= 7) return '🔥🔥🔥';
+  if (streak >= 5) return '🔥🔥';
+  if (streak >= 3) return '🔥';
+  return '';
+}
+// Short label for one person's score in a given mode (used on every leaderboard).
+function psScoreLabel(mode, p) {
+  mode = psModeOk(mode);
+  const n = Math.round((p.score || 0) * 10) / 10;
+  if (mode === 'survival') return p.alive ? '✅ ' + n : '💀 out';
+  if (mode === 'streak' && p.streak > 1) return n + ' ' + (psStreakFlair(p.streak) || '🔥') + p.streak;
+  return String(n);
+}
+// Rank movement between two standings snapshots — the "you just passed three people"
+// signal. Social comparison is the strongest engagement lever there is, and it costs
+// nothing but remembering last round's order.
+function psRankDeltas(prevOrder, rows) {
+  const prev = {}; (prevOrder || []).forEach((pid, i) => { prev[pid] = i; });
+  return rows.map((p, i) => {
+    const was = prev[p.pid];
+    return Object.assign({}, p, { delta: (was === undefined) ? null : (was - i) });
+  });
+}
+function psDeltaBadge(delta) {
+  if (delta === null || delta === 0) return '';
+  return delta > 0
+    ? `<span style="color:#43e97b;font-size:10.5px;font-weight:800;margin-left:5px;">▲${delta}</span>`
+    : `<span style="color:#ff6584;font-size:10.5px;font-weight:800;margin-left:5px;">▼${Math.abs(delta)}</span>`;
+}
+// ===== PS_GAME_MODES_END =====
+
 /* ─── 🎁 SHAREABLE SESSION RECAP ─────────────────────────────────────────────
    Turns one session's data into a public page the presenter can send to everyone who
    took part: winner (or winning team), the question that fooled the room, per-question
@@ -310,20 +473,32 @@ async function makeRecap(){
     const presId = presIds[0];
     const title  = (PRES[presId] && PRES[presId].name) || data[0].presName || 'PollSlide session';
 
-    // Per-person + per-team scoring (mirrors the presenter's size-fair team average).
-    const byPerson = {};
+    // Score it the way the session was actually RUN. We rebuild the raw
+    // sessions/<code>/responses shape from the flattened records and hand it to the very
+    // same psStandings() the presenter and big screen use, so a recap can never disagree
+    // with what the room saw on the night.
+    const code = (PRES[presId] && PRES[presId].sessionCode) || 'x';
+    let gameMode = 'classic';
+    if (PRES[presId] && PRES[presId].sessionCode) {
+      try { const gs = await fbDb.ref('sessions/'+PRES[presId].sessionCode+'/meta/gameMode').get();
+            if (gs.exists() && gs.val()) gameMode = psModeOk(String(gs.val())); } catch(e){}
+    }
+    const rebuilt = {};
     data.forEach(r=>{
-      const p = byPerson[r.pid] || (byPerson[r.pid] = { name:r.name||'Anonymous', team:r.team||null, score:0, answered:0 });
-      if (r.name) p.name = r.name;
-      if (r.team) p.team = r.team;
-      p.answered++;
-      if (r.isCorrect===true) p.score += 1;
-      else if (typeof r.isCorrect === 'number') p.score += r.isCorrect;
+      const key = 'q'+r.qIdx+'_stable_'+code;
+      (rebuilt[key] = rebuilt[key] || {})[r.pid] = {
+        name:r.name, team:r.team||null, isCorrect:r.isCorrect, elapsed:r.elapsed||0, wager:r.wager||null };
     });
-    const people = Object.values(byPerson);
+    const maxQ = data.reduce((m,r)=>Math.max(m, r.qIdx), -1);
+    const orderedQs = Array.from({length:maxQ+1},()=>({}));
+    const people = psStandings(gameMode, orderedQs, rebuilt, code);
     const graded = data.filter(r=>r.isCorrect===true||r.isCorrect===false).length > 0;
-    const leaderboard = people.slice().sort((a,b)=>b.score-a.score).slice(0,10)
-      .map(p=>({ name:p.name, score:Math.round(p.score*10)/10 }));
+    // psStandings already ranks for the mode (survival puts survivors first), so keep
+    // its order rather than re-sorting on raw score.
+    const leaderboard = people.slice(0,10)
+      .map(p=>({ name:p.name, score:Math.round(p.score*10)/10,
+                 alive:(gameMode==='survival') ? !!p.alive : null,
+                 streak:(gameMode==='streak') ? (p.bestStreak||0) : null }));
     let teams = null;
     if (people.some(p=>p.team)) {
       const g = {};
@@ -373,7 +548,7 @@ async function makeRecap(){
     const payload = {
       owner: userId, title, at: Date.now(),
       respondents: people.length, responses: data.length,
-      graded, leaderboard, teams, questions, toughest, summary,
+      graded, leaderboard, teams, questions, toughest, summary, gameMode,
     };
     await fbDb.ref('recaps/'+rid).set(payload);
     const url = location.origin + '/recap#' + rid;

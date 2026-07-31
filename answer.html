@@ -231,6 +231,72 @@ let participantName = null;
 let TEAM_MODE          = false;
 let participantTeamId  = null;
 let participantTeam    = null;
+
+// ── Game modes (set by the presenter in the Present picker) ──────────────────
+// Only scoring + on-screen drama change; answering itself is identical in every mode,
+// so an unknown/missing mode simply behaves like classic.
+let GAME_MODE      = 'classic';
+let _survivalOut   = false;   // survival: this player answered something wrong earlier
+let _survivedCount = 0;       // survival: how many questions they got through
+let _aliveCount    = null;    // survival: how many players are still in (for the banner)
+let _streakCount   = 0;       // streak: this player's current run of correct answers
+let _wagerPick     = 1;       // wager: multiplier chosen for THIS question
+let _wagerLocked   = false;   // wager: has the bet been placed for this question?
+
+// Recompute this player's per-mode state from the session's own responses. Runs before
+// each question paints. Everything is best-effort: if the read fails the player just
+// answers normally (never blocked by a mode).
+async function refreshModeState() {
+  _survivalOut = false; _survivedCount = 0; _streakCount = 0; _aliveCount = null;
+  if (GAME_MODE !== 'survival' && GAME_MODE !== 'streak') return;
+  try {
+    const snap = await db.ref(`sessions/${SESSION}/responses`).get();
+    if (!snap.exists()) return;
+    const all = snap.val() || {};
+    // Walk questions in order — both survival and streak depend on sequence.
+    const keys = Object.keys(all)
+      .map(k => ({ k, i: (/^q(\d+)_stable_/.exec(k) || [])[1] }))
+      .filter(x => x.i !== undefined)
+      .sort((a, b) => Number(a.i) - Number(b.i));
+    const perPlayerOut = {};
+    for (const { k } of keys) {
+      const bucket = all[k] || {};
+      // Track everyone for the "still in" counter, and me for my own state.
+      Object.entries(bucket).forEach(([pid, r]) => {
+        const right = r && (r.isCorrect === true);
+        if (GAME_MODE === 'survival' && !right && r && r.isCorrect === false) perPlayerOut[pid] = true;
+      });
+      const mine = bucket[participantId];
+      if (!mine) continue;
+      const right = mine.isCorrect === true;
+      if (GAME_MODE === 'survival') {
+        if (_survivalOut) continue;
+        if (right) _survivedCount++;
+        else if (mine.isCorrect === false) _survivalOut = true;
+      } else if (GAME_MODE === 'streak') {
+        _streakCount = right ? _streakCount + 1 : 0;
+      }
+    }
+    if (GAME_MODE === 'survival') {
+      const everyone = new Set();
+      Object.values(all).forEach(b => Object.keys(b || {}).forEach(p => everyone.add(p)));
+      _aliveCount = Math.max(0, everyone.size - Object.keys(perPlayerOut).length);
+    }
+  } catch (e) { /* mode flavour is optional — never block answering */ }
+}
+
+// The strip above the question that tells the player what's at stake right now.
+function modeBannerHtml() {
+  if (GAME_MODE === 'classic') return '';
+  const box = (bg, bd, html) => `<div style="background:${bg};border:1px solid ${bd};border-radius:11px;padding:9px 13px;margin-bottom:14px;font-size:12.5px;font-weight:600;text-align:center;line-height:1.5;">${html}</div>`;
+  if (GAME_MODE === 'speed')  return box('rgba(56,217,245,0.12)','rgba(56,217,245,0.35)', `⚡ <b>${t('modeSpeed','Speed round')}</b> — ${t('modeSpeedHint','answer fast for bonus points')}`);
+  if (GAME_MODE === 'streak') return box('rgba(247,183,49,0.12)','rgba(247,183,49,0.35)',
+    _streakCount > 0 ? `🔥 <b>${_streakCount} ${t('modeStreakOn','in a row')}</b> — ${t('modeStreakKeep','keep it going!')}` : `🔥 <b>${t('modeStreak','Streak')}</b> — ${t('modeStreakStart','answers in a row multiply your points')}`);
+  if (GAME_MODE === 'survival') return box('rgba(255,101,132,0.12)','rgba(255,101,132,0.35)',
+    `💀 <b>${t('modeSurvival','Survival')}</b> — ${t('modeSurvivalHint','one wrong answer and you\'re out')}${_aliveCount !== null ? ` · ${_aliveCount} ${t('modeStillIn','still in')}` : ''}`);
+  if (GAME_MODE === 'wager') return box('rgba(167,139,250,0.12)','rgba(167,139,250,0.35)', `🎲 <b>${t('modeWager','Wager round')}</b> — ${t('modeWagerHint','bet before you answer')}`);
+  return '';
+}
 let questionData    = null;
 let answered        = false;
 let submitting      = false; // prevent double-submit on slow connections
@@ -252,11 +318,11 @@ function render(html) {
 // ── i18n: the audience page matches the deck's language (set by the presenter) ──
 let LANG = 'en';
 const I18N = {
-  es:{enterName:'Escribe tu nombre',nameOnce:'Solo necesitas hacerlo una vez por sesión.',yourName:'Tu nombre',continue:'Continuar →',enterNamePlease:'Por favor, escribe tu nombre.',submitAnswer:'Enviar respuesta',submitRating:'Enviar valoración',submitAnswers:'Enviar respuestas',submitted:'✓ ¡Enviado!',alreadyAnswered:'¡Ya respondiste esta pregunta!',selectAll:'✓ Marca todas las que correspondan',submitSurvey:'Enviar encuesta',submitQuiz:'Enviar y ver puntuación',thankYou:'¡Gracias!',recorded:'Tus respuestas se han guardado.',qaTitle:'Preguntas del público',qaSub:'Haz una pregunta — o vota las que quieras que respondan.',ask:'Preguntar',typeQuestion:'Escribe tu pregunta…',loading:'Cargando…',responses:'respuestas',question:'Pregunta',typeAnswer:'Escribe tu respuesta…',tapToFlip:'TOCA PARA GIRAR',answerFace:'RESPUESTA',showAnswer:'Mostrar respuesta',again:'Otra vez',hard:'Difícil',good:'Bien',easy:'Fácil',yourAnswer:'Tu respuesta',correctWas:'Correcta',skipped:'(omitida)',joinTitle:'Únete a una sesión',joinSub:'Escribe el código que aparece junto al código QR.',joinBtn:'Unirse →',joinShort:'Ese código parece demasiado corto: revísalo e inténtalo de nuevo.',joinNotFound:'No se encontró ninguna sesión con ese código. Verifícalo con tu presentador.',joinFail:'No se pudo comprobar el código: revisa tu conexión.',seeOriginal:'Ver original',seeTranslation:'Ver traducción',teamTitle:'Únete a un equipo',teamSub:'Responded juntos: elige el equipo de tu mesa o crea uno.',teamNewLabel:'…o crea uno nuevo',teamFirst:'Crea el primer equipo',teamNew:'Nombre del nuevo equipo…',teamCreate:'Crear equipo',teamSolo:'Jugar solo (sin equipo)',teamMembers:'miembros',teamNamePlease:'Ponle un nombre a tu equipo.'},
-  de:{enterName:'Gib deinen Namen ein',nameOnce:'Nur einmal pro Sitzung nötig.',yourName:'Dein Name',continue:'Weiter →',enterNamePlease:'Bitte gib deinen Namen ein.',submitAnswer:'Antwort senden',submitRating:'Bewertung senden',submitAnswers:'Antworten senden',submitted:'✓ Gesendet!',alreadyAnswered:'Du hast diese Frage bereits beantwortet!',selectAll:'✓ Alle Zutreffenden auswählen',submitSurvey:'Umfrage senden',submitQuiz:'Senden & Punktzahl ansehen',thankYou:'Danke!',recorded:'Deine Antworten wurden gespeichert.',qaTitle:'Publikumsfragen',qaSub:'Stelle eine Frage — oder stimme für andere ab.',ask:'Fragen',typeQuestion:'Schreibe deine Frage…',loading:'Lädt…',responses:'Antworten',question:'Frage',typeAnswer:'Schreibe deine Antwort…',tapToFlip:'ZUM UMDREHEN TIPPEN',answerFace:'ANTWORT',showAnswer:'Antwort zeigen',again:'Nochmal',hard:'Schwer',good:'Gut',easy:'Leicht',yourAnswer:'Deine Antwort',correctWas:'Richtig',skipped:'(übersprungen)',joinTitle:'Sitzung beitreten',joinSub:'Gib den Code ein, der neben dem QR-Code angezeigt wird.',joinBtn:'Beitreten →',joinShort:'Dieser Code sieht zu kurz aus — prüfe ihn und versuche es erneut.',joinNotFound:'Keine Sitzung mit diesem Code gefunden — frag deinen Präsentator.',joinFail:'Code konnte nicht geprüft werden — prüfe deine Verbindung.',seeOriginal:'Original ansehen',seeTranslation:'Übersetzung ansehen',teamTitle:'Tritt einem Team bei',teamSub:'Antwortet zusammen — wähle das Team deines Tisches oder gründe eins.',teamNewLabel:'…oder gründe ein neues',teamFirst:'Gründe das erste Team',teamNew:'Name des neuen Teams…',teamCreate:'Team gründen',teamSolo:'Allein spielen (ohne Team)',teamMembers:'Mitglieder',teamNamePlease:'Gib deinem Team einen Namen.'},
-  fr:{enterName:'Entrez votre nom',nameOnce:'À faire une seule fois par session.',yourName:'Votre nom',continue:'Continuer →',enterNamePlease:'Veuillez entrer votre nom.',submitAnswer:'Envoyer la réponse',submitRating:'Envoyer la note',submitAnswers:'Envoyer les réponses',submitted:'✓ Envoyé !',alreadyAnswered:'Vous avez déjà répondu à cette question !',selectAll:'✓ Sélectionnez tout ce qui s’applique',submitSurvey:'Envoyer le sondage',submitQuiz:'Envoyer et voir le score',thankYou:'Merci !',recorded:'Vos réponses ont été enregistrées.',qaTitle:'Questions du public',qaSub:'Posez une question — ou votez pour celles à traiter.',ask:'Demander',typeQuestion:'Écrivez votre question…',loading:'Chargement…',responses:'réponses',question:'Question',typeAnswer:'Écrivez votre réponse…',tapToFlip:'TOUCHEZ POUR RETOURNER',answerFace:'RÉPONSE',showAnswer:'Voir la réponse',again:'Encore',hard:'Difficile',good:'Bien',easy:'Facile',yourAnswer:'Votre réponse',correctWas:'Bonne réponse',skipped:'(passée)',joinTitle:'Rejoindre une session',joinSub:'Saisissez le code affiché à côté du QR code.',joinBtn:'Rejoindre →',joinShort:'Ce code semble trop court — vérifiez-le et réessayez.',joinNotFound:'Aucune session trouvée avec ce code — vérifiez auprès de votre présentateur.',joinFail:'Impossible de vérifier le code — vérifiez votre connexion.',seeOriginal:'Voir l’original',seeTranslation:'Voir la traduction',teamTitle:'Rejoignez une équipe',teamSub:'Répondez ensemble — choisissez l’équipe de votre table ou créez-en une.',teamNewLabel:'…ou créez-en une nouvelle',teamFirst:'Créez la première équipe',teamNew:'Nom de la nouvelle équipe…',teamCreate:'Créer l’équipe',teamSolo:'Jouer seul (sans équipe)',teamMembers:'membres',teamNamePlease:'Donnez un nom à votre équipe.'},
-  pt:{enterName:'Digite seu nome',nameOnce:'Só precisa fazer isso uma vez por sessão.',yourName:'Seu nome',continue:'Continuar →',enterNamePlease:'Por favor, digite seu nome.',submitAnswer:'Enviar resposta',submitRating:'Enviar avaliação',submitAnswers:'Enviar respostas',submitted:'✓ Enviado!',alreadyAnswered:'Você já respondeu a esta pergunta!',selectAll:'✓ Marque todas as aplicáveis',submitSurvey:'Enviar pesquisa',submitQuiz:'Enviar e ver pontuação',thankYou:'Obrigado!',recorded:'Suas respostas foram registradas.',qaTitle:'Perguntas do público',qaSub:'Faça uma pergunta — ou vote nas que quer ver respondidas.',ask:'Perguntar',typeQuestion:'Escreva sua pergunta…',loading:'Carregando…',responses:'respostas',question:'Pergunta',typeAnswer:'Digite sua resposta…',tapToFlip:'TOQUE PARA VIRAR',answerFace:'RESPOSTA',showAnswer:'Mostrar resposta',again:'De novo',hard:'Difícil',good:'Bom',easy:'Fácil',yourAnswer:'Sua resposta',correctWas:'Correta',skipped:'(pulada)',joinTitle:'Entrar em uma sessão',joinSub:'Digite o código exibido ao lado do QR code.',joinBtn:'Entrar →',joinShort:'Esse código parece curto demais — confira e tente novamente.',joinNotFound:'Nenhuma sessão encontrada com esse código — confirme com seu apresentador.',joinFail:'Não foi possível verificar o código — verifique sua conexão.',seeOriginal:'Ver original',seeTranslation:'Ver tradução',teamTitle:'Entre em uma equipe',teamSub:'Respondam juntos — escolha a equipe da sua mesa ou crie uma.',teamNewLabel:'…ou crie uma nova',teamFirst:'Crie a primeira equipe',teamNew:'Nome da nova equipe…',teamCreate:'Criar equipe',teamSolo:'Jogar sozinho (sem equipe)',teamMembers:'membros',teamNamePlease:'Dê um nome à sua equipe.'},
-  it:{enterName:'Inserisci il tuo nome',nameOnce:'Da fare una sola volta per sessione.',yourName:'Il tuo nome',continue:'Continua →',enterNamePlease:'Inserisci il tuo nome.',submitAnswer:'Invia risposta',submitRating:'Invia valutazione',submitAnswers:'Invia risposte',submitted:'✓ Inviato!',alreadyAnswered:'Hai già risposto a questa domanda!',selectAll:'✓ Seleziona tutte quelle pertinenti',submitSurvey:'Invia sondaggio',submitQuiz:'Invia e vedi punteggio',thankYou:'Grazie!',recorded:'Le tue risposte sono state registrate.',qaTitle:'Domande del pubblico',qaSub:'Fai una domanda — o vota quelle da trattare.',ask:'Chiedi',typeQuestion:'Scrivi la tua domanda…',loading:'Caricamento…',responses:'risposte',question:'Domanda',typeAnswer:'Scrivi la tua risposta…',tapToFlip:'TOCCA PER GIRARE',answerFace:'RISPOSTA',showAnswer:'Mostra risposta',again:'Di nuovo',hard:'Difficile',good:'Bene',easy:'Facile',yourAnswer:'La tua risposta',correctWas:'Corretta',skipped:'(saltata)',joinTitle:'Partecipa a una sessione',joinSub:'Digita il codice mostrato accanto al codice QR.',joinBtn:'Partecipa →',joinShort:'Questo codice sembra troppo corto — controllalo e riprova.',joinNotFound:'Nessuna sessione trovata con questo codice — verifica con il tuo presentatore.',joinFail:'Impossibile verificare il codice — controlla la connessione.',seeOriginal:'Vedi originale',seeTranslation:'Vedi traduzione',teamTitle:'Unisciti a una squadra',teamSub:'Rispondete insieme — scegli la squadra del tuo tavolo o creane una.',teamNewLabel:'…o creane una nuova',teamFirst:'Crea la prima squadra',teamNew:'Nome della nuova squadra…',teamCreate:'Crea squadra',teamSolo:'Gioca da solo (senza squadra)',teamMembers:'membri',teamNamePlease:'Dai un nome alla tua squadra.'},
+  es:{enterName:'Escribe tu nombre',nameOnce:'Solo necesitas hacerlo una vez por sesión.',yourName:'Tu nombre',continue:'Continuar →',enterNamePlease:'Por favor, escribe tu nombre.',submitAnswer:'Enviar respuesta',submitRating:'Enviar valoración',submitAnswers:'Enviar respuestas',submitted:'✓ ¡Enviado!',alreadyAnswered:'¡Ya respondiste esta pregunta!',selectAll:'✓ Marca todas las que correspondan',submitSurvey:'Enviar encuesta',submitQuiz:'Enviar y ver puntuación',thankYou:'¡Gracias!',recorded:'Tus respuestas se han guardado.',qaTitle:'Preguntas del público',qaSub:'Haz una pregunta — o vota las que quieras que respondan.',ask:'Preguntar',typeQuestion:'Escribe tu pregunta…',loading:'Cargando…',responses:'respuestas',question:'Pregunta',typeAnswer:'Escribe tu respuesta…',tapToFlip:'TOCA PARA GIRAR',answerFace:'RESPUESTA',showAnswer:'Mostrar respuesta',again:'Otra vez',hard:'Difícil',good:'Bien',easy:'Fácil',yourAnswer:'Tu respuesta',correctWas:'Correcta',skipped:'(omitida)',joinTitle:'Únete a una sesión',joinSub:'Escribe el código que aparece junto al código QR.',joinBtn:'Unirse →',joinShort:'Ese código parece demasiado corto: revísalo e inténtalo de nuevo.',joinNotFound:'No se encontró ninguna sesión con ese código. Verifícalo con tu presentador.',joinFail:'No se pudo comprobar el código: revisa tu conexión.',seeOriginal:'Ver original',seeTranslation:'Ver traducción',teamTitle:'Únete a un equipo',teamSub:'Responded juntos: elige el equipo de tu mesa o crea uno.',teamNewLabel:'…o crea uno nuevo',teamFirst:'Crea el primer equipo',teamNew:'Nombre del nuevo equipo…',teamCreate:'Crear equipo',teamSolo:'Jugar solo (sin equipo)',teamMembers:'miembros',teamNamePlease:'Ponle un nombre a tu equipo.',modeSpeed:'Ronda rápida',modeSpeedHint:'responde rápido para ganar puntos extra',modeStreak:'Racha',modeStreakOn:'seguidas',modeStreakKeep:'¡sigue así!',modeStreakStart:'las respuestas seguidas multiplican tus puntos',modeSurvival:'Supervivencia',modeSurvivalHint:'un fallo y quedas eliminado',modeStillIn:'siguen en juego',modeWager:'Ronda de apuestas',modeWagerHint:'apuesta antes de responder',outTitle:'¡Estás eliminado!',outSub:'Sobreviviste',outQ:'pregunta',outQs:'preguntas',outWatch:'Quédate en esta pantalla: seguirás viendo cada pregunta.',wagerTitle:'¿Cuánta confianza tienes?',wagerSub:'Apuesta antes de responder. Apostar más da más puntos, pero cuesta si fallas.',wagerSafe:'Segura',wagerSafeNote:'Ganas 1 · no pierdes nada',wagerRisky:'Arriesgada',wagerRiskyNote:'Ganas 2 · pierdes 1',wagerBold:'Atrevida',wagerBoldNote:'Ganas 3 · pierdes 2',speedLocked:'Enviada en',streakRiding:'Llevas una racha de',survivalHold:'Acierta para seguir en juego…',wagerPlaced:'Apostaste'},
+  de:{enterName:'Gib deinen Namen ein',nameOnce:'Nur einmal pro Sitzung nötig.',yourName:'Dein Name',continue:'Weiter →',enterNamePlease:'Bitte gib deinen Namen ein.',submitAnswer:'Antwort senden',submitRating:'Bewertung senden',submitAnswers:'Antworten senden',submitted:'✓ Gesendet!',alreadyAnswered:'Du hast diese Frage bereits beantwortet!',selectAll:'✓ Alle Zutreffenden auswählen',submitSurvey:'Umfrage senden',submitQuiz:'Senden & Punktzahl ansehen',thankYou:'Danke!',recorded:'Deine Antworten wurden gespeichert.',qaTitle:'Publikumsfragen',qaSub:'Stelle eine Frage — oder stimme für andere ab.',ask:'Fragen',typeQuestion:'Schreibe deine Frage…',loading:'Lädt…',responses:'Antworten',question:'Frage',typeAnswer:'Schreibe deine Antwort…',tapToFlip:'ZUM UMDREHEN TIPPEN',answerFace:'ANTWORT',showAnswer:'Antwort zeigen',again:'Nochmal',hard:'Schwer',good:'Gut',easy:'Leicht',yourAnswer:'Deine Antwort',correctWas:'Richtig',skipped:'(übersprungen)',joinTitle:'Sitzung beitreten',joinSub:'Gib den Code ein, der neben dem QR-Code angezeigt wird.',joinBtn:'Beitreten →',joinShort:'Dieser Code sieht zu kurz aus — prüfe ihn und versuche es erneut.',joinNotFound:'Keine Sitzung mit diesem Code gefunden — frag deinen Präsentator.',joinFail:'Code konnte nicht geprüft werden — prüfe deine Verbindung.',seeOriginal:'Original ansehen',seeTranslation:'Übersetzung ansehen',teamTitle:'Tritt einem Team bei',teamSub:'Antwortet zusammen — wähle das Team deines Tisches oder gründe eins.',teamNewLabel:'…oder gründe ein neues',teamFirst:'Gründe das erste Team',teamNew:'Name des neuen Teams…',teamCreate:'Team gründen',teamSolo:'Allein spielen (ohne Team)',teamMembers:'Mitglieder',teamNamePlease:'Gib deinem Team einen Namen.',modeSpeed:'Schnellrunde',modeSpeedHint:'schnell antworten bringt Bonuspunkte',modeStreak:'Serie',modeStreakOn:'in Folge',modeStreakKeep:'weiter so!',modeStreakStart:'Antworten in Folge vervielfachen deine Punkte',modeSurvival:'Survival',modeSurvivalHint:'eine falsche Antwort und du bist raus',modeStillIn:'noch dabei',modeWager:'Wettrunde',modeWagerHint:'setze, bevor du antwortest',outTitle:'Du bist raus!',outSub:'Du hast überstanden',outQ:'Frage',outQs:'Fragen',outWatch:'Bleib auf diesem Bildschirm — du siehst weiterhin jede Frage.',wagerTitle:'Wie sicher bist du?',wagerSub:'Setze, bevor du antwortest. Höhere Einsätze bringen mehr — kosten dich aber bei einem Fehler.',wagerSafe:'Sicher',wagerSafeNote:'Gewinn 1 · kein Verlust',wagerRisky:'Riskant',wagerRiskyNote:'Gewinn 2 · Verlust 1',wagerBold:'Mutig',wagerBoldNote:'Gewinn 3 · Verlust 2',speedLocked:'Abgeschickt nach',streakRiding:'Deine Serie steht bei',survivalHold:'Richtig antworten, um dabei zu bleiben…',wagerPlaced:'Du hast gesetzt'},
+  fr:{enterName:'Entrez votre nom',nameOnce:'À faire une seule fois par session.',yourName:'Votre nom',continue:'Continuer →',enterNamePlease:'Veuillez entrer votre nom.',submitAnswer:'Envoyer la réponse',submitRating:'Envoyer la note',submitAnswers:'Envoyer les réponses',submitted:'✓ Envoyé !',alreadyAnswered:'Vous avez déjà répondu à cette question !',selectAll:'✓ Sélectionnez tout ce qui s’applique',submitSurvey:'Envoyer le sondage',submitQuiz:'Envoyer et voir le score',thankYou:'Merci !',recorded:'Vos réponses ont été enregistrées.',qaTitle:'Questions du public',qaSub:'Posez une question — ou votez pour celles à traiter.',ask:'Demander',typeQuestion:'Écrivez votre question…',loading:'Chargement…',responses:'réponses',question:'Question',typeAnswer:'Écrivez votre réponse…',tapToFlip:'TOUCHEZ POUR RETOURNER',answerFace:'RÉPONSE',showAnswer:'Voir la réponse',again:'Encore',hard:'Difficile',good:'Bien',easy:'Facile',yourAnswer:'Votre réponse',correctWas:'Bonne réponse',skipped:'(passée)',joinTitle:'Rejoindre une session',joinSub:'Saisissez le code affiché à côté du QR code.',joinBtn:'Rejoindre →',joinShort:'Ce code semble trop court — vérifiez-le et réessayez.',joinNotFound:'Aucune session trouvée avec ce code — vérifiez auprès de votre présentateur.',joinFail:'Impossible de vérifier le code — vérifiez votre connexion.',seeOriginal:'Voir l’original',seeTranslation:'Voir la traduction',teamTitle:'Rejoignez une équipe',teamSub:'Répondez ensemble — choisissez l’équipe de votre table ou créez-en une.',teamNewLabel:'…ou créez-en une nouvelle',teamFirst:'Créez la première équipe',teamNew:'Nom de la nouvelle équipe…',teamCreate:'Créer l’équipe',teamSolo:'Jouer seul (sans équipe)',teamMembers:'membres',teamNamePlease:'Donnez un nom à votre équipe.',modeSpeed:'Manche rapide',modeSpeedHint:'répondez vite pour des points bonus',modeStreak:'Série',modeStreakOn:'d’affilée',modeStreakKeep:'continuez !',modeStreakStart:'les bonnes réponses d’affilée multiplient vos points',modeSurvival:'Survie',modeSurvivalHint:'une erreur et vous êtes éliminé',modeStillIn:'encore en lice',modeWager:'Manche de paris',modeWagerHint:'misez avant de répondre',outTitle:'Vous êtes éliminé !',outSub:'Vous avez survécu à',outQ:'question',outQs:'questions',outWatch:'Restez sur cet écran — vous verrez toujours chaque question.',wagerTitle:'À quel point êtes-vous sûr ?',wagerSub:'Misez avant de répondre. Les grosses mises rapportent plus, mais coûtent cher en cas d’erreur.',wagerSafe:'Sûr',wagerSafeNote:'Gagnez 1 · ne perdez rien',wagerRisky:'Risqué',wagerRiskyNote:'Gagnez 2 · perdez 1',wagerBold:'Audacieux',wagerBoldNote:'Gagnez 3 · perdez 2',speedLocked:'Validé en',streakRiding:'Vous êtes sur une série de',survivalHold:'Trouvez la bonne réponse pour rester…',wagerPlaced:'Vous avez misé'},
+  pt:{enterName:'Digite seu nome',nameOnce:'Só precisa fazer isso uma vez por sessão.',yourName:'Seu nome',continue:'Continuar →',enterNamePlease:'Por favor, digite seu nome.',submitAnswer:'Enviar resposta',submitRating:'Enviar avaliação',submitAnswers:'Enviar respostas',submitted:'✓ Enviado!',alreadyAnswered:'Você já respondeu a esta pergunta!',selectAll:'✓ Marque todas as aplicáveis',submitSurvey:'Enviar pesquisa',submitQuiz:'Enviar e ver pontuação',thankYou:'Obrigado!',recorded:'Suas respostas foram registradas.',qaTitle:'Perguntas do público',qaSub:'Faça uma pergunta — ou vote nas que quer ver respondidas.',ask:'Perguntar',typeQuestion:'Escreva sua pergunta…',loading:'Carregando…',responses:'respostas',question:'Pergunta',typeAnswer:'Digite sua resposta…',tapToFlip:'TOQUE PARA VIRAR',answerFace:'RESPOSTA',showAnswer:'Mostrar resposta',again:'De novo',hard:'Difícil',good:'Bom',easy:'Fácil',yourAnswer:'Sua resposta',correctWas:'Correta',skipped:'(pulada)',joinTitle:'Entrar em uma sessão',joinSub:'Digite o código exibido ao lado do QR code.',joinBtn:'Entrar →',joinShort:'Esse código parece curto demais — confira e tente novamente.',joinNotFound:'Nenhuma sessão encontrada com esse código — confirme com seu apresentador.',joinFail:'Não foi possível verificar o código — verifique sua conexão.',seeOriginal:'Ver original',seeTranslation:'Ver tradução',teamTitle:'Entre em uma equipe',teamSub:'Respondam juntos — escolha a equipe da sua mesa ou crie uma.',teamNewLabel:'…ou crie uma nova',teamFirst:'Crie a primeira equipe',teamNew:'Nome da nova equipe…',teamCreate:'Criar equipe',teamSolo:'Jogar sozinho (sem equipe)',teamMembers:'membros',teamNamePlease:'Dê um nome à sua equipe.',modeSpeed:'Rodada rápida',modeSpeedHint:'responda rápido para ganhar pontos extras',modeStreak:'Sequência',modeStreakOn:'seguidas',modeStreakKeep:'continue assim!',modeStreakStart:'respostas seguidas multiplicam seus pontos',modeSurvival:'Sobrevivência',modeSurvivalHint:'um erro e você está fora',modeStillIn:'ainda no jogo',modeWager:'Rodada de apostas',modeWagerHint:'aposte antes de responder',outTitle:'Você está fora!',outSub:'Você sobreviveu a',outQ:'pergunta',outQs:'perguntas',outWatch:'Fique nesta tela — você continuará vendo cada pergunta.',wagerTitle:'Qual é a sua confiança?',wagerSub:'Aposte antes de responder. Apostas maiores rendem mais — mas custam se você errar.',wagerSafe:'Segura',wagerSafeNote:'Ganha 1 · não perde nada',wagerRisky:'Arriscada',wagerRiskyNote:'Ganha 2 · perde 1',wagerBold:'Ousada',wagerBoldNote:'Ganha 3 · perde 2',speedLocked:'Enviada em',streakRiding:'Você está numa sequência de',survivalHold:'Acerte para continuar no jogo…',wagerPlaced:'Você apostou'},
+  it:{enterName:'Inserisci il tuo nome',nameOnce:'Da fare una sola volta per sessione.',yourName:'Il tuo nome',continue:'Continua →',enterNamePlease:'Inserisci il tuo nome.',submitAnswer:'Invia risposta',submitRating:'Invia valutazione',submitAnswers:'Invia risposte',submitted:'✓ Inviato!',alreadyAnswered:'Hai già risposto a questa domanda!',selectAll:'✓ Seleziona tutte quelle pertinenti',submitSurvey:'Invia sondaggio',submitQuiz:'Invia e vedi punteggio',thankYou:'Grazie!',recorded:'Le tue risposte sono state registrate.',qaTitle:'Domande del pubblico',qaSub:'Fai una domanda — o vota quelle da trattare.',ask:'Chiedi',typeQuestion:'Scrivi la tua domanda…',loading:'Caricamento…',responses:'risposte',question:'Domanda',typeAnswer:'Scrivi la tua risposta…',tapToFlip:'TOCCA PER GIRARE',answerFace:'RISPOSTA',showAnswer:'Mostra risposta',again:'Di nuovo',hard:'Difficile',good:'Bene',easy:'Facile',yourAnswer:'La tua risposta',correctWas:'Corretta',skipped:'(saltata)',joinTitle:'Partecipa a una sessione',joinSub:'Digita il codice mostrato accanto al codice QR.',joinBtn:'Partecipa →',joinShort:'Questo codice sembra troppo corto — controllalo e riprova.',joinNotFound:'Nessuna sessione trovata con questo codice — verifica con il tuo presentatore.',joinFail:'Impossibile verificare il codice — controlla la connessione.',seeOriginal:'Vedi originale',seeTranslation:'Vedi traduzione',teamTitle:'Unisciti a una squadra',teamSub:'Rispondete insieme — scegli la squadra del tuo tavolo o creane una.',teamNewLabel:'…o creane una nuova',teamFirst:'Crea la prima squadra',teamNew:'Nome della nuova squadra…',teamCreate:'Crea squadra',teamSolo:'Gioca da solo (senza squadra)',teamMembers:'membri',teamNamePlease:'Dai un nome alla tua squadra.',modeSpeed:'Round veloce',modeSpeedHint:'rispondi in fretta per punti bonus',modeStreak:'Serie',modeStreakOn:'di fila',modeStreakKeep:'continua così!',modeStreakStart:'le risposte di fila moltiplicano i tuoi punti',modeSurvival:'Sopravvivenza',modeSurvivalHint:'una sbagliata e sei fuori',modeStillIn:'ancora in gioco',modeWager:'Round di scommesse',modeWagerHint:'punta prima di rispondere',outTitle:'Sei fuori!',outSub:'Sei sopravvissuto a',outQ:'domanda',outQs:'domande',outWatch:'Resta su questa schermata — continuerai a vedere ogni domanda.',wagerTitle:'Quanto sei sicuro?',wagerSub:'Punta prima di rispondere. Puntate alte rendono di più, ma costano se sbagli.',wagerSafe:'Sicura',wagerSafeNote:'Vinci 1 · non perdi nulla',wagerRisky:'Rischiosa',wagerRiskyNote:'Vinci 2 · perdi 1',wagerBold:'Audace',wagerBoldNote:'Vinci 3 · perdi 2',speedLocked:'Inviata in',streakRiding:'Sei su una serie di',survivalHold:'Indovina per restare in gioco…',wagerPlaced:'Hai puntato'},
 };
 function t(key, fallback){ return (I18N[LANG] && I18N[LANG][key]) || fallback; }
 
@@ -538,6 +604,10 @@ async function bootApp() {
   // Team play (pub-quiz mode): presenter toggles it per deck. When on, everyone picks or
   // creates a team after entering their name, and each response carries the team name.
   try { const tm = await db.ref(`quiz_builder/${SESSION}/teamMode`).get(); TEAM_MODE = tm.exists() && tm.val() === true; } catch(e) {}
+
+  // Game mode, and keep following it — the presenter can switch between rounds.
+  try { const gm = await db.ref(`sessions/${SESSION}/meta/gameMode`).get(); if (gm.exists() && gm.val()) GAME_MODE = String(gm.val()); } catch(e) {}
+  try { db.ref(`sessions/${SESSION}/meta/gameMode`).on('value', s => { if (s.exists() && s.val()) GAME_MODE = String(s.val()); }); } catch(e) {}
   try { const tj = localStorage.getItem(`ql_team_${SESSION}`); if (tj) { const t = JSON.parse(tj); participantTeamId = t.id; participantTeam = t.name; } } catch(e) {}
 
   // The viewer reads in: their saved choice → their browser language (if supported) → the deck language.
@@ -797,6 +867,10 @@ async function loadQuestion() {
 
   answered = false;
   answerStartTime = Date.now();
+  // Fresh per-question mode state (survival: am I out? streak: what's my run?). Classic
+  // returns immediately, so the default path is unchanged.
+  _wagerPick = 1; _wagerLocked = (GAME_MODE !== 'wager');
+  await refreshModeState();
   // Paint NOW, in the deck's language. Translation used to be awaited here, which
   // meant the whole room stared at a blank screen for however long the model took —
   // and the better the model, the longer the stall. The viewer's language is swapped
@@ -887,17 +961,67 @@ function showQuestion(q) {
          </div>
        </div>` : '';
 
+  // ── SURVIVAL: knocked out ──────────────────────────────────────────────────
+  // They stay in the room as a spectator — still see every question, just can't score.
+  // Deliberately dramatic, because that's the whole point of the mode.
+  if (GAME_MODE === 'survival' && _survivalOut) {
+    render(`
+      <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</div>
+      <div style="text-align:center;padding:14px 0 4px;">
+        <div style="font-size:54px;line-height:1;">💀</div>
+        <h1 style="margin:12px 0 4px;">${t('outTitle','You\'re out!')}</h1>
+        <p class="subtitle">${t('outSub','You survived')} <b style="color:var(--accent4);">${_survivedCount}</b> ${_survivedCount===1?t('outQ','question'):t('outQs','questions')}.</p>
+      </div>
+      <div style="background:rgba(255,101,132,0.10);border:1px solid rgba(255,101,132,0.3);border-radius:12px;padding:13px 15px;font-size:13px;color:var(--muted);line-height:1.6;text-align:center;">
+        ${t('outWatch','Stay on this screen — you\'ll still see every question as it comes up.')}
+        ${_aliveCount !== null ? `<div style="margin-top:7px;color:var(--text);font-weight:700;">${_aliveCount} ${t('modeStillIn','still in')}</div>` : ''}
+      </div>
+      <div class="q-badge" style="margin-top:16px;">${t('question','Question')} ${Q_INDEX+1}</div>
+      ${qImage}
+      <div class="q-text" style="opacity:0.75;">${q.text}</div>
+    `);
+    return;
+  }
+
+  // ── WAGER: place your bet before the options appear ────────────────────────
+  const wagerGate = (GAME_MODE === 'wager' && !_wagerLocked) ? `
+    <div id="qBody">
+      <div style="background:rgba(167,139,250,0.10);border:1px solid rgba(167,139,250,0.32);border-radius:14px;padding:16px;">
+        <div style="text-align:center;font-family:'Syne',sans-serif;font-weight:800;font-size:16px;margin-bottom:4px;">🎲 ${t('wagerTitle','How confident are you?')}</div>
+        <div style="text-align:center;font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.5;">${t('wagerSub','Bet before you answer. Higher bets win more — but cost you if you\'re wrong.')}</div>
+        ${[[1,t('wagerSafe','Safe'),t('wagerSafeNote','Win 1 · lose nothing'),'#43e97b'],
+           [2,t('wagerRisky','Risky'),t('wagerRiskyNote','Win 2 · lose 1'),'#f7b731'],
+           [3,t('wagerBold','Bold'),t('wagerBoldNote','Win 3 · lose 2'),'#ff6584']].map(([mult,label,note,col]) => `
+          <button class="btn" style="width:100%;margin-bottom:9px;display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid ${col}55;color:var(--text);text-align:left;padding:12px 14px;" onclick="placeWager(${mult})">
+            <span style="font-family:'Syne',sans-serif;font-weight:900;font-size:20px;color:${col};min-width:34px;">${mult}×</span>
+            <span style="flex:1;"><span style="display:block;font-weight:700;font-size:14px;">${label}</span>
+            <span style="display:block;font-size:11.5px;color:var(--muted);margin-top:1px;">${note}</span></span>
+          </button>`).join('')}
+      </div>
+    </div>` : '';
+
   render(`
     <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</div>
     <div class="q-badge">${t('question','Question')} ${Q_INDEX+1}</div>
+    ${modeBannerHtml()}
     ${timerHtml}
     ${qImage}
     <div class="q-text">${q.text}</div>
-    <div id="qBody">${body}</div>
+    ${wagerGate || `<div id="qBody">${body}</div>`}
   `);
 
-  // Start countdown if timer set
-  if (q.timer && q.timer > 0) startTimer(q.timer);
+  // Start countdown if timer set. In wager mode the clock starts once the bet is placed,
+  // so nobody loses their speed/answer window while deciding how much to risk.
+  if (q.timer && q.timer > 0 && !(GAME_MODE === 'wager' && !_wagerLocked)) startTimer(q.timer);
+}
+
+// Lock in a wager, then reveal the options. Also restarts the answer clock so a slow
+// bet never counts against them (matters in speed-scored rounds).
+function placeWager(mult) {
+  _wagerPick = (mult >= 1 && mult <= 3) ? mult : 1;
+  _wagerLocked = true;
+  answerStartTime = Date.now();
+  showQuestion(questionData);
 }
 
 // ─── COUNTDOWN TIMER ──────────────────────────────────────────────────────────
@@ -983,7 +1107,21 @@ function submitAnswer() {
   else if (q.type === 'multiple_choice_multi') answer = Array.from(selectedOptions);
   submitToDb(answer);
   document.getElementById('qBody').innerHTML =
-    '<div class="status-box submitted">' + t('submitted','✓ Submitted!') + '</div>';
+    '<div class="status-box submitted">' + t('submitted','✓ Submitted!') + '</div>' + submittedModeNoteHtml();
+}
+
+// A line of mode flavour right after answering, so the phone feels part of the game
+// instead of just a form. Classic shows nothing extra.
+function submittedModeNoteHtml() {
+  const wrap = (html) => `<div style="text-align:center;font-size:12.5px;color:var(--muted);margin-top:10px;line-height:1.6;">${html}</div>`;
+  if (GAME_MODE === 'speed') {
+    const secs = ((Date.now() - (answerStartTime || Date.now())) / 1000).toFixed(1);
+    return wrap(`⚡ ${t('speedLocked','Locked in at')} <b style="color:#38d9f5;">${secs}s</b>`);
+  }
+  if (GAME_MODE === 'streak' && _streakCount > 0) return wrap(`🔥 ${t('streakRiding','Riding a streak of')} <b style="color:#f7b731;">${_streakCount}</b>`);
+  if (GAME_MODE === 'survival') return wrap(`💀 ${t('survivalHold','Get it right to stay in…')}`);
+  if (GAME_MODE === 'wager')   return wrap(`🎲 ${t('wagerPlaced','You bet')} <b style="color:#a78bfa;">${_wagerPick}×</b>`);
+  return '';
 }
 
 async function submitToDb(answer) {
@@ -1049,6 +1187,7 @@ async function submitToDb(answer) {
       participantId,
       name: participantName,
       team: participantTeam || null,   // team play: every response carries the team name
+      wager: (GAME_MODE === 'wager') ? _wagerPick : null,   // wager mode: what they bet
       answer: answer === null || answer === undefined ? '__none__' : JSON.stringify(answer),
       elapsed,
       isCorrect,

@@ -2022,6 +2022,39 @@ function openArchDetail(layerKey,i){
 // Self-service "what broke → exact fix" so Rod can resolve common issues fast.
 // Each step is either an instruction (string) or a copyable command ({cmd}).
 const RUNBOOK = [
+  { cat:'🎮 Game modes (speed / streak / survival / wager)', items:[
+    { sym:'"I picked a game mode but the scores look the same"',
+      cause:'Either the mode was not actually applied to that session, or they are judging it from a single question — on one question most modes score similarly; the differences compound across a round.',
+      steps:[
+        'The mode is chosen in the picker that appears EVERY time they press Present, and stored per presentation. Check what the session is actually running:',
+        {cmd:'curl -s "https://echonest-live-survey-default-rtdb.firebaseio.com/sessions/<CODE>/meta/gameMode.json"'},
+        '<b>"classic"</b> or <b>null</b> → they never confirmed a different mode in the picker (Classic is preselected, so hitting Start keeps Classic).',
+        'Anyone who joined BEFORE the mode changed should reload the answer page — phones read the mode when they load, and follow live changes after that.',
+        'Remember Classic is intentionally unchanged; only speed/streak/survival/wager alter scoring.',
+      ] },
+    { sym:'"Someone got knocked out in Survival and wants back in"',
+      cause:'By design. Survival elimination is final within a round — that finality is the whole tension of the mode.',
+      steps:[
+        'Correct answer: finish the round, then start the next one — everyone is back in from the next question.',
+        'Or reset the tally for that presentation in the presenter (↺ Reset), which clears responses and therefore elimination.',
+        'Eliminated players are NOT kicked out of the session: they keep seeing every question on a spectator screen. If they say they "lost the app", they are probably just on that screen.',
+      ] },
+    { sym:'"The wager/bet screen never appeared"',
+      cause:'The bet step only shows in wager mode, and only before answering. If the phone loaded while the session was in a different mode, it will not show.',
+      steps:[
+        'Confirm the session mode is "wager" using the curl above.',
+        'Ask them to reload the answer page — the bet step appears before the options on the NEXT question.',
+        'Note the answer clock restarts once the bet is placed, so deciding slowly never costs them speed points.',
+      ] },
+    { sym:'Scores differ between the big screen, the presenter and the recap',
+      cause:'Should be impossible — all three use the same psStandings() scoring function, kept byte-identical in presenter.html, live.html and report.html.',
+      steps:[
+        'If they genuinely differ, the shared block has DRIFTED between files. Verify:',
+        {cmd:'cd ~/Documents/GitHub/PollSlide && python3 -c "import re;fs=[\'presenter.html\',\'live.html\',\'report.html\'];b=[re.search(r\'PS_GAME_MODES_START.*?PS_GAME_MODES_END\',open(f).read(),re.S).group(0) for f in fs];print(\'IDENTICAL\' if len(set(b))==1 else \'DRIFT\')"'},
+        'If it prints DRIFT, re-copy the block from presenter.html into the other two and redeploy.',
+        'Also check they are comparing the same filter — the recap covers ONE presentation, chosen in the Report filters.',
+      ] },
+  ] },
   { cat:'👥 Team play, warm-up, co-pilot & recap', items:[
     { sym:'"The team screen never appeared for my audience"',
       cause:'Team play is a PER-PRESENTATION setting (quiz_builder/<code>/teamMode). Either it was never switched on for that deck, or the audience joined before it was.',

@@ -2922,6 +2922,7 @@ function setRightPanelIdle() {
 // Async response feed for SurveySlide. Fully additive + product-gated: uses its own
 // listener (_dashListener), never touches the poll/companion live path or renderRightPanel.
 let _dashListener = null;
+let _prevLbOrder = [];   // last leaderboard order, so we can show ▲/▼ rank movement
 function attachSurveyDashboard(pres) {
   if (_dashListener) { _dashListener(); _dashListener = null; }
   const code = pres.sessionCode;
@@ -3118,32 +3119,31 @@ function renderQuizLeaderboard(pres, all) {
   const rs = document.getElementById('rightScroll');
   if (!rs) return;
   const code = pres.sessionCode;
-  const byPerson = {};
-  toQArr(pres.questions).forEach((q, i) => {
-    const bucket = all[`q${i}_stable_${code}`];
-    if (!bucket) return;
-    Object.entries(bucket).forEach(([pid, r]) => {
-      if (!byPerson[pid]) byPerson[pid] = { name: r.name || 'Anon', team: r.team || null, score: 0 };
-      if (r.name) byPerson[pid].name = r.name;
-      if (r.team) byPerson[pid].team = r.team;
-      if (r.isCorrect === true) byPerson[pid].score += 1;
-      else if (typeof r.isCorrect === 'number') byPerson[pid].score += r.isCorrect; // partial credit
-    });
-  });
-  let ranked = Object.values(byPerson).sort((a, b) => b.score - a.score);
+  // Cumulative scores, scored the way THIS session is being run (classic = 1 per correct,
+  // exactly as before; speed/streak/survival/wager apply their own rules).
+  const mode = currentGameMode();
+  let ranked = psStandings(mode, toQArr(pres.questions), all, code);
   const rc = document.getElementById('respCounter'); if (rc) rc.textContent = ranked.length;
+  // Who moved? Compare against the previous paint before we regroup into teams.
+  ranked = psRankDeltas(_prevLbOrder, ranked);
+  _prevLbOrder = ranked.map(p => p.pid);
   // Team play: rank teams (average member score) with solo players inline.
   const teamView = isTeamMode() && ranked.some(p => p.team);
   const playerCount = ranked.length;
+  const survivors = (mode === 'survival') ? ranked.filter(p => p.alive).length : null;
   if (teamView) ranked = groupTeams(ranked);
   const medals = ['🥇','🥈','🥉'];
-  rs.innerHTML = `<div class="resp-big" style="padding:14px;">${teamView ? ranked.filter(x=>!x.solo).length + ' <span>teams · ' + playerCount + ' players</span>' : playerCount + ` <span>player${playerCount !== 1 ? 's' : ''}</span>`}</div>` +
+  const headCount = (survivors !== null)
+    ? `${survivors} <span>still standing · ${playerCount} played</span>`
+    : (teamView ? ranked.filter(x=>!x.solo).length + ' <span>teams · ' + playerCount + ' players</span>'
+                : playerCount + ` <span>player${playerCount !== 1 ? 's' : ''}</span>`);
+  rs.innerHTML = `<div class="resp-big" style="padding:14px;">${headCount}</div>` +
     (ranked.length === 0
       ? '<div style="padding:14px;color:var(--muted);font-size:13px;">Scores stack up here as players answer across questions.</div>'
       : ranked.map((p, i) => `<div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border);${i<3?'background:rgba(108,99,255,0.06);':''}">
           <span style="width:24px;text-align:center;font-family:Syne,sans-serif;font-weight:800;${i<3?'font-size:16px;':'color:var(--muted);font-size:12px;'}">${medals[i] || (i+1)}</span>
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;font-size:13px;">${teamView ? (p.solo?'🙋 ':'👥 ') : ''}${escapeHtml(p.name)}${teamView && !p.solo ? ` <span style="font-size:10px;color:var(--muted);">×${p.n}</span>` : ''}</span>
-          <span style="font-family:Syne,sans-serif;font-weight:700;color:var(--accent3);">${Math.round(p.score * 10) / 10}</span>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600;font-size:13px;${p.alive===false?'opacity:0.45;':''}">${teamView ? (p.solo?'🙋 ':'👥 ') : ''}${escapeHtml(p.name)}${teamView && !p.solo ? ` <span style="font-size:10px;color:var(--muted);">×${p.n}</span>` : ''}${teamView ? '' : psDeltaBadge(p.delta)}</span>
+          <span style="font-family:Syne,sans-serif;font-weight:700;color:var(--accent3);">${teamView ? (Math.round(p.score*10)/10) : psScoreLabel(mode, p)}</span>
         </div>`).join(''));
 }
 
@@ -3877,6 +3877,18 @@ function buildPostRevealContent(q, responses) {
   });
   const isQuizQ = q.type === 'multiple_choice' || q.type === 'multiple_choice_multi';
 
+  // Game-mode headline — the line the room reacts to. Classic returns null, so the
+  // classic reveal renders exactly as it always has.
+  const _hl = psModeHeadline(currentGameMode(), responses);
+  const headlineHtml = _hl ? `<div style="background:linear-gradient(120deg,${_hl.tone}22,${_hl.tone}0a);border:1px solid ${_hl.tone}66;border-radius:12px;padding:11px 14px;margin-bottom:12px;display:flex;align-items:center;gap:11px;">
+      <div style="font-size:26px;line-height:1;">${_hl.icon}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-family:Syne,sans-serif;font-weight:800;font-size:10.5px;letter-spacing:.1em;color:${_hl.tone};">${_hl.label}</div>
+        <div style="font-family:Syne,sans-serif;font-weight:800;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(_hl.name)}</div>
+        ${_hl.extra ? `<div style="font-size:11.5px;color:var(--muted);">${escapeHtml(_hl.extra)}</div>` : ''}
+      </div>
+    </div>` : '';
+
   // Team play: rank TEAMS (average member score this question), solo players inline.
   const _respScore = r => r.isCorrect===true?1:(typeof r.isCorrect==='number'?r.isCorrect:0);
   const teamRows = isTeamMode()
@@ -3896,7 +3908,7 @@ function buildPostRevealContent(q, responses) {
         <span style="color:${pct>=100?'var(--accent3)':pct>0?'#f7b731':'var(--accent2)'};font-family:Syne,sans-serif;font-weight:700;font-size:13px;">${pct}%</span>
       </div>`;
     }).join('') || '<div style="color:var(--muted);font-size:13px;">No responses yet.</div>';
-    return `<div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:10px;letter-spacing:.04em;">✦ TEAM LEADERBOARD</div>${rows}`;
+    return `${headlineHtml}<div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:10px;letter-spacing:.04em;">✦ TEAM LEADERBOARD</div>${rows}`;
   }
   if (type === 'podium' && useTeams) {
     const top3 = teamRows.slice(0,3);
@@ -3911,7 +3923,7 @@ function buildPostRevealContent(q, responses) {
         <div style="width:100%;height:${heights[i]};background:${PS_COLORS[i]};border-radius:8px 8px 0 0;opacity:0.85;box-shadow:0 0 18px ${PS_COLORS[i]}66;"></div>
       </div>`;
     });
-    return `<div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:14px;letter-spacing:.04em;">✦ TOP TEAMS</div>
+    return `${headlineHtml}<div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:14px;letter-spacing:.04em;">✦ TOP TEAMS</div>
       <div style="display:flex;align-items:flex-end;gap:8px;justify-content:center;padding:0 8px;">${podiums.join('')}</div>
       ${teamRows.length > 3 ? `<div style="margin-top:12px;font-size:11px;color:var(--muted);text-align:center;">+ ${teamRows.length-3} more teams</div>` : ''}`;
   }
@@ -3933,7 +3945,7 @@ function buildPostRevealContent(q, responses) {
         ${score}
       </div>`;
     }).join('') || '<div style="color:var(--muted);font-size:13px;">No responses yet.</div>';
-    return `<div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:10px;letter-spacing:.04em;">✦ LEADERBOARD</div>${rows}`;
+    return `${headlineHtml}<div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:10px;letter-spacing:.04em;">✦ LEADERBOARD</div>${rows}`;
   }
 
   // ── Podium (top 3) ───────────────────────────────────────────────────────────
@@ -3953,7 +3965,7 @@ function buildPostRevealContent(q, responses) {
         <div style="width:100%;height:${heights[i]};background:${PS_COLORS[i]};border-radius:8px 8px 0 0;opacity:0.85;box-shadow:0 0 18px ${PS_COLORS[i]}66;"></div>
       </div>`;
     });
-    return `<div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:14px;letter-spacing:.04em;">✦ TOP 3</div>
+    return `${headlineHtml}<div style="font-family:Syne,sans-serif;font-size:13px;font-weight:700;color:#a78bfa;margin-bottom:14px;letter-spacing:.04em;">✦ TOP 3</div>
       <div style="display:flex;align-items:flex-end;gap:8px;justify-content:center;padding:0 8px;">${podiums.join('')}</div>
       ${sorted.length > 3 ? `<div style="margin-top:12px;font-size:11px;color:var(--muted);text-align:center;">+ ${sorted.length-3} more participants</div>` : ''}`;
   }
@@ -4804,13 +4816,74 @@ function psStandings(mode, questions, all, code) {
   return rows;
 }
 
+// The moment the room reacts to. Given THIS question's responses, returns the headline
+// to slam on screen at reveal — fastest finger, who got knocked out, who bet big and won.
+// Returns null for classic (and whenever there's nothing worth shouting about), so the
+// classic reveal is completely unchanged. Data only — each screen renders it its own way.
+function psModeHeadline(mode, responses) {
+  mode = psModeOk(mode);
+  if (mode === 'classic') return null;
+  const rs = (responses || []).filter(Boolean);
+  if (!rs.length) return null;
+  const right = rs.filter(r => r.isCorrect === true);
+
+  if (mode === 'speed') {
+    const f = right.slice().sort((a, b) => (a.elapsed || 9e9) - (b.elapsed || 9e9))[0];
+    if (!f || !f.elapsed) return null;
+    return { icon: '⚡', label: 'FASTEST FINGER', name: f.name || 'Player', extra: (f.elapsed / 1000).toFixed(1) + 's', tone: '#38d9f5' };
+  }
+  if (mode === 'survival') {
+    const out = rs.filter(r => r.isCorrect === false).length;
+    return { icon: '💀', label: out ? 'KNOCKED OUT' : 'EVERYONE SURVIVES',
+             name: out ? (out + (out === 1 ? ' player out' : ' players out')) : 'Nobody went home',
+             extra: right.length + ' still standing', tone: '#ff6584' };
+  }
+  if (mode === 'wager') {
+    const bold = right.slice().sort((a, b) => (psWagerOf(b) - psWagerOf(a)) || ((a.elapsed || 0) - (b.elapsed || 0)))[0];
+    if (!bold) return { icon: '🎲', label: 'THE HOUSE WINS', name: 'Nobody got it', extra: 'big bets lost', tone: '#a78bfa' };
+    const w = psWagerOf(bold);
+    return { icon: '🎲', label: w > 1 ? 'BIGGEST CALL' : 'PLAYED IT SAFE', name: bold.name || 'Player',
+             extra: w + '× and nailed it', tone: '#a78bfa' };
+  }
+  if (mode === 'streak') {
+    if (!right.length) return { icon: '💔', label: 'STREAKS BROKEN', name: 'Everyone resets', extra: '', tone: '#f7b731' };
+    return { icon: '🔥', label: 'STILL ON A ROLL', name: right.length + (right.length === 1 ? ' player' : ' players'), extra: 'kept the streak alive', tone: '#f7b731' };
+  }
+  return null;
+}
+
+// Escalating heat, because a number alone doesn't feel like anything. 3 in a row earns a
+// flame, 5 earns two, 7+ earns "ON FIRE" — the visible momentum that makes a streak worth
+// protecting (and makes losing it hurt, which is the point).
+function psStreakFlair(streak) {
+  if (streak >= 7) return '🔥🔥🔥';
+  if (streak >= 5) return '🔥🔥';
+  if (streak >= 3) return '🔥';
+  return '';
+}
 // Short label for one person's score in a given mode (used on every leaderboard).
 function psScoreLabel(mode, p) {
   mode = psModeOk(mode);
   const n = Math.round((p.score || 0) * 10) / 10;
   if (mode === 'survival') return p.alive ? '✅ ' + n : '💀 out';
-  if (mode === 'streak' && p.streak > 1) return n + ' 🔥' + p.streak;
+  if (mode === 'streak' && p.streak > 1) return n + ' ' + (psStreakFlair(p.streak) || '🔥') + p.streak;
   return String(n);
+}
+// Rank movement between two standings snapshots — the "you just passed three people"
+// signal. Social comparison is the strongest engagement lever there is, and it costs
+// nothing but remembering last round's order.
+function psRankDeltas(prevOrder, rows) {
+  const prev = {}; (prevOrder || []).forEach((pid, i) => { prev[pid] = i; });
+  return rows.map((p, i) => {
+    const was = prev[p.pid];
+    return Object.assign({}, p, { delta: (was === undefined) ? null : (was - i) });
+  });
+}
+function psDeltaBadge(delta) {
+  if (delta === null || delta === 0) return '';
+  return delta > 0
+    ? `<span style="color:#43e97b;font-size:10.5px;font-weight:800;margin-left:5px;">▲${delta}</span>`
+    : `<span style="color:#ff6584;font-size:10.5px;font-weight:800;margin-left:5px;">▼${Math.abs(delta)}</span>`;
 }
 // ===== PS_GAME_MODES_END =====
 
