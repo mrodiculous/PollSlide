@@ -94,6 +94,78 @@ function buildMessages({ question, texts, distribution, topic, language }) {
   return [{ role: 'system', content: system }, { role: 'user', content: parts.join('\n\n') }];
 }
 
+// Work out WHICH option the model meant. Models are inconsistent about this: the same
+// prompt yields "Harper Lee", "A", "A) Harper Lee", "Option A", "Harper Lee." or a bare
+// index — and a miss here silently produces a question with no correct answer, which the
+// presenter only discovers when the reveal shows nothing. So we try hard, in order of how
+// certain each interpretation is. (Mirrors resolveCorrect() in api/polly.js, which learned
+// the same lesson.) Returns null ONLY when there genuinely is no answer to mark.
+function resolveAnswerIndex(rawAnswer, options) {
+  if (rawAnswer == null) return null;
+  // Normalise for comparison: lowercase, strip wrapping quotes, collapse whitespace, and
+  // drop trailing sentence punctuation ("Harper Lee." === "Harper Lee").
+  const norm = (v) => String(v == null ? '' : v)
+    .replace(/[‘’]/g, "'").replace(/[“”]/g, '"')   // curly → straight
+    .trim().replace(/^["'`]+|["'`]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/[.,;:!?]+$/, '')
+    .toLowerCase();
+
+  const ans = norm(rawAnswer);
+  if (!ans) return null;                       // "" = opinion question, by design
+  const opts = options.map(norm);
+  const inRange = (i) => (Number.isInteger(i) && i >= 0 && i < options.length && options[i]) ? i : null;
+
+  // 1) Straight text match — the common, unambiguous case.
+  let i = opts.indexOf(ans);
+  if (i >= 0) return i;
+
+  // 2) The model prefixed the option with its label: "A) Harper Lee", "A. Harper Lee",
+  //    "A - Harper Lee", "1. Harper Lee". Strip the label and match the text again.
+  const stripped = ans.replace(/^\(?([a-f]|[1-9])\)?\s*[.):\-–]\s*/i, '').trim();
+  if (stripped && stripped !== ans) {
+    i = opts.indexOf(stripped);
+    if (i >= 0) return i;
+  }
+
+  // 3) "Option A" / "option 2" / "answer b".
+  const worded = /^(?:option|answer|choice)\s+([a-f]|\d{1,2})$/i.exec(ans);
+  if (worded) {
+    const tok = worded[1];
+    if (/[a-f]/i.test(tok)) return inRange(tok.toLowerCase().charCodeAt(0) - 97);
+    const n = parseInt(tok, 10);
+    return inRange(n) !== null ? inRange(n) : inRange(n - 1);   // 0-based, else 1-based
+  }
+
+  // 4) A bare letter.
+  if (/^[a-f]$/.test(ans)) return inRange(ans.charCodeAt(0) - 97);
+
+  // 5) A bare number is genuinely ambiguous: "1" could mean index 1 (0-based) or the FIRST
+  //    option (1-based), and there is no way to tell from the value alone. Guessing wrong
+  //    marks the wrong option correct in front of a live audience — far worse than marking
+  //    none — so we only accept a number when exactly one reading is possible:
+  //      "0"                        → must be 0-based (no "0th" option in 1-based counting)
+  //      n === options.length       → must be 1-based (out of range 0-based)
+  //    Anything in between falls through to null and the presenter sets it themselves.
+  if (/^\d{1,2}$/.test(ans)) {
+    const n = parseInt(ans, 10);
+    if (n === 0) return inRange(0);
+    if (n === options.filter(Boolean).length) return inRange(n - 1);
+    return null;
+  }
+
+  // 6) Last resort: the answer text contains, or is contained by, exactly ONE option.
+  //    Only accept a unique hit — an ambiguous match is worse than no answer at all.
+  const hits = [];
+  opts.forEach((o, idx) => {
+    if (!o) return;
+    if (ans.includes(o) || o.includes(ans)) hits.push(idx);
+  });
+  if (hits.length === 1) return hits[0];
+
+  return null;   // genuinely couldn't tell — better null than a confidently wrong answer
+}
+
 // Normalise into exactly what the presenter can launch: 4 options, a resolved answer index
 // (or null for opinion questions). Anything malformed is dropped rather than shown.
 function parseSuggestions(raw) {
@@ -115,14 +187,7 @@ function parseSuggestions(raw) {
       .slice(0, 4);
     if (!text || options.length < 2) continue;
     while (options.length < 4) options.push('');            // the editor expects 4 slots
-    const ansRaw = String(s.answer == null ? '' : s.answer).trim().toLowerCase();
-    let answerIndex = null;
-    if (ansRaw) {
-      const i = options.findIndex(o => o.trim().toLowerCase() === ansRaw);
-      if (i >= 0) answerIndex = i;
-      else if (/^[a-d]$/.test(ansRaw)) answerIndex = ansRaw.charCodeAt(0) - 97;   // letter fallback
-    }
-    if (answerIndex != null && (answerIndex < 0 || answerIndex >= options.length)) answerIndex = null;
+    const answerIndex = resolveAnswerIndex(s.answer, options);
     out.push({ text, options, answerIndex, why: String(s.why || '').trim().slice(0, 140) });
   }
   return out.length ? out : null;

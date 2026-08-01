@@ -2072,6 +2072,14 @@ const RUNBOOK = [
         'Solo players (who tapped "Play solo") appear on the same board as themselves — that is intended, not a duplicate.',
         'If they truly want sum-based scoring, log it as a feature request; there is no toggle today.',
       ] },
+    { sym:'"A suggested follow-up has no correct answer marked"',
+      cause:'Two different reasons, and the modal now says which: (a) it is genuinely an opinion question, or (b) the model named the answer in a form we could not tie to an option with certainty.',
+      steps:[
+        'The suggestion card shows "🗳️ No right answer marked" when this happens — that label IS the answer to "is this a bug?".',
+        'Presenter fix: add the question, then tap ✓ on the correct option in the editor. Takes two seconds.',
+        'We deliberately mark NOTHING rather than guess: a bare number like "1" could mean the 1st option or index 1, and marking the wrong option correct in front of a live room is far worse than marking none.',
+        'Forms we DO resolve automatically: exact text, any case, "A", "A) Harper Lee", "A. Harper Lee", "Option A", trailing punctuation, curly quotes, "0", and a number equal to the option count.',
+      ] },
     { sym:'"The co-pilot says unavailable" / no suggestions',
       cause:'BOTH the local Mac LLM and OpenAI were unreachable at that moment. This is the designed fallback — it returns HTTP 200 with degraded:true so a live session is never interrupted by an error.',
       steps:[
