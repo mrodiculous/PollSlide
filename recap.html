@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Session recap — PollSlide</title>
 <meta name="description" content="A shareable recap of a live PollSlide session — winner, highlights and the question that fooled everyone.">
+<!-- Recaps show the display names of everyone who took part. They're deliberately
+     link-only (unguessable id), but without this a recap link posted publicly could be
+     crawled and make participants' names searchable on Google. noindex keeps the sharing
+     loop intact — the link still works for anyone the presenter sends it to — while
+     keeping real people out of search results. Matches results.html. -->
+<meta name="robots" content="noindex, nofollow">
 <meta property="og:title" content="Session recap — PollSlide">
 <meta property="og:description" content="See how the room did: winner, toughest question and the highlights.">
 <meta property="og:type" content="website">
@@ -154,8 +160,20 @@ function render(d){
     ${tough}
     ${lbBlock}
     ${qBlock}
-    <a class="cta" href="https://pollslide.com">Run your own live quiz — free →</a>
-    <div class="foot">Made with <a href="https://pollslide.com">PollSlide</a> · live polls, quizzes &amp; surveys for any presentation</div>
+    <!-- The recap is the one page that reaches people who did NOT organise the session —
+         it's the cheapest acquisition surface we have. So the CTA speaks to the reader's
+         actual situation ("you just played one") rather than pitching software, and the
+         ?ref tag lets us tell recap-driven signups apart from search/direct without any
+         tracking cookie (see MARKETING-LAUNCH-KIT.md). -->
+    <div style="background:linear-gradient(135deg,rgba(108,99,255,0.14),rgba(67,233,123,0.08));border:1px solid rgba(108,99,255,0.35);border-radius:16px;padding:20px 18px;margin-top:24px;text-align:center;">
+      <div style="font-family:'Syne',sans-serif;font-weight:900;font-size:18px;margin-bottom:6px;">Fancy running the next one?</div>
+      <p style="color:var(--muted);font-size:13.5px;line-height:1.6;margin-bottom:14px;">
+        This whole quiz was built and run with PollSlide — free, and your players just need their phones.
+        Set one up in about five minutes.
+      </p>
+      <a class="cta" style="margin-top:0;" href="https://pollslide.com/game-modes?ref=recap">Make your own quiz — free →</a>
+    </div>
+    <div class="foot">Made with <a href="https://pollslide.com/?ref=recap">PollSlide</a> · live polls, quizzes &amp; surveys for any presentation</div>
   `;
 }
 
