@@ -4747,6 +4747,11 @@ function openPolly() {
 function isTeamMode() { return !!(activePresId && presentations[activePresId]?.teamMode); }
 function syncTeamModeBtn() {
   const b = document.getElementById('teamModeBtn'); if (!b) return;
+  // ⚠️ This button ships DISABLED in the markup (like Report / Big screen / Q&A), so it
+  // must be explicitly enabled once a presentation is open — otherwise it renders greyed
+  // out and team play is simply unreachable. That's exactly what shipped: syncTeamModeBtn
+  // only ever restyled the label, so the button was never clickable. Keep this line.
+  b.disabled = !activePresId;
   const on = isTeamMode();
   b.textContent = on ? '👥 Teams: On' : '👥 Teams: Off';
   b.style.color = on ? 'var(--accent3)' : '';
