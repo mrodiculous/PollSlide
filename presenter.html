@@ -460,6 +460,8 @@
     <button class="btn btn-ghost" id="reportBtn" onclick="window.open('/report'+(activePresId?('?pres='+encodeURIComponent(activePresId)):''),'_blank')" disabled title="Open the full report">📊 Report</button>
     <button class="btn btn-ghost" id="bigScreenBtn" onclick="openBigScreen()" disabled title="Open the big-screen join + live results view (projector / second screen)">🖥️ Big screen</button>
     <button class="btn btn-ghost" id="teamModeBtn" onclick="toggleTeamMode()" disabled title="Team play (pub-quiz mode): the audience joins as teams and the leaderboard ranks teams. Team score = average of the members' scores, so team size doesn't matter.">👥 Teams: Off</button>
+    <button class="btn btn-ghost" id="studyNowBtn" onclick="studyNow()" style="display:none;" title="Study this set yourself, right now — spaced repetition, streaks and study games">📚 Study now</button>
+    <button class="btn btn-ghost" id="makeStudyBtn" onclick="studyThisDeck()" style="display:none;" title="Turn this deck into a StudySlide set of flashcards you can revise with">📚 Study this deck</button>
     <button class="btn btn-reset" id="resetBtn" onclick="confirmResetAll()" disabled>↺ Reset All Tallies</button>
   </div>
 </div>
@@ -2328,6 +2330,7 @@ function selectPresentation(id) {
   document.getElementById('bigScreenBtn').disabled = false;
   document.getElementById('qaBtn').disabled = false;
   syncTeamModeBtn();
+  syncStudyButtons();
   updateShareButton();
 
   renderPresList();
@@ -2519,6 +2522,38 @@ function deriveBack(q) {
   }
   if (q.options && q.options.length) return q.options.map(o => o.text).filter(Boolean).join(' · ');
   return '';
+}
+
+// ─── STUDY IT YOURSELF ────────────────────────────────────────────────────────
+// The suite was built assuming you DISTRIBUTE a study set to other people — the only
+// way to actually revise your own set was to copy the share link and paste it into a
+// tab by hand. These two buttons close that gap:
+//   📚 Study now        — on a study set: opens YOUR set in the learner view
+//   📚 Study this deck  — on a poll/quiz/survey: turns it into flashcards in one tap
+//                         (this is the "one tap" the quiz panel has always promised)
+function studyNow() {
+  const pres = presentations[activePresId];
+  if (!pres || !pres.sessionCode) { toast('Save the set first — it needs a session code.', 'warn'); return; }
+  if (!toQArr(pres.questions).length) { toast('Add some cards first.', 'warn'); return; }
+  window.open(getSurveyURL(), '_blank');
+  toast('📚 Opened in a new tab — your progress and streak save automatically.', 'success');
+}
+function studyThisDeck() {
+  if (!activePresId) return;
+  const n = toQArr(presentations[activePresId]?.questions).length;
+  if (!n) { toast('Add some questions first.', 'warn'); return; }
+  makeStudySet(activePresId);
+}
+// Show whichever of the two makes sense for the product that's open.
+function syncStudyButtons() {
+  const studyBtn = document.getElementById('studyNowBtn');
+  const makeBtn  = document.getElementById('makeStudyBtn');
+  if (!studyBtn || !makeBtn) return;
+  const pres = presentations[activePresId];
+  const isStudy = !!pres && presType(pres) === 'study';
+  const hasQs   = !!pres && toQArr(pres.questions).length > 0;
+  studyBtn.style.display = (pres && isStudy && hasQs) ? '' : 'none';
+  makeBtn.style.display  = (pres && !isStudy && hasQs) ? '' : 'none';
 }
 
 async function makeStudySet(srcId) {
@@ -3167,7 +3202,10 @@ function renderStudyMastery(pres, studiers) {
   const rc = document.getElementById('respCounter'); if (rc) rc.textContent = people.length;
   if (people.length === 0) {
     rs.innerHTML = `<div class="resp-big" style="padding:14px;">${cards.length} <span>card${cards.length!==1?'s':''}</span></div>
-      <div style="padding:14px;color:var(--muted);font-size:13px;line-height:1.7;">📚 <b style="color:var(--text);">Share this set</b> — as people study, their mastery shows up here live.</div>`;
+      <div style="padding:14px;color:var(--muted);font-size:13px;line-height:1.7;">
+        📚 <b style="color:var(--text);">Study it yourself</b> — hit <b>📚 Study now</b> in the top bar for spaced repetition, streaks and study games.
+        <div style="margin-top:8px;">Or <b style="color:var(--text);">share the set</b> — as people study, their mastery shows up here live.</div>
+      </div>`;
     return;
   }
   const isMastered = r => r === 'good' || r === 'easy';
@@ -4651,6 +4689,7 @@ function addQuestion() {
     questions.push({ text:'', type:'multiple_choice', options:[{text:'',img:''},{text:'',img:''},{text:'',img:''},{text:'',img:''}], correctAnswer:0, image:'', timer:0, displayMode:'bars', revealDelay:30, postReveal:{ enabled:false, type:'leaderboard', explainerText:'', advanceDelay:'manual' } });
   }
   presentations[activePresId].questions = questions;
+  syncStudyButtons();       // first card added → the study buttons become available
   const newIdx = questions.length - 1;
   selIdx = newIdx;          // Set BEFORE renderQList so the new question is highlighted
   renderQList();            // Now renders with the correct selIdx

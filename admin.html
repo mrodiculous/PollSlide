@@ -2022,6 +2022,35 @@ function openArchDetail(layerKey,i){
 // Self-service "what broke → exact fix" so Rod can resolve common issues fast.
 // Each step is either an instruction (string) or a copyable command ({cmd}).
 const RUNBOOK = [
+  { cat:'📚 StudySlide (study games, streaks, mastery)', items:[
+    { sym:'"How do I study my own set? I can only share it."',
+      cause:'Historic gap — the product assumed you were distributing to a class. Fixed: there are now two buttons in the presenter top bar.',
+      steps:[
+        'On a STUDY set → <b>📚 Study now</b> opens their own cards in a new tab (spaced repetition, streak, four modes).',
+        'On a poll/quiz/survey → <b>📚 Study this deck</b> converts it to flashcards (question on the front, correct answer on the back) and switches them to the Study tab.',
+        'Both buttons only appear once the deck has at least one question, and Study now needs a saved session code.',
+      ] },
+    { sym:'"My study streak reset even though I studied"',
+      cause:'Three legitimate reasons before you look for a bug: the session was not finished, a calendar day was genuinely missed, or they switched device/browser.',
+      steps:[
+        'The streak banks only when a session COMPLETES — closing the tab halfway does not count.',
+        'It is stored per BROWSER (localStorage), not on the account — phone and laptop keep separate streaks. This is by design: study needs no login.',
+        'It is now GLOBAL across all their sets (it used to be per-set, which meant studying two subjects gave two separate 1-day streaks). Old per-set streaks were migrated to the best one.',
+      ] },
+    { sym:'"Study progress / mastery disappeared"',
+      cause:'Progress lives in the browser, so clearing site data, private browsing or a new device starts fresh.',
+      steps:[
+        'The CARDS are safe — they live in the deck. Only the schedule, mastery and streak are local.',
+        'If they need progress to follow them across devices, that is a genuine feature request (study currently needs no login by design), not a fault.',
+      ] },
+    { sym:'"Are the study games real studying, or just a distraction?"',
+      cause:'Reasonable question — worth answering confidently.',
+      steps:[
+        'All four modes use the same cards and feed the SAME SM-2 scheduler: a right answer schedules the card further out, a wrong one brings it back sooner.',
+        'Beat the Clock / Ladder / Board differ only in framing and scoring — the learning data recorded is identical to plain Review.',
+        'The Board is quietly adaptive: tile VALUE comes from the card\'s mastery stage, so the 500s are the cards they know least well.',
+      ] },
+  ] },
   { cat:'🎮 Game modes (speed / streak / survival / wager)', items:[
     { sym:'"I picked a game mode but the scores look the same"',
       cause:'Either the mode was not actually applied to that session, or they are judging it from a single question — on one question most modes score similarly; the differences compound across a round.',

@@ -318,11 +318,11 @@ function render(html) {
 // ── i18n: the audience page matches the deck's language (set by the presenter) ──
 let LANG = 'en';
 const I18N = {
-  es:{enterName:'Escribe tu nombre',nameOnce:'Solo necesitas hacerlo una vez por sesión.',yourName:'Tu nombre',continue:'Continuar →',enterNamePlease:'Por favor, escribe tu nombre.',submitAnswer:'Enviar respuesta',submitRating:'Enviar valoración',submitAnswers:'Enviar respuestas',submitted:'✓ ¡Enviado!',alreadyAnswered:'¡Ya respondiste esta pregunta!',selectAll:'✓ Marca todas las que correspondan',submitSurvey:'Enviar encuesta',submitQuiz:'Enviar y ver puntuación',thankYou:'¡Gracias!',recorded:'Tus respuestas se han guardado.',qaTitle:'Preguntas del público',qaSub:'Haz una pregunta — o vota las que quieras que respondan.',ask:'Preguntar',typeQuestion:'Escribe tu pregunta…',loading:'Cargando…',responses:'respuestas',question:'Pregunta',typeAnswer:'Escribe tu respuesta…',tapToFlip:'TOCA PARA GIRAR',answerFace:'RESPUESTA',showAnswer:'Mostrar respuesta',again:'Otra vez',hard:'Difícil',good:'Bien',easy:'Fácil',yourAnswer:'Tu respuesta',correctWas:'Correcta',skipped:'(omitida)',joinTitle:'Únete a una sesión',joinSub:'Escribe el código que aparece junto al código QR.',joinBtn:'Unirse →',joinShort:'Ese código parece demasiado corto: revísalo e inténtalo de nuevo.',joinNotFound:'No se encontró ninguna sesión con ese código. Verifícalo con tu presentador.',joinFail:'No se pudo comprobar el código: revisa tu conexión.',seeOriginal:'Ver original',seeTranslation:'Ver traducción',teamTitle:'Únete a un equipo',teamSub:'Responded juntos: elige el equipo de tu mesa o crea uno.',teamNewLabel:'…o crea uno nuevo',teamFirst:'Crea el primer equipo',teamNew:'Nombre del nuevo equipo…',teamCreate:'Crear equipo',teamSolo:'Jugar solo (sin equipo)',teamMembers:'miembros',teamNamePlease:'Ponle un nombre a tu equipo.',modeSpeed:'Ronda rápida',modeSpeedHint:'responde rápido para ganar puntos extra',modeStreak:'Racha',modeStreakOn:'seguidas',modeStreakKeep:'¡sigue así!',modeStreakStart:'las respuestas seguidas multiplican tus puntos',modeSurvival:'Supervivencia',modeSurvivalHint:'un fallo y quedas eliminado',modeStillIn:'siguen en juego',modeWager:'Ronda de apuestas',modeWagerHint:'apuesta antes de responder',outTitle:'¡Estás eliminado!',outSub:'Sobreviviste',outQ:'pregunta',outQs:'preguntas',outWatch:'Quédate en esta pantalla: seguirás viendo cada pregunta.',wagerTitle:'¿Cuánta confianza tienes?',wagerSub:'Apuesta antes de responder. Apostar más da más puntos, pero cuesta si fallas.',wagerSafe:'Segura',wagerSafeNote:'Ganas 1 · no pierdes nada',wagerRisky:'Arriesgada',wagerRiskyNote:'Ganas 2 · pierdes 1',wagerBold:'Atrevida',wagerBoldNote:'Ganas 3 · pierdes 2',speedLocked:'Enviada en',streakRiding:'Llevas una racha de',survivalHold:'Acierta para seguir en juego…',wagerPlaced:'Apostaste'},
-  de:{enterName:'Gib deinen Namen ein',nameOnce:'Nur einmal pro Sitzung nötig.',yourName:'Dein Name',continue:'Weiter →',enterNamePlease:'Bitte gib deinen Namen ein.',submitAnswer:'Antwort senden',submitRating:'Bewertung senden',submitAnswers:'Antworten senden',submitted:'✓ Gesendet!',alreadyAnswered:'Du hast diese Frage bereits beantwortet!',selectAll:'✓ Alle Zutreffenden auswählen',submitSurvey:'Umfrage senden',submitQuiz:'Senden & Punktzahl ansehen',thankYou:'Danke!',recorded:'Deine Antworten wurden gespeichert.',qaTitle:'Publikumsfragen',qaSub:'Stelle eine Frage — oder stimme für andere ab.',ask:'Fragen',typeQuestion:'Schreibe deine Frage…',loading:'Lädt…',responses:'Antworten',question:'Frage',typeAnswer:'Schreibe deine Antwort…',tapToFlip:'ZUM UMDREHEN TIPPEN',answerFace:'ANTWORT',showAnswer:'Antwort zeigen',again:'Nochmal',hard:'Schwer',good:'Gut',easy:'Leicht',yourAnswer:'Deine Antwort',correctWas:'Richtig',skipped:'(übersprungen)',joinTitle:'Sitzung beitreten',joinSub:'Gib den Code ein, der neben dem QR-Code angezeigt wird.',joinBtn:'Beitreten →',joinShort:'Dieser Code sieht zu kurz aus — prüfe ihn und versuche es erneut.',joinNotFound:'Keine Sitzung mit diesem Code gefunden — frag deinen Präsentator.',joinFail:'Code konnte nicht geprüft werden — prüfe deine Verbindung.',seeOriginal:'Original ansehen',seeTranslation:'Übersetzung ansehen',teamTitle:'Tritt einem Team bei',teamSub:'Antwortet zusammen — wähle das Team deines Tisches oder gründe eins.',teamNewLabel:'…oder gründe ein neues',teamFirst:'Gründe das erste Team',teamNew:'Name des neuen Teams…',teamCreate:'Team gründen',teamSolo:'Allein spielen (ohne Team)',teamMembers:'Mitglieder',teamNamePlease:'Gib deinem Team einen Namen.',modeSpeed:'Schnellrunde',modeSpeedHint:'schnell antworten bringt Bonuspunkte',modeStreak:'Serie',modeStreakOn:'in Folge',modeStreakKeep:'weiter so!',modeStreakStart:'Antworten in Folge vervielfachen deine Punkte',modeSurvival:'Survival',modeSurvivalHint:'eine falsche Antwort und du bist raus',modeStillIn:'noch dabei',modeWager:'Wettrunde',modeWagerHint:'setze, bevor du antwortest',outTitle:'Du bist raus!',outSub:'Du hast überstanden',outQ:'Frage',outQs:'Fragen',outWatch:'Bleib auf diesem Bildschirm — du siehst weiterhin jede Frage.',wagerTitle:'Wie sicher bist du?',wagerSub:'Setze, bevor du antwortest. Höhere Einsätze bringen mehr — kosten dich aber bei einem Fehler.',wagerSafe:'Sicher',wagerSafeNote:'Gewinn 1 · kein Verlust',wagerRisky:'Riskant',wagerRiskyNote:'Gewinn 2 · Verlust 1',wagerBold:'Mutig',wagerBoldNote:'Gewinn 3 · Verlust 2',speedLocked:'Abgeschickt nach',streakRiding:'Deine Serie steht bei',survivalHold:'Richtig antworten, um dabei zu bleiben…',wagerPlaced:'Du hast gesetzt'},
-  fr:{enterName:'Entrez votre nom',nameOnce:'À faire une seule fois par session.',yourName:'Votre nom',continue:'Continuer →',enterNamePlease:'Veuillez entrer votre nom.',submitAnswer:'Envoyer la réponse',submitRating:'Envoyer la note',submitAnswers:'Envoyer les réponses',submitted:'✓ Envoyé !',alreadyAnswered:'Vous avez déjà répondu à cette question !',selectAll:'✓ Sélectionnez tout ce qui s’applique',submitSurvey:'Envoyer le sondage',submitQuiz:'Envoyer et voir le score',thankYou:'Merci !',recorded:'Vos réponses ont été enregistrées.',qaTitle:'Questions du public',qaSub:'Posez une question — ou votez pour celles à traiter.',ask:'Demander',typeQuestion:'Écrivez votre question…',loading:'Chargement…',responses:'réponses',question:'Question',typeAnswer:'Écrivez votre réponse…',tapToFlip:'TOUCHEZ POUR RETOURNER',answerFace:'RÉPONSE',showAnswer:'Voir la réponse',again:'Encore',hard:'Difficile',good:'Bien',easy:'Facile',yourAnswer:'Votre réponse',correctWas:'Bonne réponse',skipped:'(passée)',joinTitle:'Rejoindre une session',joinSub:'Saisissez le code affiché à côté du QR code.',joinBtn:'Rejoindre →',joinShort:'Ce code semble trop court — vérifiez-le et réessayez.',joinNotFound:'Aucune session trouvée avec ce code — vérifiez auprès de votre présentateur.',joinFail:'Impossible de vérifier le code — vérifiez votre connexion.',seeOriginal:'Voir l’original',seeTranslation:'Voir la traduction',teamTitle:'Rejoignez une équipe',teamSub:'Répondez ensemble — choisissez l’équipe de votre table ou créez-en une.',teamNewLabel:'…ou créez-en une nouvelle',teamFirst:'Créez la première équipe',teamNew:'Nom de la nouvelle équipe…',teamCreate:'Créer l’équipe',teamSolo:'Jouer seul (sans équipe)',teamMembers:'membres',teamNamePlease:'Donnez un nom à votre équipe.',modeSpeed:'Manche rapide',modeSpeedHint:'répondez vite pour des points bonus',modeStreak:'Série',modeStreakOn:'d’affilée',modeStreakKeep:'continuez !',modeStreakStart:'les bonnes réponses d’affilée multiplient vos points',modeSurvival:'Survie',modeSurvivalHint:'une erreur et vous êtes éliminé',modeStillIn:'encore en lice',modeWager:'Manche de paris',modeWagerHint:'misez avant de répondre',outTitle:'Vous êtes éliminé !',outSub:'Vous avez survécu à',outQ:'question',outQs:'questions',outWatch:'Restez sur cet écran — vous verrez toujours chaque question.',wagerTitle:'À quel point êtes-vous sûr ?',wagerSub:'Misez avant de répondre. Les grosses mises rapportent plus, mais coûtent cher en cas d’erreur.',wagerSafe:'Sûr',wagerSafeNote:'Gagnez 1 · ne perdez rien',wagerRisky:'Risqué',wagerRiskyNote:'Gagnez 2 · perdez 1',wagerBold:'Audacieux',wagerBoldNote:'Gagnez 3 · perdez 2',speedLocked:'Validé en',streakRiding:'Vous êtes sur une série de',survivalHold:'Trouvez la bonne réponse pour rester…',wagerPlaced:'Vous avez misé'},
-  pt:{enterName:'Digite seu nome',nameOnce:'Só precisa fazer isso uma vez por sessão.',yourName:'Seu nome',continue:'Continuar →',enterNamePlease:'Por favor, digite seu nome.',submitAnswer:'Enviar resposta',submitRating:'Enviar avaliação',submitAnswers:'Enviar respostas',submitted:'✓ Enviado!',alreadyAnswered:'Você já respondeu a esta pergunta!',selectAll:'✓ Marque todas as aplicáveis',submitSurvey:'Enviar pesquisa',submitQuiz:'Enviar e ver pontuação',thankYou:'Obrigado!',recorded:'Suas respostas foram registradas.',qaTitle:'Perguntas do público',qaSub:'Faça uma pergunta — ou vote nas que quer ver respondidas.',ask:'Perguntar',typeQuestion:'Escreva sua pergunta…',loading:'Carregando…',responses:'respostas',question:'Pergunta',typeAnswer:'Digite sua resposta…',tapToFlip:'TOQUE PARA VIRAR',answerFace:'RESPOSTA',showAnswer:'Mostrar resposta',again:'De novo',hard:'Difícil',good:'Bom',easy:'Fácil',yourAnswer:'Sua resposta',correctWas:'Correta',skipped:'(pulada)',joinTitle:'Entrar em uma sessão',joinSub:'Digite o código exibido ao lado do QR code.',joinBtn:'Entrar →',joinShort:'Esse código parece curto demais — confira e tente novamente.',joinNotFound:'Nenhuma sessão encontrada com esse código — confirme com seu apresentador.',joinFail:'Não foi possível verificar o código — verifique sua conexão.',seeOriginal:'Ver original',seeTranslation:'Ver tradução',teamTitle:'Entre em uma equipe',teamSub:'Respondam juntos — escolha a equipe da sua mesa ou crie uma.',teamNewLabel:'…ou crie uma nova',teamFirst:'Crie a primeira equipe',teamNew:'Nome da nova equipe…',teamCreate:'Criar equipe',teamSolo:'Jogar sozinho (sem equipe)',teamMembers:'membros',teamNamePlease:'Dê um nome à sua equipe.',modeSpeed:'Rodada rápida',modeSpeedHint:'responda rápido para ganhar pontos extras',modeStreak:'Sequência',modeStreakOn:'seguidas',modeStreakKeep:'continue assim!',modeStreakStart:'respostas seguidas multiplicam seus pontos',modeSurvival:'Sobrevivência',modeSurvivalHint:'um erro e você está fora',modeStillIn:'ainda no jogo',modeWager:'Rodada de apostas',modeWagerHint:'aposte antes de responder',outTitle:'Você está fora!',outSub:'Você sobreviveu a',outQ:'pergunta',outQs:'perguntas',outWatch:'Fique nesta tela — você continuará vendo cada pergunta.',wagerTitle:'Qual é a sua confiança?',wagerSub:'Aposte antes de responder. Apostas maiores rendem mais — mas custam se você errar.',wagerSafe:'Segura',wagerSafeNote:'Ganha 1 · não perde nada',wagerRisky:'Arriscada',wagerRiskyNote:'Ganha 2 · perde 1',wagerBold:'Ousada',wagerBoldNote:'Ganha 3 · perde 2',speedLocked:'Enviada em',streakRiding:'Você está numa sequência de',survivalHold:'Acerte para continuar no jogo…',wagerPlaced:'Você apostou'},
-  it:{enterName:'Inserisci il tuo nome',nameOnce:'Da fare una sola volta per sessione.',yourName:'Il tuo nome',continue:'Continua →',enterNamePlease:'Inserisci il tuo nome.',submitAnswer:'Invia risposta',submitRating:'Invia valutazione',submitAnswers:'Invia risposte',submitted:'✓ Inviato!',alreadyAnswered:'Hai già risposto a questa domanda!',selectAll:'✓ Seleziona tutte quelle pertinenti',submitSurvey:'Invia sondaggio',submitQuiz:'Invia e vedi punteggio',thankYou:'Grazie!',recorded:'Le tue risposte sono state registrate.',qaTitle:'Domande del pubblico',qaSub:'Fai una domanda — o vota quelle da trattare.',ask:'Chiedi',typeQuestion:'Scrivi la tua domanda…',loading:'Caricamento…',responses:'risposte',question:'Domanda',typeAnswer:'Scrivi la tua risposta…',tapToFlip:'TOCCA PER GIRARE',answerFace:'RISPOSTA',showAnswer:'Mostra risposta',again:'Di nuovo',hard:'Difficile',good:'Bene',easy:'Facile',yourAnswer:'La tua risposta',correctWas:'Corretta',skipped:'(saltata)',joinTitle:'Partecipa a una sessione',joinSub:'Digita il codice mostrato accanto al codice QR.',joinBtn:'Partecipa →',joinShort:'Questo codice sembra troppo corto — controllalo e riprova.',joinNotFound:'Nessuna sessione trovata con questo codice — verifica con il tuo presentatore.',joinFail:'Impossibile verificare il codice — controlla la connessione.',seeOriginal:'Vedi originale',seeTranslation:'Vedi traduzione',teamTitle:'Unisciti a una squadra',teamSub:'Rispondete insieme — scegli la squadra del tuo tavolo o creane una.',teamNewLabel:'…o creane una nuova',teamFirst:'Crea la prima squadra',teamNew:'Nome della nuova squadra…',teamCreate:'Crea squadra',teamSolo:'Gioca da solo (senza squadra)',teamMembers:'membri',teamNamePlease:'Dai un nome alla tua squadra.',modeSpeed:'Round veloce',modeSpeedHint:'rispondi in fretta per punti bonus',modeStreak:'Serie',modeStreakOn:'di fila',modeStreakKeep:'continua così!',modeStreakStart:'le risposte di fila moltiplicano i tuoi punti',modeSurvival:'Sopravvivenza',modeSurvivalHint:'una sbagliata e sei fuori',modeStillIn:'ancora in gioco',modeWager:'Round di scommesse',modeWagerHint:'punta prima di rispondere',outTitle:'Sei fuori!',outSub:'Sei sopravvissuto a',outQ:'domanda',outQs:'domande',outWatch:'Resta su questa schermata — continuerai a vedere ogni domanda.',wagerTitle:'Quanto sei sicuro?',wagerSub:'Punta prima di rispondere. Puntate alte rendono di più, ma costano se sbagli.',wagerSafe:'Sicura',wagerSafeNote:'Vinci 1 · non perdi nulla',wagerRisky:'Rischiosa',wagerRiskyNote:'Vinci 2 · perdi 1',wagerBold:'Audace',wagerBoldNote:'Vinci 3 · perdi 2',speedLocked:'Inviata in',streakRiding:'Sei su una serie di',survivalHold:'Indovina per restare in gioco…',wagerPlaced:'Hai puntato'},
+  es:{enterName:'Escribe tu nombre',nameOnce:'Solo necesitas hacerlo una vez por sesión.',yourName:'Tu nombre',continue:'Continuar →',enterNamePlease:'Por favor, escribe tu nombre.',submitAnswer:'Enviar respuesta',submitRating:'Enviar valoración',submitAnswers:'Enviar respuestas',submitted:'✓ ¡Enviado!',alreadyAnswered:'¡Ya respondiste esta pregunta!',selectAll:'✓ Marca todas las que correspondan',submitSurvey:'Enviar encuesta',submitQuiz:'Enviar y ver puntuación',thankYou:'¡Gracias!',recorded:'Tus respuestas se han guardado.',qaTitle:'Preguntas del público',qaSub:'Haz una pregunta — o vota las que quieras que respondan.',ask:'Preguntar',typeQuestion:'Escribe tu pregunta…',loading:'Cargando…',responses:'respuestas',question:'Pregunta',typeAnswer:'Escribe tu respuesta…',tapToFlip:'TOCA PARA GIRAR',answerFace:'RESPUESTA',showAnswer:'Mostrar respuesta',again:'Otra vez',hard:'Difícil',good:'Bien',easy:'Fácil',yourAnswer:'Tu respuesta',correctWas:'Correcta',skipped:'(omitida)',joinTitle:'Únete a una sesión',joinSub:'Escribe el código que aparece junto al código QR.',joinBtn:'Unirse →',joinShort:'Ese código parece demasiado corto: revísalo e inténtalo de nuevo.',joinNotFound:'No se encontró ninguna sesión con ese código. Verifícalo con tu presentador.',joinFail:'No se pudo comprobar el código: revisa tu conexión.',seeOriginal:'Ver original',seeTranslation:'Ver traducción',teamTitle:'Únete a un equipo',teamSub:'Responded juntos: elige el equipo de tu mesa o crea uno.',teamNewLabel:'…o crea uno nuevo',teamFirst:'Crea el primer equipo',teamNew:'Nombre del nuevo equipo…',teamCreate:'Crear equipo',teamSolo:'Jugar solo (sin equipo)',teamMembers:'miembros',teamNamePlease:'Ponle un nombre a tu equipo.',modeSpeed:'Ronda rápida',modeSpeedHint:'responde rápido para ganar puntos extra',modeStreak:'Racha',modeStreakOn:'seguidas',modeStreakKeep:'¡sigue así!',modeStreakStart:'las respuestas seguidas multiplican tus puntos',modeSurvival:'Supervivencia',modeSurvivalHint:'un fallo y quedas eliminado',modeStillIn:'siguen en juego',modeWager:'Ronda de apuestas',modeWagerHint:'apuesta antes de responder',outTitle:'¡Estás eliminado!',outSub:'Sobreviviste',outQ:'pregunta',outQs:'preguntas',outWatch:'Quédate en esta pantalla: seguirás viendo cada pregunta.',wagerTitle:'¿Cuánta confianza tienes?',wagerSub:'Apuesta antes de responder. Apostar más da más puntos, pero cuesta si fallas.',wagerSafe:'Segura',wagerSafeNote:'Ganas 1 · no pierdes nada',wagerRisky:'Arriesgada',wagerRiskyNote:'Ganas 2 · pierdes 1',wagerBold:'Atrevida',wagerBoldNote:'Ganas 3 · pierdes 2',speedLocked:'Enviada en',streakRiding:'Llevas una racha de',survivalHold:'Acierta para seguir en juego…',wagerPlaced:'Apostaste',studyTitle:'Estudiar',dayStreak:'días seguidos',cardDue:'tarjeta pendiente',cardsDue:'tarjetas pendientes',rightNow:'ahora mismo',allCaughtUp:'Estás al día — estudia igualmente para ir por delante.',stLearning:'Aprendiendo',stFamiliar:'Conocida',stMastered:'Dominada',modeClassicName:'Repasar',modeClassicDesc:'Gira las tarjetas y puntúate. La repetición espaciada elige la siguiente.',modeClockName:'Contrarreloj',modeClockDesc:'60 segundos. ¿Cuántas aciertas?',modeLadderName:'Sube la escalera',modeLadderDesc:'Diez peldaños, más riesgo. Dos comodines. Guarda o arriesga.',modeBoardName:'Tablero de tarjetas',modeBoardDesc:'Elige tus casillas al estilo concurso: las más caras son las que más olvidas.',readyNow:'listas ahora',yourBest:'Tu récord',gotItWrong:'Fallé',gotItRight:'Acerté',correct:'correctas',newBest:'¡Nuevo récord personal!',dayStreakShort:'días seguidos',playAgain:'Jugar otra vez',backToStudy:'Volver a estudiar',rung:'Peldaño',skip:'Saltar',bank:'Guardar',hintStarts:'Empieza por',hintWords:'palabras',ladderCleared:'¡Completaste la escalera!',ladderBanked:'¡Guardado!',ladderFell:'Vuelta al punto seguro',reachedRung:'Llegaste al peldaño',safeHeld:'tu punto seguro aguantó',boardHint:'Los valores altos son las tarjetas que peor conoces.',points:'puntos',boardCleared:'¡Tablero completado!'},
+  de:{enterName:'Gib deinen Namen ein',nameOnce:'Nur einmal pro Sitzung nötig.',yourName:'Dein Name',continue:'Weiter →',enterNamePlease:'Bitte gib deinen Namen ein.',submitAnswer:'Antwort senden',submitRating:'Bewertung senden',submitAnswers:'Antworten senden',submitted:'✓ Gesendet!',alreadyAnswered:'Du hast diese Frage bereits beantwortet!',selectAll:'✓ Alle Zutreffenden auswählen',submitSurvey:'Umfrage senden',submitQuiz:'Senden & Punktzahl ansehen',thankYou:'Danke!',recorded:'Deine Antworten wurden gespeichert.',qaTitle:'Publikumsfragen',qaSub:'Stelle eine Frage — oder stimme für andere ab.',ask:'Fragen',typeQuestion:'Schreibe deine Frage…',loading:'Lädt…',responses:'Antworten',question:'Frage',typeAnswer:'Schreibe deine Antwort…',tapToFlip:'ZUM UMDREHEN TIPPEN',answerFace:'ANTWORT',showAnswer:'Antwort zeigen',again:'Nochmal',hard:'Schwer',good:'Gut',easy:'Leicht',yourAnswer:'Deine Antwort',correctWas:'Richtig',skipped:'(übersprungen)',joinTitle:'Sitzung beitreten',joinSub:'Gib den Code ein, der neben dem QR-Code angezeigt wird.',joinBtn:'Beitreten →',joinShort:'Dieser Code sieht zu kurz aus — prüfe ihn und versuche es erneut.',joinNotFound:'Keine Sitzung mit diesem Code gefunden — frag deinen Präsentator.',joinFail:'Code konnte nicht geprüft werden — prüfe deine Verbindung.',seeOriginal:'Original ansehen',seeTranslation:'Übersetzung ansehen',teamTitle:'Tritt einem Team bei',teamSub:'Antwortet zusammen — wähle das Team deines Tisches oder gründe eins.',teamNewLabel:'…oder gründe ein neues',teamFirst:'Gründe das erste Team',teamNew:'Name des neuen Teams…',teamCreate:'Team gründen',teamSolo:'Allein spielen (ohne Team)',teamMembers:'Mitglieder',teamNamePlease:'Gib deinem Team einen Namen.',modeSpeed:'Schnellrunde',modeSpeedHint:'schnell antworten bringt Bonuspunkte',modeStreak:'Serie',modeStreakOn:'in Folge',modeStreakKeep:'weiter so!',modeStreakStart:'Antworten in Folge vervielfachen deine Punkte',modeSurvival:'Survival',modeSurvivalHint:'eine falsche Antwort und du bist raus',modeStillIn:'noch dabei',modeWager:'Wettrunde',modeWagerHint:'setze, bevor du antwortest',outTitle:'Du bist raus!',outSub:'Du hast überstanden',outQ:'Frage',outQs:'Fragen',outWatch:'Bleib auf diesem Bildschirm — du siehst weiterhin jede Frage.',wagerTitle:'Wie sicher bist du?',wagerSub:'Setze, bevor du antwortest. Höhere Einsätze bringen mehr — kosten dich aber bei einem Fehler.',wagerSafe:'Sicher',wagerSafeNote:'Gewinn 1 · kein Verlust',wagerRisky:'Riskant',wagerRiskyNote:'Gewinn 2 · Verlust 1',wagerBold:'Mutig',wagerBoldNote:'Gewinn 3 · Verlust 2',speedLocked:'Abgeschickt nach',streakRiding:'Deine Serie steht bei',survivalHold:'Richtig antworten, um dabei zu bleiben…',wagerPlaced:'Du hast gesetzt',studyTitle:'Lernen',dayStreak:'Tage in Folge',cardDue:'Karte fällig',cardsDue:'Karten fällig',rightNow:'jetzt',allCaughtUp:'Alles erledigt — lerne trotzdem, um voranzukommen.',stLearning:'Lernphase',stFamiliar:'Bekannt',stMastered:'Gemeistert',modeClassicName:'Wiederholen',modeClassicDesc:'Karten umdrehen und selbst bewerten. Die Wiederholung wählt die nächste.',modeClockName:'Gegen die Uhr',modeClockDesc:'60 Sekunden. Wie viele schaffst du?',modeLadderName:'Die Leiter hoch',modeLadderDesc:'Zehn Sprossen, steigender Einsatz. Zwei Joker. Sichern oder riskieren.',modeBoardName:'Karten-Spielbrett',modeBoardDesc:'Wähle deine Felder wie in einer Spielshow — die teuren sind die, die du vergisst.',readyNow:'jetzt bereit',yourBest:'Dein Rekord',gotItWrong:'Verpasst',gotItRight:'Gewusst',correct:'richtig',newBest:'Neuer Rekord!',dayStreakShort:'Tage-Serie',playAgain:'Nochmal spielen',backToStudy:'Zurück zum Lernen',rung:'Sprosse',skip:'Überspringen',bank:'Sichern',hintStarts:'Beginnt mit',hintWords:'Wörter',ladderCleared:'Du hast die Leiter geschafft!',ladderBanked:'Gesichert!',ladderFell:'Zurück zur sicheren Stufe',reachedRung:'Du kamst bis Sprosse',safeHeld:'deine sichere Stufe hielt',boardHint:'Höhere Werte sind die Karten, die du am schlechtesten kannst.',points:'Punkte',boardCleared:'Brett geschafft!'},
+  fr:{enterName:'Entrez votre nom',nameOnce:'À faire une seule fois par session.',yourName:'Votre nom',continue:'Continuer →',enterNamePlease:'Veuillez entrer votre nom.',submitAnswer:'Envoyer la réponse',submitRating:'Envoyer la note',submitAnswers:'Envoyer les réponses',submitted:'✓ Envoyé !',alreadyAnswered:'Vous avez déjà répondu à cette question !',selectAll:'✓ Sélectionnez tout ce qui s’applique',submitSurvey:'Envoyer le sondage',submitQuiz:'Envoyer et voir le score',thankYou:'Merci !',recorded:'Vos réponses ont été enregistrées.',qaTitle:'Questions du public',qaSub:'Posez une question — ou votez pour celles à traiter.',ask:'Demander',typeQuestion:'Écrivez votre question…',loading:'Chargement…',responses:'réponses',question:'Question',typeAnswer:'Écrivez votre réponse…',tapToFlip:'TOUCHEZ POUR RETOURNER',answerFace:'RÉPONSE',showAnswer:'Voir la réponse',again:'Encore',hard:'Difficile',good:'Bien',easy:'Facile',yourAnswer:'Votre réponse',correctWas:'Bonne réponse',skipped:'(passée)',joinTitle:'Rejoindre une session',joinSub:'Saisissez le code affiché à côté du QR code.',joinBtn:'Rejoindre →',joinShort:'Ce code semble trop court — vérifiez-le et réessayez.',joinNotFound:'Aucune session trouvée avec ce code — vérifiez auprès de votre présentateur.',joinFail:'Impossible de vérifier le code — vérifiez votre connexion.',seeOriginal:'Voir l’original',seeTranslation:'Voir la traduction',teamTitle:'Rejoignez une équipe',teamSub:'Répondez ensemble — choisissez l’équipe de votre table ou créez-en une.',teamNewLabel:'…ou créez-en une nouvelle',teamFirst:'Créez la première équipe',teamNew:'Nom de la nouvelle équipe…',teamCreate:'Créer l’équipe',teamSolo:'Jouer seul (sans équipe)',teamMembers:'membres',teamNamePlease:'Donnez un nom à votre équipe.',modeSpeed:'Manche rapide',modeSpeedHint:'répondez vite pour des points bonus',modeStreak:'Série',modeStreakOn:'d’affilée',modeStreakKeep:'continuez !',modeStreakStart:'les bonnes réponses d’affilée multiplient vos points',modeSurvival:'Survie',modeSurvivalHint:'une erreur et vous êtes éliminé',modeStillIn:'encore en lice',modeWager:'Manche de paris',modeWagerHint:'misez avant de répondre',outTitle:'Vous êtes éliminé !',outSub:'Vous avez survécu à',outQ:'question',outQs:'questions',outWatch:'Restez sur cet écran — vous verrez toujours chaque question.',wagerTitle:'À quel point êtes-vous sûr ?',wagerSub:'Misez avant de répondre. Les grosses mises rapportent plus, mais coûtent cher en cas d’erreur.',wagerSafe:'Sûr',wagerSafeNote:'Gagnez 1 · ne perdez rien',wagerRisky:'Risqué',wagerRiskyNote:'Gagnez 2 · perdez 1',wagerBold:'Audacieux',wagerBoldNote:'Gagnez 3 · perdez 2',speedLocked:'Validé en',streakRiding:'Vous êtes sur une série de',survivalHold:'Trouvez la bonne réponse pour rester…',wagerPlaced:'Vous avez misé',studyTitle:'Réviser',dayStreak:'jours d’affilée',cardDue:'carte à revoir',cardsDue:'cartes à revoir',rightNow:'maintenant',allCaughtUp:'Tout est à jour — révisez quand même pour prendre de l’avance.',stLearning:'En cours',stFamiliar:'Connue',stMastered:'Maîtrisée',modeClassicName:'Réviser',modeClassicDesc:'Retournez les cartes et notez-vous. La répétition espacée choisit la suivante.',modeClockName:'Contre la montre',modeClockDesc:'60 secondes. Combien en trouvez-vous ?',modeLadderName:'Montez l’échelle',modeLadderDesc:'Dix barreaux, enjeux croissants. Deux jokers. Encaissez ou risquez.',modeBoardName:'Plateau de cartes',modeBoardDesc:'Choisissez vos cases façon jeu télévisé — les plus chères sont celles que vous oubliez.',readyNow:'prêtes',yourBest:'Votre record',gotItWrong:'Raté',gotItRight:'Trouvé',correct:'correctes',newBest:'Nouveau record !',dayStreakShort:'jours d’affilée',playAgain:'Rejouer',backToStudy:'Retour aux révisions',rung:'Barreau',skip:'Passer',bank:'Encaisser',hintStarts:'Commence par',hintWords:'mots',ladderCleared:'Vous avez gravi l’échelle !',ladderBanked:'Encaissé !',ladderFell:'Retour au palier sûr',reachedRung:'Vous avez atteint le barreau',safeHeld:'votre palier a tenu',boardHint:'Les valeurs élevées sont les cartes que vous maîtrisez le moins.',points:'points',boardCleared:'Plateau terminé !'},
+  pt:{enterName:'Digite seu nome',nameOnce:'Só precisa fazer isso uma vez por sessão.',yourName:'Seu nome',continue:'Continuar →',enterNamePlease:'Por favor, digite seu nome.',submitAnswer:'Enviar resposta',submitRating:'Enviar avaliação',submitAnswers:'Enviar respostas',submitted:'✓ Enviado!',alreadyAnswered:'Você já respondeu a esta pergunta!',selectAll:'✓ Marque todas as aplicáveis',submitSurvey:'Enviar pesquisa',submitQuiz:'Enviar e ver pontuação',thankYou:'Obrigado!',recorded:'Suas respostas foram registradas.',qaTitle:'Perguntas do público',qaSub:'Faça uma pergunta — ou vote nas que quer ver respondidas.',ask:'Perguntar',typeQuestion:'Escreva sua pergunta…',loading:'Carregando…',responses:'respostas',question:'Pergunta',typeAnswer:'Digite sua resposta…',tapToFlip:'TOQUE PARA VIRAR',answerFace:'RESPOSTA',showAnswer:'Mostrar resposta',again:'De novo',hard:'Difícil',good:'Bom',easy:'Fácil',yourAnswer:'Sua resposta',correctWas:'Correta',skipped:'(pulada)',joinTitle:'Entrar em uma sessão',joinSub:'Digite o código exibido ao lado do QR code.',joinBtn:'Entrar →',joinShort:'Esse código parece curto demais — confira e tente novamente.',joinNotFound:'Nenhuma sessão encontrada com esse código — confirme com seu apresentador.',joinFail:'Não foi possível verificar o código — verifique sua conexão.',seeOriginal:'Ver original',seeTranslation:'Ver tradução',teamTitle:'Entre em uma equipe',teamSub:'Respondam juntos — escolha a equipe da sua mesa ou crie uma.',teamNewLabel:'…ou crie uma nova',teamFirst:'Crie a primeira equipe',teamNew:'Nome da nova equipe…',teamCreate:'Criar equipe',teamSolo:'Jogar sozinho (sem equipe)',teamMembers:'membros',teamNamePlease:'Dê um nome à sua equipe.',modeSpeed:'Rodada rápida',modeSpeedHint:'responda rápido para ganhar pontos extras',modeStreak:'Sequência',modeStreakOn:'seguidas',modeStreakKeep:'continue assim!',modeStreakStart:'respostas seguidas multiplicam seus pontos',modeSurvival:'Sobrevivência',modeSurvivalHint:'um erro e você está fora',modeStillIn:'ainda no jogo',modeWager:'Rodada de apostas',modeWagerHint:'aposte antes de responder',outTitle:'Você está fora!',outSub:'Você sobreviveu a',outQ:'pergunta',outQs:'perguntas',outWatch:'Fique nesta tela — você continuará vendo cada pergunta.',wagerTitle:'Qual é a sua confiança?',wagerSub:'Aposte antes de responder. Apostas maiores rendem mais — mas custam se você errar.',wagerSafe:'Segura',wagerSafeNote:'Ganha 1 · não perde nada',wagerRisky:'Arriscada',wagerRiskyNote:'Ganha 2 · perde 1',wagerBold:'Ousada',wagerBoldNote:'Ganha 3 · perde 2',speedLocked:'Enviada em',streakRiding:'Você está numa sequência de',survivalHold:'Acerte para continuar no jogo…',wagerPlaced:'Você apostou',studyTitle:'Estudar',dayStreak:'dias seguidos',cardDue:'cartão pendente',cardsDue:'cartões pendentes',rightNow:'agora',allCaughtUp:'Está tudo em dia — estude mesmo assim para sair na frente.',stLearning:'Aprendendo',stFamiliar:'Conhecido',stMastered:'Dominado',modeClassicName:'Revisar',modeClassicDesc:'Vire os cartões e avalie-se. A repetição espaçada escolhe o próximo.',modeClockName:'Contra o relógio',modeClockDesc:'60 segundos. Quantos você acerta?',modeLadderName:'Suba a escada',modeLadderDesc:'Dez degraus, risco crescente. Duas ajudas. Garanta ou arrisque.',modeBoardName:'Tabuleiro de cartões',modeBoardDesc:'Escolha suas casas estilo game show — as mais caras são as que você esquece.',readyNow:'prontos agora',yourBest:'Seu recorde',gotItWrong:'Errei',gotItRight:'Acertei',correct:'corretos',newBest:'Novo recorde!',dayStreakShort:'dias seguidos',playAgain:'Jogar de novo',backToStudy:'Voltar a estudar',rung:'Degrau',skip:'Pular',bank:'Garantir',hintStarts:'Começa com',hintWords:'palavras',ladderCleared:'Você subiu a escada toda!',ladderBanked:'Garantido!',ladderFell:'De volta ao degrau seguro',reachedRung:'Você chegou ao degrau',safeHeld:'seu degrau seguro aguentou',boardHint:'Valores altos são os cartões que você conhece menos.',points:'pontos',boardCleared:'Tabuleiro concluído!'},
+  it:{enterName:'Inserisci il tuo nome',nameOnce:'Da fare una sola volta per sessione.',yourName:'Il tuo nome',continue:'Continua →',enterNamePlease:'Inserisci il tuo nome.',submitAnswer:'Invia risposta',submitRating:'Invia valutazione',submitAnswers:'Invia risposte',submitted:'✓ Inviato!',alreadyAnswered:'Hai già risposto a questa domanda!',selectAll:'✓ Seleziona tutte quelle pertinenti',submitSurvey:'Invia sondaggio',submitQuiz:'Invia e vedi punteggio',thankYou:'Grazie!',recorded:'Le tue risposte sono state registrate.',qaTitle:'Domande del pubblico',qaSub:'Fai una domanda — o vota quelle da trattare.',ask:'Chiedi',typeQuestion:'Scrivi la tua domanda…',loading:'Caricamento…',responses:'risposte',question:'Domanda',typeAnswer:'Scrivi la tua risposta…',tapToFlip:'TOCCA PER GIRARE',answerFace:'RISPOSTA',showAnswer:'Mostra risposta',again:'Di nuovo',hard:'Difficile',good:'Bene',easy:'Facile',yourAnswer:'La tua risposta',correctWas:'Corretta',skipped:'(saltata)',joinTitle:'Partecipa a una sessione',joinSub:'Digita il codice mostrato accanto al codice QR.',joinBtn:'Partecipa →',joinShort:'Questo codice sembra troppo corto — controllalo e riprova.',joinNotFound:'Nessuna sessione trovata con questo codice — verifica con il tuo presentatore.',joinFail:'Impossibile verificare il codice — controlla la connessione.',seeOriginal:'Vedi originale',seeTranslation:'Vedi traduzione',teamTitle:'Unisciti a una squadra',teamSub:'Rispondete insieme — scegli la squadra del tuo tavolo o creane una.',teamNewLabel:'…o creane una nuova',teamFirst:'Crea la prima squadra',teamNew:'Nome della nuova squadra…',teamCreate:'Crea squadra',teamSolo:'Gioca da solo (senza squadra)',teamMembers:'membri',teamNamePlease:'Dai un nome alla tua squadra.',modeSpeed:'Round veloce',modeSpeedHint:'rispondi in fretta per punti bonus',modeStreak:'Serie',modeStreakOn:'di fila',modeStreakKeep:'continua così!',modeStreakStart:'le risposte di fila moltiplicano i tuoi punti',modeSurvival:'Sopravvivenza',modeSurvivalHint:'una sbagliata e sei fuori',modeStillIn:'ancora in gioco',modeWager:'Round di scommesse',modeWagerHint:'punta prima di rispondere',outTitle:'Sei fuori!',outSub:'Sei sopravvissuto a',outQ:'domanda',outQs:'domande',outWatch:'Resta su questa schermata — continuerai a vedere ogni domanda.',wagerTitle:'Quanto sei sicuro?',wagerSub:'Punta prima di rispondere. Puntate alte rendono di più, ma costano se sbagli.',wagerSafe:'Sicura',wagerSafeNote:'Vinci 1 · non perdi nulla',wagerRisky:'Rischiosa',wagerRiskyNote:'Vinci 2 · perdi 1',wagerBold:'Audace',wagerBoldNote:'Vinci 3 · perdi 2',speedLocked:'Inviata in',streakRiding:'Sei su una serie di',survivalHold:'Indovina per restare in gioco…',wagerPlaced:'Hai puntato',studyTitle:'Studia',dayStreak:'giorni di fila',cardDue:'carta da ripassare',cardsDue:'carte da ripassare',rightNow:'ora',allCaughtUp:'Sei in pari — studia lo stesso per portarti avanti.',stLearning:'In apprendimento',stFamiliar:'Conosciuta',stMastered:'Padroneggiata',modeClassicName:'Ripassa',modeClassicDesc:'Gira le carte e valutati. La ripetizione dilazionata sceglie la prossima.',modeClockName:'Contro il tempo',modeClockDesc:'60 secondi. Quante ne indovini?',modeLadderName:'Scala i gradini',modeLadderDesc:'Dieci gradini, posta crescente. Due aiuti. Incassa o rischia.',modeBoardName:'Tabellone di carte',modeBoardDesc:'Scegli le caselle in stile quiz TV — le più care sono quelle che dimentichi.',readyNow:'pronte ora',yourBest:'Il tuo record',gotItWrong:'Sbagliata',gotItRight:'Indovinata',correct:'corrette',newBest:'Nuovo record!',dayStreakShort:'giorni di fila',playAgain:'Gioca ancora',backToStudy:'Torna allo studio',rung:'Gradino',skip:'Salta',bank:'Incassa',hintStarts:'Inizia con',hintWords:'parole',ladderCleared:'Hai scalato tutta la scala!',ladderBanked:'Incassato!',ladderFell:'Torni al gradino sicuro',reachedRung:'Sei arrivato al gradino',safeHeld:'il tuo gradino sicuro ha retto',boardHint:'I valori alti sono le carte che conosci meno.',points:'punti',boardCleared:'Tabellone completato!'},
 };
 function t(key, fallback){ return (I18N[LANG] && I18N[LANG][key]) || fallback; }
 
@@ -1283,7 +1283,7 @@ async function loadSurvey() {
   }
 
   // StudySlide: a study set is reviewed repeatedly (spaced repetition), not "submitted".
-  if (formProduct === 'study') { startStudySession(); return; }
+  if (formProduct === 'study') { showStudyHome(); return; }
 
   // Already submitted? If this participant has a response in ANY question bucket, treat
   // the survey as completed (one submission per person).
@@ -1589,6 +1589,64 @@ function srsSchedule(st, rating) {
   return st;
 }
 
+// ── STUDY HOME — streak, mastery, and how you want to study today ────────────
+// The old flow dropped you straight into flipping cards. This gives the session a
+// shape: here's your streak (don't break it), here's how much you've mastered
+// (finish the bar), and here's how you want to play today.
+function _studyCardsInit() {
+  studyCards = surveyQuestions.map((q, idx) => ({ idx, front: cardFront(q), back: cardBack(q) }))
+                              .filter(c => c.front);
+}
+function dueCount() {
+  const srs = srsLoad(), now = Date.now();
+  return studyCards.filter(c => !srs[c.idx] || (srs[c.idx].due || 0) <= now).length;
+}
+function showStudyHome() {
+  _currentRenderer = showStudyHome;
+  _studyCardsInit();
+  if (!studyCards.length) { render(`${logoMarkup()}<p class="center" style="color:var(--muted);">This set has no cards yet.</p>`); return; }
+  const m = studyMastery();
+  const due = dueCount();
+  const streak = studyStreakPeek();
+  const best = bestClockScore();
+  const modeBtn = (id, icon, name, desc, extra) => `
+    <button class="btn" style="width:100%;margin-bottom:8px;display:flex;gap:12px;align-items:flex-start;text-align:left;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:12px 14px;" onclick="startStudyMode('${id}')">
+      <span style="font-size:21px;line-height:1.1;flex-shrink:0;">${icon}</span>
+      <span style="flex:1;min-width:0;">
+        <span style="display:block;font-weight:700;font-size:14px;">${name}</span>
+        <span style="display:block;font-size:11.5px;color:var(--muted);line-height:1.45;margin-top:1px;">${desc}</span>
+        ${extra ? `<span style="display:block;font-size:11px;color:var(--accent4);margin-top:3px;">${extra}</span>` : ''}
+      </span>
+    </button>`;
+  render(`
+    ${logoMarkup()}
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:2px;">
+      <h1 style="margin:0;font-size:22px;">${t('studyTitle','Study')}</h1>
+      <div style="display:inline-flex;align-items:center;gap:6px;background:rgba(247,183,49,0.14);border:1px solid rgba(247,183,49,0.35);border-radius:100px;padding:5px 12px;font-size:12.5px;font-weight:700;white-space:nowrap;">
+        🔥 ${streak}<span style="color:var(--muted);font-weight:500;">${t('dayStreak','day streak')}</span>
+      </div>
+    </div>
+    <p class="subtitle" style="margin-bottom:2px;">${due > 0
+      ? `<b style="color:var(--text);">${due}</b> ${due === 1 ? t('cardDue','card due') : t('cardsDue','cards due')} ${t('rightNow','right now')}`
+      : t('allCaughtUp','You\'re all caught up — study anyway to get ahead.')}</p>
+    ${masteryBarHtml(m)}
+    <div style="margin-top:18px;">
+      ${modeBtn('classic','🎯', t('modeClassicName','Review'), t('modeClassicDesc','Flip cards and rate yourself. Spaced repetition picks what you see next.'), due > 0 ? `${due} ${t('readyNow','ready now')}` : '')}
+      ${modeBtn('clock','⚡', t('modeClockName','Beat the Clock'), t('modeClockDesc','60 seconds. How many can you get right?'), best ? `${t('yourBest','Your best')}: ${best}` : '')}
+      ${modeBtn('ladder','🪜', t('modeLadderName','Climb the Ladder'), t('modeLadderDesc','Ten rungs, rising stakes. Two lifelines. Bank your win or risk it.'), '')}
+      ${modeBtn('board','🎲', t('modeBoardName','Pick-a-Card Board'), t('modeBoardDesc','Choose your squares game-show style — the pricier ones are the ones you keep forgetting.'), '')}
+    </div>
+  `);
+}
+function startStudyMode(mode) {
+  STUDY_MODE = mode;
+  if (mode === 'clock')  { startClockRound(); return; }
+  if (mode === 'ladder') { startLadder(); return; }
+  if (mode === 'board')  { startBoard(); return; }
+  startStudySession(false);
+}
+let STUDY_MODE = 'classic';
+
 function startStudySession(reviewAll) {
   studyCards = surveyQuestions.map((q, idx) => ({ idx, front: cardFront(q), back: cardBack(q) }))
                               .filter(c => c.front);
@@ -1672,6 +1730,280 @@ function recordStudyProgress(idx, rating) {
   } catch (e) {}
 }
 
+// ═══ STUDY GAME MODES ════════════════════════════════════════════════════════
+// All three run on the SAME cards and feed the SAME SM-2 scheduler as Review, so
+// playing a game is never "wasted" study — a right answer still schedules the card
+// forward, a wrong one still brings it back. They only change the framing.
+// Self-grading (you say whether you got it) is deliberate: these are recall drills,
+// and free-typed answers can't be marked reliably.
+
+// ── ⚡ BEAT THE CLOCK ── 60s time attack. Personal best per set, because "beat your
+// own number" is a stronger pull than any leaderboard when you're studying alone.
+let clockLeft = 0, clockScore = 0, clockTimer = null, clockQueue = [];
+function bestClockScore() { try { return parseInt(localStorage.getItem(`ql_clockbest_${SESSION}`), 10) || 0; } catch(e) { return 0; } }
+function saveClockScore(n) { try { if (n > bestClockScore()) localStorage.setItem(`ql_clockbest_${SESSION}`, String(n)); } catch(e) {} }
+function startClockRound() {
+  _studyCardsInit();
+  clockQueue = studyCards.map(c => c.idx);
+  for (let i = clockQueue.length - 1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [clockQueue[i],clockQueue[j]]=[clockQueue[j],clockQueue[i]]; }
+  clockScore = 0; clockLeft = 60;
+  if (clockTimer) clearInterval(clockTimer);
+  clockTimer = setInterval(() => {
+    clockLeft--;
+    const el = document.getElementById('clockLeft');
+    if (el) { el.textContent = clockLeft; el.style.color = clockLeft <= 10 ? 'var(--accent2)' : ''; }
+    if (clockLeft <= 0) endClockRound();
+  }, 1000);
+  showClockCard();
+}
+function showClockCard() {
+  if (!clockQueue.length) { endClockRound(); return; }
+  const card = studyCardByIdx(clockQueue[0]);
+  studyFlipped = false;
+  render(`
+    ${logoMarkup()}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="font-size:13px;font-weight:700;">⚡ ${t('modeClockName','Beat the Clock')}</div>
+      <div style="display:flex;gap:12px;align-items:center;font-family:'Syne',sans-serif;font-weight:800;">
+        <span style="font-size:13px;color:var(--accent3);">${clockScore}</span>
+        <span style="font-size:20px;" id="clockLeft">${clockLeft}</span>
+      </div>
+    </div>
+    <div class="study-card" onclick="flipClock()">
+      <div class="study-face-label">${t('tapToFlip','TAP TO FLIP')}</div>
+      <div class="study-front" id="studyText">${card.front}</div>
+    </div>
+    <div id="studyControls"><button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="flipClock()">${t('showAnswer','Show Answer')}</button></div>
+  `);
+}
+function flipClock() {
+  if (studyFlipped) return;
+  studyFlipped = true;
+  const card = studyCardByIdx(clockQueue[0]);
+  document.getElementById('studyText').innerHTML = card.back;
+  document.getElementById('studyControls').innerHTML = `
+    <div style="display:flex;gap:8px;">
+      <button class="btn" style="flex:1;background:rgba(255,101,132,.15);border:1px solid rgba(255,101,132,.4);color:var(--text);" onclick="answerClock(false)">✗ ${t('gotItWrong','Missed it')}</button>
+      <button class="btn" style="flex:1;background:rgba(67,233,123,.15);border:1px solid rgba(67,233,123,.4);color:var(--text);" onclick="answerClock(true)">✓ ${t('gotItRight','Got it')}</button>
+    </div>`;
+}
+function answerClock(right) {
+  const idx = clockQueue.shift();
+  const srs = srsLoad();
+  srs[idx] = srsSchedule(srs[idx], right ? 'good' : 'again');   // still real study
+  srsSave(srs);
+  recordStudyProgress(idx, right ? 'good' : 'again');
+  if (right) clockScore++; else clockQueue.push(idx);
+  if (clockLeft > 0) showClockCard(); else endClockRound();
+}
+function endClockRound() {
+  if (clockTimer) { clearInterval(clockTimer); clockTimer = null; }
+  const prev = bestClockScore();
+  const isBest = clockScore > prev;
+  saveClockScore(clockScore);
+  const streak = studyStreak();
+  render(`
+    ${logoMarkup()}
+    <div style="text-align:center;padding:10px 0;">
+      <div style="font-size:46px;">${isBest ? '🏆' : '⚡'}</div>
+      <h1 style="margin:10px 0 4px;">${clockScore} ${t('correct','correct')}</h1>
+      <p class="subtitle">${isBest ? t('newBest','New personal best!') : (prev ? `${t('yourBest','Your best')}: ${prev}` : '')}</p>
+      <div style="display:inline-flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:8px 16px;margin:14px 0;">
+        <span style="font-size:18px;">🔥</span><span style="font-weight:700;">${streak}-${t('dayStreakShort','day streak')}</span>
+      </div>
+    </div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:8px;" onclick="startClockRound()">🔁 ${t('playAgain','Play again')}</button>
+    <button class="btn btn-ghost" style="width:100%;justify-content:center;" onclick="showStudyHome()">← ${t('backToStudy','Back to study')}</button>
+  `);
+}
+
+// ── 🪜 CLIMB THE LADDER ── Millionaire-style: ten rungs, two lifelines, and safe
+// havens so a wrong answer never wipes you out completely. The bank/risk decision is
+// what makes it tense — you're playing against your own nerve, not a clock.
+const LADDER_SAFE = [3, 6];          // rungs you can't fall below once passed
+let ladderRung = 0, ladderQueue = [], ladderLifelines = { fifty:true, skip:true }, ladderHidden = [];
+function startLadder() {
+  _studyCardsInit();
+  ladderQueue = studyCards.map(c => c.idx);
+  for (let i = ladderQueue.length - 1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [ladderQueue[i],ladderQueue[j]]=[ladderQueue[j],ladderQueue[i]]; }
+  ladderRung = 0; ladderLifelines = { fifty:true, skip:true };
+  showLadderCard();
+}
+function ladderSafeFloor() { let f = 0; LADDER_SAFE.forEach(s => { if (ladderRung >= s) f = s; }); return f; }
+function showLadderCard() {
+  if (ladderRung >= 10 || !ladderQueue.length) { endLadder(true); return; }
+  studyFlipped = false; ladderHidden = [];
+  const card = studyCardByIdx(ladderQueue[0]);
+  const rungs = Array.from({length:10}, (_,i) => 9-i).map(r => {
+    const on = r === ladderRung, done = r < ladderRung, safe = LADDER_SAFE.includes(r+1);
+    return `<div style="display:flex;align-items:center;gap:8px;padding:2px 0;font-size:11px;${on?'font-weight:800;':''}color:${on?'var(--accent4)':done?'var(--accent3)':'var(--muted)'};">
+      <span style="width:18px;text-align:right;">${r+1}</span>
+      <span style="flex:1;height:4px;border-radius:100px;background:${on?'var(--accent4)':done?'var(--accent3)':'var(--surface3)'};"></span>
+      ${safe?'<span title="Safe haven">🛡</span>':''}</div>`;
+  }).join('');
+  render(`
+    ${logoMarkup()}
+    <div style="display:flex;gap:14px;align-items:flex-start;">
+      <div style="width:74px;flex-shrink:0;">${rungs}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px;">🪜 ${t('rung','Rung')} ${ladderRung+1}/10</div>
+        <div class="study-card" style="min-height:120px;" onclick="flipLadder()">
+          <div class="study-face-label">${t('tapToFlip','TAP TO FLIP')}</div>
+          <div class="study-front" id="studyText">${card.front}</div>
+        </div>
+        <div id="ladderHint" style="font-size:11.5px;color:var(--accent4);margin-top:8px;"></div>
+        <div id="studyControls" style="margin-top:10px;">
+          <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="flipLadder()">${t('showAnswer','Show Answer')}</button>
+          <div style="display:flex;gap:7px;margin-top:8px;">
+            <button class="btn btn-ghost" style="flex:1;font-size:12px;" onclick="useFifty()" ${ladderLifelines.fifty?'':'disabled'}>50:50</button>
+            <button class="btn btn-ghost" style="flex:1;font-size:12px;" onclick="useSkip()" ${ladderLifelines.skip?'':'disabled'}>⏭ ${t('skip','Skip')}</button>
+            ${ladderRung>0?`<button class="btn btn-ghost" style="flex:1;font-size:12px;color:var(--accent3);" onclick="endLadder(false,true)">💰 ${t('bank','Bank')}</button>`:''}
+          </div>
+        </div>
+      </div>
+    </div>
+  `);
+}
+function flipLadder() {
+  if (studyFlipped) return;
+  studyFlipped = true;
+  const card = studyCardByIdx(ladderQueue[0]);
+  document.getElementById('studyText').innerHTML = card.back;
+  document.getElementById('studyControls').innerHTML = `
+    <div style="display:flex;gap:8px;">
+      <button class="btn" style="flex:1;background:rgba(255,101,132,.15);border:1px solid rgba(255,101,132,.4);color:var(--text);" onclick="answerLadder(false)">✗ ${t('gotItWrong','Missed it')}</button>
+      <button class="btn" style="flex:1;background:rgba(67,233,123,.15);border:1px solid rgba(67,233,123,.4);color:var(--text);" onclick="answerLadder(true)">✓ ${t('gotItRight','Got it')}</button>
+    </div>`;
+}
+function useFifty() {
+  if (!ladderLifelines.fifty) return;
+  ladderLifelines.fifty = false;
+  const card = studyCardByIdx(ladderQueue[0]);
+  const words = String(card.back || '').split(/\s+/).filter(Boolean);
+  const hint = words.length > 1
+    ? `${t('hintStarts','Starts with')} "${words[0]}" · ${words.length} ${t('hintWords','words')}`
+    : `${t('hintStarts','Starts with')} "${String(card.back).slice(0,2)}…"`;
+  const el = document.getElementById('ladderHint'); if (el) el.textContent = '💡 ' + hint;
+  const b = document.querySelector('#studyControls .btn-ghost'); if (b) b.disabled = true;
+}
+function useSkip() {
+  if (!ladderLifelines.skip) return;
+  ladderLifelines.skip = false;
+  ladderQueue.push(ladderQueue.shift());
+  showLadderCard();
+}
+function answerLadder(right) {
+  const idx = ladderQueue.shift();
+  const srs = srsLoad();
+  srs[idx] = srsSchedule(srs[idx], right ? 'good' : 'again');
+  srsSave(srs);
+  recordStudyProgress(idx, right ? 'good' : 'again');
+  if (right) { ladderRung++; showLadderCard(); }
+  else { ladderQueue.push(idx); ladderRung = ladderSafeFloor(); endLadder(false); }
+}
+function endLadder(cleared, banked) {
+  const streak = studyStreak();
+  const reached = ladderRung;
+  render(`
+    ${logoMarkup()}
+    <div style="text-align:center;padding:10px 0;">
+      <div style="font-size:46px;">${cleared ? '👑' : banked ? '💰' : '🪜'}</div>
+      <h1 style="margin:10px 0 4px;">${cleared ? t('ladderCleared','You cleared the ladder!') : banked ? t('ladderBanked','Banked!') : t('ladderFell','Back to the safe haven')}</h1>
+      <p class="subtitle">${t('reachedRung','You reached rung')} <b style="color:var(--text);">${cleared?10:reached}</b>/10${(!cleared && !banked) ? ` — ${t('safeHeld','your safe haven held')}` : ''}</p>
+      <div style="display:inline-flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:8px 16px;margin:14px 0;">
+        <span style="font-size:18px;">🔥</span><span style="font-weight:700;">${streak}-${t('dayStreakShort','day streak')}</span>
+      </div>
+    </div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:8px;" onclick="startLadder()">🔁 ${t('playAgain','Play again')}</button>
+    <button class="btn btn-ghost" style="width:100%;justify-content:center;" onclick="showStudyHome()">← ${t('backToStudy','Back to study')}</button>
+  `);
+}
+
+// ── 🎲 PICK-A-CARD BOARD ── Jeopardy-style grid. Card VALUE is set by how well you
+// know it (from SM-2 state), so the 500s really are the ones you keep forgetting —
+// the board quietly steers you at your weak spots while feeling like a free choice.
+let boardTiles = [], boardScore = 0;
+function startBoard() {
+  _studyCardsInit();
+  const srs = srsLoad();
+  boardTiles = studyCards.slice(0, 12).map(c => {
+    const st = srs[c.idx], stage = cardStage(st);
+    const value = stage === 'learning' ? 500 : stage === 'familiar' ? 300 : 100;
+    return { idx: c.idx, value, done: false };
+  });
+  boardScore = 0;
+  showBoard();
+}
+function showBoard() {
+  const left = boardTiles.filter(t2 => !t2.done).length;
+  if (!left) { endBoard(); return; }
+  const tiles = boardTiles.map((t2, i) => t2.done
+    ? `<div style="aspect-ratio:1;border-radius:10px;background:var(--surface3);opacity:.35;"></div>`
+    : `<button onclick="pickTile(${i})" style="aspect-ratio:1;border-radius:10px;border:1px solid ${t2.value===500?'rgba(255,101,132,.45)':t2.value===300?'rgba(247,183,49,.45)':'rgba(67,233,123,.4)'};background:${t2.value===500?'rgba(255,101,132,.12)':t2.value===300?'rgba(247,183,49,.12)':'rgba(67,233,123,.1)'};color:var(--text);font-family:'Syne',sans-serif;font-weight:800;font-size:15px;cursor:pointer;">${t2.value}</button>`
+  ).join('');
+  render(`
+    ${logoMarkup()}
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <div style="font-size:13px;font-weight:700;">🎲 ${t('modeBoardName','Pick-a-Card Board')}</div>
+      <div style="font-family:'Syne',sans-serif;font-weight:800;color:var(--accent3);">${boardScore}</div>
+    </div>
+    <p style="font-size:11.5px;color:var(--muted);margin-bottom:12px;text-align:center;">${t('boardHint','Higher values are the cards you know least well.')}</p>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">${tiles}</div>
+    <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:16px;" onclick="showStudyHome()">← ${t('backToStudy','Back to study')}</button>
+  `);
+}
+let boardPick = -1;
+function pickTile(i) {
+  boardPick = i; studyFlipped = false;
+  const card = studyCardByIdx(boardTiles[i].idx);
+  render(`
+    ${logoMarkup()}
+    <div style="text-align:center;font-family:'Syne',sans-serif;font-weight:800;font-size:20px;color:var(--accent4);margin-bottom:10px;">${boardTiles[i].value}</div>
+    <div class="study-card" onclick="flipBoard()">
+      <div class="study-face-label">${t('tapToFlip','TAP TO FLIP')}</div>
+      <div class="study-front" id="studyText">${card.front}</div>
+    </div>
+    <div id="studyControls"><button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="flipBoard()">${t('showAnswer','Show Answer')}</button></div>
+  `);
+}
+function flipBoard() {
+  if (studyFlipped) return;
+  studyFlipped = true;
+  const card = studyCardByIdx(boardTiles[boardPick].idx);
+  document.getElementById('studyText').innerHTML = card.back;
+  document.getElementById('studyControls').innerHTML = `
+    <div style="display:flex;gap:8px;">
+      <button class="btn" style="flex:1;background:rgba(255,101,132,.15);border:1px solid rgba(255,101,132,.4);color:var(--text);" onclick="answerBoard(false)">✗ ${t('gotItWrong','Missed it')}</button>
+      <button class="btn" style="flex:1;background:rgba(67,233,123,.15);border:1px solid rgba(67,233,123,.4);color:var(--text);" onclick="answerBoard(true)">✓ ${t('gotItRight','Got it')}</button>
+    </div>`;
+}
+function answerBoard(right) {
+  const tile = boardTiles[boardPick];
+  const srs = srsLoad();
+  srs[tile.idx] = srsSchedule(srs[tile.idx], right ? 'good' : 'again');
+  srsSave(srs);
+  recordStudyProgress(tile.idx, right ? 'good' : 'again');
+  tile.done = true;
+  if (right) boardScore += tile.value;
+  showBoard();
+}
+function endBoard() {
+  const streak = studyStreak();
+  render(`
+    ${logoMarkup()}
+    <div style="text-align:center;padding:10px 0;">
+      <div style="font-size:46px;">🎲</div>
+      <h1 style="margin:10px 0 4px;">${boardScore} ${t('points','points')}</h1>
+      <p class="subtitle">${t('boardCleared','Board cleared!')}</p>
+      <div style="display:inline-flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:8px 16px;margin:14px 0;">
+        <span style="font-size:18px;">🔥</span><span style="font-weight:700;">${streak}-${t('dayStreakShort','day streak')}</span>
+      </div>
+    </div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:8px;" onclick="startBoard()">🔁 ${t('playAgain','Play again')}</button>
+    <button class="btn btn-ghost" style="width:100%;justify-content:center;" onclick="showStudyHome()">← ${t('backToStudy','Back to study')}</button>
+  `);
+}
+
 function speakCard() {
   try {
     if (!('speechSynthesis' in window)) return;
@@ -1681,16 +2013,80 @@ function speakCard() {
   } catch(e) {}
 }
 
-// ── Daily streak (habit loop) ──
-function studyStreak() {
-  let s; try { s = JSON.parse(localStorage.getItem(`ql_streak_${SESSION}`) || '{}'); } catch(e) { s = {}; }
+// ── Daily streak (habit loop) ────────────────────────────────────────────────
+// GLOBAL, not per-set. The streak was previously keyed `ql_streak_<SESSION>`, which
+// meant revising French on Monday and Biology on Tuesday left you with two separate
+// 1-day streaks instead of a 2-day one — the exact opposite of the habit it's meant to
+// build. Now one streak counts "did you study anything today", which is what actually
+// keeps people coming back. Old per-set values are migrated on first run so nobody
+// loses a streak they'd already earned.
+const STREAK_KEY = 'ql_study_streak';
+function _readStreak() {
+  let s; try { s = JSON.parse(localStorage.getItem(STREAK_KEY) || 'null'); } catch(e) { s = null; }
+  if (s) return s;
+  // Migrate: adopt the best per-set streak this device had.
+  let best = null;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k || k.indexOf('ql_streak_') !== 0) continue;
+      const v = JSON.parse(localStorage.getItem(k) || '{}');
+      if (v && v.count && (!best || v.count > best.count)) best = { count: v.count, lastDay: v.lastDay };
+    }
+  } catch(e) {}
+  return best || { count: 0, lastDay: null };
+}
+// Read-only: what's the streak right now? (Safe to call while rendering.)
+function studyStreakPeek() {
+  const s = _readStreak();
   const today = new Date().toDateString();
-  const yest  = new Date(Date.now()-86400000).toDateString();
-  if (s.lastDay === today) { /* already counted today */ }
-  else if (s.lastDay === yest) { s.count = (s.count||0)+1; s.lastDay = today; }
+  const yest  = new Date(Date.now() - 86400000).toDateString();
+  if (s.lastDay === today) return s.count || 1;
+  if (s.lastDay === yest)  return (s.count || 0) + 1;   // today would extend it
+  return 1;                                             // today would start a new one
+}
+// Call once when a study session is actually completed — this is what banks the day.
+function studyStreak() {
+  const s = _readStreak();
+  const today = new Date().toDateString();
+  const yest  = new Date(Date.now() - 86400000).toDateString();
+  if (s.lastDay === today) { /* already banked today */ }
+  else if (s.lastDay === yest) { s.count = (s.count || 0) + 1; s.lastDay = today; }
   else { s.count = 1; s.lastDay = today; }
-  try { localStorage.setItem(`ql_streak_${SESSION}`, JSON.stringify(s)); } catch(e) {}
+  try { localStorage.setItem(STREAK_KEY, JSON.stringify(s)); } catch(e) {}
   return s.count || 1;
+}
+
+// ── Mastery (the collection loop) ────────────────────────────────────────────
+// Turns the SM-2 state we already keep into three human buckets. People will grind to
+// turn a bar green in a way they never will for "ease factor 2.35".
+//   Learning  — never rated, or reset by an "again"
+//   Familiar  — answered right at least once, but not yet holding for a week
+//   Mastered  — surviving a review interval of a week or more
+function cardStage(st) {
+  if (!st || !st.reps) return 'learning';
+  if ((st.interval || 0) >= 7) return 'mastered';
+  return 'familiar';
+}
+function studyMastery() {
+  const srs = srsLoad();
+  const out = { learning: 0, familiar: 0, mastered: 0, total: studyCards.length };
+  studyCards.forEach(c => { out[cardStage(srs[c.idx])]++; });
+  out.pct = out.total ? Math.round((out.mastered / out.total) * 100) : 0;
+  return out;
+}
+function masteryBarHtml(m) {
+  const seg = (n, col) => n ? `<div style="width:${(n / m.total) * 100}%;background:${col};"></div>` : '';
+  return `<div style="margin:14px 0 4px;">
+      <div style="display:flex;height:9px;border-radius:100px;overflow:hidden;background:var(--surface3);">
+        ${seg(m.mastered, 'linear-gradient(90deg,#43e97b,#6bffb5)')}${seg(m.familiar, '#f7b731')}${seg(m.learning, 'rgba(255,255,255,0.12)')}
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:6px;">
+        <span>🌱 ${t('stLearning','Learning')} ${m.learning}</span>
+        <span>⭐ ${t('stFamiliar','Familiar')} ${m.familiar}</span>
+        <span style="color:var(--accent3);">🏆 ${t('stMastered','Mastered')} ${m.mastered}</span>
+      </div>
+    </div>`;
 }
 
 // ── "Add next review to calendar" (re-engagement) ──
@@ -1724,10 +2120,12 @@ function showStudyDone(nothingDue) {
       <div style="display:inline-flex;align-items:center;gap:8px;background:var(--surface2);border:1px solid var(--border);border-radius:100px;padding:8px 16px;margin:14px 0;">
         <span style="font-size:18px;">🔥</span><span style="font-weight:700;">${streak}-day streak</span>
       </div>
-      <div style="font-size:13px;color:var(--muted);margin-bottom:16px;">${dueTxt}</div>
+      <div style="font-size:13px;color:var(--muted);margin-bottom:4px;">${dueTxt}</div>
     </div>
+    ${masteryBarHtml(studyMastery())}
     <button class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:8px;" onclick="addStudyToCalendar()">📅 Remind me to review</button>
-    <button class="btn btn-ghost" style="width:100%;justify-content:center;" onclick="startStudySession(true)">🔁 Study all again</button>
+    <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-bottom:8px;" onclick="startStudySession(true)">🔁 Study all again</button>
+    <button class="btn btn-ghost" style="width:100%;justify-content:center;" onclick="showStudyHome()">← ${t('backToStudy','Back to study')}</button>
   `);
 }
 
