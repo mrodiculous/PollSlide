@@ -1571,7 +1571,106 @@ function cardBack(q) {
 
 // ── SRS state (localStorage) ──
 function srsLoad() { try { return JSON.parse(localStorage.getItem(`ql_srs_${SESSION}`) || '{}'); } catch(e) { return {}; } }
-function srsSave(s) { try { localStorage.setItem(`ql_srs_${SESSION}`, JSON.stringify(s)); } catch(e) {} }
+function srsSave(s) { try { localStorage.setItem(`ql_srs_${SESSION}`, JSON.stringify(s)); } catch(e) {} studyCloudPush(); }
+
+// ── CROSS-DEVICE SYNC (signed-in only) ───────────────────────────────────────
+// Studying deliberately needs NO login — a student scans a QR and goes. But someone
+// who bought PollSlide and is revising their own material wants their progress on
+// both phone and laptop. So: if a Firebase auth session already exists on this origin
+// (the presenter signs in on the same domain, so "📚 Study now" arrives authenticated),
+// we mirror progress to users/<uid>/study/<code>. Otherwise nothing changes at all.
+//
+// Design notes:
+//  • localStorage stays the source of truth for READS, so all 20+ existing call sites
+//    remain synchronous and instant — the cloud is a background mirror, never a blocker.
+//  • The auth SDK is loaded LAZILY, only when the study surface opens. answer.html is
+//    the page 30 phones load in a room; the poll/quiz path must not pay for this.
+//  • No database-rules change: users/$uid is already owner-read/write.
+let _studyUid = null, _cloudTimer = null, _cloudReady = false;
+
+function _loadScript(src) {
+  return new Promise((res, rej) => {
+    if (document.querySelector(`script[src="${src}"]`)) return res();
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = () => rej(new Error('load failed'));
+    document.head.appendChild(s);
+  });
+}
+// Resolve the signed-in user, if there is one. Never throws, never blocks study.
+async function studyAuthUid() {
+  if (_cloudReady) return _studyUid;
+  _cloudReady = true;
+  try {
+    await _loadScript('https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js');
+    if (!firebase.auth) return null;
+    _studyUid = await new Promise(res => {
+      const un = firebase.auth().onAuthStateChanged(u => { un(); res(u ? u.uid : null); });
+      setTimeout(() => res(null), 3000);          // never hang the study screen on auth
+    });
+  } catch (e) { _studyUid = null; }
+  return _studyUid;
+}
+
+// Merge rule: keep the MORE ADVANCED record on each side, so syncing can only ever move
+// you forward. Losing a week of revision because a stale device wrote last would be far
+// worse than briefly over-counting.
+function mergeStudyState(local, cloud) {
+  local = local || {}; cloud = cloud || {};
+  const out = { srs: {}, streak: null, best: 0 };
+  const ls = local.srs || {}, cs = cloud.srs || {};
+  new Set([...Object.keys(ls), ...Object.keys(cs)]).forEach(k => {
+    const a = ls[k], b = cs[k];
+    if (!a) { out.srs[k] = b; return; }
+    if (!b) { out.srs[k] = a; return; }
+    // More reps wins; on a tie the longer interval (better retention) wins.
+    out.srs[k] = (b.reps > a.reps || (b.reps === a.reps && (b.interval || 0) > (a.interval || 0))) ? b : a;
+  });
+  const a = local.streak, b = cloud.streak;
+  out.streak = (!a) ? b : (!b) ? a : ((b.count || 0) > (a.count || 0) ? b : a);
+  out.best = Math.max(local.best || 0, cloud.best || 0);
+  return out;
+}
+
+function _localStudyState() {
+  return { srs: srsLoad(), streak: _readStreak(), best: bestClockScore() };
+}
+function _writeStudyState(st) {
+  try {
+    localStorage.setItem(`ql_srs_${SESSION}`, JSON.stringify(st.srs || {}));
+    if (st.streak) localStorage.setItem(STREAK_KEY, JSON.stringify(st.streak));
+    if (st.best) localStorage.setItem(`ql_clockbest_${SESSION}`, String(st.best));
+  } catch(e) {}
+}
+
+// Pull cloud state and merge it in. Returns true if anything changed (so the caller
+// can repaint). Silent no-op when signed out or offline.
+async function studyCloudPull() {
+  const uid = await studyAuthUid();
+  if (!uid || !SESSION) return false;
+  try {
+    const snap = await db.ref(`users/${uid}/study/${SESSION}`).get();
+    if (!snap.exists()) { studyCloudPush(); return false; }   // first device: seed the cloud
+    const before = JSON.stringify(_localStudyState());
+    const merged = mergeStudyState(_localStudyState(), snap.val() || {});
+    _writeStudyState(merged);
+    const changed = JSON.stringify(_localStudyState()) !== before;
+    if (changed) studyCloudPush();                            // push the merged result back
+    return changed;
+  } catch (e) { return false; }
+}
+// Debounced mirror upward — study never waits on the network.
+function studyCloudPush() {
+  if (!_studyUid || !SESSION) return;
+  clearTimeout(_cloudTimer);
+  _cloudTimer = setTimeout(() => {
+    try {
+      const st = _localStudyState();
+      db.ref(`users/${_studyUid}/study/${SESSION}`)
+        .set({ srs: st.srs, streak: st.streak, best: st.best, updated: Date.now() })
+        .catch(() => {});
+    } catch (e) {}
+  }, 1200);
+}
 
 // SM-2 lite: rating ∈ again|hard|good|easy → updated {interval(days), ease, reps, due}
 function srsSchedule(st, rating) {
@@ -1604,6 +1703,9 @@ function dueCount() {
 function showStudyHome() {
   _currentRenderer = showStudyHome;
   _studyCardsInit();
+  // Signed-in? Fetch progress from the account and repaint if it moved us forward.
+  // Fire-and-forget: the screen paints instantly from local state either way.
+  studyCloudPull().then(changed => { if (changed && _currentRenderer === showStudyHome) showStudyHome(); }).catch(()=>{});
   if (!studyCards.length) { render(`${logoMarkup()}<p class="center" style="color:var(--muted);">This set has no cards yet.</p>`); return; }
   const m = studyMastery();
   const due = dueCount();
@@ -1741,7 +1843,7 @@ function recordStudyProgress(idx, rating) {
 // own number" is a stronger pull than any leaderboard when you're studying alone.
 let clockLeft = 0, clockScore = 0, clockTimer = null, clockQueue = [];
 function bestClockScore() { try { return parseInt(localStorage.getItem(`ql_clockbest_${SESSION}`), 10) || 0; } catch(e) { return 0; } }
-function saveClockScore(n) { try { if (n > bestClockScore()) localStorage.setItem(`ql_clockbest_${SESSION}`, String(n)); } catch(e) {} }
+function saveClockScore(n) { try { if (n > bestClockScore()) localStorage.setItem(`ql_clockbest_${SESSION}`, String(n)); } catch(e) {} studyCloudPush(); }
 function startClockRound() {
   _studyCardsInit();
   clockQueue = studyCards.map(c => c.idx);
@@ -2054,6 +2156,7 @@ function studyStreak() {
   else if (s.lastDay === yest) { s.count = (s.count || 0) + 1; s.lastDay = today; }
   else { s.count = 1; s.lastDay = today; }
   try { localStorage.setItem(STREAK_KEY, JSON.stringify(s)); } catch(e) {}
+  studyCloudPush();
   return s.count || 1;
 }
 
