@@ -21,6 +21,7 @@
 
 const Stripe = require('stripe');
 const admin = require('firebase-admin');
+const { setUserTier, claimStripeEvent } = require('../lib/tier');
 
 // Initialize Firebase Admin SDK (server-side — uses service account, not client SDK)
 function getFirebaseApp() {
@@ -84,18 +85,24 @@ async function tierForSubscription(stripe, sub) {
       || (VALID_TIERS.includes(sub.metadata && sub.metadata.plan) ? sub.metadata.plan : 'pro');
 }
 
-async function updateUserTier(uid, tier, stripeCustomerId) {
+async function updateUserTier(uid, tier, stripeCustomerId, meta = {}) {
   const app = getFirebaseApp();
   const db = admin.database(app);
-  const updates = {
-    tier,
-    stripeCustomerId: stripeCustomerId || null,
-    tierUpdatedAt: Date.now(),
-  };
-  await db.ref(`users/${uid}`).update(updates);
-  await db.ref(`admin/users_index/${uid}`).update(updates);
-  console.log(`Updated user ${uid} tier → ${tier}`);
-  await syncWorkspaceTier(db, uid, tier);
+  // Audited + idempotent: a redelivered Stripe event that resolves to the SAME tier
+  // now changes nothing and, crucially, triggers no email. Every real change is
+  // recorded in admin/tier_log/<uid> with its cause. See lib/tier.js.
+  const result = await setUserTier(db, uid, tier, {
+    source: 'stripe-webhook',
+    reason: meta.reason || 'subscription change',
+    actor: 'stripe',
+    ref: meta.eventId || null,
+  });
+  if (stripeCustomerId) {
+    await db.ref(`users/${uid}/stripeCustomerId`).set(stripeCustomerId).catch(() => {});
+    await db.ref(`admin/users_index/${uid}/stripeCustomerId`).set(stripeCustomerId).catch(() => {});
+  }
+  if (result.changed) await syncWorkspaceTier(db, uid, tier);
+  return result;
 }
 
 // Defense in depth against duplicate subscriptions: when a new subscription checkout
@@ -153,8 +160,12 @@ async function syncWorkspaceTier(db, uid, tier) {
     const memberTier = (tier === 'team_small' || tier === 'team_large') ? tier : 'free';
     for (const memberUid of Object.keys(ws.members || {})) {
       if (memberUid === uid) continue;
-      await db.ref(`users/${memberUid}/tier`).set(memberTier);
-      await db.ref(`admin/users_index/${memberUid}/tier`).set(memberTier);
+      // Audited too: a member whose plan changes because the OWNER's subscription
+      // changed is exactly the case that looks inexplicable from the member's side.
+      await setUserTier(db, memberUid, memberTier, {
+        source: 'stripe-webhook', actor: 'stripe',
+        reason: `workspace owner moved to ${tier}`, ref: wsId,
+      });
     }
     console.log(`Synced workspace ${wsId} tier → ${tier}; members → ${memberTier}`);
   } catch (e) {
@@ -212,6 +223,15 @@ module.exports = async function handler(req, res) {
   console.log('Stripe event:', event.type, event.id);
 
   try {
+    // Stripe guarantees at-least-once delivery. Without this, a redelivered
+    // subscription event re-applies the tier change and re-sends the email — the
+    // most likely cause of a plan silently flipping with no user action.
+    const _db = admin.database(getFirebaseApp());
+    if (!(await claimStripeEvent(_db, event.id))) {
+      console.log('Stripe event already processed — ignoring replay:', event.id);
+      return res.status(200).json({ received: true, duplicate: true });
+    }
+
     switch (event.type) {
 
       case 'checkout.session.completed': {
@@ -238,8 +258,9 @@ module.exports = async function handler(req, res) {
           await cancelOtherSubscriptions(stripe, session.customer, session.subscription);
         }
         if (uid) {
-          await updateUserTier(uid, plan, session.customer);
-          if (email) {
+          const chk = await updateUserTier(uid, plan, session.customer,
+            { reason: 'checkout.session.completed', eventId: event.id });
+          if (email && chk.changed) {
             await sendEmailNotification('upgrade', email, { plan: planLabel(plan), planKey: plan });
             await sendEmailNotification('receipt', email, {
               plan: planLabel(plan),
@@ -250,7 +271,8 @@ module.exports = async function handler(req, res) {
         } else if (email) {
           // Fallback: look up by email if uid wasn't in metadata
           const foundUid = await getUserUidByEmail(email);
-          if (foundUid) await updateUserTier(foundUid, plan, session.customer);
+          if (foundUid) await updateUserTier(foundUid, plan, session.customer,
+            { reason: 'checkout.session.completed (email lookup)', eventId: event.id });
         }
         break;
       }
@@ -275,8 +297,9 @@ module.exports = async function handler(req, res) {
             // PLAN actually changed (e.g. a Customer-Portal switch) — not every renewal.
             const db = admin.database(getFirebaseApp());
             const prevTier = (await db.ref(`users/${uid}/tier`).get()).val();
-            await updateUserTier(uid, tier, sub.customer);
-            if (prevTier && prevTier !== tier && VALID_TIERS.includes(tier)) {
+            const upd = await updateUserTier(uid, tier, sub.customer,
+              { reason: 'customer.subscription.updated (' + status + ')', eventId: event.id });
+            if (upd.changed && prevTier && prevTier !== tier && VALID_TIERS.includes(tier)) {
               const to = (await db.ref(`users/${uid}/email`).get()).val();
               if (to) await sendEmailNotification('upgrade', to, { plan: planLabel(tier), planKey: tier });
             }
@@ -296,13 +319,18 @@ module.exports = async function handler(req, res) {
           const db = admin.database(getFirebaseApp());
           const oldTierSnap = await db.ref(`users/${uid}/tier`).get();
           const oldPlan = oldTierSnap.val() || 'pro';
-          await updateUserTier(uid, 'free', sub.customer);
-          // Email: downgrade notice
-          const emailSnap = await db.ref(`users/${uid}/email`).get();
-          if (emailSnap.val()) {
-            await sendEmailNotification('downgrade', emailSnap.val(), {
-              oldPlan: planLabel(oldPlan),
-            });
+          const res2 = await updateUserTier(uid, 'free', sub.customer,
+            { reason: 'customer.subscription.deleted', eventId: event.id });
+          // ONLY email on a real change. Previously this fired unconditionally, so a
+          // replayed or duplicate cancellation event told an already-free user their
+          // account had been downgraded — alarming, and impossible to trace.
+          if (res2.changed) {
+            const emailSnap = await db.ref(`users/${uid}/email`).get();
+            if (emailSnap.val()) {
+              await sendEmailNotification('downgrade', emailSnap.val(), {
+                oldPlan: planLabel(oldPlan),
+              });
+            }
           }
         }
         break;

@@ -12,6 +12,7 @@
 //
 // Vercel env: CRON_SECRET (cron auth), INTERNAL_API_KEY (email), FIREBASE_*, NEXT_PUBLIC_APP_URL.
 const admin = require('firebase-admin');
+const { setUserTier } = require('../lib/tier');
 
 function getApp() {
   if (admin.apps.length) return admin.apps[0];
@@ -26,9 +27,14 @@ function getApp() {
   });
 }
 
-async function downgradeUser(db, uid) {
-  await db.ref('users/' + uid + '/tier').set('free');
-  await db.ref('admin/users_index/' + uid + '/tier').set('free').catch(() => {});
+async function downgradeUser(db, uid, rec) {
+  // Audited: the tier_log entry names the comp that expired, so "why did my plan
+  // change?" is answerable months later. See lib/tier.js.
+  await setUserTier(db, uid, 'free', {
+    source: 'comp-sweep', actor: 'cron',
+    reason: 'comp expired' + (rec && rec.note ? ' (' + String(rec.note).slice(0, 60) + ')' : ''),
+    ref: rec && rec.expiresAt ? 'expiresAt=' + rec.expiresAt : null,
+  });
   await db.ref('users/' + uid + '/comp').remove().catch(() => {});
   await db.ref('admin/comps/' + uid).remove().catch(() => {});
 }
@@ -38,8 +44,10 @@ async function endWorkspace(db, wsId, ws) {
   // the (content-free) workspace record. User presentations are elsewhere and stay intact.
   for (const uid of Object.keys(ws.members || {})) {
     await db.ref('users/' + uid + '/workspaceId').remove().catch(() => {});
-    await db.ref('users/' + uid + '/tier').set('free').catch(() => {});
-    await db.ref('admin/users_index/' + uid + '/tier').set('free').catch(() => {});
+    await setUserTier(db, uid, 'free', {
+      source: 'comp-sweep', actor: 'cron',
+      reason: 'team demo expired — workspace closed', ref: wsId,
+    });
   }
   for (const k of Object.keys(ws.invites || {})) await db.ref('team_invites/' + k).remove().catch(() => {});
   await db.ref('workspaces/' + wsId).remove().catch(() => {});
@@ -68,7 +76,7 @@ module.exports = async function handler(req, res) {
     if (compsSnap.exists()) {
       for (const [uid, rec] of Object.entries(compsSnap.val() || {})) {
         if (rec && rec.expiresAt && Number(rec.expiresAt) <= now) {
-          await downgradeUser(db, uid);
+          await downgradeUser(db, uid, rec);
           expiredUsers.push({ uid, email: rec.email || '', tier: rec.tier || '' });
         }
       }

@@ -278,6 +278,9 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
     <div class="nav-item" onclick="showPage('tiers')" id="nav-tiers">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Plans & tiers
     </div>
+    <div class="nav-item" onclick="showPage('billing')" id="nav-billing">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Billing / Stripe
+    </div>
     <div class="nav-item" onclick="showPage('search')" id="nav-search">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Lookup
     </div>
@@ -418,12 +421,12 @@ function showPage(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const nav=document.getElementById('nav-'+page);if(nav)nav.classList.add('active');
-  const titles={dashboard:'Dashboard',users:'Users',teams:'Teams',tickets:'Support Tickets',comms:'Send Message',flows:'Message Flows',legal:'Legal Quick Actions',health:'System Health',security:'Security',ai:'AI / Polly Management',tiers:'Plans & Tiers',search:'Lookup',architecture:'How PollSlide Works',runbook:'Runbook · Fix-it Guide'};
+  const titles={dashboard:'Dashboard',users:'Users',teams:'Teams',tickets:'Support Tickets',comms:'Send Message',flows:'Message Flows',legal:'Legal Quick Actions',health:'System Health',security:'Security',ai:'AI / Polly Management',tiers:'Plans & Tiers',search:'Lookup',architecture:'How PollSlide Works',runbook:'Runbook · Fix-it Guide',billing:'Billing / Stripe'};
   document.getElementById('pageTitle').textContent=titles[page]||page;
   closeDetail();renderPage();
 }
 function renderPage(){
-  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture,runbook:renderRunbook};
+  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture,runbook:renderRunbook,billing:renderBilling};
   if(map[currentPage])map[currentPage]();
 }
 
@@ -562,6 +565,15 @@ function renderDetailBody(uid){
     <button class="btn btn-sm btn-green" style="width:100%;" onclick="compUser('${uid}')">🎁 Grant free plan</button>`}
   </div>
   <div class="dp-sec">
+    <h3>💳 Stripe billing</h3>
+    <div id="billing_${uid}" style="font-size:12px;color:var(--muted);">Loading…</div>
+  </div>
+  <div class="dp-sec">
+    <h3>🕵️ Account timeline <span style="font-weight:400;font-size:11px;color:var(--muted);">— everything that happened, and why</span></h3>
+    <p style="font-size:11.5px;color:var(--muted);margin:2px 0 8px;">Plan changes, comps, credits and AI runs in one order. Every plan change names what caused it.</p>
+    <div id="timeline_${uid}" style="font-size:12px;color:var(--muted);">Loading…</div>
+  </div>
+  <div class="dp-sec">
     <h3>🎫 Polly credits &amp; log</h3>
     <div class="dp-row"><span class="lbl">Credits (extra generations)</span><span>${u.aiCredits||0}</span></div>
     <p style="font-size:11.5px;color:var(--muted);margin:6px 0 8px;">Grant Polly generations to make up for a bad or failed one — spent only after the monthly allowance runs out.</p>
@@ -601,6 +613,8 @@ function renderDetailBody(uid){
   </div>`;
   loadNotes(uid);
   loadPollyLog(uid);
+  loadTimeline(uid);
+  loadUserBilling(uid);
 }
 function closeDetail(){document.getElementById('detailPanel').classList.remove('open');}
 
@@ -722,6 +736,147 @@ async function grantCredits(uid){
     if(allUsers[uid]) allUsers[uid].aiCredits = d.credits;
     toast(`Granted ${d.granted} credits · ${d.credits} total.`,'success'); renderDetailBody(uid);
   }catch(e){ toast('Grant failed: '+e.message,'danger'); }
+}
+
+// ─── 💳 BILLING / STRIPE ──────────────────────────────────────────────────────
+// Read-only by design. Everything here answers "what is Stripe doing?"; anything that
+// MOVES MONEY (refund, cancel, plan edit) deliberately stays in the Stripe Dashboard,
+// which has its own confirmations, permissions and immutable audit trail. Every row
+// deep-links there, so acting is one click away in the place built for it.
+async function stripeAdmin(body){
+  const tok = await auth.currentUser.getIdToken();
+  const r = await fetch('/api/stripe-admin', { method:'POST',
+    headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tok },
+    body: JSON.stringify(body) });
+  return r.json();
+}
+function money(m){ return m ? (m.currency==='USD'?'$':m.currency+' ')+m.amount.toFixed(2) : '—'; }
+function subPill(st){
+  const c={active:'#43e97b',trialing:'#38d9f5',past_due:'#f7b731',unpaid:'#ff6584',canceled:'var(--muted)',incomplete:'#f7b731'}[st]||'var(--muted)';
+  return `<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:${c}22;color:${c};">${esc(st)}</span>`;
+}
+async function renderBilling(){
+  const el=document.getElementById('pageBody');
+  el.innerHTML='<div class="card"><div class="card-bd">Loading Stripe…</div></div>';
+  const d=await stripeAdmin({action:'summary'});
+  if(!d.configured){ el.innerHTML=`<div class="card"><div class="card-bd">Stripe isn't configured in this environment (<code>STRIPE_SECRET_KEY</code> not set).</div></div>`; return; }
+  if(d.ok===false){ el.innerHTML=`<div class="card"><div class="card-bd" style="color:var(--accent2);">Stripe error: ${esc(d.error||'')}</div></div>`; return; }
+  const modeTag = d.mode==='live'
+    ? '<span style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;background:rgba(67,233,123,.16);color:#43e97b;">LIVE</span>'
+    : '<span style="font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;background:rgba(247,183,49,.18);color:#f7b731;">TEST MODE</span>';
+  const stat=(v,l)=>`<div class="stat"><div class="stat-val">${v}</div><div class="stat-label">${l}</div></div>`;
+  const planRows=Object.entries(d.byPlan||{}).map(([k,v])=>`<div class="dp-row"><span>${esc(k)}</span><span>${v}</span></div>`).join('')||'<div class="dp-row"><span class="lbl">No active subscriptions</span></div>';
+  const probRows=(d.problems||[]).map(p=>`<div class="dp-row"><span>${subPill(p.status)} ${esc(p.plan||p.id)}</span><a href="${p.dashboardUrl}" target="_blank" style="color:var(--accent);font-size:11px;">open in Stripe ↗</a></div>`).join('')||'<div class="dp-row"><span class="lbl">None 🎉</span></div>';
+  const cancRows=(d.cancelling||[]).map(p=>`<div class="dp-row"><span>${esc(p.plan||p.id)} — ends ${p.currentPeriodEnd?new Date(p.currentPeriodEnd).toLocaleDateString():'?'}</span><a href="${p.dashboardUrl}" target="_blank" style="color:var(--accent);font-size:11px;">open ↗</a></div>`).join('')||'<div class="dp-row"><span class="lbl">None</span></div>';
+  el.innerHTML=`
+    <div class="card"><div class="card-hd"><h2>Stripe overview ${modeTag}</h2>
+      <a class="btn btn-sm btn-ghost" href="${d.dashboard}" target="_blank">Stripe Dashboard ↗</a></div>
+      <div class="card-bd">
+        <div class="stats">${stat('$'+(d.mrr||0).toFixed(2),'MRR (est.)')}${stat(d.counts.active,'Active subs')}${stat(d.counts.problem,'Payment problems')}${stat(d.counts.cancelling,'Cancelling')}</div>
+        <p style="font-size:11.5px;color:var(--muted);margin-top:10px;">Read-only view. Refunds, cancellations and plan edits are done in the Stripe Dashboard on purpose — it has the confirmations and audit trail that moving money needs.</p>
+      </div></div>
+    <div class="card"><div class="card-hd"><h2>Active plans</h2></div><div class="card-bd">${planRows}</div></div>
+    <div class="card"><div class="card-hd"><h2>⚠️ Needs attention</h2></div><div class="card-bd">${probRows}</div></div>
+    <div class="card"><div class="card-hd"><h2>Cancelling at period end</h2></div><div class="card-bd">${cancRows}</div></div>
+    <div class="card"><div class="card-hd"><h2>Recent Stripe events</h2>
+      <button class="btn btn-sm btn-ghost" onclick="loadStripeEvents()">Load events</button></div>
+      <div class="card-bd" id="stripeEvents"><span class="muted" style="font-size:12.5px;">Shows Stripe's raw event stream and whether OUR webhook claimed each one — repeated deliveries of a single event id are the signature of a replay.</span></div></div>`;
+}
+async function loadStripeEvents(){
+  const box=document.getElementById('stripeEvents'); box.innerHTML='Loading…';
+  const d=await stripeAdmin({action:'events',limit:40});
+  if(d.ok===false||!d.events){ box.innerHTML=`<span style="color:var(--accent2);">${esc(d.error||'Could not load')}</span>`; return; }
+  box.innerHTML=d.events.map(e=>{
+    const claimed=d.claimed&&d.claimed[e.id];
+    const tag=claimed===true?'<span style="color:#43e97b;font-size:10px;">✓ handled</span>'
+             :claimed===false?'<span style="color:var(--muted);font-size:10px;">not handled</span>':'';
+    return `<div class="dp-row"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;">
+      <b style="font-size:12px;">${esc(e.type)}</b> ${tag}
+      <span style="display:block;font-size:10px;color:var(--muted);">${new Date(e.created).toLocaleString()} · ${esc(e.id)}${e.pendingWebhooks?' · '+e.pendingWebhooks+' pending':''}</span></span>
+      <a href="${e.dashboardUrl}" target="_blank" style="color:var(--accent);font-size:11px;flex-shrink:0;">↗</a></div>`;
+  }).join('');
+}
+// Per-user Stripe block — Stripe's view next to OUR audit trail, which is exactly the
+// pairing that was missing when a plan changed with no user action.
+async function loadUserBilling(uid){
+  const el=document.getElementById('billing_'+uid); if(!el) return;
+  const d=await stripeAdmin({action:'user',uid});
+  if(d.configured===false){ el.innerHTML='<span class="muted">Stripe not configured here.</span>'; return; }
+  if(d.ok===false){ el.innerHTML=`<span style="color:var(--accent2);">${esc(d.error||'')}</span>`; return; }
+  if(!d.customer){ el.innerHTML=`<span class="muted">${esc(d.note||'No Stripe customer linked.')}</span>`; return; }
+  const subs=(d.subscriptions||[]).map(sub=>`<div class="dp-row">
+      <span>${subPill(sub.status)} ${esc(sub.plan||'—')} ${sub.amount?'· '+money(sub.amount)+'/'+esc(sub.interval||''):''}
+        <span style="display:block;font-size:10px;color:var(--muted);">${sub.currentPeriodEnd?'renews '+new Date(sub.currentPeriodEnd).toLocaleDateString():''}${sub.cancelAtPeriodEnd?' · cancels at period end':''}</span></span>
+      <a href="${sub.dashboardUrl}" target="_blank" style="color:var(--accent);font-size:11px;">↗</a></div>`).join('')||'<div class="dp-row"><span class="lbl">No subscriptions</span></div>';
+  const invs=(d.invoices||[]).slice(0,5).map(i=>`<div class="dp-row">
+      <span>${esc(i.status)} ${money(i.total)}${i.attemptCount>1?' · '+i.attemptCount+' attempts':''}
+        <span style="display:block;font-size:10px;color:var(--muted);">${i.created?new Date(i.created).toLocaleDateString():''}</span></span>
+      <a href="${i.dashboardUrl}" target="_blank" style="color:var(--accent);font-size:11px;">↗</a></div>`).join('')||'<div class="dp-row"><span class="lbl">No invoices</span></div>';
+  const mismatch = (d.subscriptions||[]).some(x=>['active','trialing'].includes(x.status)) && d.ourTier==='free';
+  el.innerHTML=`
+    ${mismatch?'<div style="background:rgba(247,183,49,.12);border:1px solid rgba(247,183,49,.4);border-radius:9px;padding:8px 11px;font-size:11.5px;margin-bottom:9px;">⚠️ Stripe shows an active subscription but our tier is <b>free</b> — a webhook may have been missed. Check the events list on the Billing page.</div>':''}
+    <div class="dp-row"><span class="lbl">Our tier</span><span>${esc(d.ourTier)}</span></div>
+    <div class="dp-row"><span class="lbl">Stripe customer</span><a href="${d.customer.dashboardUrl}" target="_blank" style="color:var(--accent);font-size:11px;">${esc(d.customer.id)} ↗</a></div>
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:9px 0 3px;">Subscriptions</div>${subs}
+    <div style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:9px 0 3px;">Recent invoices</div>${invs}`;
+}
+
+// ─── 🕵️ ACCOUNT TIMELINE ──────────────────────────────────────────────────────
+// Built after a real incident: an account was silently downgraded and later restored,
+// and NOTHING recorded what did it — five code paths wrote the tier directly and none
+// left a trace. Every plan change now lands in admin/tier_log/<uid> with its source,
+// actor and reason (see lib/tier.js); this merges that with comps, credits and AI runs
+// into one chronological answer to "what happened to this account?".
+const TL_KIND = {
+  tier:    { icon:'💳', colour:'#6c63ff', label:'Plan' },
+  comp:    { icon:'🎁', colour:'#43e97b', label:'Comp' },
+  credit:  { icon:'🎫', colour:'#f7b731', label:'Credits' },
+  ai:      { icon:'✨', colour:'#a78bfa', label:'AI' },
+};
+async function loadTimeline(uid){
+  const el=document.getElementById('timeline_'+uid); if(!el) return;
+  const rows=[];
+  const grab=async(path,fn)=>{ try{ const s=await db.ref(path).get(); if(s.exists()) fn(s.val()||{}); }catch(e){} };
+
+  // 1) Plan changes — the audit trail that was missing during the August incident.
+  await grab('admin/tier_log/'+uid, v=>Object.entries(v).forEach(([ts,r])=>rows.push({
+    t:Number(r.at||ts), kind:'tier',
+    title:`${r.from||'?'} → ${r.to}`,
+    detail:`${r.source||'unknown'}${r.reason?' · '+r.reason:''}`,
+    who:r.actor||'system', ref:r.ref||'' })));
+
+  // 2) Comps (a grant, or its expiry, is a common cause of a surprise plan change)
+  await grab('admin/comps/'+uid, v=>rows.push({
+    t:Number(v.grantedAt||v.at||0), kind:'comp',
+    title:`Comped to ${v.tier||'?'}`,
+    detail:v.expiresAt?('expires '+new Date(Number(v.expiresAt)).toLocaleDateString()):'permanent',
+    who:v.by||'admin', ref:v.note||'' }));
+
+  // 3) Credit grants
+  await grab('admin/credit_log/'+uid, v=>Object.values(v).forEach(r=>rows.push({
+    t:Number(r.t||0), kind:'credit',
+    title:`+${r.amount} credits`, detail:`balance ${r.credits}`, who:r.by||'admin', ref:'' })));
+
+  // 4) AI runs (thin, but useful when a complaint is "Polly did nothing")
+  await grab('admin/polly_log/'+uid, v=>Object.values(v).slice(-25).forEach(r=>rows.push({
+    t:Number(r.t||0), kind:'ai',
+    title:(r.kind==='copilot'?'🎯 co-pilot':'Polly')+(r.ok===false?' — FAILED':''),
+    detail:[r.topic||r.question||'', r.delivered!=null?`${r.delivered}/${r.requested}`:''].filter(Boolean).join(' · ').slice(0,60),
+    who:r.source||'', ref:'' })));
+
+  if(!rows.length){ el.innerHTML='<div style="color:var(--muted);">Nothing recorded yet. Plan changes from now on will appear here.</div>'; return; }
+  rows.sort((a,b)=>b.t-a.t);
+  el.innerHTML = rows.slice(0,40).map(r=>{
+    const k=TL_KIND[r.kind]||{icon:'•',colour:'var(--muted)',label:''};
+    const when=r.t?new Date(r.t).toLocaleString():'—';
+    return `<div style="display:flex;gap:9px;padding:7px 0;border-bottom:1px solid var(--border);">
+      <span style="flex-shrink:0;">${k.icon}</span>
+      <span style="flex:1;min-width:0;">
+        <span style="color:var(--text);font-weight:600;">${esc(r.title)}</span>
+        ${r.detail?`<span style="color:var(--muted);"> — ${esc(r.detail)}</span>`:''}
+        <span style="display:block;font-size:10.5px;color:var(--muted);">${when}${r.who?' · by '+esc(r.who):''}${r.ref?' · '+esc(r.ref):''}</span>
+      </span></div>`;
+  }).join('');
 }
 
 // ─── POLLY GENERATION LOG ─────────────────────────────────────────────────────
@@ -2022,6 +2177,33 @@ function openArchDetail(layerKey,i){
 // Self-service "what broke → exact fix" so Rod can resolve common issues fast.
 // Each step is either an instruction (string) or a copyable command ({cmd}).
 const RUNBOOK = [
+  { cat:'💳 Plan changed without the user doing anything', items:[
+    { sym:'"My plan was downgraded / upgraded and I did nothing"',
+      cause:'Something automated moved it. Since 2026-08-17 EVERY tier change is recorded with its cause, so this is now answerable in seconds instead of guesswork.',
+      steps:[
+        'Admin → Users → open the user → <b>🕵️ Account timeline</b>. Each 💳 Plan row shows from → to, the SOURCE (stripe-webhook / comp-sweep / team / admin-panel), the reason, and who or what did it.',
+        '<b>source: stripe-webhook</b> → a real Stripe subscription event. Cross-check the event id shown against the Stripe Dashboard → Developers → Events.',
+        '<b>source: comp-sweep</b> → a free grant reached its end date (daily cron, 08:00 UTC). Expected behaviour; re-comp them if it was premature.',
+        '<b>source: team</b> → their workspace owner\'s plan changed, or they were added/removed from a workspace. Members inherit the owner\'s tier.',
+        '<b>source: admin-panel</b> → a human did it; the actor column has the admin email.',
+        'Nothing in the timeline at all? The change predates the audit trail (before 2026-08-17) — those are unrecoverable, which is exactly why this exists.',
+      ] },
+    { sym:'A user got a plan email but their plan looks unchanged',
+      cause:'Historically the webhook wrote the tier and emailed unconditionally, so a REDELIVERED Stripe event (Stripe guarantees at-least-once) re-sent "you were downgraded" even when nothing changed.',
+      steps:[
+        'Fixed two ways: <code>claimStripeEvent()</code> now rejects a redelivered event id outright, and <code>setUserTier()</code> no-ops when the tier already matches — and emails only fire on a real change.',
+        'To confirm a suspected replay: the second delivery leaves NO row in the timeline (a no-op writes nothing).',
+        'Stripe Dashboard → Developers → Events shows delivery attempts per event; repeated attempts on one event id is the signature.',
+      ] },
+    { sym:'Need to see plan changes across ALL users, not one account',
+      cause:'Investigating a pattern rather than a single complaint.',
+      steps:[
+        'Read the whole audit tree (admin-only):',
+        {cmd:'curl -s "https://echonest-live-survey-default-rtdb.firebaseio.com/admin/tier_log.json?auth=YOUR_ID_TOKEN" | python3 -m json.tool | head -80'},
+        'Each entry is admin/tier_log/&lt;uid&gt;/&lt;timestamp&gt; = {from,to,source,reason,actor,ref}.',
+        'The same tree powers the per-user timeline, so anything you see there is visible in the UI too.',
+      ] },
+  ] },
   { cat:'📚 StudySlide (study games, streaks, mastery)', items:[
     { sym:'"How do I study my own set? I can only share it."',
       cause:'Historic gap — the product assumed you were distributing to a class. Fixed: there are now two buttons in the presenter top bar.',

@@ -16,6 +16,7 @@
 // POST { texts:[...], target:'es', source:'en' } → { translations:[...] } (same order)
 
 const admin = require('firebase-admin');   // shared cross-viewer translation cache (best-effort)
+const { sessionExists, rateLimit, clientIp, sweepRateLimits } = require('../lib/guard');
 
 const OPENAI_API_KEY    = process.env.OPENAI_API_KEY;
 const OPENAI_TEXT_MODEL = process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini';
@@ -284,6 +285,35 @@ module.exports = async function handler(req, res) {
 
   // Never hard-fail the audience: on any problem we return the ORIGINAL texts.
   const originals = (req.body && Array.isArray(req.body.texts)) ? req.body.texts.map(String) : [];
+
+  // ── ABUSE GUARD ──────────────────────────────────────────────────────────
+  // This endpoint is deliberately public (the audience is anonymous) but it spends
+  // real AI budget, so it must not be an open tap. Two checks, both fail-open so a
+  // live room is never blocked:
+  //   • the session code must exist — a stranger can't guess one
+  //   • per-session and per-IP rate limits — a valid code can't be hammered either
+  // On refusal we still return the ORIGINAL text, so the audience sees the question
+  // in the deck language rather than an error.
+  try {
+    const gdb = getAdminDb();
+    if (gdb) {
+      const code = String(req.body?.session || '');
+      const ip = clientIp(req);
+      if (!code || !(await sessionExists(gdb, code))) {
+        console.warn('translate: refused — unknown session', code ? code.slice(0, 12) : '(none)', 'ip', ip);
+        return res.status(200).json({ ok: true, translations: originals, questions: req.body?.questions || [], fallback: true, refused: 'unknown session' });
+      }
+      const [bySession, byIp] = await Promise.all([
+        rateLimit(gdb, 'tr_s_' + code, 120, 60000),   // a big room translating a set
+        rateLimit(gdb, 'tr_i_' + ip,   240, 60000),   // one IP, generous for shared wifi
+      ]);
+      if (!bySession.allowed || !byIp.allowed) {
+        console.warn('translate: rate limited', code.slice(0, 12), ip, bySession.count, byIp.count);
+        return res.status(200).json({ ok: true, translations: originals, questions: req.body?.questions || [], fallback: true, refused: 'rate limited' });
+      }
+      sweepRateLimits(gdb);
+    }
+  } catch (e) { /* guard must never break translation */ }
 
   try {
     const target = String(req.body?.target || '').slice(0, 8);

@@ -13,6 +13,7 @@
 // workspace, plus admin-only actions: adminList, adminAssign, adminSetTier,
 // adminDelete — these power the Teams page in admin.html.
 const admin = require('firebase-admin');
+const { setUserTier } = require('../lib/tier');
 const { ADMIN_EMAILS } = require('../lib/quota');
 
 function getApp() {
@@ -74,8 +75,7 @@ module.exports = async function handler(req, res) {
       if (wsIdSnap.val() === id) {
         await db.ref('users/' + memberUid + '/workspaceId').remove();
         if (memberUid !== ws.ownerUid) {
-          await db.ref('users/' + memberUid + '/tier').set('free');
-          await db.ref('admin/users_index/' + memberUid + '/tier').set('free').catch(() => {});
+          await setUserTier(db, memberUid, 'free', { source:'team', actor: who.email || 'owner', reason:'removed from workspace' });
         }
       }
     };
@@ -119,7 +119,7 @@ module.exports = async function handler(req, res) {
         await db.ref('workspaces/' + inv.wsId + '/invites/' + k).remove();
         await db.ref('team_invites/' + k).remove();
         await db.ref('users/' + callerUid + '/workspaceId').set(inv.wsId);
-        await db.ref('users/' + callerUid + '/tier').set(ws.tier);
+        await setUserTier(db, callerUid, ws.tier, { source:'team', actor:'self', reason:'accepted team invite', ref: inv.wsId });
         return res.status(200).json({ ok: true, wsId: inv.wsId, tier: ws.tier, wsName: ws.name || '' });
       }
       case 'remove': {
@@ -159,8 +159,7 @@ module.exports = async function handler(req, res) {
         const r = role === 'admin' ? 'admin' : 'member';
         await db.ref('workspaces/' + wsId + '/members/' + user.uid).set({ email: e, role: r, joinedAt: Date.now() });
         await db.ref('users/' + user.uid + '/workspaceId').set(wsId);
-        await db.ref('users/' + user.uid + '/tier').set(ws.tier);
-        await db.ref('admin/users_index/' + user.uid + '/tier').set(ws.tier).catch(() => {});
+        await setUserTier(db, user.uid, ws.tier, { source:'team', actor: who.email || 'admin', reason:'added to workspace by admin', ref: wsId });
         return res.status(200).json({ ok: true, uid: user.uid });
       }
       case 'adminSetTier': {
@@ -172,8 +171,7 @@ module.exports = async function handler(req, res) {
         await db.ref('workspaces/' + wsId + '/tier').set(t);
         for (const mUid of Object.keys(ws.members || {})) {
           if (mUid === ws.ownerUid) continue; // owner's tier follows their own billing
-          await db.ref('users/' + mUid + '/tier').set(t);
-          await db.ref('admin/users_index/' + mUid + '/tier').set(t).catch(() => {});
+          await setUserTier(db, mUid, t, { source:'team', actor: who.email || 'admin', reason:'workspace tier changed', ref: wsId });
         }
         return res.status(200).json({ ok: true });
       }
@@ -191,8 +189,7 @@ module.exports = async function handler(req, res) {
         await db.ref('workspaces/' + wsId + '/tier').set(t);
         await db.ref('workspaces/' + wsId + '/comp').set({ by: callerEmail, at: Date.now(), expiresAt: exp, note: String(note || '').slice(0, 300) });
         for (const mUid of Object.keys(ws.members || {})) {  // everyone incl. the owner
-          await db.ref('users/' + mUid + '/tier').set(t);
-          await db.ref('admin/users_index/' + mUid + '/tier').set(t).catch(() => {});
+          await setUserTier(db, mUid, t, { source:'team', actor: who.email || 'admin', reason:'workspace tier changed', ref: wsId });
         }
         return res.status(200).json({ ok: true });
       }
@@ -204,8 +201,7 @@ module.exports = async function handler(req, res) {
         if (!ws) return res.status(404).json({ error: 'Workspace not found' });
         for (const mUid of Object.keys(ws.members || {})) {
           await db.ref('users/' + mUid + '/workspaceId').remove().catch(() => {});
-          await db.ref('users/' + mUid + '/tier').set('free').catch(() => {});
-          await db.ref('admin/users_index/' + mUid + '/tier').set('free').catch(() => {});
+          await setUserTier(db, mUid, 'free', { source:'team', actor: who.email || 'admin', reason:'workspace deleted', ref: wsId });
         }
         for (const k of Object.keys(ws.invites || {})) await db.ref('team_invites/' + k).remove().catch(() => {});
         await db.ref('workspaces/' + wsId).remove();
