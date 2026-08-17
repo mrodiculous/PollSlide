@@ -46,7 +46,9 @@ async function checkBackupFreshness(db) {
     const snap = await db.ref('admin/backups/log').orderByKey().limitToLast(40).get();
     if (!snap.exists()) return;
     let newestOk = 0;
-    snap.forEach(c => { const v = c.val(); if (v && v.ok !== false && v.at > newestOk) newestOk = v.at; });
+    // ok === true, not ok !== false: a { mode:'download' } row means NO bucket was
+    // configured, so nothing was stored. Counting it would hide having no off-site copy.
+    snap.forEach(c => { const v = c.val(); if (v && v.ok === true && v.at > newestOk) newestOk = v.at; });
     const ageH = newestOk ? (Date.now() - newestOk) / 3600000 : Infinity;
     if (ageH > maxAgeH) {
       await db.ref('admin/backups/stale').set({ at: Date.now(), lastGoodAt: newestOk || null, ageHours: Math.round(ageH) });

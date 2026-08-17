@@ -1974,7 +1974,7 @@ function renderAutopilot(){
 
 // Kept in the UI as well as the server so this page explains itself without a deploy.
 const AP_CHECKS=[
-  {id:'backup_stale',      t:'Backups have stopped running',        fix:'Runs a backup immediately, then re-checks.'},
+  {id:'backup_stale',      t:'Backups have stopped running',        fix:'Runs a backup immediately, then re-checks. If BACKUP_BUCKET is unset it does NOT retry — there is nowhere to store a backup, so it tells you to set it instead.'},
   {id:'client_error_spike',t:'A page is throwing errors for users', fix:'Needs you — a JavaScript bug can\'t be auto-fixed. Emails you the message and page.'},
   {id:'tier_drift',        t:'A plan disagrees with Stripe',        fix:'Restores the plan to match Stripe, with an audited entry in the account timeline.'},
   {id:'endpoints_down',    t:'A core endpoint is not responding',   fix:'Needs you — usually a bad deploy.'},
@@ -2448,6 +2448,15 @@ const RUNBOOK = [
         'No action needed. That email is a record, not a to-do — it is only sent after the fix was confirmed working.',
         'Admin → <b>Auto-pilot</b> → Recent activity shows exactly what it did and when.',
         'The only remedies that exist are: re-run a backup, and restore a plan to match Stripe. Nothing auto-deletes user data.',
+      ] },
+    { sym:'"Backups have stopped running / No successful backup has ever been recorded"',
+      cause:'Either BACKUP_BUCKET is not set (so nothing is ever stored), or the check is reading the log wrong. Both have happened.',
+      steps:[
+        'Admin → Auto-pilot → <b>Configuration</b> → look at <code>BACKUP_BUCKET</code>.',
+        '<b>MISSING</b> → this is the real problem and it is serious: <code>/api/backup</code> builds the whole export and then streams it back instead of storing it, so there is no off-site copy at all. Set <code>BACKUP_BUCKET</code> in Vercel to your Firebase Storage bucket (<code>echonest-live-survey.firebasestorage.app</code>), redeploy, then press ▶ Run all checks now.',
+        '<b>set</b> → check Admin → Auto-pilot → Recent activity for the remedy note. A backup that returns HTTP 500 means the bucket name is wrong or the service account lacks Storage permission.',
+        'A manual browser download does NOT count as a backup — it stores nothing. Only rows with <code>ok:true</code> and a <code>file</code> are real off-site copies.',
+        'Historical note: the first version of this check read the log field <code>t</code> when it is actually <code>at</code>, so it always reported "never recorded". Fixed, with a regression test.',
       ] },
     { sym:'I got "🔴 Needs you" — what now?',
       cause:'A check failed and there is no safe automatic remedy (a JavaScript bug, a bad deploy, or the AI being unreachable all need a human).',

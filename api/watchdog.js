@@ -14,7 +14,7 @@
 const admin = require('firebase-admin');
 const {
   evalBackupAge, evalErrorSpike, evalTierDrift, evalProbe, evalAiReachable,
-  decideNotification,
+  decideNotification, isStoredBackup,
 } = require('../lib/watchdog');
 const { setUserTier } = require('../lib/tier');
 const { tierForSubscription } = require('../lib/stripe-tier');
@@ -67,10 +67,21 @@ const CHECKS = [
     async gather(ctx) {
       const snap = await ctx.db.ref('admin/backups/log').orderByKey().limitToLast(40).get();
       let lastOkAt = 0;
-      snap.forEach(s => { const v = s.val() || {}; if (v.ok !== false && v.t) lastOkAt = Math.max(lastOkAt, v.t); });
-      return { lastOkAt, now: Date.now(), maxAgeHours: Number(process.env.BACKUP_MAX_AGE_HOURS || 48) };
+      // The log field is `at` — NOT `t`. Reading the wrong name silently yields 0,
+      // which reads as "no backup has ever succeeded" no matter how healthy things are.
+      snap.forEach(s => { const v = s.val(); if (isStoredBackup(v)) lastOkAt = Math.max(lastOkAt, v.at); });
+      return {
+        lastOkAt, now: Date.now(),
+        maxAgeHours: Number(process.env.BACKUP_MAX_AGE_HOURS || 48),
+        // Same deployment as api/backup.js, so this is the value that endpoint will see.
+        bucketConfigured: !!process.env.BACKUP_BUCKET,
+      };
     },
     evaluate: evalBackupAge,
+    // Don't run the remedy when the problem is missing configuration. With no bucket,
+    // /api/backup exports the WHOLE database and streams it back to be discarded —
+    // doing that every 15 minutes would be expensive and would fix nothing.
+    canFix: (res) => !res.configIssue,
     // Remedy: just run the backup. It's idempotent — worst case we store one extra.
     async fix(ctx) {
       const r = await fetchWithTimeout(APP_URL + '/api/backup', {
@@ -78,6 +89,7 @@ const CHECKS = [
       }, 60000);
       return { note: 'Triggered a backup run (HTTP ' + r.status + ').' };
     },
+    hint: 'If BACKUP_BUCKET is unset, set it in Vercel to your Firebase Storage bucket and redeploy — until then nothing is being stored off-site.',
   },
 
   {
@@ -246,7 +258,7 @@ async function runAll(db, trigger) {
       let res = c.evaluate({ ...data, now });
       let selfHealed = false, fixNote = null;
 
-      if (!res.ok && c.autoFix && c.fix) {
+      if (!res.ok && c.autoFix && c.fix && (!c.canFix || c.canFix(res))) {
         try {
           const f = await c.fix({ db }, data, res);
           fixNote = f && f.note;
@@ -358,6 +370,8 @@ module.exports = async (req, res) => {
         { key: 'FIREBASE_CLIENT_EMAIL', set: has('FIREBASE_CLIENT_EMAIL'), needed: 'Admin SDK credential.' },
         { key: 'FIREBASE_PRIVATE_KEY',  set: has('FIREBASE_PRIVATE_KEY'),  needed: 'Admin SDK credential.' },
         { key: 'FIREBASE_DATABASE_URL', set: has('FIREBASE_DATABASE_URL'), needed: 'Which database to write to.' },
+        { key: 'BACKUP_BUCKET',      set: has('BACKUP_BUCKET'),      needed: 'Where nightly backups are stored. Missing → the cron still runs and builds the export, then throws it away. You have NO off-site copy. Set it to your Firebase Storage bucket.' },
+        { key: 'BACKUP_MAX_AGE_HOURS', set: has('BACKUP_MAX_AGE_HOURS'), needed: 'How stale a backup may get before alerting. Optional — defaults to 48h.', optional: true },
         { key: 'STRIPE_SECRET_KEY',  set: has('STRIPE_SECRET_KEY'),  needed: 'Missing → the plan-vs-Stripe drift check is skipped entirely.' },
         { key: 'OPENAI_API_KEY',     set: has('OPENAI_API_KEY'),     needed: 'Polly\'s cloud fallback. Missing → Polly fails whenever the Mac is offline.' },
         { key: 'LOCAL_LLM_URL',      set: has('LOCAL_LLM_URL'),      needed: 'The local model on the Mac. Optional if the cloud key is set.', optional: true },

@@ -10,7 +10,7 @@
  */
 const {
   evalBackupAge, evalErrorSpike, evalTierDrift, evalProbe, evalAiReachable,
-  decideNotification, ESCALATE_AFTER_MS,
+  decideNotification, ESCALATE_AFTER_MS, isStoredBackup,
 } = require('../../lib/watchdog');
 
 let pass = 0, fail = 0;
@@ -21,10 +21,30 @@ function ok(name, cond, extra) {
 const H = 3600000, NOW = 1_700_000_000_000;
 
 console.log('\nBackup freshness');
-ok('fresh backup passes',       evalBackupAge({ lastOkAt: NOW - 2 * H, now: NOW, maxAgeHours: 48 }).ok);
-ok('49h-old backup fails',      !evalBackupAge({ lastOkAt: NOW - 49 * H, now: NOW, maxAgeHours: 48 }).ok);
-ok('exactly at the limit passes', evalBackupAge({ lastOkAt: NOW - 48 * H, now: NOW, maxAgeHours: 48 }).ok);
-ok('never-backed-up fails',     !evalBackupAge({ lastOkAt: 0, now: NOW, maxAgeHours: 48 }).ok);
+const B = (o) => evalBackupAge(Object.assign({ now: NOW, maxAgeHours: 48, bucketConfigured: true }, o));
+ok('fresh backup passes',         B({ lastOkAt: NOW - 2 * H }).ok);
+ok('49h-old backup fails',        !B({ lastOkAt: NOW - 49 * H }).ok);
+ok('exactly at the limit passes', B({ lastOkAt: NOW - 48 * H }).ok);
+ok('never-backed-up fails',       !B({ lastOkAt: 0 }).ok);
+
+// Regression: a real backup email fired saying "no successful backup has ever been
+// recorded" while backups were fine, because the log field is `at` and the check read
+// `t`. isStoredBackup is now the single reader of that record shape.
+console.log('\nBackup log record shape (the `at` vs `t` regression)');
+ok('a stored backup counts',        isStoredBackup({ at: NOW, ok: true, file: 'backups/x.json' }));
+ok('a failed backup does not',      !isStoredBackup({ at: NOW, ok: false, error: 'boom' }));
+ok('a manual download does NOT count as an off-site backup',
+   !isStoredBackup({ at: NOW, bytes: 100, mode: 'download' }));
+ok('a record with no timestamp does not count', !isStoredBackup({ ok: true }));
+ok('null/undefined are safe',       !isStoredBackup(null) && !isStoredBackup(undefined));
+
+console.log('\nNo backup destination configured');
+const noBucket = B({ lastOkAt: NOW - 1 * H, bucketConfigured: false });
+ok('unconfigured bucket fails even with a recent log entry', !noBucket.ok);
+ok('it is flagged as a config issue, not a staleness issue', noBucket.configIssue === true);
+ok('the message names BACKUP_BUCKET', /BACKUP_BUCKET/.test(noBucket.detail));
+ok('a configured bucket sets no configIssue flag',
+   B({ lastOkAt: NOW - 1 * H }).configIssue === undefined);
 
 console.log('\nClient error spike');
 ok('quiet day passes',          evalErrorSpike({ total: 3, distinct: 2, worst: { count: 2, message: 'x', page: '/p' } }).ok);
