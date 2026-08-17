@@ -42,48 +42,13 @@ function getFirebaseApp() {
   });
 }
 
-// Map Stripe price IDs to PollSlide plan tier names (fallback only — the primary
-// source of truth is the `plan` we stash in subscription metadata at checkout).
-const PRICE_TO_TIER = {
-  [process.env.STRIPE_PRICE_PRO_MONTHLY]: 'pro',
-  [process.env.STRIPE_PRICE_PRO_ANNUAL]: 'pro',
-  [process.env.STRIPE_PRICE_TEAM_SMALL_MONTHLY]: 'team_small',
-  [process.env.STRIPE_PRICE_TEAM_SMALL_ANNUAL]: 'team_small',
-  [process.env.STRIPE_PRICE_TEAM_LARGE_MONTHLY]: 'team_large',
-  [process.env.STRIPE_PRICE_TEAM_LARGE_ANNUAL]: 'team_large',
-};
-const VALID_TIERS = ['pro', 'team_small', 'team_large'];
+// Price/plan resolution lives in lib/stripe-tier.js — the Auto-pilot drift check
+// needs the identical answer, and two copies of a price map drift apart silently.
+const { VALID_TIERS, getTierFromPriceId, planFromLookupKey, tierForSubscription } = require('../lib/stripe-tier');
 
 // Pretty tier names for emails — the naive charAt-uppercase produced "Team_small".
 const TIER_LABELS = { free: 'Free', pro: 'Pro', team_small: 'Team Small', team_large: 'Team Large' };
 function planLabel(plan) { return TIER_LABELS[plan] || (plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : 'Pro'); }
-
-function getTierFromPriceId(priceId) {
-  return PRICE_TO_TIER[priceId] || null; // null = unknown (let callers fall through)
-}
-
-// The price's lookup key IS the current plan — e.g. "pollslide_team_small_monthly" →
-// "team_small". This reflects the REAL plan after a Customer-Portal switch, unlike the
-// subscription's metadata.plan (stamped at checkout, never updated on a switch).
-function planFromLookupKey(lookupKey) {
-  if (!lookupKey || lookupKey.indexOf('pollslide_') !== 0) return null;
-  const plan = lookupKey.replace('pollslide_', '').replace(/_(monthly|annual)$/, '');
-  return VALID_TIERS.includes(plan) ? plan : null;
-}
-
-// Resolve the true current tier for a subscription: prefer the live price's lookup key,
-// then the price-ID env map, and only as a last resort the (possibly stale) metadata.
-async function tierForSubscription(stripe, sub) {
-  const priceItem = sub.items && sub.items.data && sub.items.data[0] && sub.items.data[0].price;
-  const priceId = priceItem && priceItem.id;
-  let lookupKey = priceItem && priceItem.lookup_key;
-  if (!lookupKey && priceId) {
-    try { const p = await stripe.prices.retrieve(priceId); lookupKey = p.lookup_key; } catch (e) {}
-  }
-  return planFromLookupKey(lookupKey)
-      || getTierFromPriceId(priceId)
-      || (VALID_TIERS.includes(sub.metadata && sub.metadata.plan) ? sub.metadata.plan : 'pro');
-}
 
 async function updateUserTier(uid, tier, stripeCustomerId, meta = {}) {
   const app = getFirebaseApp();

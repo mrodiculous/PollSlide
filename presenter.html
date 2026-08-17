@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<script src="/errors.js?v=1"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root {
@@ -2713,6 +2714,10 @@ document.addEventListener('click', function(e) {
 function renderProductTabs() {
   const bar = document.getElementById('productTabs');
   if (!bar) return;
+  // Ships display:none so the bar doesn't flash empty before the first render.
+  // Rendering IS what makes it real — without this line the whole product switcher
+  // is invisible forever (caught by scripts/qa-reachability.js, check B).
+  bar.style.display = 'flex';
   bar.innerHTML = PRODUCT_ORDER.map(key => {
     const p = PRODUCTS[key];
     const n = Object.values(presentations).filter(pr => presType(pr) === key).length;

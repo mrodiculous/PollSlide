@@ -8,28 +8,53 @@
     }
   },
   "crons": [
-    { "path": "/api/legal-watch", "schedule": "0 9 * * 1" },
-    { "path": "/api/comp-sweep", "schedule": "0 8 * * *" },
-    { "path": "/api/compliance-sweep", "schedule": "0 10 1 * *" },
-    { "path": "/api/backup", "schedule": "0 7 * * *" }
+    {
+      "path": "/api/legal-watch",
+      "schedule": "0 9 * * 1"
+    },
+    {
+      "path": "/api/comp-sweep",
+      "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/compliance-sweep",
+      "schedule": "0 10 1 * *"
+    },
+    {
+      "path": "/api/backup",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/watchdog",
+      "schedule": "*/15 * * * *"
+    }
   ],
   "headers": [
     {
       "source": "/api/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache" }
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache"
+        }
       ]
     },
     {
       "source": "/(presenter|present|companion|answer|live|admin|setup|report|results|recap|overlay|powerpoint|powerpoint-functions)",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" }
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, max-age=0"
+        }
       ]
     },
     {
       "source": "/(.*)\\.html",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, no-cache, must-revalidate, max-age=0" }
+        {
+          "key": "Cache-Control",
+          "value": "no-store, no-cache, must-revalidate, max-age=0"
+        }
       ]
     }
   ]

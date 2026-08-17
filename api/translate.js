@@ -244,7 +244,7 @@ function fnv1a(str) {
   return (h >>> 0).toString(36);
 }
 function cacheKey(source, q) {
-  return 'q' + fnv1a(source + ' ' + JSON.stringify(q));
+  return 'q' + fnv1a(source + '\u0000' + JSON.stringify(q));
 }
 
 // Run the local→OpenAI provider chain for a set of questions. Returns {outQs, provider}

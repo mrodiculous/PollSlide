@@ -18,6 +18,47 @@
 const admin = require('firebase-admin');
 const { getApp, verifyToken, tokenFrom, ADMIN_EMAILS } = require('../lib/quota');
 
+
+// A backup that fails silently is worse than no backup: it LOOKS like it's working
+// right up until the day you need it. Every other cron here emails on trouble; this
+// one didn't. Best-effort — an email problem must never mask the backup result.
+async function alertBackup(subject, body) {
+  try {
+    const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com';
+    await fetch(APP_URL + '/api/send-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-internal-key': process.env.INTERNAL_API_KEY || '' },
+      body: JSON.stringify({
+        type: 'notify',
+        to: process.env.LEGAL_ALERT_EMAIL || 'help@pollslide.com',
+        data: { subject, heading: 'Backup', body },
+      }),
+    });
+  } catch (e) { /* alerting is best-effort */ }
+}
+
+// Has a backup succeeded recently? A cron that quietly stops firing (expired creds,
+// changed schedule) leaves no failure to alert on — only an absence — so we check for
+// the absence explicitly.
+async function checkBackupFreshness(db) {
+  try {
+    const maxAgeH = Number(process.env.BACKUP_MAX_AGE_HOURS || 48);
+    const snap = await db.ref('admin/backups/log').orderByKey().limitToLast(40).get();
+    if (!snap.exists()) return;
+    let newestOk = 0;
+    snap.forEach(c => { const v = c.val(); if (v && v.ok !== false && v.at > newestOk) newestOk = v.at; });
+    const ageH = newestOk ? (Date.now() - newestOk) / 3600000 : Infinity;
+    if (ageH > maxAgeH) {
+      await db.ref('admin/backups/stale').set({ at: Date.now(), lastGoodAt: newestOk || null, ageHours: Math.round(ageH) });
+      await alertBackup('⚠️ No successful PollSlide backup in ' + Math.round(ageH) + 'h',
+        'The most recent successful backup is ' + (newestOk ? new Date(newestOk).toISOString() : 'NONE ON RECORD') +
+        '. Check the Vercel cron and BACKUP_BUCKET / storage credentials.');
+    } else {
+      await db.ref('admin/backups/stale').remove().catch(() => {});
+    }
+  } catch (e) { /* freshness check is advisory */ }
+}
+
 module.exports = async function handler(req, res) {
   // ── auth ──
   let by = null;
@@ -65,9 +106,13 @@ module.exports = async function handler(req, res) {
       } catch (e) { /* retention is best-effort */ }
 
       await db.ref('admin/backups/log/' + stamp).set({ at: Date.now(), by, bytes: json.length, file: `backups/${filename}`, bucket: bucketName, ok: true });
+      await checkBackupFreshness(db);
       return res.status(200).json({ ok: true, stored: `gs://${bucketName}/backups/${filename}`, bytes: json.length, by });
     } catch (e) {
       await db.ref('admin/backups/log/' + stamp).set({ at: Date.now(), by, bytes: json.length, ok: false, error: e.message }).catch(() => {});
+      await alertBackup('🚨 PollSlide backup FAILED',
+        'The nightly backup could not be written.<br><br><b>Error:</b> ' + String(e.message).slice(0, 300) +
+        '<br><br>Check BACKUP_BUCKET, Firebase Storage, and the service-account permissions. Until this is fixed there is no fresh off-site copy.');
       return res.status(500).json({ error: 'Backup write failed — is BACKUP_BUCKET correct and Storage enabled?', detail: e.message });
     }
   }

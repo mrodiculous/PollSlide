@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PollSlide Admin — PollSlide Technologies LLC</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="/errors.js?v=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
@@ -270,6 +271,12 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
     <div class="nav-item" onclick="showPage('security')" id="nav-security">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Security
     </div>
+    <div class="nav-item" onclick="showPage('autopilot')" id="nav-autopilot">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="3"/></svg>Auto-pilot<span id="apBadge" class="pill pill-danger" style="margin-left:auto;display:none;"></span>
+    </div>
+    <div class="nav-item" onclick="showPage('errors')" id="nav-errors">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Errors in the wild<span id="errBadge" class="pill pill-danger" style="margin-left:auto;display:none;"></span>
+    </div>
 
     <div class="nav-section">Product</div>
     <div class="nav-item" onclick="showPage('ai')" id="nav-ai">
@@ -359,6 +366,8 @@ auth.onAuthStateChanged(async user=>{
     document.getElementById('app').classList.remove('hidden');
     document.getElementById('adminEmailDisplay').textContent=user.email;
     await loadAllUsers(); watchOpenTickets(); showPage('dashboard');
+    refreshErrorBadge(); refreshAutopilotBadge();
+    setInterval(()=>{ refreshErrorBadge(); refreshAutopilotBadge(); }, 120000);
   }else if(user){auth.signOut();document.getElementById('authErr').textContent='Not authorised.';}
 });
 
@@ -421,12 +430,12 @@ function showPage(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const nav=document.getElementById('nav-'+page);if(nav)nav.classList.add('active');
-  const titles={dashboard:'Dashboard',users:'Users',teams:'Teams',tickets:'Support Tickets',comms:'Send Message',flows:'Message Flows',legal:'Legal Quick Actions',health:'System Health',security:'Security',ai:'AI / Polly Management',tiers:'Plans & Tiers',search:'Lookup',architecture:'How PollSlide Works',runbook:'Runbook · Fix-it Guide',billing:'Billing / Stripe'};
+  const titles={dashboard:'Dashboard',users:'Users',teams:'Teams',tickets:'Support Tickets',comms:'Send Message',flows:'Message Flows',legal:'Legal Quick Actions',health:'System Health',security:'Security',ai:'AI / Polly Management',tiers:'Plans & Tiers',search:'Lookup',architecture:'How PollSlide Works',runbook:'Runbook · Fix-it Guide',billing:'Billing / Stripe',errors:'Errors in the Wild',autopilot:'Auto-pilot'};
   document.getElementById('pageTitle').textContent=titles[page]||page;
   closeDetail();renderPage();
 }
 function renderPage(){
-  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture,runbook:renderRunbook,billing:renderBilling};
+  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture,runbook:renderRunbook,billing:renderBilling,errors:renderErrors,autopilot:renderAutopilot};
   if(map[currentPage])map[currentPage]();
 }
 
@@ -1928,6 +1937,261 @@ async function loadSecurityLog(){
   }catch(e){el.textContent='Could not read scan history: '+e.message;}
 }
 
+// ─── AUTO-PILOT ───────────────────────────────────────────────────────────────
+// /api/watchdog runs every 15 minutes: it checks the things that break quietly,
+// applies a known-safe remedy where one exists, re-checks to confirm the remedy
+// actually worked, and emails only on a state change. This page is the window onto
+// it — what's open, what it fixed on its own, and when it last ran.
+function renderAutopilot(){
+  document.getElementById('content').innerHTML=`
+  <div class="card">
+    <div class="card-hd">
+      <h2>Status</h2>
+      <span id="apLastRun" style="color:var(--muted);font-size:12px;"></span>
+      <button class="btn btn-sm btn-primary" onclick="runAutopilot()" id="apRunBtn">▶ Run all checks now</button>
+    </div>
+    <div id="apStatus" style="padding:14px 18px;color:var(--muted);font-size:13px;">Loading…</div>
+  </div>
+  <div class="card">
+    <div class="card-hd"><h2>Configuration</h2><button class="btn btn-sm btn-ghost" onclick="loadApConfig()">↻ Re-check</button></div>
+    <div style="padding:12px 18px 0;color:var(--muted);font-size:12.5px;line-height:1.6;">
+      A missing environment variable does not throw an error — the feature just quietly
+      does nothing, which looks identical to "everything is fine". This checks which
+      ones are actually present in Vercel right now. Values are never shown or sent.
+    </div>
+    <div id="apConfig" style="padding:14px 18px;color:var(--muted);font-size:13px;">Loading…</div>
+  </div>
+  <div class="card">
+    <div class="card-hd"><h2>What Auto-pilot watches</h2></div>
+    <div id="apChecks" style="padding:6px 18px 14px;"></div>
+  </div>
+  <div class="card">
+    <div class="card-hd"><h2>Recent activity</h2></div>
+    <div id="apHistory" style="padding:14px 18px;color:var(--muted);font-size:13px;">Loading…</div>
+  </div>`;
+  loadAutopilot();
+}
+
+// Kept in the UI as well as the server so this page explains itself without a deploy.
+const AP_CHECKS=[
+  {id:'backup_stale',      t:'Backups have stopped running',        fix:'Runs a backup immediately, then re-checks.'},
+  {id:'client_error_spike',t:'A page is throwing errors for users', fix:'Needs you — a JavaScript bug can\'t be auto-fixed. Emails you the message and page.'},
+  {id:'tier_drift',        t:'A plan disagrees with Stripe',        fix:'Restores the plan to match Stripe, with an audited entry in the account timeline.'},
+  {id:'endpoints_down',    t:'A core endpoint is not responding',   fix:'Needs you — usually a bad deploy.'},
+  {id:'ai_unavailable',    t:'Polly has no working model',          fix:'Needs you — bring the Mac back up, or set OPENAI_API_KEY so the cloud fallback covers it.'},
+];
+
+// The check table is documentation — it must render even when the data read fails,
+// otherwise a permissions blip leaves the page looking empty and broken.
+function renderApChecks(inc){
+  const ch=document.getElementById('apChecks'); if(!ch) return;
+  ch.innerHTML='<table><thead><tr><th>Check</th><th>Last result</th><th>If it fails</th></tr></thead><tbody>'
+    + AP_CHECKS.map(c=>{
+        const i=inc[c.id];
+        const pill = !i ? '<span class="pill pill-free">not run yet</span>'
+          : i.status==='open' ? '<span class="pill pill-danger">open</span>'
+          : i.autoFixed ? '<span class="pill pill-team">auto-fixed</span>'
+          : '<span class="pill pill-pro">healthy</span>';
+        return `<tr><td><b>${esc(c.t)}</b><div style="color:var(--muted);font-size:11px;">${esc(c.id)}</div></td>
+          <td style="white-space:normal;max-width:320px;">${pill}<div style="color:var(--muted);font-size:11.5px;margin-top:3px;">${esc(i&&i.detail||'—')}</div></td>
+          <td style="white-space:normal;max-width:300px;font-size:12px;color:var(--muted);">${esc(c.fix)}</td></tr>`;
+      }).join('')
+    + '</tbody></table>';
+}
+
+async function loadAutopilot(){
+  const st=document.getElementById('apStatus');
+  renderApChecks({});                    // paint the reference table immediately
+  try{
+    const [stateS, incS] = await Promise.all([
+      db.ref('admin/watchdog/state').get(),
+      db.ref('admin/watchdog/incidents').get(),
+    ]);
+    const state=stateS.val()||{}; const inc=incS.val()||{};
+    const lr=document.getElementById('apLastRun');
+    if(lr) lr.textContent = state.lastRunAt ? ('Last run '+timeAgo(state.lastRunAt)+' · '+esc(state.trigger||'')) : 'Never run yet';
+
+    const open=Object.values(inc).filter(i=>i.status==='open');
+    st.innerHTML = open.length
+      ? `<div style="color:var(--accent2);font-weight:600;margin-bottom:10px;">${open.length} open issue${open.length>1?'s':''} need${open.length>1?'':'s'} you</div>`
+        + open.map(i=>`<div style="padding:10px 0;border-top:1px solid var(--border);">
+             <span class="pill pill-danger">${esc(i.severity||'high')}</span> <b>${esc(i.title)}</b>
+             <div style="margin-top:3px;">${esc(i.detail||'')}</div>
+             <div style="color:var(--muted);font-size:11px;margin-top:3px;">Open since ${timeAgo(i.firstAt)} · seen ${i.occurrences||1}×${i.lastFixNote?' · last remedy: '+esc(i.lastFixNote):''}</div>
+           </div>`).join('')
+      : '<span style="color:var(--accent3);">✓ Everything Auto-pilot watches is healthy.</span>';
+
+    renderApChecks(inc);                 // repaint with live status
+  }catch(e){ st.textContent='Could not read Auto-pilot state: '+e.message; }
+  loadApConfig(); loadAutopilotHistory();
+}
+
+async function loadApConfig(){
+  const el=document.getElementById('apConfig'); if(!el) return;
+  el.style.padding='14px 18px'; el.textContent='Checking…';
+  try{
+    if(!auth.currentUser) throw new Error('not signed in yet — press Re-check in a moment');
+    const t=await auth.currentUser.getIdToken();
+    const r=await fetch('/api/watchdog?action=config',{method:'POST',headers:{'Authorization':'Bearer '+t}});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||('HTTP '+r.status));
+    const missing=d.env.filter(e=>!e.set&&!e.optional);
+    el.style.padding='0';
+    el.innerHTML=(missing.length
+        ? `<div style="padding:12px 18px;color:var(--accent2);font-weight:600;">${missing.length} required variable${missing.length>1?'s are':' is'} missing — the features below are silently doing nothing.</div>`
+        : '<div style="padding:12px 18px;color:var(--accent3);font-weight:600;">✓ Everything required is set.</div>')
+      +'<table><thead><tr><th>Variable</th><th>Status</th><th>What it does / what breaks without it</th></tr></thead><tbody>'
+      +d.env.map(e=>`<tr>
+          <td style="font-family:ui-monospace,monospace;font-size:12px;">${esc(e.key)}</td>
+          <td>${e.set?'<span class="pill pill-pro">set</span>':(e.optional?'<span class="pill pill-free">optional</span>':'<span class="pill pill-danger">MISSING</span>')}</td>
+          <td style="white-space:normal;max-width:460px;font-size:12px;color:var(--muted);">${esc(e.needed)}</td>
+        </tr>`).join('')
+      +'</tbody></table>';
+  }catch(e){ el.textContent='Could not check configuration: '+e.message; }
+}
+
+async function loadAutopilotHistory(){
+  const el=document.getElementById('apHistory'); if(!el) return;
+  try{
+    const snap=await db.ref('admin/watchdog/history').orderByKey().limitToLast(40).get();
+    const rows=[]; snap.forEach(s=>rows.push(s.val())); rows.reverse();
+    if(!rows.length){ el.textContent='Nothing to report — Auto-pilot only logs when something is wrong or it fixed something.'; return; }
+    el.style.padding='0';
+    el.innerHTML='<table><thead><tr><th>When</th><th>Check</th><th>Result</th><th>Remedy</th></tr></thead><tbody>'
+      + rows.map(r=>`<tr>
+          <td style="font-size:11px;color:var(--muted);">${timeAgo(r.at)}</td>
+          <td style="font-size:12px;">${esc(r.id)}</td>
+          <td style="white-space:normal;max-width:380px;font-size:12px;">${r.selfHealed?'<span class="pill pill-team">auto-fixed</span> ':(r.ok?'<span class="pill pill-pro">ok</span> ':'<span class="pill pill-danger">failed</span> ')}${esc(r.detail||'')}</td>
+          <td style="white-space:normal;max-width:260px;font-size:11.5px;color:var(--muted);">${esc(r.fix||'—')}</td>
+        </tr>`).join('')
+      + '</tbody></table>';
+  }catch(e){ el.textContent='Could not read history: '+e.message; }
+}
+
+async function runAutopilot(){
+  const b=document.getElementById('apRunBtn'); const old=b.textContent;
+  b.disabled=true; b.textContent='Running…';
+  try{
+    if(!auth.currentUser) throw new Error('not signed in yet — try again in a moment');
+    const t=await auth.currentUser.getIdToken();
+    const r=await fetch('/api/watchdog',{method:'POST',headers:{'Authorization':'Bearer '+t}});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||('HTTP '+r.status));
+    const healed=d.checks.filter(c=>c.selfHealed).length, broke=d.checks.filter(c=>c.status==='open').length;
+    alert(`Auto-pilot finished.\n\n${d.checks.length} checks run\n${healed} fixed automatically\n${broke} need you\n${d.newTickets||0} new support ticket(s) notified`);
+    loadAutopilot();
+  }catch(e){ alert('Could not run Auto-pilot: '+e.message); }
+  finally{ b.disabled=false; b.textContent=old; }
+}
+
+async function refreshAutopilotBadge(){
+  try{
+    const snap=await db.ref('admin/watchdog/incidents').get();
+    const n=Object.values(snap.val()||{}).filter(i=>i.status==='open').length;
+    const b=document.getElementById('apBadge'); if(!b)return;
+    b.style.display=n?'inline-block':'none'; b.textContent=n;
+  }catch(e){}
+}
+
+// ─── ERRORS IN THE WILD ───────────────────────────────────────────────────────
+// Every app page loads /errors.js, which POSTs uncaught errors to /api/client-error;
+// the server writes them to admin/client_errors/<day>/<hash>. Identical faults collapse
+// onto one row with a count, so "12 people hit this" is one line, not twelve.
+//
+// Read this page like a triage queue: sort by count. A row with a big count and a
+// recent lastAt is breaking the product for real people right now.
+let _errDay = null;
+function errDayKey(offset){ const d=new Date(); d.setDate(d.getDate()-offset); return d.toISOString().slice(0,10); }
+
+function renderErrors(){
+  if(!_errDay) _errDay = errDayKey(0);
+  const days=[...Array(14)].map((_,i)=>errDayKey(i));
+  document.getElementById('content').innerHTML=`
+  <div class="card">
+    <div class="card-hd">
+      <h2>Errors reported by real browsers</h2>
+      <select id="errDaySel" onchange="_errDay=this.value;loadClientErrors();" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:8px;padding:6px 9px;font-size:12px;">
+        ${days.map(d=>`<option value="${d}" ${d===_errDay?'selected':''}>${d}${d===days[0]?' (today)':''}</option>`).join('')}
+      </select>
+      <button class="btn btn-sm btn-ghost" onclick="loadClientErrors()">↻ Refresh</button>
+    </div>
+    <div style="padding:12px 18px 0;color:var(--muted);font-size:12.5px;line-height:1.6;">
+      Uncaught JavaScript errors from presenter, answer, big-screen, study and the rest.
+      Repeats of the same fault are merged — <b>Hits</b> is how many times it fired, so sort
+      your attention by that. Browser-extension noise is filtered out before it gets here.
+    </div>
+    <div id="errBody" style="padding:14px 18px;color:var(--muted);font-size:13px;">Loading…</div>
+  </div>
+  <div class="card">
+    <div class="card-hd"><h2>Last 14 days</h2></div>
+    <div id="errTrend" style="padding:14px 18px;color:var(--muted);font-size:13px;">Loading…</div>
+  </div>`;
+  loadClientErrors(); loadErrorTrend();
+}
+
+async function loadClientErrors(){
+  const el=document.getElementById('errBody'); if(!el) return;
+  el.style.padding='14px 18px'; el.textContent='Loading…';
+  try{
+    const snap=await db.ref('admin/client_errors/'+_errDay).get();
+    const rows=[]; snap.forEach(s=>{ rows.push(Object.assign({_k:s.key}, s.val())); });
+    if(!rows.length){ el.innerHTML='<span style="color:var(--accent3);">✓ Nothing broke on '+esc(_errDay)+'.</span>'; return; }
+    rows.sort((a,b)=>(b.count||0)-(a.count||0));
+    el.style.padding='0';
+    el.innerHTML='<table><thead><tr><th>Hits</th><th>Page</th><th>Error</th><th>Where</th><th>Last seen</th><th></th></tr></thead><tbody>'
+      + rows.map(r=>{
+          const bad=(r.count||0)>=5;
+          return `<tr>
+            <td><span class="pill ${bad?'pill-danger':'pill-free'}">${r.count||1}</span></td>
+            <td style="font-size:12px;">${esc(r.page||'—')}</td>
+            <td style="font-size:12.5px;white-space:normal;max-width:420px;">
+              <span class="pill pill-free" style="font-size:9px;">${esc(r.kind||'error')}</span> ${esc(r.message||'')}
+              ${r.stack?`<div style="color:var(--muted);font-size:11px;margin-top:3px;font-family:ui-monospace,monospace;white-space:normal;">${esc(r.stack)}</div>`:''}
+            </td>
+            <td style="font-size:11px;color:var(--muted);">${esc(r.source||'—')}${r.line?':'+r.line:''}</td>
+            <td style="font-size:11px;color:var(--muted);">${timeAgo(r.lastAt)}<div>${esc((r.ua||'').slice(0,42))}</div></td>
+            <td><span class="link-action" onclick="dismissError('${esc(r._k)}')">Dismiss</span></td>
+          </tr>`;
+        }).join('')
+      + '</tbody></table>';
+  }catch(e){ el.textContent='Could not read errors: '+e.message; }
+}
+
+// Dismiss = "I've seen this and shipped a fix." It deletes the row, so if the fault is
+// still live the very next occurrence re-creates it — which is exactly the check you want.
+async function dismissError(key){
+  if(!confirm('Dismiss this error?\n\nIf it is still happening it will reappear the next time someone hits it — which is how you confirm your fix worked.'))return;
+  try{ await db.ref('admin/client_errors/'+_errDay+'/'+key).remove(); loadClientErrors(); loadErrorTrend(); }
+  catch(e){ alert('Could not dismiss: '+e.message); }
+}
+
+async function loadErrorTrend(){
+  const el=document.getElementById('errTrend'); if(!el) return;
+  try{
+    const days=[...Array(14)].map((_,i)=>errDayKey(13-i));
+    const snaps=await Promise.all(days.map(d=>db.ref('admin/client_errors/'+d).get()));
+    const totals=snaps.map(s=>{ let n=0; s.forEach(c=>{ n+=(c.val().count||1); }); return n; });
+    const max=Math.max(1,...totals);
+    el.innerHTML='<div style="display:flex;align-items:flex-end;gap:5px;height:90px;">'
+      + days.map((d,i)=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;" title="${d}: ${totals[i]} hits">
+           <div style="font-size:10px;color:var(--muted);">${totals[i]||''}</div>
+           <div style="width:100%;height:${Math.round(totals[i]/max*60)}px;min-height:2px;border-radius:4px 4px 0 0;background:${totals[i]?'var(--accent2)':'var(--border2)'};"></div>
+           <div style="font-size:9px;color:var(--muted);">${d.slice(5)}</div>
+         </div>`).join('')
+      + '</div>';
+  }catch(e){ el.textContent='Could not build trend: '+e.message; }
+}
+
+// Red badge in the sidebar so a broken release is visible from any page, not just this one.
+async function refreshErrorBadge(){
+  try{
+    const snap=await db.ref('admin/client_errors/'+errDayKey(0)).get();
+    let n=0; snap.forEach(c=>{ n+=(c.val().count||1); });
+    const b=document.getElementById('errBadge'); if(!b)return;
+    b.style.display=n?'inline-block':'none'; b.textContent=n>99?'99+':n;
+  }catch(e){}
+}
+
 // ─── HOW POLLSLIDE WORKS (architecture map) ───────────────────────────────────
 // Data-driven, layered picture of every surface, data node, API and service, plus
 // the live-session lifecycle. Cards open a detail panel showing what each reads/writes.
@@ -2177,6 +2441,47 @@ function openArchDetail(layerKey,i){
 // Self-service "what broke → exact fix" so Rod can resolve common issues fast.
 // Each step is either an instruction (string) or a copyable command ({cmd}).
 const RUNBOOK = [
+  { cat:'🤖 Auto-pilot & error reporting', items:[
+    { sym:'I got an email saying "Fixed automatically" — do I need to do anything?',
+      cause:'Auto-pilot (/api/watchdog, every 15 min) found a problem, applied a known-safe remedy, RE-CHECKED it, and the re-check passed.',
+      steps:[
+        'No action needed. That email is a record, not a to-do — it is only sent after the fix was confirmed working.',
+        'Admin → <b>Auto-pilot</b> → Recent activity shows exactly what it did and when.',
+        'The only remedies that exist are: re-run a backup, and restore a plan to match Stripe. Nothing auto-deletes user data.',
+      ] },
+    { sym:'I got "🔴 Needs you" — what now?',
+      cause:'A check failed and there is no safe automatic remedy (a JavaScript bug, a bad deploy, or the AI being unreachable all need a human).',
+      steps:[
+        'The email names the check and says what to do. Admin → <b>Auto-pilot</b> shows it under "open issues".',
+        '<b>client_error_spike</b> → Admin → Errors in the wild, find the row with the big hit count, read the stack.',
+        '<b>endpoints_down</b> → check the Vercel dashboard for a failed deploy.',
+        '<b>ai_unavailable</b> → the Mac is offline AND there is no OPENAI_API_KEY. Set the key in Vercel so the cloud fallback covers it.',
+        'You get ONE email when it opens, then silence, then one reminder a day later if it is still broken. It will not spam you.',
+      ] },
+    { sym:'Auto-pilot has not run / "Never run yet"',
+      cause:'The Vercel cron is not firing, or CRON_SECRET is missing.',
+      steps:[
+        'Admin → Auto-pilot → <b>▶ Run all checks now</b> proves the endpoint itself works (it runs under your admin login, not the cron secret).',
+        'If the manual run works but the schedule does not: Vercel → Project → Settings → Cron Jobs, confirm <code>/api/watchdog</code> at <code>*/15 * * * *</code> is listed and enabled.',
+        'Confirm <code>CRON_SECRET</code> is set in Vercel env vars — without it the cron request is rejected with 401.',
+      ] },
+    { sym:'A user says "the page just went blank / nothing happens"',
+      cause:'Almost always an uncaught JavaScript error. Every app page loads /errors.js, which reports these automatically — you no longer have to reproduce it.',
+      steps:[
+        'Admin → <b>Errors in the wild</b> → pick the day → sort by Hits.',
+        'The row shows the message, the page, the file:line and the first few stack frames. That is usually enough to find it in the source.',
+        'Browser-extension noise and benign ResizeObserver warnings are filtered out before storage, so what you see is real.',
+        'After you ship a fix, press <b>Dismiss</b>. If the fault is still live it reappears on the next occurrence — that is how you confirm the fix worked.',
+        'Errors are grouped by day; use the dropdown to compare before/after a release.',
+      ] },
+    { sym:'Nothing is showing up in Errors in the wild at all',
+      cause:'Either genuinely nothing is broken, or the intake is misconfigured.',
+      steps:[
+        'The browser POSTs to <code>/api/client-error</code>, which writes with the Admin SDK. If FIREBASE_* env vars are missing the endpoint quietly answers 204 and stores nothing.',
+        'It must NOT be a direct Firebase write from the browser — admin/* is admin-write-only, so that path is denied for every real user.',
+        'Test it: open any app page, run <code>psReportError("test from console")</code> in the browser console, then reload Admin → Errors in the wild.',
+      ] },
+  ] },
   { cat:'💳 Plan changed without the user doing anything', items:[
     { sym:'"My plan was downgraded / upgraded and I did nothing"',
       cause:'Something automated moved it. Since 2026-08-17 EVERY tier change is recorded with its cause, so this is now answerable in seconds instead of guesswork.',
