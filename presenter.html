@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="/errors.js?v=1"></script>
+<script src="/present-display.js?v=1"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root {
@@ -7010,10 +7011,43 @@ function publishGameMode(mode) {
   }
 }
 let _pickedMode = 'classic';
+/* ── Present display: window vs true full screen ────────────────────────────────
+ * #presentOverlay is position:fixed/inset:0, which fills the VIEWPORT but leaves the
+ * browser's tab strip, address bar and menu on screen — visible to the whole room when
+ * you're mirroring to a projector. The only way to remove that chrome is the Fullscreen
+ * API, and it will only work when called during a real user gesture, so it has to fire
+ * from the "Start presenting" click (or the ⛶ button) — never from a timer or a
+ * Firebase callback.
+ *
+ * The choice is remembered so it's asked once, not before every session.
+ * ---------------------------------------------------------------------------- */
+// The mechanics live in present-display.js, shared with Big screen and PresentSlide.
+const PRESENT_DISPLAY_KEY = PSDisplay.KEY;
+let _presentDisplay = null;                             // choice for THIS launch
+
+const presentDisplayPref = () => PSDisplay.pref();
+const fsSupported = () => PSDisplay.supported();
+const fsElement   = () => PSDisplay.element();
+const enterFullscreen = () => PSDisplay.enter();
+const leaveFullscreen = () => PSDisplay.leave();
+const acquireWakeLock = () => PSDisplay.acquireWakeLock();
+const releaseWakeLock = () => PSDisplay.releaseWakeLock();
+
+function isPresenting() {
+  return document.getElementById('presentOverlay')?.style.display === 'flex';
+}
+PSDisplay.setActiveCheck(isPresenting);          // so the wake lock is re-taken on return
+
+const syncFsBtn = PSDisplay.bindButton('presentFsBtn');
+function togglePresentFullscreen() {
+  return PSDisplay.toggle(msg => toast(msg, 'error')).then(syncFsBtn);
+}
+
 function openPresentMode() {
   const idx = liveQIdx !== null ? liveQIdx : 0;
   if (!questions || !questions[idx]) return;
   _pickedMode = currentGameMode();
+  _presentDisplay = presentDisplayPref();
   renderModePicker();
 }
 function renderModePicker() {
@@ -7040,14 +7074,38 @@ function renderModePicker() {
     <h2 style="margin-bottom:2px;">How do you want to run this?</h2>
     <p style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">Changes how points are scored and shown. Your questions, reveal and results all work the same either way — you can switch between rounds.</p>
     ${cards}
-    <button class="btn btn-primary" style="width:100%;margin-top:6px;" onclick="startPresentWithMode()">▶ Start presenting</button>
+    ${fsSupported() ? `
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+      <div style="font-family:Syne,sans-serif;font-weight:800;font-size:13px;margin-bottom:2px;">Display</div>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:9px;line-height:1.5;">Full screen hides your browser tabs, address bar and menu — worth it when you're mirroring to a projector. You can switch any time with the ⛶ button, or leave with Esc.</p>
+      <div style="display:flex;gap:8px;">
+        ${[['fullscreen','⛶','Full screen','Hides browser chrome'],['window','🪟','Stay in this window','Keeps tabs and menu visible']].map(([id,icon,name,sub]) => {
+          const on = id === _presentDisplay;
+          return `<button onclick="pickDisplay('${id}')" style="flex:1;text-align:left;padding:10px 12px;border-radius:11px;cursor:pointer;font-family:inherit;
+            background:${on ? 'rgba(108,99,255,0.16)' : 'var(--surface2)'};border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};color:var(--text);">
+            <span style="display:block;font-size:16px;line-height:1.1;">${icon}</span>
+            <span style="display:block;font-family:Syne,sans-serif;font-weight:700;font-size:12.5px;margin-top:3px;">${name}</span>
+            <span style="display:block;font-size:10.5px;color:var(--muted);margin-top:1px;">${sub}</span>
+          </button>`;
+        }).join('')}
+      </div>
+    </div>` : ''}
+    <button class="btn btn-primary" style="width:100%;margin-top:12px;" onclick="startPresentWithMode()">▶ Start presenting</button>
     <button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="closeModePicker()">Cancel</button>
   </div>`;
   m.style.display = 'flex';
 }
 function pickMode(id) { _pickedMode = psModeOk(id); renderModePicker(); }
+function pickDisplay(id) {
+  _presentDisplay = (id === 'window') ? 'window' : 'fullscreen';
+  localStorage.setItem(PRESENT_DISPLAY_KEY, _presentDisplay);   // remember, so we ask once
+  renderModePicker();
+}
 function closeModePicker() { const m = document.getElementById('modePickerModal'); if (m) m.remove(); }
 function startPresentWithMode() {
+  // FIRST, before any await or Firebase call: requestFullscreen() is only granted
+  // inside a live user gesture, and an intervening async hop spends it.
+  if (_presentDisplay === 'fullscreen' && fsSupported() && !fsElement()) enterFullscreen();
   publishGameMode(_pickedMode);
   closeModePicker();
   const g = GAME_MODES[currentGameMode()];
@@ -7065,6 +7123,8 @@ function _beginPresentMode() {
   overlay.style.display = 'flex';
   applyPresentTheme(); // restore the saved present light/dark preference
   syncPresentTallyBtn(); // reflect the Final Results card opt-in state
+  syncFsBtn();           // ⛶ / 🪟 must match reality, however we got here
+  acquireWakeLock();     // don't let the screen dim mid-session
   document.body.style.overflow = 'hidden';
   // Make sure the opening slide is actually live in Firebase so the companion
   // follows from question one. If it's already the live question, don't re-launch
@@ -7084,7 +7144,16 @@ function _beginPresentMode() {
   // Keyboard navigation
   if (_presentKbHandler) document.removeEventListener('keydown', _presentKbHandler);
   _presentKbHandler = (e) => {
-    if (e.key === 'Escape') { closePresentMode(); return; }
+    if (e.key === 'Escape') {
+      // In full screen the browser ALWAYS consumes Esc to restore its chrome, and the
+      // keydown still reaches us. Closing here too would mean one Esc both leaves full
+      // screen and drops a live session in front of the room. So the first Esc only
+      // leaves full screen; a second one exits presenting.
+      if (PSDisplay.escapeHandledByFullscreen()) return;
+      closePresentMode();
+      return;
+    }
+    if (e.key === 'f' || e.key === 'F') { togglePresentFullscreen(); e.preventDefault(); return; }
     if (e.key === 'ArrowRight' || e.key === ' ') { presentNav(1); e.preventDefault(); }
     if (e.key === 'ArrowLeft') { presentNav(-1); e.preventDefault(); }
     if (e.key === 'r' || e.key === 'R') {
@@ -7120,6 +7189,10 @@ function closePresentMode() {
   const overlay = document.getElementById('presentOverlay');
   if (overlay) overlay.style.display = 'none';
   document.body.style.overflow = '';
+  // Only undo full screen if WE turned it on — if the presenter had the whole browser
+  // in full screen before starting, leave their window exactly as they set it up.
+  if (PSDisplay.weEntered()) leaveFullscreen();
+  releaseWakeLock();
   if (_presentCountdownTicker) { clearInterval(_presentCountdownTicker); _presentCountdownTicker = null; }
   if (postRevealTimer) { clearInterval(postRevealTimer); postRevealTimer = null; }
   if (_presentKbHandler) { document.removeEventListener('keydown', _presentKbHandler); _presentKbHandler = null; }
@@ -7541,6 +7614,7 @@ function renderPresentSlide(idx) {
        wrap onto a second line if the screen gets narrow (dynamic on resize). -->
   <div id="presentBottomControls" style="position:absolute;bottom:14px;right:16px;z-index:3;display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;max-width:calc(50% - 24px);">
     <button id="presentTallyBtn" onclick="togglePresentTally()" title="Show a Final Results card after the last question" style="background:var(--p-card-05);border:1px solid var(--p-line-10);border-radius:20px;font-size:12px;font-family:Syne,sans-serif;font-weight:700;color:var(--p-text);line-height:1;padding:6px 12px;cursor:pointer;white-space:nowrap;flex-shrink:0;">🏆 Final card</button>
+    <button id="presentFsBtn" onclick="togglePresentFullscreen()" title="Go full screen (hides browser tabs and menu)" style="background:var(--p-card-05);border:1px solid var(--p-line-10);border-radius:20px;font-size:15px;line-height:1;padding:5px 10px;cursor:pointer;flex-shrink:0;">⛶</button>
     <button id="presentThemeBtn" onclick="togglePresentTheme()" title="Light / dark mode" style="background:var(--p-card-05);border:1px solid var(--p-line-10);border-radius:20px;font-size:15px;line-height:1;padding:5px 10px;cursor:pointer;flex-shrink:0;">☀️</button>
   </div>
   <button id="presentQaBtn" onclick="togglePresentQA()" title="Show audience questions (Q)" style="position:absolute;top:10px;right:calc(50% + 70px);background:var(--p-card-05);border:1px solid var(--p-line-10);border-radius:20px;font-size:13px;font-family:Syne,sans-serif;font-weight:700;color:var(--p-text);line-height:1;padding:7px 14px;cursor:pointer;z-index:3;">💬 Questions</button>

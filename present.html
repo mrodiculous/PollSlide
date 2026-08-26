@@ -22,6 +22,7 @@
 -->
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="/errors.js?v=1"></script>
+<script src="/present-display.js?v=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
@@ -420,6 +421,7 @@
     <button class="pill-btn ghost" id="autoBtn" onclick="cycleAuto()" title="Auto-advance slides (kiosk mode)">⏱ Auto: off</button>
     <div class="spacer"></div>
     <span class="pos" id="pPos"></span>
+    <button class="pill-btn ghost" id="presentFsBtn" onclick="togglePresentFullscreen()" title="Go full screen (hides browser tabs and menu)">⛶</button>
     <button class="pill-btn ghost" onclick="endPresent()">✕ Exit</button>
   </div>
 </div>
@@ -1340,18 +1342,29 @@ function wirePresentResize(){ if(_presentResizeWired) return; _presentResizeWire
   window.addEventListener('resize', on);
   document.addEventListener('fullscreenchange', ()=>setTimeout(on,60)); }
 async function startPresent(i){ if(!deck.slides.length){toast('Add a slide first.');return;}
+  // Full screen FIRST, synchronously. requestFullscreen() is only granted during a live
+  // user gesture, and the await below spends it — which is why asking afterwards (as this
+  // did) was unreliable. Honours the shared window/full-screen preference; the whole
+  // document goes full screen, not just #present, so toasts stay visible.
+  if(PSDisplay.pref()==='fullscreen' && PSDisplay.supported() && !PSDisplay.element()) PSDisplay.enter();
   if(typeof userId!=='undefined'&&userId&&deck.slides.some(s=>isInteractive(s)&&!(s.question&&s.question.imported))){ await publishDeck(); } // publish the latest so every QR (incl. Q&A) scans
   let st0=Math.max(0,Math.min(i||0,deck.slides.length-1));
   while(st0<deck.slides.length&&deck.slides[st0].skip) st0++;    // never open on a skipped slide
-  if(st0>=deck.slides.length){ toast('Every slide is marked Skip.'); return; }
+  if(st0>=deck.slides.length){ toast('Every slide is marked Skip.'); if(PSDisplay.weEntered()) PSDisplay.leave(); return; }
   presentIdx=st0; _revealed=false; _presentT0=Date.now();
-  const el=document.getElementById('present'); el.classList.add('show'); try{ el.requestFullscreen&&el.requestFullscreen().catch(()=>{}); }catch(e){}
+  const el=document.getElementById('present'); el.classList.add('show');
+  PSDisplay.acquireWakeLock(); syncFsBtn();
   wirePresentResize(); sizePresentStage();   // lock the 16:9 letterbox before first paint
   renderPresentSlide(presentIdx);
   document.getElementById('pStage').onclick=(e)=>{ if(e.target.closest('.qr-card')||e.target.closest('button')||e.target.closest('a')||e.target.closest('video')||e.target.closest('audio'))return; presentNav(1); }; // click advances (Keynote)
-  _kb=(e)=>{ if(e.key==='Escape')endPresent(); else if(e.key==='ArrowRight'||e.key===' '){presentNav(1);e.preventDefault();} else if(e.key==='ArrowLeft')presentNav(-1); else if(e.key==='r'||e.key==='R')doReveal(); };
+  // First Esc only leaves full screen (the browser consumes it anyway); a second ends
+  // the deck. Otherwise one keypress would drop a live deck in front of the room.
+  _kb=(e)=>{ if(e.key==='Escape'){ if(PSDisplay.escapeHandledByFullscreen())return; endPresent(); } else if(e.key==='f'||e.key==='F'){togglePresentFullscreen();e.preventDefault();} else if(e.key==='ArrowRight'||e.key===' '){presentNav(1);e.preventDefault();} else if(e.key==='ArrowLeft')presentNav(-1); else if(e.key==='r'||e.key==='R')doReveal(); };
   document.addEventListener('keydown',_kb); }
-function endPresent(){ stopAuto(true); closePresenterView(); document.getElementById('pStage').onclick=null; document.getElementById('present').classList.remove('show'); if(_kb){document.removeEventListener('keydown',_kb);_kb=null;} try{document.fullscreenElement&&document.exitFullscreen&&document.exitFullscreen().catch(()=>{});}catch(e){} detachLive(); }
+function endPresent(){ stopAuto(true); closePresenterView(); document.getElementById('pStage').onclick=null; document.getElementById('present').classList.remove('show'); if(_kb){document.removeEventListener('keydown',_kb);_kb=null;} PSDisplay.releaseWakeLock(); if(PSDisplay.weEntered()) PSDisplay.leave(); detachLive(); }
+const syncFsBtn = PSDisplay.bindButton('presentFsBtn');
+function togglePresentFullscreen(){ return PSDisplay.toggle(msg=>toast(msg)).then(syncFsBtn); }
+PSDisplay.setActiveCheck(()=>isPresenting());
 function presentNav(d){
   const cur=deck.slides[presentIdx];
   if(d>0){ const b=buildEls(cur); if(b.length&&_buildStep<b.length){ _buildStep++; revealBuilds(); return; } }

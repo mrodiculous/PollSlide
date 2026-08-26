@@ -8,6 +8,7 @@
 
 <!-- Firebase -->
 <script src="/errors.js?v=1"></script>
+<script src="/present-display.js?v=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 
@@ -261,6 +262,27 @@
         oninput="this.value=this.value.toUpperCase()"
         onkeydown="if(event.key==='Enter')joinSession()">
     </div>
+    <!-- Display choice sits BEFORE the join button on purpose: joinSession() verifies
+         the code over the network first, and requesting full screen after that async
+         hop would be refused (the user gesture is already spent). So the preference is
+         chosen here and acted on synchronously the moment "Watch live" is clicked. -->
+    <div class="field" id="displayChoiceWrap" style="display:none;">
+      <label>Display</label>
+      <div style="display:flex;gap:8px;">
+        <button type="button" id="dispFull" onclick="pickLiveDisplay('fullscreen')"
+          style="flex:1;text-align:left;padding:9px 11px;border-radius:10px;cursor:pointer;font-family:inherit;background:var(--surface2);border:1px solid var(--border2);color:var(--text);">
+          <span style="display:block;font-size:15px;line-height:1.1;">⛶</span>
+          <span style="display:block;font-weight:700;font-size:12px;margin-top:2px;">Full screen</span>
+          <span style="display:block;font-size:10px;color:var(--muted);">Hides browser chrome</span>
+        </button>
+        <button type="button" id="dispWin" onclick="pickLiveDisplay('window')"
+          style="flex:1;text-align:left;padding:9px 11px;border-radius:10px;cursor:pointer;font-family:inherit;background:var(--surface2);border:1px solid var(--border2);color:var(--text);">
+          <span style="display:block;font-size:15px;line-height:1.1;">🪟</span>
+          <span style="display:block;font-weight:700;font-size:12px;margin-top:2px;">Stay in window</span>
+          <span style="display:block;font-size:10px;color:var(--muted);">Keeps tabs and menu</span>
+        </button>
+      </div>
+    </div>
     <button class="btn-join" onclick="joinSession()">Watch live →</button>
     <div class="err" id="entryErr"></div>
   </div>
@@ -288,6 +310,7 @@
       <div class="status-dot"></div>
     </div>
     <span class="session-badge" id="sessionBadge">—</span>
+    <button class="leave-btn" id="liveFsBtn" onclick="toggleLiveFullscreen()" title="Go full screen (hides browser tabs and menu)" style="margin-right:6px;">⛶</button>
     <button class="leave-btn" onclick="leaveSession()">Leave</button>
   </div>
 
@@ -396,15 +419,61 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // ── Join session ──────────────────────────────────────────────────────────────
+/* ── Display: window vs full screen ──────────────────────────────────────────
+ * Big screen is usually the thing on the projector, so the browser's tab strip and
+ * address bar are the most visible here. Mechanics are shared with Presenter and
+ * PresentSlide — see present-display.js. */
+let _liveDisplay = 'fullscreen';
+function pickLiveDisplay(v) {
+  _liveDisplay = (v === 'window') ? 'window' : 'fullscreen';
+  PSDisplay.setPref(_liveDisplay);
+  syncLiveDisplayChoice();
+}
+function syncLiveDisplayChoice() {
+  const on = 'rgba(108,99,255,0.16)', off = 'var(--surface2)';
+  const f = document.getElementById('dispFull'), w = document.getElementById('dispWin');
+  if (!f || !w) return;
+  f.style.background = _liveDisplay === 'fullscreen' ? on : off;
+  f.style.borderColor = _liveDisplay === 'fullscreen' ? 'var(--accent)' : 'var(--border2)';
+  w.style.background = _liveDisplay === 'window' ? on : off;
+  w.style.borderColor = _liveDisplay === 'window' ? 'var(--accent)' : 'var(--border2)';
+}
+const syncLiveFsBtn = PSDisplay.bindButton('liveFsBtn');
+function toggleLiveFullscreen() {
+  return PSDisplay.toggle(msg => toast(msg, 'error')).then(syncLiveFsBtn);
+}
+PSDisplay.setActiveCheck(() => !!sessionCode);   // keeps the wake lock while watching
+
+// Only offer the choice where the browser can actually honour it.
+document.addEventListener('DOMContentLoaded', () => {
+  if (!PSDisplay.supported()) return;
+  const wrap = document.getElementById('displayChoiceWrap');
+  if (wrap) wrap.style.display = '';
+  _liveDisplay = PSDisplay.pref();
+  syncLiveDisplayChoice();
+});
+
+// F toggles full screen while watching. Esc needs no handler here: the browser
+// already uses it to leave full screen, and Leave is an explicit button.
+document.addEventListener('keydown', (e) => {
+  if (!sessionCode) return;
+  if (e.key === 'f' || e.key === 'F') { toggleLiveFullscreen(); e.preventDefault(); }
+});
+
 function joinSession() {
   const code = document.getElementById('codeInput').value.trim().toUpperCase();
   if (!code) { document.getElementById('entryErr').textContent = 'Enter a session code.'; return; }
   document.getElementById('entryErr').textContent = '';
 
+  // Synchronously, while the click's user activation is still valid — the network
+  // check below would spend it. Undone again if the code turns out to be wrong.
+  if (_liveDisplay === 'fullscreen' && PSDisplay.supported() && !PSDisplay.element()) PSDisplay.enter();
+
   // Verify session exists before committing
   db.ref(`sessions/${code}/meta`).get().then(snap => {
     if (!snap.exists()) {
       document.getElementById('entryErr').textContent = 'Session not found. Check the code and try again.';
+      if (PSDisplay.weEntered()) PSDisplay.leave();   // don't strand them in a full-screen error
       return;
     }
     startWatching(code);
@@ -416,6 +485,8 @@ function joinSession() {
 
 function startWatching(code) {
   sessionCode = code;
+  PSDisplay.acquireWakeLock();   // a projector screen must not dim mid-session
+  syncLiveFsBtn();
   document.getElementById('entryScreen').classList.add('hidden');
   document.getElementById('liveScreen').style.display = 'flex';
   document.getElementById('sessionBadge').textContent = code;
@@ -518,6 +589,8 @@ function leaveSession() {
   cleanup();
   stopWarmup();
   sessionCode = null;
+  PSDisplay.releaseWakeLock();
+  if (PSDisplay.weEntered()) PSDisplay.leave();
   history.replaceState(null, '', location.pathname);
   document.getElementById('entryScreen').classList.remove('hidden');
   document.getElementById('liveScreen').style.display = 'none';
