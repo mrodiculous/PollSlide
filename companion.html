@@ -182,6 +182,7 @@
   body.portrait .bar-opt-img { height:34px; }
 </style>
 <script src="/errors.js?v=1"></script>
+<script src="/qid.js?v=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -430,7 +431,7 @@ function showTargetedQuestion(session, qIdx) {
     const questions = snap.exists() ? snap.val() : [];
     const q = Array.isArray(questions) ? questions[qIdx] : null;
     if (!q || !q.text) { showWaiting('Question not found for this slide.'); return; }
-    const qId = `q${qIdx}_stable_${session}`; // always use stable QID — matches presenter's stableQId
+    const qId = PSQid.bucket(q, qIdx, session); // the question's own id — survives reordering
     const qObj = Object.assign({}, q, { id: qId, qIndex: qIdx });
     if (curQId !== qId) {
       curQId = qId;
@@ -1014,7 +1015,7 @@ function compTally(questions, all, code) {
   qs.forEach((q, i) => {
     const _ca = q.correctAnswer;
     if (_ca !== undefined && _ca !== null && _ca !== '' && !(Array.isArray(_ca) && _ca.length === 0)) hasCorrect = true;
-    const bucket = all['q' + i + '_stable_' + code] || {};
+    const bucket = all[PSQid.bucket(q, i, code)] || {};
     Object.entries(bucket).forEach(([pid, r]) => {
       if (!byPerson[pid]) byPerson[pid] = { name: (r && r.name) || 'Anonymous', score: 0, elapsed: 0 };
       if (r && r.name) byPerson[pid].name = r.name;

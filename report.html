@@ -21,6 +21,7 @@
 -->
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="/errors.js?v=1"></script>
+<script src="/qid.js?v=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
@@ -142,10 +143,23 @@ function answerText(q, raw){
    record = { presId, presName, date(ms|null), source, qIdx, qText, qType, options,
               correctAnswer, pid, name, answer, isCorrect, elapsed } */
 function pushDataset(out, presId, presName, source, date, questions, responses){
-  // responses is { qId: { pid: resp } } where qId = `q<idx>_stable_<code>`.
+  // responses is { bucketKey: { pid: resp } }. Legacy buckets encode the question's
+  // original index (`q<idx>_stable_<code>`); buckets for questions created after
+  // stable ids shipped do not. Match by the question's own bucket first and only fall
+  // back to parsing an index out of the key — see qid.js.
+  // Map each question to its bucket by its OWN id (bucket = `<id>_<sessionCode>`),
+  // so a question created after stable ids shipped is still found. The old code
+  // required the key to encode an index and returned early otherwise — which would
+  // have dropped those responses from every report without a word.
+  const _qs = qArr(questions);
+  const _byId = {};
+  _qs.forEach((q, i) => { if (q && q.id) _byId[q.id] = i; });
   Object.entries(responses||{}).forEach(([qId, byPid]) => {
-    const m = /^q(\d+)_stable_/.exec(qId); if (!m) return;
-    const qIdx = +m[1]; const q = qArr(questions)[qIdx] || { text:'', type:'', options:null, correctAnswer:null };
+    let qIdx = null;
+    for (const id in _byId) { if (qId.indexOf(id + '_') === 0) { qIdx = _byId[id]; break; } }
+    if (qIdx === null) { const m = /^q(\d+)_stable_/.exec(qId); if (m) qIdx = +m[1]; }
+    if (qIdx === null) return;
+    const q = _qs[qIdx] || { text:'', type:'', options:null, correctAnswer:null };
     Object.entries(byPid||{}).forEach(([pid, r]) => {
       out.push({ presId, presName, source, date: r.submittedAt || date || null,
         qIdx, qText:q.text||'', qType:q.type||'', options:q.options||null, correctAnswer:(q.correctAnswer!=null?q.correctAnswer:null),
@@ -335,7 +349,7 @@ function psStandings(mode, questions, all, code) {
   });
 
   qs.forEach((q, i) => {
-    const bucket = (all || {})['q' + i + '_stable_' + code] || {};
+    const bucket = (all || {})[PSQid.bucket(q, i, code)] || {};
     Object.entries(bucket).forEach(([pid, r]) => {
       const p = rowFor(pid);
       if (r && r.name) p.name = r.name;
@@ -484,14 +498,19 @@ async function makeRecap(){
       try { const gs = await fbDb.ref('sessions/'+PRES[presId].sessionCode+'/meta/gameMode').get();
             if (gs.exists() && gs.val()) gameMode = psModeOk(String(gs.val())); } catch(e){}
     }
+    // This is a synthetic round-trip: flattened records are rebuilt into the raw
+    // responses shape purely so psStandings() can score them exactly as the room saw
+    // it. The bucket names only have to agree between the two halves — so derive them
+    // from the SAME placeholder question objects psStandings will be handed, and they
+    // agree by construction rather than by coincidence.
+    const maxQ = data.reduce((m,r)=>Math.max(m, r.qIdx), -1);
+    const orderedQs = Array.from({length:maxQ+1},()=>({}));
     const rebuilt = {};
     data.forEach(r=>{
-      const key = 'q'+r.qIdx+'_stable_'+code;
+      const key = PSQid.bucket(orderedQs[r.qIdx], r.qIdx, code);
       (rebuilt[key] = rebuilt[key] || {})[r.pid] = {
         name:r.name, team:r.team||null, isCorrect:r.isCorrect, elapsed:r.elapsed||0, wager:r.wager||null };
     });
-    const maxQ = data.reduce((m,r)=>Math.max(m, r.qIdx), -1);
-    const orderedQs = Array.from({length:maxQ+1},()=>({}));
     const people = psStandings(gameMode, orderedQs, rebuilt, code);
     const graded = data.filter(r=>r.isCorrect===true||r.isCorrect===false).length > 0;
     // psStandings already ranks for the mode (survival puts survivors first), so keep

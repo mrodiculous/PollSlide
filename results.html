@@ -7,6 +7,7 @@
 <meta name="robots" content="noindex">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="/errors.js?v=1"></script>
+<script src="/qid.js?v=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <style>
@@ -70,7 +71,7 @@ function computeTally(questions, all, code) {
     const _ca = q.correctAnswer;
     const qHasCorrect = _ca !== undefined && _ca !== null && _ca !== '' && !(Array.isArray(_ca) && _ca.length === 0);
     if (qHasCorrect) hasCorrect = true;
-    const bucket = all['q' + i + '_stable_' + code] || {};
+    const bucket = all[PSQid.bucket(q, i, code)] || {};
     let correctSum = 0, total = 0; const optCounts = {};
     Object.entries(bucket).forEach(([pid, r]) => {
       total++;

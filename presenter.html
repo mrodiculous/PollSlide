@@ -9,6 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="/errors.js?v=1"></script>
 <script src="/present-display.js?v=1"></script>
+<script src="/qid.js?v=1"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root {
@@ -1589,6 +1590,7 @@ function acceptCopilot(i, launchNow) {
     image: '', timer: 0, displayMode: 'bars', revealDelay: 30,
     postReveal: { enabled: false, type: 'leaderboard', explainerText: '', advanceDelay: 'manual' }
   };
+  if (!q.id) q.id = PSQid.fresh();
   questions.push(q);
   presentations[activePresId].questions = questions;
   const idx = questions.length - 1;
@@ -2300,6 +2302,10 @@ async function saveCurrentPresentation() {
   if (!activePresId) return;
   try {
     const pres = presentations[activePresId];
+    // Last line of defence: any question that reached here without an id (imported,
+    // pasted, restored from an old backup) gets one before it is persisted, so a
+    // later reorder can never orphan its answers.
+    PSQid.backfill(Array.isArray(pres.questions) ? pres.questions : []);
     // Save full presentation record
     await db.ref(`users/${userId}/presentations/${activePresId}`).set(pres);
     // ALSO mirror questions to quiz_builder/sessionCode so participants can find them by QR.
@@ -2362,6 +2368,16 @@ function selectPresentation(id) {
 
   const pres = presentations[id];
   if (!pres) return;
+
+  // Give every question a permanent id, using its current index so the derived
+  // response bucket is byte-identical to the legacy key — no answers move. From
+  // here on the id travels with the question through reorders and deletes.
+  // See qid.js.
+  const qarr = toQArr(pres.questions);
+  if (PSQid.backfill(qarr)) {
+    pres.questions = qarr;
+    if (userId) db.ref(`users/${userId}/presentations/${id}/questions`).set(qarr).catch(() => {});
+  }
 
   // Stamp last-opened so "Recent" sorting reflects what you actually work on,
   // not what you happened to create first. Fire-and-forget: a failed write must
@@ -3701,7 +3717,8 @@ function renderSurveyDashboard(pres, all) {
   Object.values(all || {}).forEach(byPid => Object.keys(byPid || {}).forEach(pid => people.add(pid)));
   const rc = document.getElementById('respCounter'); if (rc) rc.textContent = people.size;
   const rows = qs.map((q, i) => {
-    const resp = all[`q${i}_stable_${code}`] ? Object.values(all[`q${i}_stable_${code}`]) : [];
+    const _bk = PSQid.bucket(qs[i], i, code);
+    const resp = all[_bk] ? Object.values(all[_bk]) : [];
     const n = resp.length;
     let summary = '<span style="color:var(--muted);">No responses yet</span>';
     if (n > 0 && q.type === 'rating') {
@@ -3745,7 +3762,7 @@ function computeTally(questions, all, code) {
     const _ca = q.correctAnswer;
     const qHasCorrect = _ca !== undefined && _ca !== null && _ca !== '' && !(Array.isArray(_ca) && _ca.length === 0);
     if (qHasCorrect) hasCorrect = true;
-    const bucket = all['q' + i + '_stable_' + code] || {};
+    const bucket = all[PSQid.bucket(q, i, code)] || {};
     let correctSum = 0, total = 0;
     const optCounts = {};
     Object.entries(bucket).forEach(([pid, r]) => {
@@ -4013,7 +4030,7 @@ async function launchQuestion(idx, opts) {
   liveQIdx = idx;
   const q    = questions[idx];
   // Use stable qId so participant responses always match regardless of when launched
-  const qId  = `q${idx}_stable_${presentations[activePresId].sessionCode}`;
+  const qId  = PSQid.bucket(q, idx, presentations[activePresId].sessionCode);
   liveQId    = qId;
   const code = presentations[activePresId].sessionCode;
   // Persist so page reload restores live state
@@ -5147,7 +5164,7 @@ async function showTally() {
 async function resetQuestionTally(qIdx) {
   if (!activePresId) return;
   const code = presentations[activePresId].sessionCode;
-  const stableQId = `q${qIdx}_stable_${code}`;
+  const stableQId = PSQid.bucket(questions[qIdx], qIdx, code);
   try {
     // Step 1: Detach listeners
     if (respListener) { respListener(); respListener = null; }
@@ -5190,7 +5207,7 @@ async function showPresTally(presId) {
   const respondents = {}; // participantId → { name, perQ: {} }
 
   qs.forEach((q, qIdx) => {
-    const stableQId = `q${qIdx}_stable_${code}`;
+    const stableQId = PSQid.bucket(questions[qIdx], qIdx, code);
     const qResps = allResp[stableQId] || {};
     Object.entries(qResps).forEach(([pid, r]) => {
       if (!respondents[pid]) {
@@ -5307,7 +5324,7 @@ async function showQuestionTally(qIdx) {
   document.getElementById('tallyModal').classList.remove('hidden');
 
   // Read directly from this question's response bucket — no shared participants node
-  const stableQId = `q${qIdx}_stable_${code}`;
+  const stableQId = PSQid.bucket(questions[qIdx], qIdx, code);
   const respSnap  = await db.ref(`sessions/${code}/responses/${stableQId}`).get();
 
   if (!respSnap.exists()) {
@@ -5408,9 +5425,9 @@ function addQuestion() {
   if (!activePresId) return;
   // Study sets default to a flashcard (front/back); other products to a poll/quiz question.
   if (presType(presentations[activePresId]) === 'study') {
-    questions.push({ type:'flashcard', front:'', back:'' });
+    questions.push({ id: PSQid.fresh(), type:'flashcard', front:'', back:'' });
   } else {
-    questions.push({ text:'', type:'multiple_choice', options:[{text:'',img:''},{text:'',img:''},{text:'',img:''},{text:'',img:''}], correctAnswer:0, image:'', timer:0, displayMode:'bars', revealDelay:30, postReveal:{ enabled:false, type:'leaderboard', explainerText:'', advanceDelay:'manual' } });
+    questions.push({ id: PSQid.fresh(), text:'', type:'multiple_choice', options:[{text:'',img:''},{text:'',img:''},{text:'',img:''},{text:'',img:''}], correctAnswer:0, image:'', timer:0, displayMode:'bars', revealDelay:30, postReveal:{ enabled:false, type:'leaderboard', explainerText:'', advanceDelay:'manual' } });
   }
   presentations[activePresId].questions = questions;
   syncStudyButtons();       // first card added → the study buttons become available
@@ -5540,7 +5557,7 @@ function psStandings(mode, questions, all, code) {
   });
 
   qs.forEach((q, i) => {
-    const bucket = (all || {})['q' + i + '_stable_' + code] || {};
+    const bucket = (all || {})[PSQid.bucket(q, i, code)] || {};
     Object.entries(bucket).forEach(([pid, r]) => {
       const p = rowFor(pid);
       if (r && r.name) p.name = r.name;
@@ -5802,6 +5819,7 @@ async function runPolly() {
     let added = 0;
     for (const gq of data.questions) {
       const q = pollyToQuestion(gq);   // emojis baked into the text; add images per-question if wanted
+      if (!q.id) q.id = PSQid.fresh();
       questions.push(q);
       added++;
     }
@@ -5926,7 +5944,7 @@ function showLiveOrEdit(idx) {
   liveStartedAt = savedStart;
 
   // Live view: use the stable qId so it always matches participant responses
-  const stableQId = `q${idx}_stable_${code}`;
+  const stableQId = PSQid.bucket(questions[idx], idx, code);
   liveQIdx = idx;
   liveQId  = stableQId;
   renderLiveView(idx, stableQId, questions[idx]);
@@ -7004,7 +7022,7 @@ let _reportData = null; // cached for CSV export
 function responsesToCSV(qs, allData, code) {
   const rows = [['Participant','Question #','Question Text','Question Type','Answer','Correct?','Time (ms)','Submitted']];
   toQArr(qs).forEach((q, idx) => {
-    const qId = 'q' + idx + '_stable_' + code;
+    const qId = PSQid.bucket(questions[idx], idx, code);
     const raw = allData[qId] ? Object.values(allData[qId]) : [];
     raw.forEach(resp => {
       let ans = resp.answer;
@@ -7328,7 +7346,7 @@ async function openReport() {
 
   // Aggregate per question
   const report = qs.map((q, idx) => {
-    const qId = 'q' + idx + '_stable_' + code;
+    const qId = PSQid.bucket(questions[idx], idx, code);
     const raw = allData[qId] ? Object.values(allData[qId]) : [];
     const totalResponses = raw.length;
     const correctCount = raw.filter(r => r.isCorrect === true).length;
@@ -7545,7 +7563,7 @@ async function aiGradeQuestion(idx){
     const d = await resp.json().catch(() => ({}));
     if (!resp.ok || !d.ok || !Array.isArray(d.grades)) throw new Error(d.error || 'Failed');
     const byId = {}; d.grades.forEach(g => { byId[g.id] = g; });
-    const qId = 'q'+idx+'_stable_'+code; let correct = 0;
+    const qId = PSQid.bucket(questions[idx], idx, code); let correct = 0;
     for (const resp2 of r.raw) {
       const g = byId[resp2.participantId || resp2.name]; if (!g) continue;
       const isC = g.correct === true ? true : (typeof g.score === 'number' ? g.score >= 0.6 : false);

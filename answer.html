@@ -160,6 +160,7 @@
 <div id="app"></div>
 
 <script src="/errors.js?v=1"></script>
+<script src="/qid.js?v=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script>
@@ -243,6 +244,11 @@ let _aliveCount    = null;    // survival: how many players are still in (for th
 let _streakCount   = 0;       // streak: this player's current run of correct answers
 let _wagerPick     = 1;       // wager: multiplier chosen for THIS question
 let _wagerLocked   = false;   // wager: has the bet been placed for this question?
+// The presenter is the authority on which bucket a question's answers belong in —
+// publishLive() puts it on currentQuestion.id. _liveQ holds whatever we last saw, so
+// the bucket follows the question through a reorder instead of following the slot.
+let _liveQ         = null;    // { id, qIndex, ... } as published on currentQuestion
+let _modeQuestions = [];      // the deck's questions, for survival/streak ordering
 
 // Recompute this player's per-mode state from the session's own responses. Runs before
 // each question paints. Everything is best-effort: if the read fails the player just
@@ -251,14 +257,23 @@ async function refreshModeState() {
   _survivalOut = false; _survivedCount = 0; _streakCount = 0; _aliveCount = null;
   if (GAME_MODE !== 'survival' && GAME_MODE !== 'streak') return;
   try {
+    // Ordering comes from the deck, so make sure we have it. Cheap and cached.
+    if (!_modeQuestions.length) {
+      const qs = await db.ref(`quiz_builder/${SESSION}/questions`).get();
+      const v = qs.exists() ? qs.val() : null;
+      _modeQuestions = Array.isArray(v) ? v.filter(Boolean) : (v ? Object.values(v).filter(Boolean) : []);
+    }
     const snap = await db.ref(`sessions/${SESSION}/responses`).get();
     if (!snap.exists()) return;
     const all = snap.val() || {};
-    // Walk questions in order — both survival and streak depend on sequence.
-    const keys = Object.keys(all)
-      .map(k => ({ k, i: (/^q(\d+)_stable_/.exec(k) || [])[1] }))
-      .filter(x => x.i !== undefined)
-      .sort((a, b) => Number(a.i) - Number(b.i));
+    // Walk questions in DECK order — both survival and streak depend on sequence.
+    // This used to parse the index back out of the bucket key, which only worked
+    // while keys encoded a position; a question with a real id carries no index, and
+    // its bucket was silently skipped. Order comes from the question list instead.
+    const order = (_modeQuestions && _modeQuestions.length)
+      ? _modeQuestions.map((q, i) => PSQid.bucket(q, i, SESSION))
+      : Object.keys(all).sort();
+    const keys = order.filter(k => all[k]).map(k => ({ k }));
     const perPlayerOut = {};
     for (const { k } of keys) {
       const bucket = all[k] || {};
@@ -306,7 +321,10 @@ let answerStartTime = null;
 
 // stableQId is the Firebase key for this question's response bucket
 // Path: sessions/SESSION/responses/STABLE_QID/PARTICIPANT_ID
-let STABLE_QID = `q${Q_INDEX}_stable_${SESSION}`;   // recomputed by goToQuestion on advance
+// The presenter publishes the authoritative bucket id on currentQuestion.id
+// (see publishLive). Trusting that instead of recomputing from the index is what
+// keeps answers attached to the right question when a deck is reordered.
+let STABLE_QID = `q${Q_INDEX}_stable_${SESSION}`;   // replaced as soon as we read currentQuestion
 
 // ─── RENDER ───────────────────────────────────────────────────────────────────
 function render(html) {
@@ -773,10 +791,18 @@ async function followLive(){
     } catch(e){}
   }
   if (!follow) return;
-  db.ref(`sessions/${SESSION}/currentQuestion/qIndex`).on('value', snap => {
-    const idx = snap.exists() ? Number(snap.val()) : NaN;
+  // Watch the whole node rather than just qIndex: currentQuestion.id IS the bucket the
+  // presenter writes answers to, and guessing it from the index is exactly what broke
+  // when a deck was reordered.
+  db.ref(`sessions/${SESSION}/currentQuestion`).on('value', snap => {
+    const cq = snap.exists() ? snap.val() : null;
+    if (!cq) return;
+    if (cq.id) _liveQ = cq;
+    const idx = cq.qIndex != null ? Number(cq.qIndex) : NaN;
     if (!isNaN(idx) && idx >= 0 && idx !== Q_INDEX) {
       goToQuestion(idx);   // IN-PLACE swap — no full page reload (fast + reliable on mobile)
+    } else if (cq.id && !isNaN(idx) && idx === Q_INDEX) {
+      STABLE_QID = cq.id;  // same question, but now we know its real bucket
     }
   });
 }
@@ -787,7 +813,9 @@ async function followLive(){
 function goToQuestion(idx){
   if (idx === Q_INDEX) return;
   Q_INDEX = idx;
-  STABLE_QID = `q${idx}_stable_${SESSION}`;
+  STABLE_QID = (_liveQ && _liveQ.id && Number(_liveQ.qIndex) === idx)
+    ? _liveQ.id
+    : PSQid.bucket(null, idx, SESSION);   // legacy key until the presenter tells us
   // Clean per-question interaction state so the new question starts fresh.
   answered = false; submitting = false;
   selectedOptions = new Set();
@@ -1246,6 +1274,7 @@ async function loadSurvey() {
   } catch(e) { qs = []; }
   // Firebase may return an object if keys are sparse — normalize to array.
   surveyQuestions = Array.isArray(qs) ? qs.filter(Boolean) : Object.values(qs).filter(Boolean);
+  _modeQuestions = surveyQuestions;
 
   // What product is this? (Presenter publishes productType to quiz_builder.)
   try {
@@ -1426,7 +1455,7 @@ async function submitSurvey() {
     if (!surveyIsAnswered(idx)) return; // skip blanks
     let answer      = surveyAnswers[idx];
     if (q.type === 'free_text' && typeof answer === 'string') answer = moderateText(answer);
-    const stableQId = `q${idx}_stable_${SESSION}`;
+    const stableQId = PSQid.bucket(q, idx, SESSION);
     const isCorrect = surveyComputeCorrect(q, answer);
     writes.push(
       db.ref(`sessions/${SESSION}/responses/${stableQId}/${participantId}`).set({

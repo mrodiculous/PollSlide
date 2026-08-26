@@ -8,6 +8,7 @@
 
 <!-- Firebase -->
 <script src="/errors.js?v=1"></script>
+<script src="/qid.js?v=1"></script>
 <script src="/present-display.js?v=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
@@ -647,7 +648,7 @@ function showQuestion(q) {
   stopWarmup(); const _wc = document.getElementById('warmupCard'); if (_wc) _wc.style.display = 'none';
   currentQ = q;
   const idx  = q.qIndex !== undefined ? q.qIndex : (q.index ? q.index - 1 : 0);
-  const qId  = q.id || `q${idx}_stable_${sessionCode}`;
+  const qId  = PSQid.bucket(q, idx, sessionCode);
   const code = sessionCode;
 
   // Reset reveal state for new question
@@ -729,7 +730,7 @@ function doReveal() {
   // Re-render chart with correct answer highlights
   if (currentQ && responsesListener) {
     const idx = currentQ.qIndex !== undefined ? currentQ.qIndex : (currentQ.index ? currentQ.index - 1 : 0);
-    const qId = currentQ.id || `q${idx}_stable_${sessionCode}`;
+    const qId = PSQid.bucket(currentQ, idx, sessionCode);
     db.ref(`sessions/${sessionCode}/responses/${qId}`).get().then(snap => {
       const all = snap.exists() ? Object.values(snap.val()) : [];
       renderChart(currentQ, liveStartedAt > 0 ? all.filter(r=>(r.submittedAt||0)>=liveStartedAt) : all);
@@ -819,7 +820,7 @@ function psStandings(mode, questions, all, code) {
   });
 
   qs.forEach((q, i) => {
-    const bucket = (all || {})['q' + i + '_stable_' + code] || {};
+    const bucket = (all || {})[PSQid.bucket(q, i, code)] || {};
     Object.entries(bucket).forEach(([pid, r]) => {
       const p = rowFor(pid);
       if (r && r.name) p.name = r.name;

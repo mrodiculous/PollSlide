@@ -22,6 +22,7 @@
 -->
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="/errors.js?v=1"></script>
+<script src="/qid.js?v=1"></script>
 <script src="/present-display.js?v=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
@@ -1406,7 +1407,7 @@ function qrPresent(s){ return `<div class="qr-card" style="bottom:9%;"><div clas
 function afterPresentQR(s){ const box=document.querySelector('#pStage .qr-card .qrbox'); if(box)renderQR(box, answerUrl(s)); }
 function respFor(s){ const fx=window.__PRESENT_FIXTURE; if(fx&&fx.responses&&fx.responses[s.id])return fx.responses[s.id]; return _liveResp[s.id]||[]; }
 function attachLive(s){ const fx=window.__PRESENT_FIXTURE; if(fx&&fx.responses&&fx.responses[s.id])return; if(_liveSlide===s.id)return; detachLive(); _liveSlide=s.id;
-  if(typeof fbDb==='undefined'||!fbDb||!s.question.sessionCode)return; const code=s.question.sessionCode,qId='q'+(s.question.qIndex||0)+'_stable_'+code; const ref=fbDb.ref('sessions/'+code+'/responses/'+qId);
+  if(typeof fbDb==='undefined'||!fbDb||!s.question.sessionCode)return; const code=s.question.sessionCode,qId=PSQid.bucket(s.question,(s.question.qIndex||0),code); const ref=fbDb.ref('sessions/'+code+'/responses/'+qId);
   const fn=ref.on('value',sn=>{ _liveResp[s.id]=sn.exists()?Object.values(sn.val()):[]; if(deck.slides[presentIdx]&&deck.slides[presentIdx].id===s.id)paintLive(s); }); _liveUnsub=()=>ref.off('value',fn); }
 function detachLive(){ if(_liveUnsub){_liveUnsub();_liveUnsub=null;} _liveSlide=null; }
 function paintLive(s){ const st=document.getElementById('pStage'); st.querySelectorAll(':scope > *:not(.p-logo)').forEach(n=>n.remove());
@@ -1587,7 +1588,7 @@ async function resetTallies(){
     const ts=Date.now();
     for(const [code,list] of Object.entries(byCode)){
       const responses={}; let any=false;
-      for(const t of list){ const qId='q'+t.idx+'_stable_'+code;
+      for(const t of list){ const qId=PSQid.bucket(t.q, t.idx, code);
         const snap=await fbDb.ref('sessions/'+code+'/responses/'+qId).get();
         if(snap.exists()){ responses[qId]=snap.val(); any=true; } }
       if(any){ // archive first — the report's history keeps every answer
@@ -1596,7 +1597,7 @@ async function resetTallies(){
           questions:list.map(t=>({ text:t.q.text||t.q.front||'', type:t.q.type||'', options:t.q.options||null,
             correctAnswer:(t.q.correctAnswer!=null?t.q.correctAnswer:null) })), responses });
       }
-      for(const t of list){ await fbDb.ref('sessions/'+code+'/responses/q'+t.idx+'_stable_'+code).remove(); }
+      for(const t of list){ await fbDb.ref('sessions/'+code+'/responses/'+PSQid.bucket(t.q, t.idx, code)).remove(); }
     }
     toast('✓ Tallies cleared — answers saved to your report history.');
   }catch(e){ toast('Could not reset — try again.'); }
