@@ -207,6 +207,13 @@
   .type-chip { font-size:8.5px; font-weight:700; letter-spacing:0.05em; padding:1px 5px; border-radius:20px; text-transform:uppercase; background:rgba(255,255,255,0.08); color:var(--muted); margin-left:5px; flex-shrink:0; }
   .row-check { width:18px; height:18px; flex-shrink:0; border-radius:5px; border:1.5px solid var(--border2); display:flex; align-items:center; justify-content:center; font-size:11px; color:#fff; cursor:pointer; }
   .row-check.on { background:var(--accent); border-color:var(--accent); }
+  .collab-bar { display:flex; flex-wrap:wrap; gap:5px; padding:7px 9px; background:rgba(67,233,123,0.10); border-top:1px solid var(--border); border-bottom:1px solid var(--border); flex-shrink:0; }
+  .collab-chip { font-size:10.5px; font-weight:600; padding:3px 9px; border-radius:20px; background:rgba(67,233,123,0.16); color:var(--accent3); white-space:nowrap; }
+  .collab-chip.owner { background:rgba(108,99,255,0.16); color:var(--accent); }
+  .collab-chip.idle { background:var(--surface2); color:var(--muted); }
+  .q-locked { opacity:.62; position:relative; }
+  .q-lock-tag { font-size:9.5px; font-weight:700; padding:1px 6px; border-radius:20px; background:rgba(247,183,49,0.18); color:var(--accent4); margin-left:6px; white-space:nowrap; }
+  .shared-tag { font-size:8.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; padding:1px 5px; border-radius:20px; background:rgba(108,99,255,0.18); color:var(--accent); margin-left:5px; flex-shrink:0; }
   #rowMenu { position:fixed; z-index:100000; background:var(--surface2); border:1px solid var(--border2); border-radius:10px; padding:5px; min-width:196px; box-shadow:0 12px 34px rgba(0,0,0,0.5); }
   #rowMenu .rm-item { display:flex; align-items:center; gap:9px; width:100%; padding:7px 10px; border:none; background:transparent; color:var(--text); font-size:12.5px; font-family:'DM Sans',sans-serif; text-align:left; border-radius:7px; cursor:pointer; }
   #rowMenu .rm-item:hover { background:var(--surface3); }
@@ -549,6 +556,7 @@
         <button class="btn btn-ghost btn-sm" id="bulkArchive" onclick="bulkArchive()">📦 Archive</button>
         <button class="btn btn-ghost btn-sm" id="bulkDelete" onclick="bulkDelete()" style="color:var(--accent2);">🗑</button>
       </div>
+      <div class="collab-bar" id="collabBar" style="display:none;"></div>
       <div class="pres-list" id="presList">
         <div style="padding:16px;text-align:center;color:var(--muted);font-size:12px;">No presentations yet.</div>
       </div>
@@ -2258,9 +2266,57 @@ let renamePresTarget = null;
 // ─── SAVE STATUS ──────────────────────────────────────────────────────────────
 function markSaving() { document.getElementById('saveDot').className='save-dot saving'; document.getElementById('saveText').textContent='Saving...'; }
 function markSaved()  { document.getElementById('saveDot').className='save-dot'; document.getElementById('saveText').textContent='Saved'; }
-function scheduleSave() { markSaving(); clearTimeout(saveTimeout); saveTimeout=setTimeout(saveCurrentPresentation, 800); }
+function scheduleSave() {
+  // A remote edit repaints the editor, which fires the same change handlers a human
+  // would. Saving here would bounce their change straight back at them.
+  if (_applyingRemote) return;
+  markSaving(); clearTimeout(saveTimeout); saveTimeout=setTimeout(saveCurrentPresentation, 800);
+}
 
 // ─── PRESENTATIONS — LOAD / SAVE ─────────────────────────────────────────────
+/* ── COLLABORATION: where does a deck actually live? ──────────────────────────
+ * A deck someone shared with you for editing stays in THEIR tree — you hold a grant,
+ * not a copy. So every read and write has to address the owner's path, not yours.
+ * collabDecks maps presId → { ownerUid, ... } for those; anything absent is your own.
+ * Kept out of `presentations` itself so a runtime marker can never be persisted into
+ * a deck record by a whole-object save. */
+let collabDecks = {};
+
+function deckOwnerUid(id) {
+  const c = collabDecks[id];
+  return (c && c.ownerUid) ? c.ownerUid : userId;
+}
+function deckPath(id) { return `users/${deckOwnerUid(id)}/presentations/${id}`; }
+function isCollabDeck(id) { return !!collabDecks[id]; }
+function isDeckOwner(id) { return !isCollabDeck(id); }
+
+// Decks other people have let me edit. Loaded from collabIndex (rules can't filter
+// queries, so the index is what makes them discoverable at all), then read from the
+// owner's tree — which only succeeds while the grant still exists.
+async function loadCollabDecks() {
+  collabDecks = {};
+  if (!userId) return;
+  let idx = {};
+  try {
+    const snap = await db.ref(`collabIndex/${userId}`).get();
+    idx = snap.exists() ? (snap.val() || {}) : {};
+  } catch (e) { return; }
+  for (const entry of Object.values(idx)) {
+    if (!entry || !entry.ownerUid || !entry.presId) continue;
+    try {
+      const d = await db.ref(`users/${entry.ownerUid}/presentations/${entry.presId}`).get();
+      if (!d.exists()) continue;                 // owner deleted it, or the grant is gone
+      const deck = d.val();
+      presentations[entry.presId] = deck;
+      collabDecks[entry.presId] = { ownerUid: entry.ownerUid, ownerEmail: entry.ownerEmail || '', role: entry.role || 'edit' };
+    } catch (e) {
+      // Access was revoked, or the owner deleted the deck. The owner can remove the
+      // grant but cannot touch MY index (rules scope it to me), so I prune it here.
+      db.ref(`collabIndex/${userId}/${entry.ownerUid}_${entry.presId}`).remove().catch(() => {});
+    }
+  }
+}
+
 async function loadPresentations() {
   purgeOldTrash();   // clear trash older than 30 days (fire-and-forget)
   await loadEmptyFolders();   // folders that exist but hold nothing yet
@@ -2271,6 +2327,8 @@ async function loadPresentations() {
       presentations = snap.val() || {};
     }
   } catch(e) { console.error('Load failed', e); }
+
+  await loadCollabDecks();   // decks other people let me edit
 
   // Restore last active — and land on its product tab so it's visible in the list.
   const lastActive = localStorage.getItem('ql_active_pres');
@@ -2293,7 +2351,11 @@ async function loadPresentations() {
 
 async function saveAllPresentations() {
   try {
-    await db.ref(`users/${userId}/presentations`).set(presentations);
+    // Only decks you OWN. A deck you merely collaborate on lives in its owner's tree;
+    // writing it here would silently fork their work into your account.
+    const mine = {};
+    Object.keys(presentations).forEach(id => { if (isDeckOwner(id)) mine[id] = presentations[id]; });
+    await db.ref(`users/${userId}/presentations`).set(mine);
     markSaved();
   } catch(e) { document.getElementById('saveText').textContent='Save failed'; }
 }
@@ -2307,7 +2369,7 @@ async function saveCurrentPresentation() {
     // later reorder can never orphan its answers.
     PSQid.backfill(Array.isArray(pres.questions) ? pres.questions : []);
     // Save full presentation record
-    await db.ref(`users/${userId}/presentations/${activePresId}`).set(pres);
+    await db.ref(deckPath(activePresId)).set(pres);
     // ALSO mirror questions to quiz_builder/sessionCode so participants can find them by QR.
     // Publish productType too so the participant page knows whether to grade (quiz) or not.
     if (pres.sessionCode && pres.questions) {
@@ -2350,7 +2412,7 @@ async function createPresentation(thenPolly = false) {
     questions: []
   };
 
-  await db.ref(`users/${userId}/presentations/${id}`).set(presentations[id]);
+  await db.ref(deckPath(id)).set(presentations[id]);
   renderPresList();
   selectPresentation(id);
   if (thenPolly === true) {
@@ -2376,18 +2438,20 @@ function selectPresentation(id) {
   const qarr = toQArr(pres.questions);
   if (PSQid.backfill(qarr)) {
     pres.questions = qarr;
-    if (userId) db.ref(`users/${userId}/presentations/${id}/questions`).set(qarr).catch(() => {});
+    if (userId) db.ref(deckPath(id) + '/questions').set(qarr).catch(() => {});
   }
 
   // Stamp last-opened so "Recent" sorting reflects what you actually work on,
   // not what you happened to create first. Fire-and-forget: a failed write must
   // never block opening a deck.
   pres.lastOpenedAt = Date.now();
-  if (userId) db.ref(`users/${userId}/presentations/${id}/lastOpenedAt`).set(pres.lastOpenedAt).catch(() => {});
+  if (userId && isDeckOwner(id)) db.ref(deckPath(id) + '/lastOpenedAt').set(pres.lastOpenedAt).catch(() => {});
 
   // "+ New" and the setup panel follow the selected deck's type. The list FILTER
   // (typeFilter) is left alone — jumping the filter around under someone who is
   // browsing "All" would be hostile.
+  startCollab(id);   // live sync + presence; a no-op for a deck nobody shares
+
   const pt = presType(pres);
   if (pt !== activeProduct) { activeProduct = pt; localStorage.setItem('ql_active_product', pt); renderProductTabs(); }
 
@@ -2452,6 +2516,8 @@ function selectPresentation(id) {
 
 // ─── DELETE / RENAME PRESENTATIONS ───────────────────────────────────────────
 function openDeletePres(id) {
+  // You can't delete someone else's deck — you leave it.
+  if (isCollabDeck(id)) { leaveCollab(id); return; }
   deletePresTarget = id;
   document.getElementById('deletePresName').textContent = presentations[id]?.name || 'this presentation';
   document.getElementById('deletePresModal').classList.remove('hidden');
@@ -2466,6 +2532,9 @@ async function doDeletePres() {
   // hard-deleting, so an accidental delete can be undone or restored for 30 days.
   const snapshot = presentations[id];
   try { await db.ref(`users/${userId}/trash/${id}`).set(Object.assign({}, snapshot, { _deletedAt: Date.now() })); } catch (e) {}
+  // End any collaboration on it first, so nobody is left holding a grant to a deck
+  // that no longer exists.
+  await db.ref(`deckGrants/${userId}/${id}`).remove().catch(() => {});
   await db.ref(`users/${userId}/presentations/${id}`).remove();
   delete presentations[id];
 
@@ -2558,7 +2627,7 @@ async function doRenamePres() {
   const name = document.getElementById('renameInput').value.trim();
   if (!name) return;
   presentations[renamePresTarget].name = name;
-  await db.ref(`users/${userId}/presentations/${renamePresTarget}/name`).set(name);
+  await db.ref(deckPath(renamePresTarget) + '/name').set(name);
   if (renamePresTarget === activePresId) {
     const pres = presentations[activePresId];
     document.getElementById('activePres').innerHTML = `<strong>${pres.name}</strong> <span style="font-size:11px;color:var(--muted);margin-left:4px;">· ${pres.sessionCode}</span>`;
@@ -2671,7 +2740,7 @@ async function makeStudySet(srcId) {
     id, name: src.name + ' — Study', sessionCode: code,
     createdAt: Date.now(), productType: 'study', questions: cards
   };
-  await db.ref(`users/${userId}/presentations/${id}`).set(presentations[id]);
+  await db.ref(deckPath(id)).set(presentations[id]);
   await db.ref(`quiz_builder/${code}/questions`).set(cards);
   await db.ref(`quiz_builder/${code}/productType`).set('study');
 
@@ -2717,7 +2786,7 @@ async function copyPresToProduct(srcId, targetType) {
   const code = genCode();
   const base = src.name.replace(/ — (Poll|Survey|Quiz|Study)$/, '');
   presentations[id] = { id, name: base + ' — ' + PRODUCTS[targetType].name.replace('Slide',''), sessionCode: code, createdAt: Date.now(), productType: targetType, questions: newQs };
-  await db.ref(`users/${userId}/presentations/${id}`).set(presentations[id]);
+  await db.ref(deckPath(id)).set(presentations[id]);
   await db.ref(`quiz_builder/${code}/questions`).set(newQs);
   await db.ref(`quiz_builder/${code}/productType`).set(targetType);
   activeProduct = targetType;
@@ -2776,7 +2845,7 @@ async function doCopyQuestion(targetPresId) {
   presentations[targetPresId].questions = targetQs;
 
   const code = presentations[targetPresId].sessionCode;
-  await db.ref(`users/${userId}/presentations/${targetPresId}/questions`).set(targetQs);
+  await db.ref(deckPath(targetPresId) + '/questions').set(targetQs);
   await db.ref(`quiz_builder/${code}/questions`).set(targetQs);
   await db.ref(`quiz_builder/${code}/productType`).set(presType(presentations[targetPresId]));
 
@@ -3168,7 +3237,7 @@ function deckRow(id, p, opts) {
   return `<div class="pres-item ${isA ? 'active' : ''}" onclick="${selectMode ? `toggleSelect('${escAttr(id)}')` : `selectPresentation('${escAttr(id)}')`}">
     ${check}
     <div class="pres-meta">
-      <div class="pres-name"><span class="pres-name-text">${escapeHtml(p.name || 'Untitled')}</span>${p.pinned ? '<span class="pin-star">★</span>' : ''}<span class="type-chip">${escapeHtml(t.charAt(0).toUpperCase() + t.slice(1))}</span></div>
+      <div class="pres-name"><span class="pres-name-text">${escapeHtml(p.name || 'Untitled')}</span>${p.pinned ? '<span class="pin-star">★</span>' : ''}<span class="type-chip">${escapeHtml(t.charAt(0).toUpperCase() + t.slice(1))}</span>${isCollabDeck(id) ? '<span class="shared-tag">shared</span>' : ''}</div>
       <div class="pres-sub">${qn} ${unit}${when ? ' · ' + when : ''}${o.showPath && path ? ' · <span class="row-path">' + escapeHtml(path.replace(/\//g, ' › ')) + '</span>' : ''}</div>
     </div>
     <div class="pres-actions" onclick="event.stopPropagation();">
@@ -3210,17 +3279,28 @@ function popMenu(ev, items) {
 function openDeckMenu(id, ev) {
   const p = presentations[id]; if (!p) return;
   popMenu(ev, [
-    { icon: p.pinned ? '☆' : '★', label: p.pinned ? 'Unpin' : 'Pin to top', act: `togglePin('${escAttr(id)}')` },
-    { icon: '📁', label: 'Move to folder…', act: `openMoveModal(['${escAttr(id)}'])` },
-    { icon: '📤', label: 'Share with someone…', act: `openDeckShareModal('${escAttr(id)}')` },
+    // Pinning and folders are YOUR filing, but they'd be written onto the owner's
+    // record for a deck you only collaborate on — so they're offered on your own
+    // decks only. Renaming stays available: on a shared deck that's a shared edit,
+    // which is the point.
+    ...(isCollabDeck(id) ? [] : [
+      { icon: p.pinned ? '☆' : '★', label: p.pinned ? 'Unpin' : 'Pin to top', act: `togglePin('${escAttr(id)}')` },
+      { icon: '📁', label: 'Move to folder…', act: `openMoveModal(['${escAttr(id)}'])` },
+    ]),
+    { icon: '📤', label: 'Share a copy…', act: `openDeckShareModal('${escAttr(id)}')` },
+    ...(isCollabDeck(id)
+      ? [{ icon: '🚪', label: 'Leave this shared deck', act: `leaveCollab('${escAttr(id)}')`, danger: true }]
+      : [{ icon: '🤝', label: 'Build it together…', act: `openCollabModal('${escAttr(id)}')` }]),
     '-',
     { icon: '⧉',  label: 'Copy to another type…', act: `openCopyPresPicker('${escAttr(id)}')` },
     { icon: '📑', label: 'Duplicate', act: `openDuplicatePresentation('${escAttr(id)}')` },
     { icon: '✏️', label: 'Rename', act: `openRenamePres('${escAttr(id)}')` },
     { icon: '↺',  label: 'Reset tally', act: `confirmResetPres('${escAttr(id)}')` },
     '-',
-    { icon: p.archived ? '📤' : '📦', label: p.archived ? 'Unarchive' : 'Archive', act: `toggleArchive('${escAttr(id)}')` },
-    { icon: '🗑', label: 'Delete', act: `openDeletePres('${escAttr(id)}')`, danger: true },
+    ...(isCollabDeck(id) ? [] : [
+      { icon: p.archived ? '📤' : '📦', label: p.archived ? 'Unarchive' : 'Archive', act: `toggleArchive('${escAttr(id)}')` },
+      { icon: '🗑', label: 'Delete', act: `openDeletePres('${escAttr(id)}')`, danger: true },
+    ]),
   ]);
 }
 
@@ -3237,7 +3317,7 @@ async function setDeckField(id, field, value) {
   if (value === null || value === undefined || value === '') delete p[field];
   else p[field] = value;
   if (userId) {
-    await db.ref(`users/${userId}/presentations/${id}/${field}`)
+    await db.ref(deckPath(id) + '/' + field)
       .set(value === '' ? null : value).catch(() => {});
   }
 }
@@ -3357,6 +3437,12 @@ function closeMoveModal() { const m = document.getElementById('moveFolderModal')
 async function doMove(ids) {
   const typed = (document.getElementById('moveNew').value || '').trim();
   const target = normalizeFolder(typed || document.getElementById('moveTarget').value);
+  // A folder is YOUR filing system. Writing one onto a deck you only collaborate on
+  // would change how its owner sees their own library.
+  const shared = ids.filter(id => isCollabDeck(id));
+  ids = ids.filter(id => !isCollabDeck(id));
+  if (shared.length) toast(`${shared.length} shared deck${shared.length===1?'':'s'} can't be filed — ${shared.length===1?'it lives':'they live'} in the owner's library.`, 'warn');
+  if (!ids.length) { closeMoveModal(); clearSelection(); renderPresList(); return; }
   const updates = {};
   ids.forEach(id => {
     if (!presentations[id]) return;
@@ -3394,18 +3480,30 @@ async function shareApi(action, body) {
   return d;
 }
 
-function openDeckShareModal(id) {
+let _shareRole = 'copy';
+function openDeckShareModal(id, asCollab) {
   const p = presentations[id]; if (!p) return;
+  _shareRole = asCollab ? 'edit' : 'copy';
   let m = document.getElementById('deckShareModal');
   if (!m) { m = document.createElement('div'); m.id = 'deckShareModal'; m.className = 'overlay';
             m.onclick = e => { if (e.target === m) closeDeckShareModal(); }; document.body.appendChild(m); }
   const qn = toQArr(p.questions).length;
-  m.innerHTML = `<div class="modal" style="max-width:440px;">
+  const roleCard = (id2, icon, name, sub) => {
+    const on = id2 === _shareRole;
+    return `<button onclick="pickShareRole('${escAttr(id)}','${id2}')" style="flex:1;text-align:left;padding:11px 12px;border-radius:11px;cursor:pointer;font-family:inherit;
+      background:${on ? 'rgba(108,99,255,0.16)' : 'var(--surface2)'};border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};color:var(--text);">
+      <span style="display:block;font-size:17px;line-height:1.1;">${icon}</span>
+      <span style="display:block;font-family:Syne,sans-serif;font-weight:700;font-size:12.5px;margin-top:3px;">${name}</span>
+      <span style="display:block;font-size:10.5px;color:var(--muted);margin-top:2px;line-height:1.4;">${sub}</span>
+    </button>`;
+  };
+  m.innerHTML = `<div class="modal" style="max-width:460px;">
     <h2 style="margin-bottom:2px;">Share “${escapeHtml(p.name || 'Untitled')}”</h2>
-    <p style="color:var(--muted);font-size:12.5px;line-height:1.55;margin-bottom:14px;">
-      They get their <b>own copy</b> — ${qn} question${qn === 1 ? '' : 's'} — saved to their profile,
-      and can change it however they like. Your version stays exactly as it is.
-    </p>
+    <p style="color:var(--muted);font-size:12.5px;line-height:1.55;margin-bottom:11px;">${qn} question${qn === 1 ? '' : 's'}. Choose what they get.</p>
+    <div style="display:flex;gap:8px;margin-bottom:14px;">
+      ${roleCard('copy', '📤', 'Send a copy', 'Their own version to edit. Yours never changes.')}
+      ${roleCard('edit', '🤝', 'Build it together', 'You both edit this deck. You stay the owner.')}
+    </div>
     <label style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">Their email</label>
     <input id="deckShareEmail" type="email" placeholder="colleague@school.edu" autocomplete="off"
            style="width:100%;margin:6px 0 12px;padding:9px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;font-size:13px;">
@@ -3413,7 +3511,7 @@ function openDeckShareModal(id) {
     <textarea id="deckShareNote" rows="2" placeholder="Here's the Unit 3 quiz we talked about."
            style="width:100%;margin:6px 0 14px;padding:9px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;font-size:13px;font-family:inherit;resize:vertical;"></textarea>
     <div id="deckShareErr" style="display:none;color:var(--accent2);font-size:12px;margin-bottom:10px;"></div>
-    <button class="btn btn-primary" id="deckShareSendBtn" style="width:100%;" onclick="doDeckShare('${escAttr(id)}')">📤 Send copy</button>
+    <button class="btn btn-primary" id="deckShareSendBtn" style="width:100%;" onclick="doDeckShare('${escAttr(id)}')">${_shareRole === 'edit' ? '🤝 Send invite' : '📤 Send copy'}</button>
     <button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="closeDeckShareModal()">Cancel</button>
     <p style="color:var(--muted);font-size:11px;line-height:1.5;margin-top:12px;text-align:center;">
       They don't need a PollSlide account yet — it'll be waiting when they sign in.
@@ -3423,6 +3521,14 @@ function openDeckShareModal(id) {
   setTimeout(() => document.getElementById('deckShareEmail')?.focus(), 40);
 }
 function closeDeckShareModal() { const m = document.getElementById('deckShareModal'); if (m) m.remove(); }
+function pickShareRole(id, role) {
+  const email = document.getElementById('deckShareEmail')?.value || '';
+  const note  = document.getElementById('deckShareNote')?.value || '';
+  _shareRole = role === 'edit' ? 'edit' : 'copy';
+  openDeckShareModal(id, _shareRole === 'edit');
+  const e = document.getElementById('deckShareEmail'); if (e) e.value = email;
+  const n = document.getElementById('deckShareNote');  if (n) n.value = note;
+}
 
 async function doDeckShare(id) {
   const btn = document.getElementById('deckShareSendBtn');
@@ -3432,14 +3538,189 @@ async function doDeckShare(id) {
   err.style.display = 'none';
   btn.disabled = true; const old = btn.textContent; btn.textContent = 'Sending…';
   try {
-    await shareApi('send', { presId: id, toEmail: email, note });
+    await shareApi('send', { presId: id, toEmail: email, note, role: _shareRole });
+    const wasCollab = _shareRole === 'edit';
     closeDeckShareModal();
-    toast(`📤 Copy sent to ${email}`, 'success');
+    toast(wasCollab ? `🤝 Invited ${email} to build it with you` : `📤 Copy sent to ${email}`, 'success');
     refreshShareInbox();
   } catch (e) {
     err.textContent = e.message; err.style.display = 'block';
     btn.disabled = false; btn.textContent = old;
   }
+}
+
+/* ── LIVE COLLABORATION ────────────────────────────────────────────────────
+ * Two people editing one deck. The deck never leaves its owner's tree; the other
+ * person holds a grant that database rules check on every single write, so revoking
+ * takes effect on the next keystroke — there is no session to expire.
+ *
+ * Keeping concurrent edits safe without a rewrite:
+ *   • Both clients subscribe to the deck, so their question arrays stay identical.
+ *   • Editing a question claims a short lock on it; the other side sees who has it
+ *     and can't type into the same one.
+ *   • Structural changes (add / delete / reorder) take a whole-deck lock, because
+ *     they move every index at once.
+ * That is honest about what it protects: simultaneous edits to DIFFERENT questions
+ * are safe, and simultaneous edits to the SAME one are prevented rather than merged.
+ * ------------------------------------------------------------------------- */
+let _collabUnsub = null;      // live deck subscription
+let _presenceUnsub = null;    // who else is here
+let _presenceRef = null;      // my own presence node
+let _collabPeers = {};        // uid → { name, at, editingQid }
+let _lockedQids = {};         // qid → { uid, name } held by someone else
+let _applyingRemote = false;  // guard: don't echo a remote change back as a save
+
+const LOCK_TTL_MS = 25000;    // a lock older than this is treated as abandoned
+
+function collabRoot(id) { return `deckPresence/${deckOwnerUid(id)}/${id}`; }
+function collabActive(id) { return isCollabDeck(id) || (_collabPeers && Object.keys(_collabPeers).length > 0); }
+
+function stopCollab() {
+  if (_collabUnsub) { _collabUnsub(); _collabUnsub = null; }
+  if (_presenceUnsub) { _presenceUnsub(); _presenceUnsub = null; }
+  if (_presenceRef) { _presenceRef.remove().catch(() => {}); _presenceRef = null; }
+  _collabPeers = {}; _lockedQids = {};
+  renderCollabBar();
+}
+
+// Called whenever a deck is opened. Cheap for a deck nobody shares: one listener.
+function startCollab(id) {
+  stopCollab();
+  if (!userId || !id || !presentations[id]) return;
+
+  // 1. Follow the deck itself, so their edits appear here.
+  const dref = db.ref(deckPath(id));
+  const dcb = dref.on('value', snap => {
+    if (!snap.exists()) {
+      // The owner deleted it, or your access was revoked mid-session.
+      if (isCollabDeck(id)) {
+        toast('That shared deck is no longer available — the owner removed it or ended the collaboration.', 'danger');
+        delete presentations[id]; delete collabDecks[id];
+        activePresId = null; questions = []; stopCollab();
+        renderPresList(); showSetup(); renderQList();
+      }
+      return;
+    }
+    if (id !== activePresId) return;
+    const remote = snap.val() || {};
+    // Don't fight the person typing: only take a remote version that differs from
+    // what we just wrote.
+    const localJson = JSON.stringify(presentations[id] || {});
+    const remoteJson = JSON.stringify(remote);
+    if (localJson === remoteJson) return;
+    _applyingRemote = true;
+    try {
+      presentations[id] = remote;
+      const wasSel = selIdx;
+      questions = toQArr(remote.questions);
+      selIdx = (wasSel != null && wasSel < questions.length) ? wasSel : (questions.length ? 0 : null);
+      renderQList();
+      if (selIdx != null && editMode) renderEditor(selIdx);
+      renderPresList();
+    } finally { _applyingRemote = false; }
+  });
+  _collabUnsub = () => dref.off('value', dcb);
+
+  // 2. Presence + locks.
+  const proot = db.ref(collabRoot(id));
+  _presenceRef = proot.child(userId);
+  const me = { name: (userEmail || 'Someone').split('@')[0], at: Date.now(), editingQid: null };
+  _presenceRef.set(me).catch(() => {});
+  _presenceRef.onDisconnect().remove();
+  const pcb = proot.on('value', snap => {
+    const all = snap.exists() ? (snap.val() || {}) : {};
+    const now = Date.now();
+    _collabPeers = {}; _lockedQids = {};
+    Object.entries(all).forEach(([uid, v]) => {
+      if (uid === userId || !v) return;
+      if (now - (v.at || 0) > LOCK_TTL_MS * 4) return;    // stale tab, treat as gone
+      _collabPeers[uid] = v;
+      if (v.editingQid && now - (v.at || 0) < LOCK_TTL_MS) _lockedQids[v.editingQid] = { uid, name: v.name || 'Someone' };
+    });
+    renderCollabBar();
+    renderQList();
+  });
+  _presenceUnsub = () => proot.off('value', pcb);
+}
+
+// Heartbeat: keeps my presence fresh and my lock alive while I'm actually typing.
+setInterval(() => {
+  if (_presenceRef && activePresId) {
+    _presenceRef.update({ at: Date.now() }).catch(() => {});
+  }
+}, 10000);
+
+// Claim / release the question I'm editing.
+function claimQuestion(qid) {
+  if (!_presenceRef) return;
+  _presenceRef.update({ editingQid: qid || null, at: Date.now() }).catch(() => {});
+}
+function questionLockedBy(q) {
+  if (!q || !q.id) return null;
+  return _lockedQids[q.id] || null;
+}
+
+function renderCollabBar() {
+  const bar = document.getElementById('collabBar');
+  if (!bar) return;
+  const peers = Object.values(_collabPeers);
+  const shared = activePresId && isCollabDeck(activePresId);
+  if (!peers.length && !shared) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  const owner = shared ? collabDecks[activePresId].ownerEmail : null;
+  bar.innerHTML =
+    (shared ? `<span class="collab-chip owner">🤝 Shared by ${escapeHtml(owner || 'someone')}</span>` : '')
+    + peers.map(p => `<span class="collab-chip">${escapeHtml(p.name || 'Someone')}${p.editingQid ? ' · editing' : ''}</span>`).join('')
+    + (peers.length ? '' : '<span class="collab-chip idle">No one else here right now</span>');
+}
+
+/* ── Managing who can edit ─────────────────────────────────────────────────── */
+async function openCollabModal(id) {
+  const p = presentations[id]; if (!p) return;
+  let m = document.getElementById('collabModal');
+  if (!m) { m = document.createElement('div'); m.id = 'collabModal'; m.className = 'overlay';
+            m.onclick = e => { if (e.target === m) closeCollabModal(); }; document.body.appendChild(m); }
+  m.innerHTML = `<div class="modal" style="max-width:440px;">
+    <h2 style="margin-bottom:2px;">Who can edit “${escapeHtml(p.name || 'Untitled')}”</h2>
+    <p style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">You stay the owner. Ending someone's access takes effect immediately — even mid-edit.</p>
+    <div id="collabList" style="color:var(--muted);font-size:13px;">Loading…</div>
+    <button class="btn btn-primary" style="width:100%;margin-top:12px;" onclick="closeCollabModal();openDeckShareModal('${escAttr(id)}',true)">＋ Invite someone to edit</button>
+    <button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="closeCollabModal()">Close</button>
+  </div>`;
+  m.style.display = 'flex';
+  try {
+    const d = await shareApi('collaborators', { presId: id });
+    const list = document.getElementById('collabList');
+    list.innerHTML = d.collaborators.length
+      ? d.collaborators.map(c => `<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-top:1px solid var(--border);">
+           <span style="flex:1;color:var(--text);font-size:13px;">${escapeHtml(c.email || c.uid)}</span>
+           <span class="pill" style="font-size:10px;">can edit</span>
+           <button class="btn btn-ghost btn-sm" onclick="revokeCollab('${escAttr(id)}','${escAttr(c.uid)}')">Remove</button>
+         </div>`).join('')
+      : '<p style="padding:10px 0;">Nobody else can edit this yet.</p>';
+  } catch (e) {
+    const list = document.getElementById('collabList');
+    if (list) list.textContent = 'Could not load: ' + e.message;
+  }
+}
+function closeCollabModal() { const m = document.getElementById('collabModal'); if (m) m.remove(); }
+
+async function revokeCollab(id, collabUid) {
+  if (!confirm('Remove their access to this deck?\n\nIt takes effect immediately — if they have it open, their next change will be refused.')) return;
+  try { await shareApi('revokeCollab', { presId: id, collabUid }); openCollabModal(id); toast('Access removed', 'success'); }
+  catch (e) { toast(e.message, 'danger'); }
+}
+
+async function leaveCollab(id) {
+  const c = collabDecks[id]; if (!c) return;
+  if (!confirm(`Leave “${presentations[id]?.name || 'this deck'}”?\n\nIt belongs to ${c.ownerEmail || 'its owner'} — leaving removes it from your list. Nothing is deleted, and they can invite you back.`)) return;
+  try {
+    await shareApi('leaveCollab', { ownerUid: c.ownerUid, presId: id });
+    delete presentations[id]; delete collabDecks[id];
+    if (activePresId === id) { activePresId = null; questions = []; stopCollab(); showSetup(); renderQList(); }
+    renderPresList();
+    toast('You left the collaboration', 'success');
+  } catch (e) { toast(e.message, 'danger'); }
 }
 
 /* ── Shared with me ──────────────────────────────────────────────────────── */
@@ -3465,9 +3746,14 @@ function openInbox() {
       <div style="color:var(--muted);font-size:11.5px;margin-top:2px;">
         from ${escapeHtml(sh.from)} · ${sh.questionCount} question${sh.questionCount === 1 ? '' : 's'} · ${escapeHtml((sh.productType || 'poll'))}
       </div>
+      <div style="font-size:11.5px;margin-top:5px;color:${sh.role === 'edit' ? 'var(--accent)' : 'var(--muted)'};">
+        ${sh.role === 'edit'
+          ? '🤝 Build it together — you both edit the same deck. They stay the owner.'
+          : '📤 A copy for you to keep and change. Their version stays as it is.'}
+      </div>
       ${sh.note ? `<div style="border-left:3px solid var(--accent);padding-left:10px;margin-top:8px;font-size:12.5px;color:var(--text);">${escapeHtml(sh.note)}</div>` : ''}
       <div style="display:flex;gap:7px;margin-top:11px;">
-        <button class="btn btn-primary btn-sm" onclick="acceptShare('${escAttr(sh.id)}')">Accept a copy</button>
+        <button class="btn btn-primary btn-sm" onclick="acceptShare('${escAttr(sh.id)}')">${sh.role === 'edit' ? 'Join and edit' : 'Accept a copy'}</button>
         <button class="btn btn-ghost btn-sm" onclick="declineShare('${escAttr(sh.id)}')">Decline</button>
       </div>
     </div>`).join('')
@@ -3488,7 +3774,8 @@ async function acceptShare(shareId) {
     const d = await shareApi('accept', { shareId });
     await loadPresentations();
     closeInbox();
-    toast(`✅ “${d.name}” is yours now — edit it freely`, 'success');
+    toast(d.collab ? `🤝 You're now editing “${d.name}” together` : `✅ “${d.name}” is yours now — edit it freely`, 'success');
+    if (d.collab && d.presId) { selectPresentation(d.presId); refreshShareInbox(); return; }
     if (d.presId) selectPresentation(d.presId);
     refreshShareInbox();
   } catch (e) {
@@ -3522,13 +3809,13 @@ function syncBulkBar() {
 }
 function bulkMove() { if (selectedIds.size) openMoveModal([...selectedIds]); }
 async function bulkArchive() {
-  const ids = [...selectedIds]; if (!ids.length) return;
+  const ids = [...selectedIds].filter(id => isDeckOwner(id)); if (!ids.length) { toast('Shared decks can\'t be archived — leave them instead.', 'warn'); return; }
   for (const id of ids) if (presentations[id] && !presentations[id].archived) await setDeckField(id, 'archived', true);
   clearSelection(); renderPresList();
   toast(`📦 Archived ${ids.length} deck${ids.length === 1 ? '' : 's'}`, 'success');
 }
 async function bulkDelete() {
-  const ids = [...selectedIds]; if (!ids.length) return;
+  const ids = [...selectedIds].filter(id => isDeckOwner(id)); if (!ids.length) { toast('Shared decks belong to someone else — leave them instead of deleting.', 'warn'); return; }
   if (!confirm(`Delete ${ids.length} deck${ids.length === 1 ? '' : 's'}?\n\nThey go to Recently deleted and can be restored.`)) return;
   // Same soft-delete path as doDeletePres — trash first, then remove, so bulk
   // delete is exactly as recoverable as deleting one at a time.
@@ -3836,7 +4123,7 @@ function togglePresentTally() {
   if (!activePresId) return;
   const pres = presentations[activePresId];
   pres.showTallyCard = !pres.showTallyCard;
-  if (userId) db.ref(`users/${userId}/presentations/${activePresId}/showTallyCard`).set(!!pres.showTallyCard).catch(()=>{});
+  if (userId) db.ref(deckPath(activePresId) + '/showTallyCard').set(!!pres.showTallyCard).catch(()=>{});
   syncPresentTallyBtn();
   if (_presentIdx !== null && _presentIdx < questions.length) renderPresentSlide(_presentIdx); // refresh Next→ label
   toast(pres.showTallyCard ? 'Final Results card ON — press → after the last question.' : 'Final Results card off.', pres.showTallyCard ? 'success' : 'info');
@@ -5889,15 +6176,18 @@ function renderQList() {
     list.innerHTML = '<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px;">No questions yet.</div>';
     return;
   }
-  list.innerHTML = questions.map((q,i)=>`
-    <div class="q-item ${i===selIdx?'sel':''}" onclick="selectQ(${i})">
+  list.innerHTML = questions.map((q,i)=>{
+    const lock = questionLockedBy(q);
+    return `
+    <div class="q-item ${i===selIdx?'sel':''} ${lock?'q-locked':''}" onclick="selectQ(${i})">
       <div class="q-num">${i+1}</div>
       <div style="flex:1;">
-        <div class="q-label">${(q.type==='flashcard'?q.front:q.text)||'<span style="color:var(--muted);font-style:italic;">Untitled</span>'}</div>
+        <div class="q-label">${(q.type==='flashcard'?q.front:q.text)||'<span style="color:var(--muted);font-style:italic;">Untitled</span>'}${lock?`<span class="q-lock-tag">✏️ ${escapeHtml(lock.name)}</span>`:''}</div>
         <div class="q-type-tag">${icons[q.type]||'?'} ${(q.type||'').replace(/_/g,' ')}</div>
       </div>
       <button class="icon-btn" onclick="event.stopPropagation();openCopyQuestion(${i})" title="Copy to another presentation" style="opacity:0;transition:opacity 0.15s;">📋</button>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   // Show copy button on hover
   document.querySelectorAll('.q-item').forEach((el) => {
     el.addEventListener('mouseenter', () => el.querySelector('.icon-btn')?.style.setProperty('opacity', '1'));
@@ -5906,8 +6196,13 @@ function renderQList() {
 }
 
 function selectQ(idx) {
+  // Don't let two people type into the same question — that's the one case a live
+  // subscription can't reconcile, so it's prevented rather than merged.
+  const lock = questionLockedBy(questions[idx]);
+  if (lock) { toast(`${lock.name} is editing this question right now.`, 'warn'); return; }
   selIdx = idx;
   editMode = false;  // default to LIVE view; editing is explicit
+  claimQuestion(questions[idx] && questions[idx].id);
   renderQList();
   showLiveOrEdit(idx);
 }

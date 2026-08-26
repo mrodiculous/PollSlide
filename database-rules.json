@@ -13,6 +13,12 @@
         },
         "aiCredits": {
           ".validate": "newData.val() === data.val()"
+        },
+        "presentations": {
+          "$presId": {
+            ".read": "auth != null && root.child('deckGrants').child($uid).child($presId).child(auth.uid).exists()",
+            ".write": "auth != null && root.child('deckGrants').child($uid).child($presId).child(auth.uid).val() === 'edit'"
+          }
         }
       }
     },
@@ -137,6 +143,32 @@
         "toEmailKey",
         "fromUid"
       ]
+    },
+    "deckGrants": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid",
+        "$presId": {
+          "$collabUid": {
+            ".read": "auth != null && (auth.uid == $uid || auth.uid == $collabUid)",
+            ".write": "auth != null && (auth.uid == $uid || (auth.uid == $collabUid && !newData.exists()))"
+          }
+        }
+      }
+    },
+    "collabIndex": {
+      "$uid": {
+        ".read": "auth != null && auth.uid == $uid",
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    },
+    "deckPresence": {
+      "$ownerUid": {
+        "$presId": {
+          ".read": "auth != null && (auth.uid == $ownerUid || root.child('deckGrants').child($ownerUid).child($presId).child(auth.uid).exists())",
+          ".write": "auth != null && (auth.uid == $ownerUid || root.child('deckGrants').child($ownerUid).child($presId).child(auth.uid).exists())"
+        }
+      }
     }
   }
 }

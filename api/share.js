@@ -72,6 +72,7 @@ function publicShare(id, v) {
     id,
     from: v.fromEmail, fromName: v.fromName || null,
     title: v.title, productType: v.productType, questionCount: v.questionCount,
+    role: v.role || 'copy',
     note: v.note || null, at: v.at, status: v.status,
   };
 }
@@ -96,6 +97,9 @@ module.exports = async (req, res) => {
       /* ── Send a copy of one deck to an email address ───────────────────── */
       case 'send': {
         const { presId, toEmail, note } = req.body || {};
+        // 'copy'  → they get their own independent duplicate (default)
+        // 'edit'  → they work on YOUR deck with you; you stay the owner and can revoke
+        const role = req.body && req.body.role === 'edit' ? 'edit' : 'copy';
         if (!presId) return res.status(400).json({ error: 'Which deck?' });
         if (!isEmail(toEmail)) return res.status(400).json({ error: 'That doesn\'t look like an email address.' });
         const to = String(toEmail).toLowerCase().trim();
@@ -122,21 +126,32 @@ module.exports = async (req, res) => {
           productType: s(deck.productType, 16) || 'poll',
           questionCount: questions.length,
           note: s(note, 300) || null,
-          // The snapshot is taken NOW. A copy-share is a point-in-time send: later
-          // edits by the sender deliberately do not reach an already-sent share.
-          payload: JSON.stringify({ name: deck.name, productType: deck.productType,
-                                    language: deck.language || 'en', questions }),
+          role,
+          // A COPY carries a snapshot taken now — later edits by the sender
+          // deliberately don't reach an already-sent copy. A COLLABORATION carries no
+          // payload at all: it's a pointer to the live deck, which is the whole point.
+          payload: role === 'copy'
+            ? JSON.stringify({ name: deck.name, productType: deck.productType,
+                               language: deck.language || 'en', questions })
+            : null,
           at: Date.now(), status: 'pending',
         };
         await db.ref('shares/' + shareId).set(rec);
 
+        const noteHtml = rec.note ? `<p style="border-left:3px solid #6c63ff;padding-left:12px;color:#555;">${esc(rec.note)}</p>` : '';
         await notify(to,
-          `📤 ${esc(myEmail)} shared “${esc(rec.title)}” with you`,
-          'A deck was shared with you',
-          `<p><b>${esc(myEmail)}</b> sent you a copy of <b>${esc(rec.title)}</b> — ${rec.questionCount} question${rec.questionCount === 1 ? '' : 's'}.</p>` +
-          (rec.note ? `<p style="border-left:3px solid #6c63ff;padding-left:12px;color:#555;">${esc(rec.note)}</p>` : '') +
-          `<p>Open PollSlide and you'll find it under <b>Shared with me</b>. Accepting puts your own copy in your library — you can change it however you like, and the original stays with ${esc(myEmail)}.</p>` +
-          `<p><a href="${APP_URL}/presenter.html">Open PollSlide →</a></p>`);
+          role === 'edit'
+            ? `🤝 ${esc(myEmail)} invited you to build “${esc(rec.title)}” together`
+            : `📤 ${esc(myEmail)} shared “${esc(rec.title)}” with you`,
+          role === 'edit' ? 'You were invited to collaborate' : 'A deck was shared with you',
+          role === 'edit'
+            ? `<p><b>${esc(myEmail)}</b> wants to build <b>${esc(rec.title)}</b> with you — ${rec.questionCount} question${rec.questionCount === 1 ? '' : 's'} so far.</p>` + noteHtml +
+              `<p>Open PollSlide and accept under <b>Shared with me</b>. You'll both edit the same deck and see each other's changes as they happen.</p>` +
+              `<p style="color:#666;font-size:13px;">${esc(myEmail)} stays the owner and can end the collaboration at any time.</p>` +
+              `<p><a href="${APP_URL}/presenter.html">Open PollSlide →</a></p>`
+            : `<p><b>${esc(myEmail)}</b> sent you a copy of <b>${esc(rec.title)}</b> — ${rec.questionCount} question${rec.questionCount === 1 ? '' : 's'}.</p>` + noteHtml +
+              `<p>Open PollSlide and you'll find it under <b>Shared with me</b>. Accepting puts your own copy in your library — you can change it however you like, and the original stays with ${esc(myEmail)}.</p>` +
+              `<p><a href="${APP_URL}/presenter.html">Open PollSlide →</a></p>`);
 
         return res.status(200).json({ ok: true, shareId });
       }
@@ -172,6 +187,32 @@ module.exports = async (req, res) => {
         const v = snap.val();
         if (v.toEmailKey !== myKey) return res.status(403).json({ error: 'That share isn\'t addressed to you.' });
         if (v.status !== 'pending') return res.status(409).json({ error: 'That share was already ' + v.status + '.' });
+
+        /* ── Collaboration: no copy at all ────────────────────────────────
+         * Write a grant and an index entry. The deck stays in the owner's tree and
+         * they remain the owner — database rules read deckGrants on every request, so
+         * revoking takes effect on the very next write with no session to expire.
+         * No plan check: the deck doesn't count against the collaborator's library,
+         * because it isn't in it. */
+        if (v.role === 'edit') {
+          const ownerStill = await db.ref(`users/${v.fromUid}/presentations/${v.presId}`).get();
+          if (!ownerStill.exists()) {
+            await ref.update({ status: 'gone', at: Date.now() });
+            return res.status(404).json({ error: 'That deck has since been deleted by its owner.' });
+          }
+          await db.ref(`deckGrants/${v.fromUid}/${v.presId}/${me.uid}`).set('edit');
+          await db.ref(`collabIndex/${me.uid}/${v.fromUid}_${v.presId}`).set({
+            ownerUid: v.fromUid, ownerEmail: v.fromEmail, presId: v.presId,
+            title: v.title, productType: v.productType, role: 'edit', at: Date.now(),
+          });
+          await ref.update({ status: 'accepted', acceptedAt: Date.now(), acceptedBy: me.uid });
+
+          notify(v.fromEmail, `🤝 ${esc(myEmail)} joined “${esc(v.title)}”`, 'Collaboration started',
+            `<p><b>${esc(myEmail)}</b> can now edit <b>${esc(v.title)}</b> with you. You'll see each other's changes as they happen.</p>
+             <p style="color:#666;font-size:13px;">You're still the owner — end it any time from the deck's ⋯ menu.</p>`);
+
+          return res.status(200).json({ ok: true, collab: true, ownerUid: v.fromUid, presId: v.presId, name: v.title });
+        }
 
         // The recipient's own plan decides whether they can hold another deck —
         // otherwise sharing would be a way around the free-tier cap.
@@ -235,6 +276,49 @@ module.exports = async (req, res) => {
         }
         await ref.remove();
         return res.status(200).json({ ok: true });
+      }
+
+      /* ── Who can edit one of MY decks ──────────────────────────────────── */
+      case 'collaborators': {
+        const { presId } = req.body || {};
+        const snap = await db.ref(`deckGrants/${me.uid}/${s(presId, 60)}`).get();
+        const out = [];
+        snap.forEach(c => { out.push({ uid: c.key, role: c.val() }); });
+        // Grants store only a uid; the readable email lives on the share that created it.
+        const shares = await db.ref('shares').orderByChild('fromUid').equalTo(me.uid).get();
+        const emailByUid = {};
+        shares.forEach(c => { const v = c.val(); if (v && v.acceptedBy) emailByUid[v.acceptedBy] = v.toEmail; });
+        out.forEach(o => { o.email = emailByUid[o.uid] || null; });
+        return res.status(200).json({ ok: true, collaborators: out });
+      }
+
+      /* ── End a collaboration. The owner revokes; a collaborator leaves. ──── */
+      case 'revokeCollab': {
+        const { presId, collabUid } = req.body || {};
+        const pid = s(presId, 60), cu = s(collabUid, 128);
+        if (!pid || !cu) return res.status(400).json({ error: 'Which deck, and whose access?' });
+        const g = await db.ref(`deckGrants/${me.uid}/${pid}/${cu}`).get();
+        if (!g.exists()) return res.status(404).json({ error: 'They already have no access to this deck.' });
+        await db.ref(`deckGrants/${me.uid}/${pid}/${cu}`).remove();
+        await db.ref(`collabIndex/${cu}/${me.uid}_${pid}`).remove().catch(() => {});
+        return res.status(200).json({ ok: true });
+      }
+
+      case 'leaveCollab': {
+        const { ownerUid, presId } = req.body || {};
+        const ou = s(ownerUid, 128), pid = s(presId, 60);
+        if (!ou || !pid) return res.status(400).json({ error: 'Which deck?' });
+        await db.ref(`deckGrants/${ou}/${pid}/${me.uid}`).remove().catch(() => {});
+        await db.ref(`collabIndex/${me.uid}/${ou}_${pid}`).remove().catch(() => {});
+        return res.status(200).json({ ok: true });
+      }
+
+      /* ── Decks other people have let ME edit ──────────────────────────────── */
+      case 'shared_with_me': {
+        const snap = await db.ref(`collabIndex/${me.uid}`).get();
+        const out = [];
+        snap.forEach(c => { const v = c.val() || {}; out.push(Object.assign({ key: c.key }, v)); });
+        return res.status(200).json({ ok: true, decks: out });
       }
 
       default:
