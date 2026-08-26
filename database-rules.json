@@ -5,21 +5,29 @@
       "$uid": {
         ".read": "auth != null && (auth.uid == $uid || auth.token.email == 'help@pollslide.com')",
         ".write": "auth != null && (auth.uid == $uid || auth.token.email == 'help@pollslide.com')",
-        "aiUsedThisMonth": { ".validate": "newData.val() === data.val()" },
-        "aiQuotaMonth":    { ".validate": "newData.val() === data.val()" },
-        "aiCredits":       { ".validate": "newData.val() === data.val()" }
+        "aiUsedThisMonth": {
+          ".validate": "newData.val() === data.val()"
+        },
+        "aiQuotaMonth": {
+          ".validate": "newData.val() === data.val()"
+        },
+        "aiCredits": {
+          ".validate": "newData.val() === data.val()"
+        }
       }
     },
-
     "admin": {
       ".read": "auth != null && auth.token.email == 'help@pollslide.com'",
       "tickets": {
-        ".indexOn": ["status", "createdAt"],
+        ".indexOn": [
+          "status",
+          "createdAt"
+        ],
         ".write": "auth != null"
       },
       "deletion_requests": {
         "$uid": {
-          ".read":  "auth != null && (auth.uid == $uid || auth.token.email == 'help@pollslide.com')",
+          ".read": "auth != null && (auth.uid == $uid || auth.token.email == 'help@pollslide.com')",
           ".write": "auth != null && (auth.uid == $uid || auth.token.email == 'help@pollslide.com')"
         }
       },
@@ -27,56 +35,64 @@
         ".write": "auth != null && auth.token.email == 'help@pollslide.com'"
       }
     },
-
     "app_config": {
       ".read": true,
       ".write": "auth != null && auth.token.email == 'help@pollslide.com'"
     },
-
     "quiz_builder": {
       "$sessionCode": {
         ".read": true,
         ".write": "auth != null"
       }
     },
-
     "sessions": {
       "$sessionCode": {
         ".read": true,
-        "responses":       { ".write": true },
-        "currentQuestion": { ".write": "auth != null" },
-        "qstate":          { ".write": "auth != null" },
-        "meta":            { ".write": "auth != null" },
-        "qa":              { ".write": true },
-        "study":           { ".write": true },
-        "teams":           { ".write": true,
+        "responses": {
+          ".write": true
+        },
+        "currentQuestion": {
+          ".write": "auth != null"
+        },
+        "qstate": {
+          ".write": "auth != null"
+        },
+        "meta": {
+          ".write": "auth != null"
+        },
+        "qa": {
+          ".write": true
+        },
+        "study": {
+          ".write": true
+        },
+        "teams": {
+          ".write": true,
           "$teamId": {
             ".validate": "newData.hasChild('name')",
-            "name": { ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 40" }
+            "name": {
+              ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 40"
+            }
           }
         }
       }
     },
-
     "pairing": {
       "$code": {
         ".read": true,
         ".write": "auth != null"
       }
     },
-
     "mac_link": {
       "$uid": {
-        ".read":  true,
+        ".read": true,
         ".write": "auth != null && auth.uid == $uid"
       }
     },
-
     "presentations": {
       ".read": false,
       ".write": false
     },
-
     "sharedDecks": {
       "$sid": {
         ".read": true,
@@ -84,7 +100,6 @@
         ".validate": "newData.hasChildren(['owner','title','json','at'])"
       }
     },
-
     "recaps": {
       "$rid": {
         ".read": true,
@@ -92,7 +107,6 @@
         ".validate": "newData.hasChildren(['owner','title','at'])"
       }
     },
-
     "workspaces": {
       "$wsId": {
         ".read": "auth != null && (data.child('ownerUid').val() === auth.uid || data.child('members').child(auth.uid).exists())",
@@ -110,12 +124,19 @@
         }
       }
     },
-
     "team_invites": {
       "$emailKey": {
         ".read": "auth != null",
         ".write": "auth != null"
       }
+    },
+    "shares": {
+      ".read": false,
+      ".write": false,
+      ".indexOn": [
+        "toEmailKey",
+        "fromUid"
+      ]
     }
   }
 }

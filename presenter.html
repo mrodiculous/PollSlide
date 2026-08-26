@@ -172,13 +172,45 @@
   .pres-icon { width:30px; height:30px; border-radius:8px; background:var(--surface3); display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
   .pres-item.active .pres-icon { background:var(--accent); }
   .pres-meta { flex:1; min-width:0; }
-  .pres-name { font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pres-name { font-size:13px; font-weight:600; display:flex; align-items:center; min-width:0; }
+  .pres-name-text { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0; }
   .pres-sub  { font-size:10px; color:var(--muted); margin-top:1px; }
   .pres-actions { display:flex; gap:4px; opacity:0; transition:opacity 0.15s; flex-shrink:0; }
   .pres-item:hover .pres-actions { opacity:1; }
   .icon-btn { width:22px; height:22px; border-radius:5px; background:transparent; border:1px solid var(--border); color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:11px; transition:all 0.15s; }
   .icon-btn:hover { background:var(--surface3); color:var(--text); }
   .icon-btn.del:hover { background:rgba(255,101,132,0.15); color:var(--accent2); border-color:rgba(255,101,132,0.4); }
+  /* ── Deck organization: ribbon, toolbar, groups, rows ── */
+  .folder-ribbon { display:flex; align-items:center; gap:5px; padding:8px 11px; border-top:1px solid var(--border); border-bottom:1px solid var(--border); background:rgba(108,99,255,0.06); font-size:11.5px; color:var(--muted); overflow-x:auto; white-space:nowrap; flex-shrink:0; scrollbar-width:none; }
+  .folder-ribbon::-webkit-scrollbar { display:none; }
+  .folder-ribbon .crumb { color:var(--accent); font-weight:600; cursor:pointer; border-radius:5px; padding:1px 3px; }
+  .folder-ribbon .crumb:hover { background:var(--surface2); }
+  .folder-ribbon .crumb.here { color:var(--text); cursor:default; }
+  .folder-ribbon .crumb.here:hover { background:transparent; }
+  .folder-ribbon .crumb-sep { opacity:0.45; }
+  .deck-toolbar { display:flex; gap:5px; align-items:center; padding:7px 8px; flex-shrink:0; }
+  .deck-toolbar input[type="search"] { flex:1; min-width:0; background:var(--surface2); border:1px solid var(--border2); border-radius:8px; padding:6px 9px; font-size:11.5px; color:var(--text); font-family:'DM Sans',sans-serif; }
+  .deck-toolbar input[type="search"]::placeholder { color:var(--muted); }
+  /* width:auto is load-bearing — the global `select { width:100% }` further down the
+     sheet otherwise stretches this and squeezes the search box to nothing. */
+  .deck-toolbar select { width:auto; flex:0 0 auto; background:var(--surface2); border:1px solid var(--border2); border-radius:8px; padding:6px 4px; font-size:11px; color:var(--text); font-family:'DM Sans',sans-serif; cursor:pointer; }
+  .deck-toolbar .icon-btn { flex:0 0 auto; }
+  .bulk-bar { display:flex; align-items:center; gap:5px; padding:6px 9px; background:rgba(108,99,255,0.12); border-top:1px solid var(--border); border-bottom:1px solid var(--border); font-size:11px; color:var(--text); flex-shrink:0; }
+  .bulk-bar #bulkCount { flex:1; color:var(--muted); }
+  .list-group { margin-bottom:4px; }
+  .list-group-hd { padding:8px 10px 4px; font-size:9.5px; font-weight:700; letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); }
+  .folder-item .pres-icon { background:rgba(247,183,49,0.16); }
+  .row-chevron { color:var(--muted); font-size:12px; flex-shrink:0; margin-left:2px; }
+  .row-path { opacity:0.85; }
+  .pin-star { color:var(--accent4); margin-left:5px; font-size:10px; flex-shrink:0; }
+  .type-chip { font-size:8.5px; font-weight:700; letter-spacing:0.05em; padding:1px 5px; border-radius:20px; text-transform:uppercase; background:rgba(255,255,255,0.08); color:var(--muted); margin-left:5px; flex-shrink:0; }
+  .row-check { width:18px; height:18px; flex-shrink:0; border-radius:5px; border:1.5px solid var(--border2); display:flex; align-items:center; justify-content:center; font-size:11px; color:#fff; cursor:pointer; }
+  .row-check.on { background:var(--accent); border-color:var(--accent); }
+  #rowMenu { position:fixed; z-index:100000; background:var(--surface2); border:1px solid var(--border2); border-radius:10px; padding:5px; min-width:196px; box-shadow:0 12px 34px rgba(0,0,0,0.5); }
+  #rowMenu .rm-item { display:flex; align-items:center; gap:9px; width:100%; padding:7px 10px; border:none; background:transparent; color:var(--text); font-size:12.5px; font-family:'DM Sans',sans-serif; text-align:left; border-radius:7px; cursor:pointer; }
+  #rowMenu .rm-item:hover { background:var(--surface3); }
+  #rowMenu .rm-item.danger:hover { background:rgba(255,101,132,0.15); color:var(--accent2); }
+  #rowMenu .rm-sep { height:1px; background:var(--border); margin:4px 6px; }
 
   /* QUESTIONS panel — bottom half */
   .q-panel { display:flex; flex-direction:column; flex:1; overflow:hidden; }
@@ -497,14 +529,35 @@
     <div class="pres-panel">
       <!-- Product switcher: Polls / Surveys / Quizzes / Study -->
       <div class="product-tabs" id="productTabs" style="display:none;"></div>
-      <div class="panel-hd" style="border-top:1px solid var(--border);">
-        <span class="panel-hd-title" id="presPanelTitle">Presentations</span>
+      <!-- Folder breadcrumb. Scrolls sideways rather than wrapping, so the panel
+           never changes height as you go deeper. -->
+      <div class="folder-ribbon" id="folderRibbon"></div>
+      <div class="deck-toolbar">
+        <input id="deckSearch" type="search" placeholder="Search decks and questions…" autocomplete="off"
+               oninput="onDeckSearch(this.value)" title="Searches every folder, not just this one">
+        <select id="deckSort" onchange="onDeckSort(this.value)" title="Sort order">
+          <option value="recent">Recent</option>
+          <option value="created">Newest</option>
+          <option value="name">A–Z</option>
+        </select>
+        <button class="icon-btn" id="selectModeBtn" onclick="toggleSelectMode()" title="Select several decks">☑</button>
+      </div>
+      <div class="bulk-bar" id="bulkBar" style="display:none;">
+        <span id="bulkCount">0 selected</span>
+        <button class="btn btn-ghost btn-sm" id="bulkMove" onclick="bulkMove()">📁 Move</button>
+        <button class="btn btn-ghost btn-sm" id="bulkArchive" onclick="bulkArchive()">📦 Archive</button>
+        <button class="btn btn-ghost btn-sm" id="bulkDelete" onclick="bulkDelete()" style="color:var(--accent2);">🗑</button>
       </div>
       <div class="pres-list" id="presList">
         <div style="padding:16px;text-align:center;color:var(--muted);font-size:12px;">No presentations yet.</div>
       </div>
       <div style="padding:8px;border-top:1px solid var(--border);flex-shrink:0;">
         <button class="btn btn-primary" id="createPresBtn" style="width:100%;justify-content:center;padding:9px 14px;font-size:12px;" onclick="createPresentation()">+ Create New</button>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <button class="btn btn-ghost" onclick="createFolder()" style="flex:1;justify-content:center;padding:6px 8px;font-size:11px;color:var(--muted);" title="Group decks by class, unit or event">📁 New folder</button>
+          <button class="btn btn-ghost" id="archivedBtn" onclick="toggleArchivedView()" style="flex:1;justify-content:center;padding:6px 8px;font-size:11px;color:var(--muted);" title="Decks you've put away without deleting">📦 Archived</button>
+        </div>
+        <button class="btn btn-ghost" id="inboxBtn" style="display:none;width:100%;justify-content:center;padding:6px 14px;font-size:11px;margin-top:6px;color:var(--accent);border-color:rgba(108,99,255,0.4);" onclick="openInbox()" title="Decks other people have shared with you">📥 Shared with me</button>
         <button class="btn btn-ghost" id="trashBtn" style="width:100%;justify-content:center;padding:6px 14px;font-size:11px;margin-top:6px;color:var(--muted);" onclick="openTrash()" title="Restore a deleted presentation">🗑 Recently deleted</button>
       </div>
     </div>
@@ -2149,6 +2202,22 @@ const LANGUAGES = { en:'English', es:'Español', de:'Deutsch', fr:'Français', p
 
 // Active product surface in the UI. Persisted so the user lands where they left off.
 let activeProduct = localStorage.getItem('ql_active_product') || 'poll';
+// Folders that exist but hold nothing yet. Everything else is derived from decks.
+async function loadEmptyFolders() {
+  if (!userId) return;
+  try {
+    const snap = await db.ref(`users/${userId}/folders`).get();
+    const v = snap.val();
+    emptyFolders = Array.isArray(v) ? v.filter(x => typeof x === 'string') : [];
+  } catch (e) { emptyFolders = []; }
+}
+// Reflect saved sort/search state in the controls after the panel is in the DOM.
+function syncDeckToolbar() {
+  const sel = document.getElementById('deckSort'); if (sel) sel.value = deckSort;
+  const q = document.getElementById('deckSearch'); if (q && q.value !== deckQuery) q.value = deckQuery;
+  const ab = document.getElementById('archivedBtn');
+  if (ab) { ab.style.color = showArchived ? 'var(--accent)' : 'var(--muted)'; }
+}
 if (!PRODUCTS[activeProduct]) activeProduct = 'poll';
 // Treat any presentation with no productType as a poll (backward compatible).
 function presType(p) { return (p && PRODUCTS[p.productType]) ? p.productType : 'poll'; }
@@ -2192,6 +2261,8 @@ function scheduleSave() { markSaving(); clearTimeout(saveTimeout); saveTimeout=s
 // ─── PRESENTATIONS — LOAD / SAVE ─────────────────────────────────────────────
 async function loadPresentations() {
   purgeOldTrash();   // clear trash older than 30 days (fire-and-forget)
+  await loadEmptyFolders();   // folders that exist but hold nothing yet
+  refreshShareInbox();        // anything waiting under this email?
   try {
     const snap = await db.ref(`users/${userId}/presentations`).get();
     if (snap.exists()) {
@@ -2265,7 +2336,11 @@ async function createPresentation(thenPolly = false) {
     name,
     sessionCode: code,
     createdAt: Date.now(),
+    lastOpenedAt: Date.now(),     // a brand-new deck IS the most recent one
     productType: activeProduct,   // tag the presentation with the active product
+    // File it where you're standing. Creating a deck inside "Unit 3" and finding it
+    // at the top level instead would mean re-filing every single one by hand.
+    ...(currentFolder ? { folder: currentFolder } : {}),
     questions: []
   };
 
@@ -2288,7 +2363,15 @@ function selectPresentation(id) {
   const pres = presentations[id];
   if (!pres) return;
 
-  // Keep the product tab in sync with the selected presentation.
+  // Stamp last-opened so "Recent" sorting reflects what you actually work on,
+  // not what you happened to create first. Fire-and-forget: a failed write must
+  // never block opening a deck.
+  pres.lastOpenedAt = Date.now();
+  if (userId) db.ref(`users/${userId}/presentations/${id}/lastOpenedAt`).set(pres.lastOpenedAt).catch(() => {});
+
+  // "+ New" and the setup panel follow the selected deck's type. The list FILTER
+  // (typeFilter) is left alone — jumping the filter around under someone who is
+  // browsing "All" would be hostile.
   const pt = presType(pres);
   if (pt !== activeProduct) { activeProduct = pt; localStorage.setItem('ql_active_product', pt); renderProductTabs(); }
 
@@ -2719,16 +2802,24 @@ function renderProductTabs() {
   // Rendering IS what makes it real — without this line the whole product switcher
   // is invisible forever (caught by scripts/qa-reachability.js, check B).
   bar.style.display = 'flex';
-  bar.innerHTML = PRODUCT_ORDER.map(key => {
+  // "All" leads, and is the default. It is the only place a lesson's poll, quiz and
+  // study set are visible together — which is the entire point of folders.
+  const total = Object.values(presentations).filter(pr => !pr.archived).length;
+  const tabs = [`<div class="product-tab ${typeFilter==='all'?'active':''}" onclick="switchProduct('all')" title="Everything, whatever its type">
+      <span class="product-tab-icon">🗂️</span>
+      <span class="product-tab-label">All${total?` (${total})`:''}</span>
+    </div>`].concat(PRODUCT_ORDER.map(key => {
     const p = PRODUCTS[key];
-    const n = Object.values(presentations).filter(pr => presType(pr) === key).length;
-    return `<div class="product-tab ${key===activeProduct?'active':''}" onclick="switchProduct('${key}')" title="${p.name} — ${p.tagline}">
+    const n = Object.values(presentations).filter(pr => presType(pr) === key && !pr.archived).length;
+    return `<div class="product-tab ${key===typeFilter?'active':''}" onclick="switchProduct('${key}')" title="${p.name} — ${p.tagline}. Filters whatever folder you're in.">
       <span class="product-tab-icon">${p.icon}</span>
       <span class="product-tab-label">${p.short}${n?` (${n})`:''}</span>
     </div>`;
-  }).join('');
-  // Reflect the active product in the topbar brand + create button.
-  const prod = PRODUCTS[activeProduct];
+  }));
+  bar.innerHTML = tabs.join('');
+  // Brand + create button follow activeProduct (a real product), never typeFilter,
+  // which may be 'all'.
+  const prod = PRODUCTS[activeProduct] || PRODUCTS.poll;
   const brand = document.getElementById('brandName');
   if (brand) brand.textContent = prod.name;
   const cb = document.getElementById('createPresBtn');
@@ -2738,11 +2829,13 @@ function renderProductTabs() {
 }
 
 function switchProduct(key) {
-  if (!PRODUCTS[key]) return;
-  activeProduct = key;
-  localStorage.setItem('ql_active_product', key);
-  // If the selected presentation belongs to a different product, deselect it.
-  if (activePresId && presentations[activePresId] && presType(presentations[activePresId]) !== key) {
+  if (key !== 'all' && !PRODUCTS[key]) return;
+  typeFilter = key;
+  localStorage.setItem('ql_type_filter', key);
+  // A real type also becomes "what + New creates". 'all' leaves that as it was.
+  if (key !== 'all') { activeProduct = key; localStorage.setItem('ql_active_product', key); }
+  // Under 'all' nothing needs deselecting — every deck is visible.
+  if (key !== 'all' && activePresId && presentations[activePresId] && presType(presentations[activePresId]) !== key) {
     activePresId = null;
     questions = [];
     selIdx = null;
@@ -2767,46 +2860,671 @@ function switchProduct(key) {
 }
 
 // ─── RENDER PRESENTATIONS LIST ────────────────────────────────────────────────
-function renderPresList() {
-  renderProductTabs();
-  const list = document.getElementById('presList');
-  const prod = PRODUCTS[activeProduct];
-  // Only show presentations belonging to the active product.
-  const ids  = Object.keys(presentations)
-    .filter(id => presType(presentations[id]) === activeProduct)
-    .sort((a,b) => (presentations[a].createdAt||0)-(presentations[b].createdAt||0));
+/* ═══ DECK ORGANIZATION ══════════════════════════════════════════════════════
+ * Search · sort · pinning · folders · archive · bulk actions.
+ *
+ * THE RULE THAT KEEPS THIS MAINTAINABLE
+ * One pipeline, never a second rendering branch:
+ *     visibleDecks()  filter + sort   (pure)
+ *     groupDecks()    → sections      (pure)
+ *     deckRow()       the ONLY place a deck row is built
+ * Grouping is an argument, not a fork. The test to apply to every future change:
+ * adding a new product type, or a new row action, must require exactly ONE edit.
+ * If it ever takes two, a second code path has leaked back in.
+ *
+ * WHY FOLDERS CUT ACROSS PRODUCT TYPES
+ * Type is a property of a deck, not a place to keep it. A teacher thinks
+ * "Biology 101 › Unit 3", and that unit holds a warm-up poll, a graded quiz AND a
+ * study set. Product tabs are therefore a FILTER over the current folder, not a
+ * container — otherwise one lesson stays scattered across four screens.
+ *
+ * Folders are derived from the decks that carry them, so there are no orphan
+ * records and renaming is a string replace. users/$uid/folders holds only the
+ * names of folders that are still empty; it is never the source of truth.
+ * ═══════════════════════════════════════════════════════════════════════════ */
 
-  if (ids.length === 0) {
-    const label = prod.name.replace('Slide','').toLowerCase();
-    list.innerHTML = `<div style="padding:20px 14px;text-align:center;">
-      <div style="font-size:28px;margin-bottom:8px;">${prod.icon}</div>
-      <div style="color:var(--muted);font-size:12px;line-height:1.6;margin-bottom:12px;">No ${prod.short.toLowerCase()} yet.<br>${prod.blurb}.</div>
-      <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:11px;" onclick="createPresentation()">+ Create ${label}</button>
-    </div>`;
-    return;
+// ── PS_DECKORG_PURE_START ── extracted verbatim by scripts/tests/deckorg.test.js
+const FOLDER_MAX_DEPTH = 2;   // Course › Unit. Raise this one constant to go deeper.
+
+function folderParts(path) {
+  return String(path == null ? '' : path).split('/').map(s => s.trim()).filter(Boolean);
+}
+function folderJoin(parts) { return parts.filter(Boolean).join('/'); }
+function normalizeFolder(path) { return folderJoin(folderParts(path).slice(0, FOLDER_MAX_DEPTH)); }
+function deckFolder(p) { return normalizeFolder(p && p.folder); }
+
+// Is `path` at or inside `root`? Root '' contains everything.
+function folderContains(root, path) {
+  if (!root) return true;
+  return path === root || String(path).indexOf(root + '/') === 0;
+}
+
+// What a search query is matched against: the deck's name plus its question text,
+// so "Punnett" finds the deck even when the word only appears inside a question.
+function deckSearchText(p) {
+  var parts = [p.name || ''];
+  toQArr(p.questions).forEach(function (q) {
+    if (q && q.text) parts.push(q.text);
+    (q && Array.isArray(q.options) ? q.options : []).forEach(function (o) {
+      parts.push(typeof o === 'string' ? o : (o && o.text) || '');
+    });
+  });
+  return parts.join(' ').toLowerCase();
+}
+
+/* PURE. decks is the { id: deck } map. Returns [{ id, deck }].
+ * Search deliberately IGNORES the current folder — when someone searches "Punnett"
+ * they want it found wherever it lives; the row then shows its path. Scoping search
+ * to the open folder is the usual way this pattern gets built wrong. */
+function visibleDecks(decks, opts) {
+  var o = opts || {};
+  var q = String(o.query || '').trim().toLowerCase();
+  var searching = q.length > 0;
+  var sort = o.sort || 'recent';
+
+  var rows = Object.keys(decks || {})
+    .map(function (id) { return { id: id, deck: decks[id] }; })
+    .filter(function (r) { return !!r.deck; });
+
+  rows = rows.filter(function (r) { return !!r.deck.archived === !!o.archived; });
+
+  if (o.type && o.type !== 'all') {
+    rows = rows.filter(function (r) { return presType(r.deck) === o.type; });
   }
 
-  list.innerHTML = ids.map((id) => {
-    const p   = presentations[id];
-    const qn  = toQArr(p.questions).length;
-    const isA = id === activePresId;
-    return `
-      <div class="pres-item ${isA?'active':''}" onclick="selectPresentation('${id}')">
-        <div class="pres-icon">${PRODUCTS[presType(p)].icon}</div>
-        <div class="pres-meta">
-          <div class="pres-name">${p.name}</div>
-          <div class="pres-sub">${qn} question${qn!==1?'s':''} · ${p.sessionCode}</div>
-        </div>
-        <div class="pres-actions">
-          <button class="icon-btn" onclick="event.stopPropagation();showPresTally('${id}')" title="View Tally" style="color:var(--accent);">📊</button>
-          <button class="icon-btn" onclick="event.stopPropagation();openCopyPresPicker('${id}')" title="Copy to another tab — Poll / Survey / Quiz / Study" style="color:var(--accent);">⧉</button>
-          <button class="icon-btn" onclick="event.stopPropagation();openDuplicatePresentation('${id}')" title="Duplicate">📑</button>
-          <button class="icon-btn" onclick="event.stopPropagation();openRenamePres('${id}')" title="Rename">✏️</button>
-          <button class="icon-btn" onclick="event.stopPropagation();confirmResetPres('${id}')" title="Reset Tally" style="color:var(--accent2);">↺</button>
-          <button class="icon-btn del" onclick="event.stopPropagation();openDeletePres('${id}')" title="Delete">🗑</button>
-        </div>
-      </div>`;
+  if (searching) rows = rows.filter(function (r) { return deckSearchText(r.deck).indexOf(q) !== -1; });
+  else if (typeof o.folder === 'string') {
+    rows = rows.filter(function (r) { return deckFolder(r.deck) === o.folder; });
+  }
+
+  if (sort === 'name') {
+    rows.sort(function (a, b) { return String(a.deck.name || '').localeCompare(String(b.deck.name || '')); });
+  } else {
+    var at = sort === 'created'
+      ? function (d) { return d.createdAt || 0; }
+      : function (d) { return d.lastOpenedAt || d.createdAt || 0; };
+    rows.sort(function (a, b) { return at(b.deck) - at(a.deck); });
+  }
+  // Second pass: pinned float up. Array#sort is stable, so the order above holds
+  // within each group.
+  rows.sort(function (a, b) { return (b.deck.pinned ? 1 : 0) - (a.deck.pinned ? 1 : 0); });
+  return rows;
+}
+
+/* PURE. Immediate subfolders of `root`, with a recursive deck count.
+ * `extra` carries folders that exist but hold nothing yet. */
+function subfolders(decks, root, extra) {
+  var depth = folderParts(root).length;
+  var map = {};
+  function add(path) {
+    var parts = folderParts(path);
+    if (parts.length <= depth) return;             // unfiled, or not deep enough
+    if (!folderContains(root, folderJoin(parts))) return;
+    var childPath = folderJoin(parts.slice(0, depth + 1));
+    if (!map[childPath]) map[childPath] = { path: childPath, name: parts[depth], count: 0 };
+  }
+  var live = Object.keys(decks || {})
+    .map(function (id) { return decks[id]; })
+    .filter(function (d) { return d && !d.archived; });
+
+  live.forEach(function (d) { add(deckFolder(d)); });
+  (extra || []).forEach(function (p) { add(normalizeFolder(p)); });
+
+  live.forEach(function (d) {
+    var f = deckFolder(d);
+    Object.keys(map).forEach(function (k) { if (folderContains(k, f)) map[k].count++; });
+  });
+
+  return Object.keys(map).map(function (k) { return map[k]; })
+    .sort(function (a, b) { return a.name.localeCompare(b.name); });
+}
+
+/* PURE. Turns rows + folders into the sections the list renders.
+ * groupBy is an ARGUMENT — adding "group by type" later means adding a case here,
+ * not a second renderer. */
+function groupDecks(rows, opts) {
+  var o = opts || {};
+  if (o.searching) {
+    return [{ key: 'results', label: rows.length + ' result' + (rows.length === 1 ? '' : 's'),
+              showPath: true, folders: [], decks: rows }];
+  }
+  var out = [];
+  // Pinned gets its own section only at the root, where it means "my weekly decks".
+  // Inside a folder, pins simply float to the top of that folder's list.
+  if (!o.folder && o.pinned && o.pinned.length) {
+    out.push({ key: 'pinned', label: '📌 Pinned', showPath: true, folders: [], decks: o.pinned });
+  }
+  if (o.folders && o.folders.length) {
+    out.push({ key: 'folders', label: 'Folders', folders: o.folders, decks: [] });
+  }
+  var rest = (!o.folder && o.pinned && o.pinned.length)
+    ? rows.filter(function (r) { return !r.deck.pinned; })
+    : rows;
+  out.push({ key: 'decks', label: o.folder ? 'In this folder' : (o.archived ? 'Archived' : 'Decks'),
+             showPath: !!o.archived, folders: [], decks: rest });
+  return out;
+}
+// ── PS_DECKORG_PURE_END ──
+
+/* ── UI state ──────────────────────────────────────────────────────────────
+ * typeFilter is SEPARATE from activeProduct on purpose. activeProduct still means
+ * "what kind of thing am I making" and is used by create / Polly / the setup panel,
+ * all of which need a real product. typeFilter only narrows the list and may be
+ * 'all'. Merging them would have made PRODUCTS[activeProduct] undefined in a dozen
+ * places that never expected it. */
+let typeFilter    = localStorage.getItem('ql_type_filter') || 'all';
+let deckQuery     = '';
+let deckSort      = localStorage.getItem('ql_deck_sort') || 'recent';
+let currentFolder = normalizeFolder(localStorage.getItem('ql_current_folder') || '');
+let emptyFolders  = [];        // users/$uid/folders — folders with nothing in them yet
+let showArchived  = false;
+let selectMode    = false;
+let selectedIds   = new Set();
+
+function deckOrgState() {
+  return {
+    query: deckQuery, type: typeFilter,
+    // The archive is a FLAT view of everything you've set aside, wherever it lived.
+    // Scoping it to the open folder hid archived decks that were filed anywhere —
+    // which made the archive look permanently empty. Rows show their path instead.
+    folder: showArchived ? undefined : currentFolder,
+    sort: deckSort, archived: showArchived,
+  };
+}
+
+// ── Breadcrumb ribbon ─────────────────────────────────────────────────────
+function renderFolderRibbon() {
+  const el = document.getElementById('folderRibbon');
+  if (!el) return;
+  const parts = folderParts(currentFolder);
+  const crumbs = [`<span class="crumb ${parts.length ? '' : 'here'}" onclick="goToFolder('')">📁 All</span>`];
+  parts.forEach((name, i) => {
+    const path = folderJoin(parts.slice(0, i + 1));
+    crumbs.push('<span class="crumb-sep">›</span>');
+    crumbs.push(`<span class="crumb ${i === parts.length - 1 ? 'here' : ''}" onclick="goToFolder('${escAttr(path)}')">${escapeHtml(name)}</span>`);
+  });
+  if (showArchived) {
+    crumbs.push('<span class="crumb-sep">·</span><span class="crumb here">📦 Archived</span>');
+  }
+  el.innerHTML = crumbs.join('');
+}
+
+function goToFolder(path) {
+  currentFolder = normalizeFolder(path);
+  localStorage.setItem('ql_current_folder', currentFolder);
+  showArchived = false;
+  clearSelection();
+  renderPresList();
+}
+
+function toggleArchivedView() {
+  showArchived = !showArchived;
+  if (showArchived) currentFolder = '';
+  clearSelection();
+  renderPresList();
+}
+
+// ── Search / sort ─────────────────────────────────────────────────────────
+function onDeckSearch(v) { deckQuery = v; renderPresList(); }
+function onDeckSort(v)   { deckSort = v; localStorage.setItem('ql_deck_sort', v); renderPresList(); }
+
+// ── The list ──────────────────────────────────────────────────────────────
+function renderPresList() {
+  renderProductTabs();
+  renderFolderRibbon();
+  const list = document.getElementById('presList');
+  if (!list) return;
+
+  const st = deckOrgState();
+  const searching = !!String(deckQuery).trim();
+  const rows = visibleDecks(presentations, st);
+  const folders = (searching || showArchived) ? [] : subfolders(presentations, currentFolder, emptyFolders);
+  const pinned = (searching || showArchived || currentFolder) ? []
+               : visibleDecks(presentations, Object.assign({}, st, { folder: undefined }))
+                   .filter(r => r.deck.pinned);
+
+  const sections = groupDecks(rows, {
+    searching, folder: currentFolder, folders, pinned, archived: showArchived,
+  });
+
+  const hasAnything = sections.some(s => s.decks.length || s.folders.length);
+  if (!hasAnything) { list.innerHTML = emptyStateHtml(searching); syncBulkBar(); syncDeckToolbar(); return; }
+
+  list.innerHTML = sections.filter(s => s.decks.length || s.folders.length).map(sec => {
+    const body = sec.folders.map(folderRow).join('') +
+                 sec.decks.map(r => deckRow(r.id, r.deck, { showPath: sec.showPath })).join('');
+    return `<div class="list-group"><div class="list-group-hd">${escapeHtml(sec.label)}</div>${body}</div>`;
   }).join('');
+  syncBulkBar();
+  syncDeckToolbar();
+}
+
+function emptyStateHtml(searching) {
+  if (searching) {
+    return `<div style="padding:22px 14px;text-align:center;color:var(--muted);font-size:12px;line-height:1.6;">
+      <div style="font-size:24px;margin-bottom:6px;">🔍</div>
+      Nothing matches “${escapeHtml(deckQuery)}”.<br>
+      <span style="font-size:11px;">Search covers every folder, and question text too.</span></div>`;
+  }
+  if (showArchived) {
+    return `<div style="padding:22px 14px;text-align:center;color:var(--muted);font-size:12px;line-height:1.6;">
+      <div style="font-size:24px;margin-bottom:6px;">📦</div>Nothing archived.</div>`;
+  }
+  const prod = PRODUCTS[activeProduct] || PRODUCTS.poll;
+  const where = currentFolder ? `“${escapeHtml(folderParts(currentFolder).slice(-1)[0])}” is empty.` : 'Nothing here yet.';
+  return `<div style="padding:20px 14px;text-align:center;">
+    <div style="font-size:26px;margin-bottom:8px;">${prod.icon}</div>
+    <div style="color:var(--muted);font-size:12px;line-height:1.6;margin-bottom:12px;">${where}</div>
+    <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:11px;" onclick="createPresentation()">+ Create ${escapeHtml(prod.name.replace('Slide',''))}</button>
+  </div>`;
+}
+
+function folderRow(f) {
+  return `<div class="pres-item folder-item" onclick="goToFolder('${escAttr(f.path)}')">
+    <div class="pres-icon">📁</div>
+    <div class="pres-meta">
+      <div class="pres-name"><span class="pres-name-text">${escapeHtml(f.name)}</span></div>
+      <div class="pres-sub">${f.count} deck${f.count === 1 ? '' : 's'}</div>
+    </div>
+    <div class="pres-actions" onclick="event.stopPropagation();">
+      <button class="icon-btn" onclick="openFolderMenu('${escAttr(f.path)}',event)" title="Rename or delete this folder">⋯</button>
+    </div>
+    <span class="row-chevron">›</span>
+  </div>`;
+}
+
+/* THE ONLY PLACE A DECK ROW IS BUILT. Every list — folder view, search results,
+ * pinned, archived — comes through here. */
+function deckRow(id, p, opts) {
+  const o = opts || {};
+  const t  = presType(p);
+  const qn = toQArr(p.questions).length;
+  const isA = id === activePresId;
+  const path = deckFolder(p);
+  const when = p.lastOpenedAt ? 'opened ' + agoText(p.lastOpenedAt)
+             : p.createdAt    ? 'created ' + agoText(p.createdAt) : '';
+  const unit = t === 'study' ? (qn === 1 ? 'card' : 'cards') : (qn === 1 ? 'question' : 'questions');
+
+  const check = selectMode
+    ? `<span class="row-check ${selectedIds.has(id) ? 'on' : ''}" onclick="event.stopPropagation();toggleSelect('${escAttr(id)}')">${selectedIds.has(id) ? '✓' : ''}</span>`
+    : `<div class="pres-icon">${PRODUCTS[t].icon}</div>`;
+
+  return `<div class="pres-item ${isA ? 'active' : ''}" onclick="${selectMode ? `toggleSelect('${escAttr(id)}')` : `selectPresentation('${escAttr(id)}')`}">
+    ${check}
+    <div class="pres-meta">
+      <div class="pres-name"><span class="pres-name-text">${escapeHtml(p.name || 'Untitled')}</span>${p.pinned ? '<span class="pin-star">★</span>' : ''}<span class="type-chip">${escapeHtml(t.charAt(0).toUpperCase() + t.slice(1))}</span></div>
+      <div class="pres-sub">${qn} ${unit}${when ? ' · ' + when : ''}${o.showPath && path ? ' · <span class="row-path">' + escapeHtml(path.replace(/\//g, ' › ')) + '</span>' : ''}</div>
+    </div>
+    <div class="pres-actions" onclick="event.stopPropagation();">
+      <button class="icon-btn" onclick="showPresTally('${escAttr(id)}')" title="View tally" style="color:var(--accent);">📊</button>
+      <button class="icon-btn" onclick="openDeckMenu('${escAttr(id)}',event)" title="More actions">⋯</button>
+    </div>
+  </div>`;
+}
+
+function escAttr(s) { return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+function agoText(ts) {
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 90) return 'just now';
+  const m = Math.floor(s / 60); if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60); if (h < 24) return h + 'h ago';
+  const d = Math.floor(h / 24); if (d < 7) return d + 'd ago';
+  const w = Math.floor(d / 7);  if (w < 5) return w + 'w ago';
+  return Math.floor(d / 30) + 'mo ago';
+}
+
+// ── Row overflow menu ─────────────────────────────────────────────────────
+function closeRowMenu() { const m = document.getElementById('rowMenu'); if (m) m.remove(); }
+document.addEventListener('click', (e) => { if (!e.target.closest('#rowMenu')) closeRowMenu(); });
+
+function popMenu(ev, items) {
+  closeRowMenu();
+  const m = document.createElement('div');
+  m.id = 'rowMenu';
+  m.innerHTML = items.map(it => it === '-'
+    ? '<div class="rm-sep"></div>'
+    : `<button class="rm-item ${it.danger ? 'danger' : ''}" onclick="closeRowMenu();${it.act}">${it.icon} ${escapeHtml(it.label)}</button>`).join('');
+  document.body.appendChild(m);
+  const r = ev.currentTarget.getBoundingClientRect();
+  m.style.top  = Math.min(r.bottom + 4, window.innerHeight - m.offsetHeight - 10) + 'px';
+  m.style.left = Math.min(r.left, window.innerWidth - m.offsetWidth - 10) + 'px';
+  ev.stopPropagation();
+}
+
+function openDeckMenu(id, ev) {
+  const p = presentations[id]; if (!p) return;
+  popMenu(ev, [
+    { icon: p.pinned ? '☆' : '★', label: p.pinned ? 'Unpin' : 'Pin to top', act: `togglePin('${escAttr(id)}')` },
+    { icon: '📁', label: 'Move to folder…', act: `openMoveModal(['${escAttr(id)}'])` },
+    { icon: '📤', label: 'Share with someone…', act: `openDeckShareModal('${escAttr(id)}')` },
+    '-',
+    { icon: '⧉',  label: 'Copy to another type…', act: `openCopyPresPicker('${escAttr(id)}')` },
+    { icon: '📑', label: 'Duplicate', act: `openDuplicatePresentation('${escAttr(id)}')` },
+    { icon: '✏️', label: 'Rename', act: `openRenamePres('${escAttr(id)}')` },
+    { icon: '↺',  label: 'Reset tally', act: `confirmResetPres('${escAttr(id)}')` },
+    '-',
+    { icon: p.archived ? '📤' : '📦', label: p.archived ? 'Unarchive' : 'Archive', act: `toggleArchive('${escAttr(id)}')` },
+    { icon: '🗑', label: 'Delete', act: `openDeletePres('${escAttr(id)}')`, danger: true },
+  ]);
+}
+
+function openFolderMenu(path, ev) {
+  popMenu(ev, [
+    { icon: '✏️', label: 'Rename folder', act: `renameFolder('${escAttr(path)}')` },
+    { icon: '🗑', label: 'Delete folder', act: `deleteFolder('${escAttr(path)}')`, danger: true },
+  ]);
+}
+
+// ── Deck field writes ─────────────────────────────────────────────────────
+async function setDeckField(id, field, value) {
+  const p = presentations[id]; if (!p) return;
+  if (value === null || value === undefined || value === '') delete p[field];
+  else p[field] = value;
+  if (userId) {
+    await db.ref(`users/${userId}/presentations/${id}/${field}`)
+      .set(value === '' ? null : value).catch(() => {});
+  }
+}
+
+async function togglePin(id) {
+  const p = presentations[id]; if (!p) return;
+  await setDeckField(id, 'pinned', p.pinned ? null : true);
+  renderPresList();
+  toast(p.pinned ? '★ Pinned' : 'Unpinned', 'success');
+}
+
+async function toggleArchive(id) {
+  const p = presentations[id]; if (!p) return;
+  const now = !p.archived;
+  await setDeckField(id, 'archived', now ? true : null);
+  renderPresList();
+  toast(now ? '📦 Archived — find it under Archived' : 'Restored', 'success');
+}
+
+// ── Folders ───────────────────────────────────────────────────────────────
+function allFolderPaths() {
+  const set = new Set(emptyFolders.map(normalizeFolder).filter(Boolean));
+  Object.values(presentations).forEach(p => { const f = deckFolder(p); if (f) set.add(f); });
+  // A nested path implies its parent exists.
+  [...set].forEach(f => { const parts = folderParts(f); for (let i = 1; i < parts.length; i++) set.add(folderJoin(parts.slice(0, i))); });
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+async function saveEmptyFolders() {
+  if (!userId) return;
+  await db.ref(`users/${userId}/folders`).set(emptyFolders.length ? emptyFolders : null).catch(() => {});
+}
+
+async function createFolder() {
+  const depth = folderParts(currentFolder).length;
+  if (depth >= FOLDER_MAX_DEPTH) {
+    toast(`Folders go ${FOLDER_MAX_DEPTH} levels deep — you're at the deepest level.`, 'danger');
+    return;
+  }
+  const name = (prompt(currentFolder ? `New folder inside “${folderParts(currentFolder).slice(-1)[0]}”:` : 'New folder name:') || '').trim();
+  if (!name) return;
+  if (name.includes('/')) { toast('Folder names can’t contain “/”.', 'danger'); return; }
+  const path = folderJoin(folderParts(currentFolder).concat([name]));
+  if (allFolderPaths().includes(path)) { toast('That folder already exists.', 'danger'); return; }
+  emptyFolders.push(path);
+  await saveEmptyFolders();
+  renderPresList();
+  toast(`📁 Created “${name}”`, 'success');
+}
+
+async function renameFolder(path) {
+  const parts = folderParts(path);
+  const name = (prompt('Rename folder:', parts[parts.length - 1]) || '').trim();
+  if (!name || name === parts[parts.length - 1]) return;
+  if (name.includes('/')) { toast('Folder names can’t contain “/”.', 'danger'); return; }
+  const next = folderJoin(parts.slice(0, -1).concat([name]));
+  // Rename is a string replace across the decks that carry the path — that's the
+  // payoff of deriving folders from decks instead of storing them as records.
+  const updates = {};
+  Object.keys(presentations).forEach(id => {
+    const f = deckFolder(presentations[id]);
+    if (folderContains(path, f)) {
+      const moved = next + f.slice(path.length);
+      presentations[id].folder = moved;
+      updates[`users/${userId}/presentations/${id}/folder`] = moved;
+    }
+  });
+  emptyFolders = emptyFolders.map(f => folderContains(path, normalizeFolder(f)) ? next + normalizeFolder(f).slice(path.length) : f);
+  if (userId && Object.keys(updates).length) await db.ref().update(updates).catch(() => {});
+  await saveEmptyFolders();
+  if (folderContains(path, currentFolder)) currentFolder = next + currentFolder.slice(path.length);
+  localStorage.setItem('ql_current_folder', currentFolder);
+  renderPresList();
+  toast('Folder renamed', 'success');
+}
+
+async function deleteFolder(path) {
+  const inside = Object.keys(presentations).filter(id => folderContains(path, deckFolder(presentations[id])));
+  const parent = folderJoin(folderParts(path).slice(0, -1));
+  const label = folderParts(path).slice(-1)[0];
+  if (inside.length && !confirm(`Delete the folder “${label}”?\n\nThe ${inside.length} deck${inside.length === 1 ? '' : 's'} inside will move to ${parent ? '“' + folderParts(parent).slice(-1)[0] + '”' : 'the top level'}. No deck is deleted.`)) return;
+  const updates = {};
+  inside.forEach(id => {
+    presentations[id].folder = parent || null;
+    if (!parent) delete presentations[id].folder;
+    updates[`users/${userId}/presentations/${id}/folder`] = parent || null;
+  });
+  emptyFolders = emptyFolders.filter(f => !folderContains(path, normalizeFolder(f)));
+  if (userId && Object.keys(updates).length) await db.ref().update(updates).catch(() => {});
+  await saveEmptyFolders();
+  if (folderContains(path, currentFolder)) goToFolder(parent);
+  else renderPresList();
+  toast('Folder deleted — decks kept', 'success');
+}
+
+// ── Move to folder ────────────────────────────────────────────────────────
+function openMoveModal(ids) {
+  let m = document.getElementById('moveFolderModal');
+  if (!m) { m = document.createElement('div'); m.id = 'moveFolderModal'; m.className = 'overlay'; m.onclick = e => { if (e.target === m) closeMoveModal(); }; document.body.appendChild(m); }
+  const paths = allFolderPaths().filter(p => folderParts(p).length < FOLDER_MAX_DEPTH || true);
+  const opts = ['<option value="">— Top level (unfiled) —</option>']
+    .concat(paths.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p.replace(/\//g, ' › '))}</option>`)).join('');
+  m.innerHTML = `<div class="modal" style="max-width:420px;">
+    <h2 style="margin-bottom:2px;">Move ${ids.length} deck${ids.length === 1 ? '' : 's'}</h2>
+    <p style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">Folders hold any mix of polls, surveys, quizzes and study sets — a lesson's material can live together.</p>
+    <label style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">Destination</label>
+    <select id="moveTarget" style="width:100%;margin:6px 0 12px;padding:9px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;font-size:13px;">${opts}</select>
+    <label style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">…or type a new one</label>
+    <input id="moveNew" placeholder="e.g. Biology 101/Unit 3" style="width:100%;margin:6px 0 14px;padding:9px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;font-size:13px;">
+    <button class="btn btn-primary" style="width:100%;" onclick='doMove(${JSON.stringify(ids)})'>Move</button>
+    <button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="closeMoveModal()">Cancel</button>
+  </div>`;
+  m.style.display = 'flex';
+}
+function closeMoveModal() { const m = document.getElementById('moveFolderModal'); if (m) m.remove(); }
+
+async function doMove(ids) {
+  const typed = (document.getElementById('moveNew').value || '').trim();
+  const target = normalizeFolder(typed || document.getElementById('moveTarget').value);
+  const updates = {};
+  ids.forEach(id => {
+    if (!presentations[id]) return;
+    if (target) presentations[id].folder = target; else delete presentations[id].folder;
+    updates[`users/${userId}/presentations/${id}/folder`] = target || null;
+  });
+  if (target) emptyFolders = emptyFolders.filter(f => normalizeFolder(f) !== target);
+  if (userId && Object.keys(updates).length) await db.ref().update(updates).catch(() => {});
+  await saveEmptyFolders();
+  closeMoveModal(); clearSelection(); renderPresList();
+  toast(`Moved to ${target ? target.replace(/\//g, ' › ') : 'the top level'}`, 'success');
+}
+
+/* ── SHARING ───────────────────────────────────────────────────────────────
+ * Send someone a COPY. They get their own deck in their own library and can edit
+ * it however they like; your original is untouched. Works whether or not they're
+ * on your team, and whether or not they've signed up yet — an unclaimed share
+ * waits under their email until they log in.
+ *
+ * Everything goes through /api/share, because users/$uid is readable only by that
+ * uid: a browser cannot read someone else's deck, and Realtime Database rules
+ * can't filter queries, so a recipient could never list their own inbox either.
+ * The Admin SDK does both. Nothing about a share is client-readable.
+ * ------------------------------------------------------------------------- */
+async function shareApi(action, body) {
+  if (!auth.currentUser) throw new Error('Sign in first.');
+  const t = await auth.currentUser.getIdToken();
+  const r = await fetch('/api/share', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + t },
+    body: JSON.stringify(Object.assign({ action }, body || {})),
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+  return d;
+}
+
+function openDeckShareModal(id) {
+  const p = presentations[id]; if (!p) return;
+  let m = document.getElementById('deckShareModal');
+  if (!m) { m = document.createElement('div'); m.id = 'deckShareModal'; m.className = 'overlay';
+            m.onclick = e => { if (e.target === m) closeDeckShareModal(); }; document.body.appendChild(m); }
+  const qn = toQArr(p.questions).length;
+  m.innerHTML = `<div class="modal" style="max-width:440px;">
+    <h2 style="margin-bottom:2px;">Share “${escapeHtml(p.name || 'Untitled')}”</h2>
+    <p style="color:var(--muted);font-size:12.5px;line-height:1.55;margin-bottom:14px;">
+      They get their <b>own copy</b> — ${qn} question${qn === 1 ? '' : 's'} — saved to their profile,
+      and can change it however they like. Your version stays exactly as it is.
+    </p>
+    <label style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">Their email</label>
+    <input id="deckShareEmail" type="email" placeholder="colleague@school.edu" autocomplete="off"
+           style="width:100%;margin:6px 0 12px;padding:9px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;font-size:13px;">
+    <label style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">Note (optional)</label>
+    <textarea id="deckShareNote" rows="2" placeholder="Here's the Unit 3 quiz we talked about."
+           style="width:100%;margin:6px 0 14px;padding:9px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;font-size:13px;font-family:inherit;resize:vertical;"></textarea>
+    <div id="deckShareErr" style="display:none;color:var(--accent2);font-size:12px;margin-bottom:10px;"></div>
+    <button class="btn btn-primary" id="deckShareSendBtn" style="width:100%;" onclick="doDeckShare('${escAttr(id)}')">📤 Send copy</button>
+    <button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="closeDeckShareModal()">Cancel</button>
+    <p style="color:var(--muted);font-size:11px;line-height:1.5;margin-top:12px;text-align:center;">
+      They don't need a PollSlide account yet — it'll be waiting when they sign in.
+    </p>
+  </div>`;
+  m.style.display = 'flex';
+  setTimeout(() => document.getElementById('deckShareEmail')?.focus(), 40);
+}
+function closeDeckShareModal() { const m = document.getElementById('deckShareModal'); if (m) m.remove(); }
+
+async function doDeckShare(id) {
+  const btn = document.getElementById('deckShareSendBtn');
+  const err = document.getElementById('deckShareErr');
+  const email = (document.getElementById('deckShareEmail').value || '').trim();
+  const note = (document.getElementById('deckShareNote').value || '').trim();
+  err.style.display = 'none';
+  btn.disabled = true; const old = btn.textContent; btn.textContent = 'Sending…';
+  try {
+    await shareApi('send', { presId: id, toEmail: email, note });
+    closeDeckShareModal();
+    toast(`📤 Copy sent to ${email}`, 'success');
+    refreshShareInbox();
+  } catch (e) {
+    err.textContent = e.message; err.style.display = 'block';
+    btn.disabled = false; btn.textContent = old;
+  }
+}
+
+/* ── Shared with me ──────────────────────────────────────────────────────── */
+let _shareInbox = [];
+async function refreshShareInbox() {
+  if (!auth.currentUser) return;
+  try { _shareInbox = (await shareApi('inbox')).shares || []; }
+  catch (e) { _shareInbox = []; }
+  const b = document.getElementById('inboxBtn');
+  if (b) {
+    b.style.display = _shareInbox.length ? '' : 'none';
+    b.textContent = `📥 Shared with me (${_shareInbox.length})`;
+  }
+}
+
+function openInbox() {
+  let m = document.getElementById('shareInboxModal');
+  if (!m) { m = document.createElement('div'); m.id = 'shareInboxModal'; m.className = 'overlay';
+            m.onclick = e => { if (e.target === m) closeInbox(); }; document.body.appendChild(m); }
+  const rows = _shareInbox.length ? _shareInbox.map(sh => `
+    <div style="border:1px solid var(--border);border-radius:11px;padding:12px 14px;margin-bottom:9px;">
+      <div style="font-family:Syne,sans-serif;font-weight:700;font-size:14px;">${escapeHtml(sh.title)}</div>
+      <div style="color:var(--muted);font-size:11.5px;margin-top:2px;">
+        from ${escapeHtml(sh.from)} · ${sh.questionCount} question${sh.questionCount === 1 ? '' : 's'} · ${escapeHtml((sh.productType || 'poll'))}
+      </div>
+      ${sh.note ? `<div style="border-left:3px solid var(--accent);padding-left:10px;margin-top:8px;font-size:12.5px;color:var(--text);">${escapeHtml(sh.note)}</div>` : ''}
+      <div style="display:flex;gap:7px;margin-top:11px;">
+        <button class="btn btn-primary btn-sm" onclick="acceptShare('${escAttr(sh.id)}')">Accept a copy</button>
+        <button class="btn btn-ghost btn-sm" onclick="declineShare('${escAttr(sh.id)}')">Decline</button>
+      </div>
+    </div>`).join('')
+    : '<p style="color:var(--muted);font-size:13px;text-align:center;padding:22px 0;">Nothing shared with you right now.</p>';
+
+  m.innerHTML = `<div class="modal" style="max-width:480px;">
+    <h2 style="margin-bottom:2px;">Shared with me</h2>
+    <p style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">Accepting puts your own copy in your library. Editing it never affects the sender's version.</p>
+    <div style="max-height:52vh;overflow-y:auto;">${rows}</div>
+    <button class="btn btn-ghost" style="width:100%;margin-top:10px;" onclick="closeInbox()">Close</button>
+  </div>`;
+  m.style.display = 'flex';
+}
+function closeInbox() { const m = document.getElementById('shareInboxModal'); if (m) m.remove(); }
+
+async function acceptShare(shareId) {
+  try {
+    const d = await shareApi('accept', { shareId });
+    await loadPresentations();
+    closeInbox();
+    toast(`✅ “${d.name}” is yours now — edit it freely`, 'success');
+    if (d.presId) selectPresentation(d.presId);
+    refreshShareInbox();
+  } catch (e) {
+    // A plan-limit refusal deserves the upgrade path, not a red toast.
+    if (/plan holds/i.test(e.message)) { closeInbox(); showUpgradePrompt(e.message, 'Upgrade for unlimited decks.'); }
+    else toast(e.message, 'danger');
+  }
+}
+async function declineShare(shareId) {
+  try { await shareApi('decline', { shareId }); await refreshShareInbox(); openInbox(); }
+  catch (e) { toast(e.message, 'danger'); }
+}
+
+// ── Bulk selection ────────────────────────────────────────────────────────
+function toggleSelectMode() { selectMode = !selectMode; selectedIds.clear(); renderPresList(); }
+function clearSelection() { selectMode = false; selectedIds.clear(); }
+function toggleSelect(id) {
+  if (selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+  renderPresList();
+}
+function syncBulkBar() {
+  const bar = document.getElementById('bulkBar');
+  const btn = document.getElementById('selectModeBtn');
+  if (btn) { btn.textContent = selectMode ? '✕' : '☑'; btn.title = selectMode ? 'Cancel selection' : 'Select several decks'; }
+  if (!bar) return;
+  bar.style.display = selectMode ? 'flex' : 'none';
+  const n = selectedIds.size;
+  const c = document.getElementById('bulkCount');
+  if (c) c.textContent = n + ' selected';
+  ['bulkMove', 'bulkArchive', 'bulkDelete'].forEach(x => { const b = document.getElementById(x); if (b) b.disabled = n === 0; });
+}
+function bulkMove() { if (selectedIds.size) openMoveModal([...selectedIds]); }
+async function bulkArchive() {
+  const ids = [...selectedIds]; if (!ids.length) return;
+  for (const id of ids) if (presentations[id] && !presentations[id].archived) await setDeckField(id, 'archived', true);
+  clearSelection(); renderPresList();
+  toast(`📦 Archived ${ids.length} deck${ids.length === 1 ? '' : 's'}`, 'success');
+}
+async function bulkDelete() {
+  const ids = [...selectedIds]; if (!ids.length) return;
+  if (!confirm(`Delete ${ids.length} deck${ids.length === 1 ? '' : 's'}?\n\nThey go to Recently deleted and can be restored.`)) return;
+  // Same soft-delete path as doDeletePres — trash first, then remove, so bulk
+  // delete is exactly as recoverable as deleting one at a time.
+  for (const id of ids) {
+    const snap = presentations[id]; if (!snap) continue;
+    try { await db.ref(`users/${userId}/trash/${id}`).set(Object.assign({}, snap, { _deletedAt: Date.now() })); } catch (e) {}
+    await db.ref(`users/${userId}/presentations/${id}`).remove().catch(() => {});
+    delete presentations[id];
+    if (activePresId === id) { activePresId = null; questions = []; selIdx = null; showSetup(); renderQList(); }
+  }
+  clearSelection(); renderPresList();
+  toast(`Deleted ${ids.length} deck${ids.length === 1 ? '' : 's'} — restore from Recently deleted`, 'success');
 }
 
 // ─── RESET TALLY ──────────────────────────────────────────────────────────────

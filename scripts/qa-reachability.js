@@ -53,6 +53,35 @@ let findings = 0;
  *
  * Returns Map<id, rhs[]> — an id absent from the map is never assigned at all.
  */
+/* Carve the source into function bodies plus whatever is left at the top level, by
+ * brace matching. Used by two checks: locals must not leak between functions, and a
+ * "duplicate function" is only a bug when both declarations share a scope. */
+function splitScopes(js) {
+  const ranges = [];
+  for (const m of js.matchAll(/\bfunction\s+([\w$]*)\s*\([^)]*\)\s*\{|\bfunction\s*\([^)]*\)\s*\{/g)) {
+    let depth = 0, i = m.index + m[0].length - 1;
+    for (; i < js.length; i++) {
+      const c = js[i];
+      if (c === '{') depth++;
+      else if (c === '}') { depth--; if (depth === 0) break; }
+    }
+    ranges.push({ start: m.index, end: i + 1, name: m[1] || null, body: js.slice(m.index, i + 1) });
+  }
+  // A declaration is top-level when no OTHER function body encloses it. Testing this
+  // by nesting rather than by "what's left over" matters: a top-level declaration is
+  // itself a function body, so subtracting all bodies from the source deletes exactly
+  // the declarations this check needs to see.
+  const topLevel = ranges.filter(r => !ranges.some(o => o !== r && o.start < r.start && r.start < o.end));
+  const covered = ranges.map(r => [r.start, r.end]);
+  let last = 0, outside = '';
+  for (const [a, b] of covered.sort((x, y) => x[0] - y[0])) {
+    if (a > last) outside += js.slice(last, a);
+    last = Math.max(last, b);
+  }
+  outside += js.slice(last);
+  return { scopes: ranges.map(r => r.body).concat([outside]), ranges, topLevel };
+}
+
 function collectDisabledAssignments(js) {
   const out = new Map();
   const add = (id, rhs) => {
@@ -61,23 +90,7 @@ function collectDisabledAssignments(js) {
     out.get(id).push(rhs.trim());
   };
 
-  // Carve out each function body by brace matching, so a local `b` can't leak
-  // across into the next function. Everything left over is one top-level scope.
-  const scopes = [];
-  const covered = [];
-  for (const m of js.matchAll(/\bfunction\s*[\w$]*\s*\([^)]*\)\s*\{/g)) {
-    let depth = 0, i = m.index + m[0].length - 1;
-    for (; i < js.length; i++) {
-      const c = js[i];
-      if (c === '{') depth++;
-      else if (c === '}') { depth--; if (depth === 0) break; }
-    }
-    scopes.push(js.slice(m.index, i + 1));
-    covered.push([m.index, i + 1]);
-  }
-  let last = 0, top = '';
-  for (const [a, b] of covered.sort((x, y) => x[0] - y[0])) { if (a > last) top += js.slice(last, a); last = Math.max(last, b); }
-  scopes.push(top + js.slice(last));
+  const { scopes } = splitScopes(js);
 
   // Accessors that take an id and hand back the element. `el` and `$` are the two
   // this codebase actually uses; getElementById is the raw form.
@@ -126,6 +139,22 @@ for (const f of files) {
     const id = m[2];
     const shows = new RegExp(`['"\`]${id}['"\`][\\s\\S]{0,300}?(?:style\\.display|classList\\.(?:remove|toggle)|hidden\\s*=)`).test(js);
     if (!shows) hits.push(`[B] #${id} ships display:none — found no code showing it. VERIFY IN BROWSER.`);
+  }
+
+  /* D. the same function declared twice -------------------------------------
+   * A duplicate `function foo()` is not an error in JavaScript — the last one
+   * silently wins, and every earlier definition becomes unreachable code. Adding
+   * `openShareModal(id)` for deck sharing to a file that already had
+   * `openShareModal()` for session links meant the new modal never opened, and the
+   * menu item quietly called the WRONG feature with an argument it ignored.
+   *
+   * Check C can't see this: the name IS defined. Only the count gives it away. */
+  const seen = {};
+  for (const r of splitScopes(js).topLevel) {
+    if (r.name) seen[r.name] = (seen[r.name] || 0) + 1;
+  }
+  for (const [name, n] of Object.entries(seen)) {
+    if (n > 1) hits.push(`[D] function ${name}() is declared ${n}× — the last one silently wins and the others are dead. Rename one.`);
   }
 
   // C. dead handlers --------------------------------------------------------
