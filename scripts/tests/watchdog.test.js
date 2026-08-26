@@ -11,6 +11,7 @@
 const {
   evalBackupAge, evalErrorSpike, evalTierDrift, evalProbe, evalAiReachable,
   decideNotification, ESCALATE_AFTER_MS, isStoredBackup,
+  evalShareHygiene, evalQidBackfill, evalOrphanGrants,
 } = require('../../lib/watchdog');
 
 let pass = 0, fail = 0;
@@ -77,6 +78,28 @@ ok('pro → team_small counts as a restore (rank, not alphabetical)',
    evalTierDrift({ rows: [{ uid: 'a', actual: 'pro', expected: 'team_small' }] }).restore.length === 1);
 ok('team_large → team_small counts as a review',
    evalTierDrift({ rows: [{ uid: 'a', actual: 'team_large', expected: 'team_small' }] }).review.length === 1);
+
+console.log('\nShare hygiene');
+ok('nothing to tidy passes',        evalShareHygiene({ total: 12, stalePending: 0, settledWithPayload: 0 }).ok);
+ok('an unclaimed old share fails',  !evalShareHygiene({ total: 12, stalePending: 3, maxAgeDays: 30 }).ok);
+ok('a spent snapshot fails',        !evalShareHygiene({ total: 12, settledWithPayload: 5 }).ok);
+ok('the message names both problems', (() => {
+  const d = evalShareHygiene({ total: 9, stalePending: 2, settledWithPayload: 4, maxAgeDays: 30 }).detail;
+  return /2 pending/.test(d) && /4 settled/.test(d);
+})());
+ok('an empty shares node passes',   evalShareHygiene({}).ok);
+
+console.log('\nStable question ids');
+ok('all decks done passes',   evalQidBackfill({ decksChecked: 40, decksNeedingIds: 0 }).ok);
+ok('any deck without ids fails', !evalQidBackfill({ decksChecked: 40, decksNeedingIds: 1 }).ok);
+ok('the message explains the consequence, not just the count',
+   /mis-attribute/.test(evalQidBackfill({ decksNeedingIds: 3 }).detail));
+ok('no decks at all passes',  evalQidBackfill({ decksChecked: 0, decksNeedingIds: 0 }).ok);
+
+console.log('\nOrphan collaboration grants');
+ok('all grants live passes',   evalOrphanGrants({ grantsChecked: 7, orphans: 0 }).ok);
+ok('a dead grant fails',       !evalOrphanGrants({ grantsChecked: 7, orphans: 2 }).ok);
+ok('no grants at all passes',  evalOrphanGrants({ grantsChecked: 0, orphans: 0 }).ok);
 
 console.log('\nEndpoint probes');
 ok('all 200 passes',            evalProbe({ results: [{ name: 'a', status: 200, ok: true }] }).ok);

@@ -21,7 +21,7 @@
  * Env: FIREBASE_*, INTERNAL_API_KEY (notification email), NEXT_PUBLIC_APP_URL.
  * --------------------------------------------------------------------------- */
 const admin = require('firebase-admin');
-const { verifyToken, tokenFrom } = require('../lib/quota');
+const { verifyToken, tokenFrom, ADMIN_EMAILS } = require('../lib/quota');
 const { limitsFor } = require('../lib/limits');
 const { rateLimit, clientIp, sweepRateLimits } = require('../lib/guard');
 
@@ -319,6 +319,71 @@ module.exports = async (req, res) => {
         const out = [];
         snap.forEach(c => { const v = c.val() || {}; out.push(Object.assign({ key: c.key }, v)); });
         return res.status(200).json({ ok: true, decks: out });
+      }
+
+      /* ── ADMIN: support tooling ───────────────────────────────────────────
+       * "I shared a quiz with Jane and she never got it" is unanswerable without
+       * being able to look a share up from either side. Admin-gated. */
+      case 'admin_lookup': {
+        if (!ADMIN_EMAILS.includes(myEmail)) return res.status(403).json({ error: 'Admins only.' });
+        const q = String((req.body || {}).email || '').toLowerCase().trim();
+        if (!isEmail(q)) return res.status(400).json({ error: 'Give me an email address to look up.' });
+        const key = emailKey(q);
+
+        const [toThem, fromThem] = await Promise.all([
+          db.ref('shares').orderByChild('toEmailKey').equalTo(key).get(),
+          db.ref('shares').get(),
+        ]);
+        const received = [], sent = [];
+        toThem.forEach(c => { const v = c.val() || {};
+          received.push({ id: c.key, from: v.fromEmail, title: v.title, role: v.role || 'copy',
+                          status: v.status, at: v.at, acceptedAt: v.acceptedAt || null }); });
+        fromThem.forEach(c => { const v = c.val() || {};
+          if ((v.fromEmail || '').toLowerCase() !== q) return;
+          sent.push({ id: c.key, to: v.toEmail, title: v.title, role: v.role || 'copy',
+                      status: v.status, at: v.at, acceptedAt: v.acceptedAt || null }); });
+        received.sort((a, b) => b.at - a.at); sent.sort((a, b) => b.at - a.at);
+
+        // Live collaborations, both directions.
+        const uid = (await db.ref('admin/users_index').orderByChild('email').equalTo(q).get()).val();
+        const theirUid = uid ? Object.keys(uid)[0] : null;
+        const grantsOut = [], grantsIn = [];
+        if (theirUid) {
+          const g = await db.ref(`deckGrants/${theirUid}`).get();
+          g.forEach(d => {
+            Object.keys(d.val() || {}).forEach(cu => grantsOut.push({ presId: d.key, collabUid: cu }));
+          });
+          const ci = await db.ref(`collabIndex/${theirUid}`).get();
+          ci.forEach(c => { const v = c.val() || {}; grantsIn.push({ ownerEmail: v.ownerEmail, presId: v.presId, title: v.title }); });
+        }
+        return res.status(200).json({ ok: true, uid: theirUid, received, sent, grantsOut, grantsIn });
+      }
+
+      /* Support can end a collaboration on a user's behalf — "someone is editing my
+       * deck and I can't get them off". */
+      case 'admin_revoke': {
+        if (!ADMIN_EMAILS.includes(myEmail)) return res.status(403).json({ error: 'Admins only.' });
+        const { ownerUid, presId, collabUid } = req.body || {};
+        if (!ownerUid || !presId || !collabUid) return res.status(400).json({ error: 'Need ownerUid, presId and collabUid.' });
+        await db.ref(`deckGrants/${s(ownerUid,128)}/${s(presId,60)}/${s(collabUid,128)}`).remove();
+        await db.ref(`collabIndex/${s(collabUid,128)}/${s(ownerUid,128)}_${s(presId,60)}`).remove().catch(() => {});
+        return res.status(200).json({ ok: true });
+      }
+
+      /* Counts for the admin overview — cheap enough to read on page load. */
+      case 'admin_stats': {
+        if (!ADMIN_EMAILS.includes(myEmail)) return res.status(403).json({ error: 'Admins only.' });
+        const snap = await db.ref('shares').get();
+        const byStatus = {}, byRole = {};
+        let total = 0, withPayload = 0;
+        snap.forEach(c => { const v = c.val() || {}; total++;
+          byStatus[v.status || '?'] = (byStatus[v.status || '?'] || 0) + 1;
+          byRole[v.role || 'copy'] = (byRole[v.role || 'copy'] || 0) + 1;
+          if (v.payload) withPayload++; });
+        const g = await db.ref('deckGrants').get();
+        let liveCollabs = 0;
+        g.forEach(o => { Object.values(o.val() || {}).forEach(d => { liveCollabs += Object.keys(d || {}).length; }); });
+        return res.status(200).json({ ok: true, total, byStatus, byRole, withPayload, liveCollabs });
       }
 
       default:

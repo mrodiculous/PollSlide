@@ -15,6 +15,7 @@ const admin = require('firebase-admin');
 const {
   evalBackupAge, evalErrorSpike, evalTierDrift, evalProbe, evalAiReachable,
   decideNotification, isStoredBackup,
+  evalShareHygiene, evalQidBackfill, evalOrphanGrants,
 } = require('../lib/watchdog');
 const { setUserTier } = require('../lib/tier');
 const { tierForSubscription } = require('../lib/stripe-tier');
@@ -174,6 +175,122 @@ const CHECKS = [
       return { note: notes.length ? notes.join('; ') : 'Nothing needed changing.' };
     },
     hint: 'Under-granted accounts are restored automatically. Over-granted ones are listed for you — check Admin → Users → 🕵️ Account timeline before changing anything, since team members and comped accounts are meant to sit above their own Stripe record.',
+  },
+
+  {
+    id: 'share_hygiene',
+    title: 'Old share records are piling up',
+    severity: 'warn',
+    autoFix: true,
+    async gather(ctx) {
+      const maxAgeDays = Number(process.env.SHARE_TTL_DAYS || 30);
+      const cutoff = Date.now() - maxAgeDays * 86400000;
+      const snap = await ctx.db.ref('shares').get();
+      let total = 0, stalePending = 0, settledWithPayload = 0;
+      const stale = [], settled = [];
+      snap.forEach(c => {
+        const v = c.val() || {}; total++;
+        if (v.status === 'pending' && (v.at || 0) < cutoff) { stalePending++; stale.push(c.key); }
+        else if (v.status !== 'pending' && v.payload) { settledWithPayload++; settled.push(c.key); }
+      });
+      return { total, stalePending, settledWithPayload, maxAgeDays, _stale: stale, _settled: settled };
+    },
+    evaluate: evalShareHygiene,
+    /* Two safe, non-destructive-to-users remedies:
+     *   • drop the deck snapshot from a share that has already been accepted or
+     *     declined — it has done its job and the copy already exists
+     *   • expire a pending share nobody claimed, so a mistyped address doesn't keep
+     *     someone's quiz forever
+     * Neither touches a deck anyone actually owns. */
+    async fix(ctx, data) {
+      const updates = {};
+      (data._settled || []).forEach(k => { updates[`shares/${k}/payload`] = null; });
+      (data._stale || []).forEach(k => { updates[`shares/${k}`] = null; });
+      if (Object.keys(updates).length) await ctx.db.ref().update(updates);
+      return { note: `Dropped ${(data._settled || []).length} spent snapshot(s) and expired ${(data._stale || []).length} unclaimed share(s).` };
+    },
+    hint: 'Nothing to do — this tidies itself. Raise SHARE_TTL_DAYS if 30 days is too short for your users to claim a share.',
+  },
+
+  {
+    id: 'qid_backfill',
+    title: 'Some decks still key answers by question position',
+    severity: 'high',
+    autoFix: true,
+    async gather(ctx) {
+      // Sampled, not exhaustive: this runs every 15 minutes and only needs to know
+      // whether any remain. The remedy fixes whatever it finds, so repeated runs
+      // converge on zero.
+      const snap = await ctx.db.ref('users').limitToFirst(200).get();
+      let decksChecked = 0, decksNeedingIds = 0;
+      const need = [];
+      snap.forEach(u => {
+        const uid = u.key, decks = (u.val() || {}).presentations || {};
+        Object.entries(decks).forEach(([pid, d]) => {
+          if (!d) return;
+          const qs = Array.isArray(d.questions) ? d.questions : (d.questions ? Object.values(d.questions) : []);
+          if (!qs.length) return;
+          decksChecked++;
+          if (qs.some(q => q && typeof q === 'object' && !q.id)) { decksNeedingIds++; need.push({ uid, pid }); }
+        });
+      });
+      return { decksChecked, decksNeedingIds, _need: need.slice(0, 50) };
+    },
+    evaluate: evalQidBackfill,
+    /* The same backfill the browser does on open, applied server-side so a deck
+     * nobody has opened is protected too. The id assigned is `q<index>_stable`, which
+     * makes the derived response bucket byte-identical to the existing key — so this
+     * moves no data and cannot orphan an answer. See qid.js. */
+    async fix(ctx, data) {
+      let fixed = 0;
+      for (const { uid, pid } of (data._need || [])) {
+        try {
+          const ref = ctx.db.ref(`users/${uid}/presentations/${pid}/questions`);
+          const snap = await ref.get();
+          if (!snap.exists()) continue;
+          const v = snap.val();
+          const qs = Array.isArray(v) ? v : Object.values(v);
+          let changed = false;
+          qs.forEach((q, i) => { if (q && typeof q === 'object' && !q.id) { q.id = 'q' + i + '_stable'; changed = true; } });
+          if (changed) { await ref.set(qs); fixed++; }
+        } catch (e) { /* one unreadable deck must not stop the sweep */ }
+      }
+      return { note: `Backfilled stable question ids on ${fixed} deck(s).` };
+    },
+  },
+
+  {
+    id: 'orphan_grants',
+    title: 'Collaboration grants point at deleted decks',
+    severity: 'warn',
+    autoFix: true,
+    async gather(ctx) {
+      const snap = await ctx.db.ref('deckGrants').get();
+      let grantsChecked = 0, orphans = 0;
+      const dead = [];
+      const owners = [];
+      snap.forEach(o => { owners.push([o.key, o.val() || {}]); });
+      for (const [ownerUid, decks] of owners) {
+        for (const presId of Object.keys(decks)) {
+          grantsChecked++;
+          try {
+            const d = await ctx.db.ref(`users/${ownerUid}/presentations/${presId}`).get();
+            if (!d.exists()) { orphans++; dead.push({ ownerUid, presId, collabs: Object.keys(decks[presId] || {}) }); }
+          } catch (e) { /* skip */ }
+        }
+      }
+      return { grantsChecked, orphans, _dead: dead };
+    },
+    evaluate: evalOrphanGrants,
+    async fix(ctx, data) {
+      const updates = {};
+      (data._dead || []).forEach(({ ownerUid, presId, collabs }) => {
+        updates[`deckGrants/${ownerUid}/${presId}`] = null;
+        (collabs || []).forEach(cu => { updates[`collabIndex/${cu}/${ownerUid}_${presId}`] = null; });
+      });
+      if (Object.keys(updates).length) await ctx.db.ref().update(updates);
+      return { note: `Cleared ${(data._dead || []).length} grant(s) for decks that no longer exist.` };
+    },
   },
 
   {

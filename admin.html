@@ -288,6 +288,9 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
     <div class="nav-item" onclick="showPage('billing')" id="nav-billing">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Billing / Stripe
     </div>
+    <div class="nav-item" onclick="showPage('sharing')" id="nav-sharing">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Sharing &amp; collaboration
+    </div>
     <div class="nav-item" onclick="showPage('search')" id="nav-search">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Lookup
     </div>
@@ -430,12 +433,12 @@ function showPage(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const nav=document.getElementById('nav-'+page);if(nav)nav.classList.add('active');
-  const titles={dashboard:'Dashboard',users:'Users',teams:'Teams',tickets:'Support Tickets',comms:'Send Message',flows:'Message Flows',legal:'Legal Quick Actions',health:'System Health',security:'Security',ai:'AI / Polly Management',tiers:'Plans & Tiers',search:'Lookup',architecture:'How PollSlide Works',runbook:'Runbook · Fix-it Guide',billing:'Billing / Stripe',errors:'Errors in the Wild',autopilot:'Auto-pilot'};
+  const titles={dashboard:'Dashboard',users:'Users',teams:'Teams',tickets:'Support Tickets',comms:'Send Message',flows:'Message Flows',legal:'Legal Quick Actions',health:'System Health',security:'Security',ai:'AI / Polly Management',tiers:'Plans & Tiers',search:'Lookup',architecture:'How PollSlide Works',runbook:'Runbook · Fix-it Guide',billing:'Billing / Stripe',errors:'Errors in the Wild',autopilot:'Auto-pilot',sharing:'Sharing & Collaboration'};
   document.getElementById('pageTitle').textContent=titles[page]||page;
   closeDetail();renderPage();
 }
 function renderPage(){
-  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture,runbook:renderRunbook,billing:renderBilling,errors:renderErrors,autopilot:renderAutopilot};
+  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture,runbook:renderRunbook,billing:renderBilling,errors:renderErrors,autopilot:renderAutopilot,sharing:renderSharing};
   if(map[currentPage])map[currentPage]();
 }
 
@@ -1937,6 +1940,95 @@ async function loadSecurityLog(){
   }catch(e){el.textContent='Could not read scan history: '+e.message;}
 }
 
+// ─── SHARING & COLLABORATION ──────────────────────────────────────────────────
+// The support questions this exists to answer:
+//   "I shared a quiz with Jane and she never got it"  → look it up from either side
+//   "Someone is editing my deck and I can't remove them" → end it for them
+//   "I accepted a share but nothing appeared"         → see the grant and the index
+function renderSharing(){
+  document.getElementById('content').innerHTML=`
+  <div class="stat-grid" id="shareStats"><div class="loader">Loading…</div></div>
+  <div class="card">
+    <div class="card-hd"><h2>Look up a person's shares</h2></div>
+    <div style="padding:12px 18px;color:var(--muted);font-size:12.5px;line-height:1.6;">
+      Type the email a user is asking about. You'll see what was sent <b>to</b> them and <b>by</b> them,
+      plus any live collaborations in either direction.
+    </div>
+    <div style="padding:0 18px 14px;display:flex;gap:8px;">
+      <input id="shareLookupEmail" type="email" placeholder="teacher@school.edu"
+             onkeydown="if(event.key==='Enter')lookupShares()"
+             style="flex:1;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;padding:9px 11px;font-size:13px;">
+      <button class="btn btn-primary btn-sm" onclick="lookupShares()">Look up</button>
+    </div>
+    <div id="shareLookupOut" style="padding:0 18px 16px;color:var(--muted);font-size:13px;"></div>
+  </div>`;
+  loadShareStats();
+}
+
+async function shareAdmin(action, body){
+  if(!auth.currentUser) throw new Error('not signed in yet — try again in a moment');
+  const t = await auth.currentUser.getIdToken();
+  const r = await fetch('/api/share',{method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},
+    body:JSON.stringify(Object.assign({action},body||{}))});
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error||('HTTP '+r.status));
+  return d;
+}
+
+async function loadShareStats(){
+  const el=document.getElementById('shareStats');
+  try{
+    const d=await shareAdmin('admin_stats');
+    const st=d.byStatus||{};
+    el.innerHTML=`
+      <div class="stat"><div class="stat-val">${d.total||0}</div><div class="stat-label">Share records</div></div>
+      <div class="stat"><div class="stat-val">${st.pending||0}</div><div class="stat-label">Pending</div><div class="stat-sub">not yet accepted</div></div>
+      <div class="stat"><div class="stat-val">${st.accepted||0}</div><div class="stat-label">Accepted</div></div>
+      <div class="stat"><div class="stat-val">${d.liveCollabs||0}</div><div class="stat-label">Live collaborations</div><div class="stat-sub">people editing someone else's deck</div></div>
+      <div class="stat"><div class="stat-val">${(d.byRole||{}).edit||0}</div><div class="stat-label">Collaboration invites</div><div class="stat-sub">${(d.byRole||{}).copy||0} copy shares</div></div>
+      <div class="stat"><div class="stat-val">${d.withPayload||0}</div><div class="stat-label">Carrying a snapshot</div><div class="stat-sub">Auto-pilot prunes spent ones</div></div>`;
+  }catch(e){ el.innerHTML='<div class="stat" style="min-width:100%;">Could not load: '+esc(e.message)+'</div>'; }
+}
+
+async function lookupShares(){
+  const email=(document.getElementById('shareLookupEmail').value||'').trim();
+  const out=document.getElementById('shareLookupOut');
+  if(!email){ out.textContent='Enter an email address.'; return; }
+  out.textContent='Looking…';
+  try{
+    const d=await shareAdmin('admin_lookup',{email});
+    const row=(r,dir)=>`<tr>
+      <td style="font-size:12px;">${esc(dir==='in'?r.from:r.to)}</td>
+      <td><span class="pill ${r.role==='edit'?'pill-team':'pill-free'}">${r.role==='edit'?'collaborate':'copy'}</span></td>
+      <td style="font-size:12.5px;">${esc(r.title)}</td>
+      <td><span class="pill ${r.status==='accepted'?'pill-pro':r.status==='pending'?'pill-free':'pill-danger'}">${esc(r.status)}</span></td>
+      <td style="font-size:11px;color:var(--muted);">${timeAgo(r.at)}</td></tr>`;
+    const table=(rows,dir,head)=>rows.length
+      ? `<table><thead><tr><th>${head}</th><th>Kind</th><th>Deck</th><th>Status</th><th>Sent</th></tr></thead><tbody>${rows.map(r=>row(r,dir)).join('')}</tbody></table>`
+      : '<p style="padding:8px 0;">None.</p>';
+
+    out.innerHTML=
+      (d.uid ? `<p style="margin-bottom:10px;">Account found — uid <code style="font-size:11px;">${esc(d.uid)}</code></p>`
+             : '<p style="margin-bottom:10px;color:var(--accent4);">No PollSlide account with that address yet. Shares sent to them are still waiting and will appear when they first sign in.</p>')
+      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:14px 0 6px;">Shared with them</div>' + table(d.received,'in','From')
+      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:16px 0 6px;">Shared by them</div>' + table(d.sent,'out','To')
+      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:16px 0 6px;">Decks they can edit (someone else owns)</div>'
+      + (d.grantsIn.length ? d.grantsIn.map(g=>`<div style="padding:7px 0;border-top:1px solid var(--border);font-size:12.5px;">${esc(g.title||g.presId)} — owned by ${esc(g.ownerEmail||'?')}</div>`).join('') : '<p style="padding:8px 0;">None.</p>')
+      + '<div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin:16px 0 6px;">People who can edit THEIR decks</div>'
+      + (d.grantsOut.length ? d.grantsOut.map(g=>`<div style="display:flex;align-items:center;gap:9px;padding:7px 0;border-top:1px solid var(--border);font-size:12.5px;">
+             <span style="flex:1;">deck <code style="font-size:11px;">${esc(g.presId)}</code> — collaborator <code style="font-size:11px;">${esc(g.collabUid)}</code></span>
+             <button class="btn btn-ghost btn-sm" onclick="adminEndCollab('${esc(d.uid)}','${esc(g.presId)}','${esc(g.collabUid)}')">End access</button>
+           </div>`).join('') : '<p style="padding:8px 0;">None.</p>');
+  }catch(e){ out.textContent='Lookup failed: '+e.message; }
+}
+
+async function adminEndCollab(ownerUid, presId, collabUid){
+  if(!confirm('End this collaboration on the owner\'s behalf?\n\nIt takes effect immediately — their next edit will be refused.'))return;
+  try{ await shareAdmin('admin_revoke',{ownerUid,presId,collabUid}); lookupShares(); }
+  catch(e){ alert('Could not end it: '+e.message); }
+}
+
 // ─── AUTO-PILOT ───────────────────────────────────────────────────────────────
 // /api/watchdog runs every 15 minutes: it checks the things that break quietly,
 // applies a known-safe remedy where one exists, re-checks to confirm the remedy
@@ -1979,6 +2071,9 @@ const AP_CHECKS=[
   {id:'tier_drift',        t:'A plan disagrees with Stripe',        fix:'Restores the plan to match Stripe, with an audited entry in the account timeline.'},
   {id:'endpoints_down',    t:'A core endpoint is not responding',   fix:'Needs you — usually a bad deploy.'},
   {id:'ai_unavailable',    t:'Polly has no working model',          fix:'Needs you — bring the Mac back up, or set OPENAI_API_KEY so the cloud fallback covers it.'},
+  {id:'share_hygiene',     t:'Old share records piling up',          fix:'Drops the deck snapshot from shares already accepted or declined, and expires ones nobody claimed after 30 days.'},
+  {id:'qid_backfill',      t:'Decks keying answers by position',     fix:'Backfills stable question ids server-side. Uses the deck\'s current order so response keys stay byte-identical — no answers move.'},
+  {id:'orphan_grants',     t:'Grants pointing at deleted decks',     fix:'Clears the grant and the collaborator\'s index entry.'},
 ];
 
 // The check table is documentation — it must render even when the data read fails,
@@ -2441,6 +2536,46 @@ function openArchDetail(layerKey,i){
 // Self-service "what broke → exact fix" so Rod can resolve common issues fast.
 // Each step is either an instruction (string) or a copyable command ({cmd}).
 const RUNBOOK = [
+  { cat:'🤝 Sharing & collaboration', items:[
+    { sym:'"I shared a quiz with someone and they never got it"',
+      cause:'Almost always a mistyped address, or they signed in with a different email than the one you sent to.',
+      steps:[
+        'Admin → <b>Sharing & collaboration</b> → look up the SENDER\'s email. "Shared by them" lists every share with its status and the exact address it went to.',
+        'If the address is wrong, there is nothing to recover — ask them to resend. A pending share can be withdrawn from the sender\'s own ⋯ menu.',
+        'If the address is right, look up the RECIPIENT. "No PollSlide account with that address yet" means the share is waiting correctly and appears the moment they sign in with that exact address.',
+        'A share addressed to <code>jane@school.edu</code> does NOT appear for someone signed in as <code>j.doe@school.edu</code>. Same person, different key.',
+      ] },
+    { sym:'"Someone is editing my deck and I can\'t get them off"',
+      cause:'The owner should be able to do this themselves — but support can do it for them.',
+      steps:[
+        'The user\'s own route: the deck\'s <b>⋯</b> menu → <b>🤝 Build it together…</b> → Remove.',
+        'Support route: Admin → Sharing & collaboration → look up the OWNER → "People who can edit THEIR decks" → <b>End access</b>.',
+        'It takes effect immediately. Access is re-checked by the database rules on every single write, so their next keystroke is refused — there is no session to wait out.',
+        'The collaborator keeps nothing. A collaboration is a grant, not a copy.',
+      ] },
+    { sym:'"I accepted a share but the deck never appeared"',
+      cause:'A copy-share and a collaboration behave differently — check which kind it was.',
+      steps:[
+        'Look them up. The <b>Kind</b> column says <code>copy</code> or <code>collaborate</code>.',
+        '<b>copy</b> → a new deck should be in their own library. If they are on Free and already hold 3 decks, accepting is refused with an upgrade prompt — check their plan.',
+        '<b>collaborate</b> → it appears in their list marked <b>shared</b>, and lives in the OWNER\'s library. It will not show under any of their folders, by design.',
+        'If a collaboration accepted but shows nothing, the owner may have deleted the deck since. Auto-pilot\'s <code>orphan_grants</code> check clears those automatically.',
+      ] },
+    { sym:'"Why can\'t I put a shared deck in a folder / pin it?"',
+      cause:'Expected. Folders and pins are personal filing, and the deck lives in its owner\'s library.',
+      steps:[
+        'Writing a folder or a pin onto a shared deck would change how its OWNER sees their own library — so those actions are hidden on shared decks rather than silently doing that.',
+        'Everything else works normally: editing, presenting, reports.',
+        'If they want it filed under their own system, they want a <b>copy</b>, not a collaboration.',
+      ] },
+    { sym:'"Answers are attached to the wrong question"',
+      cause:'The pre-2026-08-17 bug: a question\'s responses were keyed by its POSITION, so reordering or deleting one moved the answers to whatever took its place.',
+      steps:[
+        'Fixed. Every question now carries a permanent id, and the id assigned during migration keeps the existing response key byte-identical — so no historical answer moved.',
+        'A deck nobody has opened since the fix is still exposed. Auto-pilot\'s <code>qid_backfill</code> check finds and repairs those server-side, every 15 minutes.',
+        'Damage done BEFORE the fix cannot be undone — the answers were written under the wrong key at the time. If a user reports a historical report looking wrong, this is the likely cause and it is not recoverable.',
+      ] },
+  ] },
   { cat:'🤖 Auto-pilot & error reporting', items:[
     { sym:'I got an email saying "Fixed automatically" — do I need to do anything?',
       cause:'Auto-pilot (/api/watchdog, every 15 min) found a problem, applied a known-safe remedy, RE-CHECKED it, and the re-check passed.',
