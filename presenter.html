@@ -2329,6 +2329,7 @@ async function loadPresentations() {
   } catch(e) { console.error('Load failed', e); }
 
   await loadCollabDecks();   // decks other people let me edit
+  await loadMyGrants();      // ...and which of mine other people can edit
 
   // Restore last active — and land on its product tab so it's visible in the list.
   const lastActive = localStorage.getItem('ql_active_pres');
@@ -2429,7 +2430,15 @@ async function createPresentation(thenPolly = false) {
   }
 
   renderPresList();
-  selectPresentation(id);
+  // Selecting must never be able to stop Polly opening. Anything that throws in
+  // here — a listener, a dashboard, a rules change — used to take the dialog down
+  // with it, leaving a new deck and no way to describe what it should contain.
+  try {
+    selectPresentation(id);
+  } catch (e) {
+    activePresId = id;   // openPolly needs this, and it's true regardless
+    if (window.psReportError) psReportError('selectPresentation failed after create: ' + (e && e.message));
+  }
 
   // Opening Polly is the whole point of "New with Polly", so it gets its own guard:
   // one missing element inside openPolly() must not leave the user with a new deck
@@ -2475,8 +2484,6 @@ function selectPresentation(id) {
   // "+ New" and the setup panel follow the selected deck's type. The list FILTER
   // (typeFilter) is left alone — jumping the filter around under someone who is
   // browsing "All" would be hostile.
-  startCollab(id);   // live sync + presence; a no-op for a deck nobody shares
-
   const pt = presType(pres);
   if (pt !== activeProduct) { activeProduct = pt; localStorage.setItem('ql_active_product', pt); renderProductTabs(); }
 
@@ -2537,6 +2544,15 @@ function selectPresentation(id) {
   if (presType(pres) === 'survey') attachSurveyDashboard(pres);
   else if (presType(pres) === 'quiz' && liveQIdx === null) attachQuizLeaderboard(pres);
   else if (presType(pres) === 'study') attachStudyDashboard(pres);
+
+  // LAST, and never fatal. Running this early raced the code below for control of
+  // `questions` — the listener set them from the remote copy, this function then
+  // overwrote them, and the listener fired again and clobbered them back. It also
+  // must not be able to throw: selectPresentation's caller depends on it returning
+  // (that's what stopped "New with Polly" opening its dialog).
+  try { startCollab(id); } catch (e) {
+    if (window.psReportError) psReportError('startCollab failed: ' + (e && e.message));
+  }
 }
 
 // ─── DELETE / RENAME PRESENTATIONS ───────────────────────────────────────────
@@ -3609,9 +3625,26 @@ function stopCollab() {
 }
 
 // Called whenever a deck is opened. Cheap for a deck nobody shares: one listener.
+// Decks of mine that someone else can edit. Read once at load; a per-click read
+// would put a network round-trip in front of every deck you open.
+let myGrantedDeckIds = new Set();
+async function loadMyGrants() {
+  myGrantedDeckIds = new Set();
+  if (!userId) return;
+  try {
+    const snap = await db.ref(`deckGrants/${userId}`).get();
+    if (snap.exists()) Object.keys(snap.val() || {}).forEach(pid => myGrantedDeckIds.add(pid));
+  } catch (e) { /* no grants, or rules not deployed yet — treat as none */ }
+}
+function deckIsShared(id) { return isCollabDeck(id) || myGrantedDeckIds.has(id); }
+
 function startCollab(id) {
   stopCollab();
   if (!userId || !id || !presentations[id]) return;
+  // THE IMPORTANT LINE. A deck nobody shares needs no live listener, no presence
+  // write and no heartbeat — subscribing to all of them made every click do four
+  // network operations and fight the editor for `questions`.
+  if (!deckIsShared(id)) return;
 
   // 1. Follow the deck itself, so their edits appear here.
   const dref = db.ref(deckPath(id));
@@ -3635,12 +3668,19 @@ function startCollab(id) {
     if (localJson === remoteJson) return;
     _applyingRemote = true;
     try {
+      const remoteQs = toQArr(remote.questions);
+      // Only touch the editor when the QUESTIONS actually changed. Metadata churn
+      // (lastOpenedAt, a folder move) used to rebuild the whole list and reset the
+      // selection under whoever was typing.
+      const questionsChanged = JSON.stringify(remoteQs) !== JSON.stringify(questions);
       presentations[id] = remote;
-      const wasSel = selIdx;
-      questions = toQArr(remote.questions);
-      selIdx = (wasSel != null && wasSel < questions.length) ? wasSel : (questions.length ? 0 : null);
-      renderQList();
-      if (selIdx != null && editMode) renderEditor(selIdx);
+      if (questionsChanged) {
+        const wasSel = selIdx;
+        questions = remoteQs;
+        selIdx = (wasSel != null && wasSel < questions.length) ? wasSel : (questions.length ? 0 : null);
+        renderQList();
+        if (selIdx != null && editMode) renderEditor(selIdx);
+      }
       renderPresList();
     } finally { _applyingRemote = false; }
   });
@@ -3670,6 +3710,7 @@ function startCollab(id) {
 
 // Heartbeat: keeps my presence fresh and my lock alive while I'm actually typing.
 setInterval(() => {
+  // _presenceRef only exists for a shared deck, so this is idle for everyone else.
   if (_presenceRef && activePresId) {
     _presenceRef.update({ at: Date.now() }).catch(() => {});
   }
