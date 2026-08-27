@@ -412,27 +412,45 @@ function _writeTransFromApi(q, out){
 // POST a batch of api-questions to /api/translate and return the translated ones in the
 // same order. Cached per source-question, and NEVER throws — on any failure it returns
 // the originals so the audience is never blocked on a translation.
+// Requests already in flight, so the same question is never asked for twice at once.
+// Without this, showing question 1 and pre-warming the deck both request question 1
+// simultaneously — two model calls for one answer, and the slower one wins nothing.
+const _transInFlight = {};
+const _transKey = (qq) => DECK_LANG + '>' + LANG + ':' + JSON.stringify(qq);
+
 async function _translateApiQuestions(apiQs){
   const out = new Array(apiQs.length);
-  const need = [], needIdx = [];
+  const need = [], needIdx = [], waits = [];
   apiQs.forEach((qq, i) => {
-    const k = DECK_LANG + '>' + LANG + ':' + JSON.stringify(qq);
-    if (_transQCache[k] != null) out[i] = _transQCache[k];
-    else { need.push(qq); needIdx.push(i); }
+    const k = _transKey(qq);
+    if (_transQCache[k] != null) { out[i] = _transQCache[k]; return; }
+    if (_transInFlight[k]) {                     // someone else already asked — ride along
+      waits.push(_transInFlight[k].then(v => { out[i] = (v != null) ? v : qq; }).catch(() => { out[i] = qq; }));
+      return;
+    }
+    need.push(qq); needIdx.push(i);
   });
+
   if (need.length){
-    try {
+    const call = (async () => {
       const r = await fetch('/api/translate', { method:'POST', headers:{'content-type':'application/json'},
         body: JSON.stringify({ questions: need, target: LANG, source: DECK_LANG, session: SESSION || '' }) });
       const d = await r.json().catch(() => null);
-      const arr = (d && Array.isArray(d.questions)) ? d.questions : [];
-      need.forEach((qq, j) => {
-        const v = (arr[j] && typeof arr[j] === 'object') ? arr[j] : qq;   // passthrough on any miss
-        _transQCache[DECK_LANG + '>' + LANG + ':' + JSON.stringify(qq)] = v;
-        out[needIdx[j]] = v;
-      });
-    } catch(e){ need.forEach((qq, j) => { out[needIdx[j]] = qq; }); }  // never block the audience on a failure
+      return (d && Array.isArray(d.questions)) ? d.questions : [];
+    })();
+    // Register each key BEFORE awaiting, so a concurrent caller finds it.
+    need.forEach((qq, j) => { _transInFlight[_transKey(qq)] = call.then(arr => (arr[j] && typeof arr[j] === 'object') ? arr[j] : qq); });
+    let arr = [];
+    try { arr = await call; } catch(e){ arr = []; }   // never block the audience on a failure
+    need.forEach((qq, j) => {
+      const v = (arr[j] && typeof arr[j] === 'object') ? arr[j] : qq;   // passthrough on any miss
+      _transQCache[_transKey(qq)] = v;
+      out[needIdx[j]] = v;
+      delete _transInFlight[_transKey(qq)];
+    });
   }
+
+  if (waits.length) await Promise.all(waits);
   return out;
 }
 
@@ -469,10 +487,17 @@ async function prewarmDeckTranslation(){
         opts: (q.options || []).map(o => (o && o.text) || ''),
       }))
       .filter(Boolean);
-    // Chunks of four: small enough that the structured JSON reply stays reliable,
-    // large enough that a 20-question deck is five calls rather than twenty.
-    for (let i = 0; i < apiQs.length; i += 4) {
-      await _translateApiQuestions(apiQs.slice(i, i + 4));
+    /* Chunk size is a real trade against a LOCAL model.
+     * Every call re-sends the same long system prompt, so more chunks means paying
+     * that overhead more times — but a bigger batch makes the structured JSON reply
+     * less reliable, and one bad batch is rejected whole. Six is the compromise: a
+     * 20-question deck is four calls instead of five, and the reply stays small
+     * enough to come back well-formed.
+     * The FIRST chunk is what the room is waiting for, so it goes first and alone —
+     * later chunks only start once question one is safely translated. */
+    const SIZE = Number(6);
+    for (let i = 0; i < apiQs.length; i += SIZE) {
+      await _translateApiQuestions(apiQs.slice(i, i + SIZE));
     }
   } catch (e) {
     _prewarmedFor = null;   // let a later attempt retry
@@ -679,6 +704,13 @@ async function bootApp() {
 
   // Load the deck's (source) language first.
   try { const s = await db.ref(`quiz_builder/${SESSION}/language`).get(); if (s.exists() && s.val()) DECK_LANG = String(s.val()); } catch(e) {}
+
+  // Start translating the deck RIGHT NOW, not when the first question appears.
+  // Between here and question one there is a name to type, maybe a team to pick, and
+  // a wait for the presenter — easily ten or twenty seconds of dead time that the
+  // model can use. Whoever gets here first also warms the shared cache, so everyone
+  // behind them reads it instantly. Fire-and-forget: nothing waits on it.
+  prewarmDeckTranslation();
 
   // Team play (pub-quiz mode): presenter toggles it per deck. When on, everyone picks or
   // creates a team after entering their name, and each response carries the team name.

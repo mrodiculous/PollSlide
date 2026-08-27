@@ -68,6 +68,10 @@ async function callChat({ baseURL, apiKey, model, messages, timeoutMs, extraHead
         messages,
         temperature: 0.2,                          // faithful, not creative
         response_format: { type: 'json_object' },
+        // Generation time is the whole latency story for a local model. The reply we
+        // want is short (~60-200 tokens); this only stops a model that decides to keep
+        // going after the closing brace, which costs the room seconds for nothing.
+        max_tokens: Number(process.env.TRANSLATE_MAX_TOKENS || 1500),
       }),
       signal: controller.signal,
     });
@@ -249,33 +253,114 @@ function cacheKey(source, q) {
 
 // Run the local→OpenAI provider chain for a set of questions. Returns {outQs, provider}
 // where outQs is the normalised translation set, or null when both providers failed.
+/* RACE, don't fall back.
+ *
+ * Local-first made sense for Polly, where nobody is waiting in a room. For live
+ * translation it is the wrong shape: gemma4 on the M4 measures 10.5-12.9s (see the
+ * note above), so an audience watched a question sit in the wrong language for ten
+ * seconds — and if the local output failed the corruption gate, the cloud call
+ * started only THEN, doubling it.
+ *
+ * Both providers now start together and the FIRST VALID answer wins. gpt-4o-mini
+ * on this payload returns in ~1-2s, so that is what the room normally sees, while
+ * the Mac still covers the case where the cloud key is missing or OpenAI is down.
+ *
+ * Cost: a cache MISS may spend one cheap cloud call it would previously have
+ * avoided. Given the cross-viewer cache that is once per deck, per language — not
+ * once per viewer. Set TRANSLATE_RACE=0 to go back to local-first if that trade
+ * ever stops being worth it.
+ */
+// How long the Mac gets ON ITS OWN before the cloud is also asked. Set to 0 to race
+// both from the start; set very high (or clear OPENAI_API_KEY) to stay local always.
+const HEDGE_MS = Number(process.env.TRANSLATE_HEDGE_MS || 2500);
+const TRANSLATE_RACE = process.env.TRANSLATE_RACE !== '0';
+
 async function translateStructuredViaProviders(questions, targetName) {
   const units    = flattenQuestions(questions).length || questions.length;
   const messages = [{ role:'system', content: buildStructuredSystem(targetName) },
                     { role:'user',   content: JSON.stringify({ questions }) }];
-  let raw = '', provider = '';
-  if (LOCAL_LLM_URL) {
+  const localBudget = Math.min(45000, Math.max(LOCAL_TIMEOUT_MS, 12000 + units * 1400));
+
+  // One provider attempt. Resolves ONLY with output that parses and passes the
+  // corruption gate — anything else throws, so the race moves on to the other one.
+  const attempt = async (provider) => {
+    const raw = provider === 'local'
+      ? await callChat({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_TRANSLATE_MODEL, messages, timeoutMs: localBudget, extraHeaders: CF_ACCESS_HEADERS })
+      : await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS });
+    const outQs = parseStructured(raw, questions);
+    if (!outQs) throw new Error(provider + ': unparseable reply');
+    // The corruption gate (dropped emoji, translated brand name) was only ever
+    // applied to the local model. Keep it that way: it exists because small models
+    // mangle those, and rejecting a good cloud answer on a false positive would
+    // cost the room the very seconds this change is trying to save.
+    if (provider === 'local' && !qualityOkStructured(questions, outQs)) {
+      throw new Error(`local: ${LOCAL_TRANSLATE_MODEL} returned corrupted output`);
+    }
+    return { outQs, provider };
+  };
+
+  // Thunks, not promises: calling attempt() fires the request, so building the list
+  // eagerly would send BOTH even with racing switched off.
+  const racers = [];
+  if (OPENAI_API_KEY) racers.push(() => attempt('openai'));
+  if (LOCAL_LLM_URL)  racers.push(() => attempt('local'));
+  if (!racers.length) return { outQs: null, provider: '' };
+
+  /* HEDGED, not raced.
+   *
+   * Racing both from the start made the audience fast but sent every cache miss to
+   * OpenAI even when the Mac would have answered fine a second later. Hedging keeps
+   * the work local by default AND caps what the room can be made to wait:
+   *
+   *   t=0        ask the Mac
+   *   t=HEDGE_MS if the Mac hasn't answered yet, ask the cloud too
+   *   whichever returns a VALID answer first wins
+   *
+   * So a healthy warm local model answers inside the hedge and the cloud is never
+   * called — no cost, nothing leaves the machine. A cold or struggling Mac stops
+   * being the audience's problem after HEDGE_MS instead of after twelve seconds.
+   */
+  if (TRANSLATE_RACE && racers.length > 1 && LOCAL_LLM_URL && OPENAI_API_KEY) {
+    const localFirst = () => attempt('local');
+    const cloudLater = async () => {
+      await new Promise(r => setTimeout(r, Math.max(0, HEDGE_MS)));
+      if (settled.done) throw new Error('cloud: not needed, local already answered');
+      return attempt('openai');
+    };
+    const settled = { done: false };
+    const track = (p) => p.then(v => { settled.done = true; return v; });
     try {
-      const localBudget = Math.min(45000, Math.max(LOCAL_TIMEOUT_MS, 12000 + units * 1400));
-      raw = await callChat({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_TRANSLATE_MODEL, messages, timeoutMs: localBudget, extraHeaders: CF_ACCESS_HEADERS });
-      provider = 'local';
-    } catch (err) { console.warn('Translate(structured): local LLM unreachable → OpenAI fallback:', err.message); }
+      return await Promise.any([track(localFirst()), track(cloudLater())]);
+    } catch (agg) {
+      const why = (agg && agg.errors ? agg.errors : []).map(e => e && e.message).join(' | ');
+      console.error('Translate(structured): every provider failed:', why);
+      return { outQs: null, provider: '' };
+    }
   }
-  let outQs = parseStructured(raw, questions);
-  if (outQs && provider === 'local' && !qualityOkStructured(questions, outQs)) {
-    console.warn(`Translate(structured): ${LOCAL_TRANSLATE_MODEL} returned corrupted output → OpenAI fallback`);
-    outQs = null; provider = '';
-  }
-  if (!outQs && OPENAI_API_KEY) {
+
+  if (TRANSLATE_RACE && racers.length > 1) {
     try {
-      raw = await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS });
-      provider = 'openai';
-      outQs = parseStructured(raw, questions);
-    } catch (err) { console.error('Translate(structured): OpenAI error:', err.message); }
+      return await Promise.any(racers.map(f => f()));   // first VALID answer wins
+    } catch (agg) {
+      // Promise.any only rejects when EVERY provider failed.
+      const why = (agg && agg.errors ? agg.errors : []).map(e => e && e.message).join(' | ');
+      console.error('Translate(structured): every provider failed:', why);
+      return { outQs: null, provider: '' };
+    }
   }
-  return { outQs, provider };
+
+  // Sequential (single provider, or TRANSLATE_RACE=0) — only the next one is started
+  // if the previous actually failed.
+  for (const f of racers) {
+    try { return await f(); } catch (err) { console.warn('Translate(structured):', err.message); }
+  }
+  return { outQs: null, provider: '' };
 }
 
+// Exported for scripts/tests/translate-race.test.js. The racing logic decides how
+// long an audience stares at the wrong language, and it has real failure modes
+// (corrupt local reply, unparseable reply, every provider down) that deserve a test
+// rather than a hope.
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -445,3 +530,5 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ ok:true, translations: originals, fallback:true, error: String(e && e.message || e) });
   }
 };
+
+module.exports.__test = { translateStructuredViaProviders, parseStructured, qualityOkStructured };

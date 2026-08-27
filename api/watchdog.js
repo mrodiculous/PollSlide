@@ -325,16 +325,37 @@ const CHECKS = [
     async gather() {
       let localOk = false;
       const base = process.env.LOCAL_LLM_URL;
-      if (base) {
+      const host = base ? base.replace(/\/v1\/?.*$/, '') : '';
+      const cfHeaders = process.env.CF_ACCESS_CLIENT_ID ? {
+        'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID,
+        'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET || '',
+      } : {};
+      if (host) {
         try {
-          const r = await fetchWithTimeout(base.replace(/\/v1\/?.*$/, '') + '/api/tags', {
-            headers: process.env.CF_ACCESS_CLIENT_ID ? {
-              'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID,
-              'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET || '',
-            } : {},
-          }, 6000);
+          const r = await fetchWithTimeout(host + '/api/tags', { headers: cfHeaders }, 6000);
           localOk = r.ok;
         } catch (e) { localOk = false; }
+      }
+
+      /* Keep the models RESIDENT, not just the server reachable.
+       * Ollama evicts an idle model, and a cold load of the translation model was
+       * measured at ~18s — paid by whoever in the audience happens to switch
+       * language first. An empty generate with keep_alive pins it in memory without
+       * generating anything, and running every 15 minutes means it never falls out.
+       * Best-effort and fire-and-forget: this check reports on reachability, and a
+       * failed warm-up must not turn into a false alarm. */
+      if (localOk) {
+        const keepAlive = process.env.LOCAL_KEEP_ALIVE || '1h';
+        const models = [
+          process.env.LOCAL_TRANSLATE_MODEL || 'gemma4:latest',   // the audience waits on this one
+          process.env.LOCAL_LLM_MODEL,                            // Polly's, if different
+        ].filter((m, i, a) => m && a.indexOf(m) === i);
+        await Promise.all(models.map(model =>
+          fetchWithTimeout(host + '/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...cfHeaders },
+            body: JSON.stringify({ model, prompt: '', keep_alive: keepAlive }),
+          }, 20000).catch(() => {})));
       }
       return { localOk, cloudConfigured: !!process.env.OPENAI_API_KEY };
     },
