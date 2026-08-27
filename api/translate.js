@@ -347,12 +347,17 @@ module.exports = async function handler(req, res) {
       const results = new Array(questions.length);
       const hit     = new Array(questions.length).fill(false);
       if (canCache) {
-        await Promise.all(questions.map(async (q, i) => {
-          try {
-            const snap = await cacheRoot.child(cacheKey(source, q)).get();
-            if (snap.exists()) { results[i] = snap.val(); hit[i] = true; }
-          } catch (e) { /* treat as a miss */ }
-        }));
+        // ONE read of the whole language bucket, then match locally. This used to be
+        // one Firebase round-trip PER QUESTION — a 20-question deck cost 20 sequential
+        // network hops before a single word was translated, on every viewer's request.
+        try {
+          const snap = await cacheRoot.get();
+          const bucket = snap.exists() ? (snap.val() || {}) : {};
+          questions.forEach((q, i) => {
+            const v = bucket[cacheKey(source, q)];
+            if (v) { results[i] = v; hit[i] = true; }
+          });
+        } catch (e) { /* treat the whole bucket as a miss */ }
       }
       const missQs = [], missIdx = [];
       questions.forEach((q, i) => { if (!hit[i]) { missIdx.push(i); missQs.push(q); } });

@@ -345,6 +345,19 @@ const I18N = {
 };
 function t(key, fallback){ return (I18N[LANG] && I18N[LANG][key]) || fallback; }
 
+/* Everything a presenter typed, and everything a translation model returned, is
+ * injected into innerHTML by the renderers below. Unescaped, a single "<" swallowed
+ * the rest of a question and "&amp;" silently decoded — which is what "garbled" looks
+ * like from the audience's seat. It is also an injection hole: whatever the model
+ * returns would run as HTML on every phone in the room.
+ * Escape on OUTPUT, never on input — the same string is also used in plain-text
+ * contexts (submission, comparison, "see original"), where entities would be wrong. */
+function esc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 // ── Live audience translation ───────────────────────────────────────────────
 // LANG = the language THIS viewer reads in (chrome + content). DECK_LANG = the
 // language the presenter authored in (the source). When they differ, question
@@ -421,6 +434,49 @@ async function _translateApiQuestions(apiQs){
     } catch(e){ need.forEach((qq, j) => { out[needIdx[j]] = qq; }); }  // never block the audience on a failure
   }
   return out;
+}
+
+/* ── Pre-warm the whole deck, once ─────────────────────────────────────────
+ * Live mode translated ONE question at a time, on arrival. So every advance made
+ * the first viewer in a language wait for a model round-trip, and everyone else
+ * wait for an HTTP hop — on every single question.
+ *
+ * The deck is known in advance, so translate all of it the moment a viewer picks a
+ * language. That viewer waits once; every later question is an instant local hit,
+ * and because /api/translate shares its cache across viewers, everyone ELSE in that
+ * language gets pure cache hits too — including people who join later.
+ *
+ * Deliberately fire-and-forget and chunked: it must never block the question on
+ * screen, and a whole deck in one request would strain the structured-JSON reply.
+ * ------------------------------------------------------------------------- */
+let _prewarmedFor = null;          // 'src>tgt' already warmed (or in flight)
+
+async function prewarmDeckTranslation(){
+  if (LANG === DECK_LANG || !SESSION) return;
+  const tag = DECK_LANG + '>' + LANG;
+  if (_prewarmedFor === tag) return;              // already done or running
+  _prewarmedFor = tag;
+  try {
+    const snap = await db.ref(`quiz_builder/${SESSION}/questions`).get();
+    if (!snap.exists()) return;
+    const v = snap.val();
+    const all = (Array.isArray(v) ? v : Object.values(v || {})).filter(Boolean);
+    const apiQs = all
+      .filter(q => !q.noTranslate)
+      .map(q => _apiQFromOrig({
+        text: q.text, front: q.front, back: q.back,
+        low: (q.ratingLabels || {}).low, high: (q.ratingLabels || {}).high,
+        opts: (q.options || []).map(o => (o && o.text) || ''),
+      }))
+      .filter(Boolean);
+    // Chunks of four: small enough that the structured JSON reply stays reliable,
+    // large enough that a 20-question deck is five calls rather than twenty.
+    for (let i = 0; i < apiQs.length; i += 4) {
+      await _translateApiQuestions(apiQs.slice(i, i + 4));
+    }
+  } catch (e) {
+    _prewarmedFor = null;   // let a later attempt retry
+  }
 }
 
 // ── "See original" support ───────────────────────────────────────────────────
@@ -604,6 +660,10 @@ function setViewerLang(code){
   LANG = code; try { localStorage.setItem('ql_viewer_lang', code); } catch(e){}
   _showOriginal = false;   // picking a language means "show me this language", not the source
   if (typeof _currentRenderer === 'function') _currentRenderer();
+  // Warm the whole deck in the NEW language straight away. Picking a language is the
+  // clearest possible signal that every remaining question will be needed in it —
+  // so pay the cost once here rather than once per question advance.
+  prewarmDeckTranslation();
 }
 
 // ─── BOOT ─────────────────────────────────────────────────────────────────────
@@ -909,6 +969,9 @@ async function loadQuestion() {
     translateQuestion(questionData)
       .then(() => { if (answerUntouched()) showQuestion(questionData); })
       .catch(() => {});
+    // …and warm the REST of the deck in the background, so the next advance is
+    // instant instead of another round-trip.
+    prewarmDeckTranslation();
   }
 }
 
@@ -955,7 +1018,7 @@ function showQuestion(q) {
       <div class="rating-wrap" id="ratingWrap">
         ${Array.from({length:max},(_,i)=>`<button class="r-btn" id="rb${i+1}" onclick="selectRating(${i+1})">${i+1}</button>`).join('')}
       </div>
-      ${labels.low||labels.high ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:14px;"><span id="ratingLow">${labels.low||''}</span><span id="ratingHigh">${labels.high||''}</span></div>` : ''}
+      ${labels.low||labels.high ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:14px;"><span id="ratingLow">${esc(labels.low)}</span><span id="ratingHigh">${esc(labels.high)}</span></div>` : ''}
       <button class="btn btn-primary" id="submitBtn" onclick="submitAnswer()" disabled>${t('submitRating','Submit Rating')}</button>`;
   } else {
     body = `
@@ -967,7 +1030,7 @@ function showQuestion(q) {
           <button class="option ${hasImg?'has-img':''}" id="opt${i}" onclick="toggleOpt(${i})">
             <span class="opt-letter">${letters[i]}</span>
             ${hasImg?mediaTag(opt.img, opt.videoOpts, 'opt-img'):''}
-            <span>${opt.text||''}</span>
+            <span>${esc(opt.text)}</span>
           </button>`;
         }).join('')}
       </div>
@@ -1007,7 +1070,7 @@ function showQuestion(q) {
       </div>
       <div class="q-badge" style="margin-top:16px;">${t('question','Question')} ${Q_INDEX+1}</div>
       ${qImage}
-      <div class="q-text" style="opacity:0.75;">${q.text}</div>
+      <div class="q-text" style="opacity:0.75;">${esc(q.text)}</div>
     `);
     return;
   }
@@ -1035,7 +1098,7 @@ function showQuestion(q) {
     ${modeBannerHtml()}
     ${timerHtml}
     ${qImage}
-    <div class="q-text">${q.text}</div>
+    <div class="q-text">${esc(q.text)}</div>
     ${wagerGate || `<div id="qBody">${body}</div>`}
   `);
 
@@ -1347,7 +1410,7 @@ function surveyQuestionBody(q, idx) {
       <div class="rating-wrap">
         ${Array.from({length:max},(_,i)=>`<button type="button" class="r-btn" id="sq${idx}_r${i+1}" onclick="surveyPickRating(${idx},${i+1})">${i+1}</button>`).join('')}
       </div>
-      ${labels.low||labels.high ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>${labels.low||''}</span><span>${labels.high||''}</span></div>` : ''}`;
+      ${labels.low||labels.high ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);"><span>${esc(labels.low)}</span><span>${esc(labels.high)}</span></div>` : ''}`;
   }
   // single or multi choice
   return `
@@ -1358,7 +1421,7 @@ function surveyQuestionBody(q, idx) {
         return `<button type="button" class="option ${hasImg?'has-img':''}" id="sq${idx}_opt${i}" onclick="surveyPickOption(${idx},${i},${isMulti})">
           <span class="opt-letter">${SURVEY_LETTERS[i]}</span>
           ${hasImg?mediaTag(opt.img, opt.videoOpts, 'opt-img'):''}
-          <span>${opt.text||''}</span>
+          <span>${esc(opt.text)}</span>
         </button>`;
       }).join('')}
     </div>`;
@@ -1369,7 +1432,7 @@ function showSurveyForm() {
     <div class="survey-card" id="surveyCard${idx}">
       <div class="survey-qnum">${idx+1}</div>
       ${mediaTag(q.image, q.videoOpts, 'q-image')}
-      <div class="q-text" style="font-size:18px;margin-bottom:14px;">${q.text || ''}</div>
+      <div class="q-text" style="font-size:18px;margin-bottom:14px;">${esc(q.text)}</div>
       ${surveyQuestionBody(q, idx)}
     </div>`).join('');
 
@@ -1524,7 +1587,7 @@ function showQuizScore() {
       <div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);text-align:left;">
         <div style="color:${color};font-weight:800;font-size:16px;flex-shrink:0;width:18px;">${icon}</div>
         <div style="min-width:0;flex:1;">
-          <div style="font-size:13px;font-weight:600;margin-bottom:2px;">${idx+1}. ${q.text||''}</div>
+          <div style="font-size:13px;font-weight:600;margin-bottom:2px;">${idx+1}. ${esc(q.text)}</div>
           ${isGradable ? `<div style="font-size:12px;color:var(--muted);">${t('yourAnswer','Your answer')}: ${answerLabel(q, ans)}</div>` : `<div style="font-size:12px;color:var(--muted);">${answerLabel(q, ans)}</div>`}
           ${showCorrect ? `<div style="font-size:12px;color:var(--accent3,#22c55e);">${t('correctWas','Correct')}: ${correctLabel(q)}</div>` : ''}
         </div>
@@ -1813,7 +1876,7 @@ function showStudyCard() {
     <div class="study-card" id="studyCard" onclick="flipStudyCard()">
       <button class="study-speak" onclick="event.stopPropagation();speakCard()" title="Read aloud" aria-label="Read aloud">🔊</button>
       <div class="study-face-label" id="studyFaceLabel">${t('tapToFlip','TAP TO FLIP')}</div>
-      <div class="study-front" id="studyText">${card.front}</div>
+      <div class="study-front" id="studyText">${esc(card.front)}</div>
     </div>
     <div id="studyControls">
       <button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="flipStudyCard()">${t('showAnswer','Show Answer')}</button>
@@ -1903,7 +1966,7 @@ function showClockCard() {
     </div>
     <div class="study-card" onclick="flipClock()">
       <div class="study-face-label">${t('tapToFlip','TAP TO FLIP')}</div>
-      <div class="study-front" id="studyText">${card.front}</div>
+      <div class="study-front" id="studyText">${esc(card.front)}</div>
     </div>
     <div id="studyControls"><button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="flipClock()">${t('showAnswer','Show Answer')}</button></div>
   `);
@@ -1981,7 +2044,7 @@ function showLadderCard() {
         <div style="font-size:13px;font-weight:700;margin-bottom:8px;">🪜 ${t('rung','Rung')} ${ladderRung+1}/10</div>
         <div class="study-card" style="min-height:120px;" onclick="flipLadder()">
           <div class="study-face-label">${t('tapToFlip','TAP TO FLIP')}</div>
-          <div class="study-front" id="studyText">${card.front}</div>
+          <div class="study-front" id="studyText">${esc(card.front)}</div>
         </div>
         <div id="ladderHint" style="font-size:11.5px;color:var(--accent4);margin-top:8px;"></div>
         <div id="studyControls" style="margin-top:10px;">
@@ -2014,7 +2077,7 @@ function useFifty() {
   const words = String(card.back || '').split(/\s+/).filter(Boolean);
   const hint = words.length > 1
     ? `${t('hintStarts','Starts with')} "${words[0]}" · ${words.length} ${t('hintWords','words')}`
-    : `${t('hintStarts','Starts with')} "${String(card.back).slice(0,2)}…"`;
+    : `${t('hintStarts','Starts with')} "${esc(String(card.back).slice(0,2))}…"`;
   const el = document.getElementById('ladderHint'); if (el) el.textContent = '💡 ' + hint;
   const b = document.querySelector('#studyControls .btn-ghost'); if (b) b.disabled = true;
 }
@@ -2093,7 +2156,7 @@ function pickTile(i) {
     <div style="text-align:center;font-family:'Syne',sans-serif;font-weight:800;font-size:20px;color:var(--accent4);margin-bottom:10px;">${boardTiles[i].value}</div>
     <div class="study-card" onclick="flipBoard()">
       <div class="study-face-label">${t('tapToFlip','TAP TO FLIP')}</div>
-      <div class="study-front" id="studyText">${card.front}</div>
+      <div class="study-front" id="studyText">${esc(card.front)}</div>
     </div>
     <div id="studyControls"><button class="btn btn-primary" style="width:100%;justify-content:center;" onclick="flipBoard()">${t('showAnswer','Show Answer')}</button></div>
   `);
@@ -2267,7 +2330,7 @@ function showStudyDone(nothingDue) {
 // Stored at sessions/SESSION/qa/<id> = {text,name,votes,voters,createdAt,answered}.
 // ════════════════════════════════════════════════════════════════════════════
 let qaRef = null;
-function escapeQa(s){ return String(s==null?'':s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function escapeQa(s){ return esc(s); }
 
 function loadQA(){
   _currentRenderer = loadQA;
