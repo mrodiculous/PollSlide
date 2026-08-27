@@ -207,6 +207,38 @@
   .type-chip { font-size:8.5px; font-weight:700; letter-spacing:0.05em; padding:1px 5px; border-radius:20px; text-transform:uppercase; background:rgba(255,255,255,0.08); color:var(--muted); margin-left:5px; flex-shrink:0; }
   .row-check { width:18px; height:18px; flex-shrink:0; border-radius:5px; border:1.5px solid var(--border2); display:flex; align-items:center; justify-content:center; font-size:11px; color:#fff; cursor:pointer; }
   .row-check.on { background:var(--accent); border-color:var(--accent); }
+  /* ── Centre pane mode strip ── */
+  .center-mode { display:flex; align-items:center; gap:10px; padding:8px 14px; flex-shrink:0;
+    border-bottom:1px solid var(--border); background:var(--surface2); font-size:12px; }
+  .cm-tag { font-size:10px; font-weight:700; letter-spacing:.05em; text-transform:uppercase;
+    padding:3px 9px; border-radius:20px; white-space:nowrap; }
+  .cm-tag.setup { background:rgba(255,255,255,.08); color:var(--muted); }
+  .cm-tag.edit  { background:rgba(247,183,49,.16); color:var(--accent4); }
+  .cm-tag.ready { background:rgba(108,99,255,.16); color:var(--accent); }
+  .cm-tag.live  { background:rgba(255,101,132,.18); color:var(--accent2); }
+  .cm-what { flex:1; min-width:0; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cm-switch { background:var(--surface3); border:1px solid var(--border2); color:var(--text);
+    border-radius:7px; padding:4px 11px; font-size:11.5px; font-family:'DM Sans',sans-serif;
+    cursor:pointer; white-space:nowrap; flex-shrink:0; }
+  .cm-switch:hover { background:var(--accent); border-color:var(--accent); color:#fff; }
+  /* ── Topbar: one primary action, everything else behind ⋯ ── */
+  .more-wrap { position:relative; }
+  .more-menu { display:none; position:absolute; top:calc(100% + 6px); right:0; z-index:9999;
+    background:var(--surface); border:1px solid var(--border2); border-radius:12px;
+    box-shadow:0 10px 34px rgba(0,0,0,.45); padding:6px; min-width:236px; }
+  .more-menu.open { display:block; }
+  .more-group { font-size:9.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase;
+    color:var(--muted); padding:9px 10px 4px; }
+  .more-sep { height:1px; background:var(--border); margin:5px 8px; }
+  /* The menu holds the REAL toolbar buttons, so restyle them as rows rather than
+     duplicating them — a second copy would drift out of sync with the first. */
+  .more-menu .btn { width:100%; justify-content:flex-start; gap:9px; padding:8px 10px;
+    font-size:12.5px; font-weight:500; border:none; background:transparent; border-radius:7px;
+    text-align:left; margin:0; }
+  .more-menu .btn:hover:not(:disabled) { background:var(--surface3); }
+  .more-menu .btn:disabled { opacity:.38; }
+  .more-menu .btn-primary { background:transparent; color:var(--text); }
+  .more-menu .btn-reset { color:var(--accent2); }
   .collab-bar { display:flex; flex-wrap:wrap; gap:5px; padding:7px 9px; background:rgba(67,233,123,0.10); border-top:1px solid var(--border); border-bottom:1px solid var(--border); flex-shrink:0; }
   .collab-chip { font-size:10.5px; font-weight:600; padding:3px 9px; border-radius:20px; background:rgba(67,233,123,0.16); color:var(--accent3); white-space:nowrap; }
   .collab-chip.owner { background:rgba(108,99,255,0.16); color:var(--accent); }
@@ -474,6 +506,32 @@
     <span id="saveText">Saved</span>
   </div>
   <div class="topbar-right">
+    <!-- ONE primary action. Everything that isn't "start the thing" lives behind ⋯,
+         grouped by the job it belongs to. The buttons below are the SAME elements as
+         before — same ids, same handlers — just relocated, so every enable/disable
+         and sync function keeps working untouched. -->
+    <button class="btn btn-primary" id="presentBtn" onclick="openPresentPicker()" disabled
+            title="Present this deck — choose where it goes">▶ Present</button>
+
+    <div class="more-wrap" id="moreWrap">
+      <button class="btn btn-ghost" id="moreBtn" onclick="toggleMoreMenu()" title="Everything else">⋯</button>
+      <div class="more-menu" id="moreMenu">
+        <div class="more-group">While you present</div>
+        <button class="btn btn-ghost" id="bigScreenBtn" onclick="openBigScreen()" disabled title="Open the big-screen join + live results view (projector / second screen)">🖥️ Big screen</button>
+        <button class="btn btn-ghost" id="teamModeBtn" onclick="toggleTeamMode()" disabled title="Team play (pub-quiz mode): the audience joins as teams and the leaderboard ranks teams. Team score = average of the members' scores, so team size doesn't matter.">👥 Teams: Off</button>
+        <button class="btn btn-ghost" id="qaBtn" onclick="openQAPanel()" disabled title="Audience Q&amp;A — questions & upvotes">💬 Q&amp;A</button>
+        <div class="more-group">Send it out</div>
+        <button class="btn btn-primary" id="shareBtn" onclick="openShareModal()" style="display:none;" title="Share link / QR for this survey">🔗 Share</button>
+        <button class="btn btn-ghost" id="studyNowBtn" onclick="studyNow()" style="display:none;" title="Study this set yourself, right now — spaced repetition, streaks and study games">📚 Study now</button>
+        <button class="btn btn-ghost" id="makeStudyBtn" onclick="studyThisDeck()" style="display:none;" title="Turn this deck into a StudySlide set of flashcards you can revise with">📚 Study this deck</button>
+        <div class="more-group">Results</div>
+        <button class="btn btn-ghost" id="reportBtn" onclick="window.open('/report'+(activePresId?('?pres='+encodeURIComponent(activePresId)):''),'_blank')" disabled title="Open the full report">📊 Report</button>
+        <button class="btn btn-reset" id="resetBtn" onclick="confirmResetAll()" disabled>↺ Reset All Tallies</button>
+        <div class="more-sep"></div>
+        <button class="btn btn-ghost" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark">🌙</button>
+      </div>
+    </div>
+
     <!-- User chip — shows email, opens a proper dropdown menu -->
     <div id="userChip" style="display:none;position:relative;">
       <button id="userBtn" onclick="toggleUserMenu()" title="Account"
@@ -496,15 +554,6 @@
         </div>
       </div>
     </div>
-    <button class="btn btn-ghost" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark">🌙</button>
-    <button class="btn btn-primary" id="shareBtn" onclick="openShareModal()" style="display:none;" title="Share link / QR for this survey">🔗 Share</button>
-    <button class="btn btn-ghost" id="qaBtn" onclick="openQAPanel()" disabled title="Audience Q&amp;A — questions & upvotes">💬 Q&amp;A</button>
-    <button class="btn btn-ghost" id="reportBtn" onclick="window.open('/report'+(activePresId?('?pres='+encodeURIComponent(activePresId)):''),'_blank')" disabled title="Open the full report">📊 Report</button>
-    <button class="btn btn-ghost" id="bigScreenBtn" onclick="openBigScreen()" disabled title="Open the big-screen join + live results view (projector / second screen)">🖥️ Big screen</button>
-    <button class="btn btn-ghost" id="teamModeBtn" onclick="toggleTeamMode()" disabled title="Team play (pub-quiz mode): the audience joins as teams and the leaderboard ranks teams. Team score = average of the members' scores, so team size doesn't matter.">👥 Teams: Off</button>
-    <button class="btn btn-ghost" id="studyNowBtn" onclick="studyNow()" style="display:none;" title="Study this set yourself, right now — spaced repetition, streaks and study games">📚 Study now</button>
-    <button class="btn btn-ghost" id="makeStudyBtn" onclick="studyThisDeck()" style="display:none;" title="Turn this deck into a StudySlide set of flashcards you can revise with">📚 Study this deck</button>
-    <button class="btn btn-reset" id="resetBtn" onclick="confirmResetAll()" disabled>↺ Reset All Tallies</button>
   </div>
 </div>
 
@@ -595,6 +644,10 @@
 
   <!-- ── CENTER ── -->
   <div class="center-panel">
+   <!-- Always says which of the centre pane's three jobs you're looking at, and
+        carries the switch. The toggle used to live inside the content, so it moved
+        around and vanished depending on what was rendered. -->
+   <div class="center-mode" id="centerMode" style="display:none;"></div>
    <div class="center-scroll" id="centerPanel">
     <div class="setup">
       <div class="setup-icon">🎯</div>
@@ -2522,6 +2575,7 @@ function selectPresentation(id) {
   // Update topbar
   document.getElementById('activePres').innerHTML = `<strong>${pres.name}</strong> <span style="font-size:11px;color:var(--muted);margin-left:4px;">· ${pres.sessionCode}</span>`;
   document.getElementById('addQBtn2').disabled = false;
+  document.getElementById('presentBtn').disabled = false;
   document.getElementById('resetBtn').disabled = false;
   document.getElementById('reportBtn').disabled = false;
   document.getElementById('bigScreenBtn').disabled = false;
@@ -2585,10 +2639,11 @@ async function doDeletePres() {
     selIdx = null;
     document.getElementById('activePres').textContent = 'Select a presentation';
     document.getElementById('addQBtn2').disabled = true;
+    document.getElementById('presentBtn').disabled = true;
     document.getElementById('resetBtn').disabled = true;
     document.getElementById('reportBtn').disabled = true;
-    document.getElementById('bigScreenBtn').disabled = true;
     document.getElementById('qaBtn').disabled = true;
+    document.getElementById('bigScreenBtn').disabled = true;
     showSetup();
     renderQList();
   }
@@ -2967,6 +3022,7 @@ function switchProduct(key) {
     selIdx = null;
     document.getElementById('activePres').textContent = 'Select a ' + PRODUCTS[key].name.replace('Slide','').toLowerCase();
     document.getElementById('addQBtn2').disabled = true;
+    document.getElementById('presentBtn').disabled = true;
     document.getElementById('resetBtn').disabled = true;
     document.getElementById('reportBtn').disabled = true;
     document.getElementById('bigScreenBtn').disabled = true;
@@ -3589,6 +3645,124 @@ async function doDeckShare(id) {
     btn.disabled = false; btn.textContent = old;
   }
 }
+
+/* ── CENTRE PANE: say which of its three jobs it's currently doing ─────────
+ * The same rectangle is the welcome screen, the question editor and the live view.
+ * Nothing on screen said which — you inferred it from the content, and the switch
+ * between edit and live was a button buried inside whichever one was showing.
+ * ------------------------------------------------------------------------- */
+function syncCenterMode(idx) {
+  const bar = document.getElementById('centerMode');
+  if (!bar) return;
+  const pres = activePresId && presentations[activePresId];
+  if (!pres) { bar.style.display = 'none'; return; }
+
+  const n = questions.length;
+  if (!n) {
+    bar.style.display = 'flex';
+    bar.innerHTML = '<span class="cm-tag setup">⚙️ Setup</span>' +
+      '<span class="cm-what">Add your first question — then ▶ Present when you\'re ready</span>';
+    return;
+  }
+
+  const i = (typeof idx === 'number') ? idx : selIdx;
+  if (i == null || !questions[i]) { bar.style.display = 'none'; return; }
+
+  const q = questions[i];
+  const pos = 'Question ' + (i + 1) + ' of ' + n;
+  // A flashcard or a study set has no live audience view, so offering the switch
+  // would be a promise the product can't keep.
+  const canGoLive = !!pres.sessionCode && q.type !== 'flashcard' && presType(pres) !== 'study';
+  bar.style.display = 'flex';
+
+  if (editMode || !canGoLive) {
+    bar.innerHTML = '<span class="cm-tag edit">✏️ Editing</span>' +
+      '<span class="cm-what">' + escapeHtml(pos) + '</span>' +
+      (canGoLive ? '<button class="cm-switch" onclick="doneEditing(' + i + ')">👁 See the live view</button>' : '');
+  } else {
+    // PollSlide's model is that every saved question is answerable at all times, and
+    // selecting one makes it the question the room is shown. Say that plainly rather
+    // than implying a "launch" step that doesn't exist.
+    const isLive = (liveQIdx === i);
+    const where = (liveQIdx != null && liveQIdx !== i)
+      ? ' · your audience is on question ' + (liveQIdx + 1)
+      : ' · nothing is live yet';
+    bar.innerHTML = '<span class="cm-tag ' + (isLive ? 'live' : 'ready') + '">' +
+        (isLive ? '🔴 Live' : '👁 Preview') + '</span>' +
+      '<span class="cm-what">' + escapeHtml(pos) +
+        (isLive ? ' · this is what your audience sees right now' : where) + '</span>' +
+      '<button class="cm-switch" onclick="editQuestion(' + i + ')">✏️ Edit this question</button>';
+  }
+}
+
+/* ── TOPBAR: one primary action, one overflow ──────────────────────────────
+ * Before this the topbar carried twelve controls and the actual "start presenting"
+ * button lived somewhere else entirely — so the one thing you came to do was the
+ * one thing that wasn't obvious. Now: ▶ Present is the only prominent control, and
+ * everything else is grouped behind ⋯ by the job it belongs to.
+ * ------------------------------------------------------------------------- */
+function toggleMoreMenu() {
+  const m = document.getElementById('moreMenu');
+  if (!m) return;
+  const open = m.classList.toggle('open');
+  if (open) { syncTeamModeBtn(); syncStudyButtons(); updateShareButton(); }
+}
+function closeMoreMenu() { document.getElementById('moreMenu')?.classList.remove('open'); }
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#moreWrap')) closeMoreMenu();
+});
+// Any choice made in the menu closes it — leaving it hanging open over the thing
+// you just triggered is the classic overflow-menu annoyance.
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('#moreMenu .btn').forEach(b => b.addEventListener('click', () => setTimeout(closeMoreMenu, 0)));
+});
+
+/* ── "Present" asks WHERE, once ────────────────────────────────────────────
+ * There are four real ways to put this in front of a room and they were four
+ * separate entry points in three different places. One button, one question.
+ * Each option still calls exactly the code it always did.
+ * ------------------------------------------------------------------------- */
+function openPresentPicker() {
+  if (!activePresId) { toast('Open a deck first.', 'warn'); return; }
+  const pres = presentations[activePresId];
+  const n = toQArr(pres.questions).length;
+  if (!n) { toast('Add a question first — there\'s nothing to present yet.', 'warn'); return; }
+
+  let m = document.getElementById('presentPickerModal');
+  if (!m) { m = document.createElement('div'); m.id = 'presentPickerModal'; m.className = 'overlay';
+            m.onclick = e => { if (e.target === m) closePresentPicker(); }; document.body.appendChild(m); }
+
+  const opt = (act, icon, name, sub, best) => `
+    <button onclick="${act}" style="display:flex;gap:13px;align-items:flex-start;text-align:left;width:100%;margin-bottom:8px;padding:13px 14px;border-radius:12px;cursor:pointer;font-family:inherit;background:var(--surface2);border:1px solid var(--border);color:var(--text);">
+      <span style="font-size:22px;line-height:1.1;flex-shrink:0;">${icon}</span>
+      <span style="flex:1;min-width:0;">
+        <span style="display:block;font-family:Syne,sans-serif;font-weight:800;font-size:14px;">${name}</span>
+        <span style="display:block;font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:2px;">${sub}</span>
+        <span style="display:block;font-size:11px;color:var(--accent3);margin-top:4px;">${best}</span>
+      </span>
+    </button>`;
+
+  m.innerHTML = `<div class="modal" style="max-width:520px;">
+    <h2 style="margin-bottom:2px;">Where should this go?</h2>
+    <p style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">“${escapeHtml(pres.name || 'Untitled')}” · ${n} question${n===1?'':'s'}. Your audience always joins the same way — by scanning the QR or typing the code.</p>
+    ${opt('closePresentPicker();openPresentMode()', '⛶', 'Present here',
+          'Full screen in this window, with live results built in. You control the questions from the same screen.',
+          'Best for: most sessions — nothing else to set up')}
+    ${opt('closePresentPicker();openBigScreen()', '🖥️', 'Big screen',
+          'Opens the join screen and live results in a second window — put it on the projector and keep this one for yourself.',
+          'Best for: a projector or second display')}
+    ${opt('closePresentPicker();goPresentSlide()', '🎬', 'Build a full deck around it',
+          'Take it into PresentSlide: import your slides, weave these questions in, pick a theme and present the whole thing.',
+          'Best for: when the questions are part of a longer talk')}
+    ${opt("closePresentPicker();openCompanionHelp()", '💻', 'Over Keynote or PowerPoint',
+          'Keep presenting in the app you already use. The Mac companion floats live results on top and follows your QR automatically.',
+          'Best for: a deck you have already built elsewhere')}
+    <button class="btn btn-ghost" style="width:100%;margin-top:6px;" onclick="closePresentPicker()">Cancel</button>
+  </div>`;
+  m.style.display = 'flex';
+}
+function closePresentPicker() { document.getElementById('presentPickerModal')?.remove(); }
+function openCompanionHelp() { window.open('https://pollslide.com/download', '_blank', 'noopener'); }
 
 /* ── LIVE COLLABORATION ────────────────────────────────────────────────────
  * Two people editing one deck. The deck never leaves its owner's tree; the other
@@ -4382,6 +4556,7 @@ async function launchQuestion(idx, opts) {
 
   liveQIdx = idx;
   const q    = questions[idx];
+  setTimeout(() => syncCenterMode(), 0);   // reflect "🔴 Live now" once state settles
   // Use stable qId so participant responses always match regardless of when launched
   const qId  = PSQid.bucket(q, idx, presentations[activePresId].sessionCode);
   liveQId    = qId;
@@ -4514,6 +4689,7 @@ function startMediaDrag(e, idx) {
 }
 
 function renderLiveView(idx, qId, q) {
+  syncCenterMode(idx);
   const typeLabels = { multiple_choice:'Single Choice', multiple_choice_multi:'Multi Select', free_text:'Free Text', rating:'Rating' };
   const letters    = ['A','B','C','D','E','F'];
   const correct    = Array.isArray(q.correctAnswer) ? q.correctAnswer : [q.correctAnswer];
@@ -4533,15 +4709,15 @@ function renderLiveView(idx, qId, q) {
   }
 
   document.getElementById('centerPanel').innerHTML = `
+    <!-- The LIVE badge, the "Q n of N" position, ✏️ Edit and ⛶ Present all moved out:
+         the mode strip above the pane now carries state and the edit switch, and
+         ▶ Present is the topbar's one primary action. Repeating them here put the
+         same label and the same button twice, inches apart. What's LEFT is what
+         genuinely belongs to this question and nowhere else. -->
     <div class="live-bar" id="liveBar">
-      <div class="live-badge" id="liveBadge"><span class="live-dot" id="liveDot"></span>LIVE</div>
-      <div style="flex:1;font-size:12px;color:var(--muted);">Q${idx+1} of ${questions.length} — ${typeLabels[q.type]||q.type}</div>
+      <div style="flex:1;font-size:12px;color:var(--muted);">${typeLabels[q.type]||q.type}</div>
       <button class="btn btn-ghost btn-sm" onclick="showQuestionTally(${idx})">📊 Tally</button>
-      <button class="btn btn-reset btn-sm" onclick="resetQuestionTally(${idx})">↺ Reset Q</button>
-      <button class="btn btn-ghost btn-sm" onclick="editQuestion(${idx})">✏️ Edit</button>
-      <button class="btn btn-ghost btn-sm" onclick="openPresentMode()" title="Present full-screen" style="background:var(--accent);color:#fff;border-color:var(--accent);">⛶ Present</button>
-      <!-- Deck import disabled pending converter fix (2026-07-07) -->
-      <!-- <a class="btn btn-ghost btn-sm" href="presenter-next/present.html" target="_blank" rel="noopener" title="Beta: import your deck (PDF/images) and present it with your live polls inline">🎞️ Present from deck</a> -->
+      <button class="btn btn-reset btn-sm" onclick="resetQuestionTally(${idx})">↺ Reset this question</button>
     </div>
 
     <div class="card">
@@ -6271,6 +6447,7 @@ function selectQ(idx) {
   claimQuestion(questions[idx] && questions[idx].id);
   renderQList();
   showLiveOrEdit(idx);
+  syncCenterMode(idx);
 }
 
 // Decide whether to show the live view or the editor for a question.
@@ -6389,6 +6566,7 @@ const PRODUCT_SETUP = {
 };
 
 function showSetup() {
+  syncCenterMode();
   const prod = PRODUCTS[activeProduct];
   const s = PRODUCT_SETUP[activeProduct] || PRODUCT_SETUP.poll;
   const hasPres = activePresId && presentations[activePresId];
@@ -6440,6 +6618,7 @@ function showSetup() {
 }
 
 function renderEditor(idx) {
+  syncCenterMode(idx);
   const q       = questions[idx];
   const letters = ['A','B','C','D','E','F'];
   const qUrl    = getQuestionURL(idx);
