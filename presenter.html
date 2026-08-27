@@ -2386,7 +2386,9 @@ async function saveCurrentPresentation() {
 async function createPresentation(thenPolly = false) {
   // Free-tier limit: cap number of saved presentations
   const limit = tierLimits().maxPresentations;
-  const current = Object.keys(presentations).length;
+  // Only decks you OWN count against your plan. A deck you collaborate on lives in
+  // its owner's library and isn't yours to be charged for.
+  const current = Object.keys(presentations).filter(pid => isDeckOwner(pid)).length;
   if (current >= limit) {
     showUpgradePrompt(
       `You've reached the ${tierLimits().name} plan limit of ${limit} presentations.`,
@@ -2412,11 +2414,34 @@ async function createPresentation(thenPolly = false) {
     questions: []
   };
 
-  await db.ref(deckPath(id)).set(presentations[id]);
+  // A rejected write used to swallow every line below it. The deck stayed in the
+  // list as a phantom that vanished on reload, Polly never opened, and nothing said
+  // why — the rejection was unhandled. Fail loudly and undo the local optimism.
+  try {
+    await db.ref(deckPath(id)).set(presentations[id]);
+  } catch (e) {
+    delete presentations[id];
+    renderPresList();
+    toast('Could not create it — ' + (e && e.message ? e.message : 'the save failed') +
+          '. Check your connection and try again.', 'danger');
+    if (window.psReportError) psReportError('createPresentation write failed: ' + (e && e.message));
+    return;
+  }
+
   renderPresList();
   selectPresentation(id);
+
+  // Opening Polly is the whole point of "New with Polly", so it gets its own guard:
+  // one missing element inside openPolly() must not leave the user with a new deck
+  // and no dialog and no explanation. A failure here is reported to
+  // Admin → Errors in the wild rather than disappearing.
   if (thenPolly === true) {
-    openPolly();          // jump straight into Polly to fill the brand-new presentation
+    try {
+      openPolly();        // jump straight into Polly to fill the brand-new presentation
+    } catch (e) {
+      if (window.psReportError) psReportError('openPolly failed after create: ' + (e && e.message));
+      toast('Created — but Polly could not open. Press ✨ Ask Polly to try again.', 'danger');
+    }
   } else {
     openRenamePres(id);   // Immediately open rename
   }
