@@ -356,8 +356,23 @@ function resolveCorrectIndices(q, options) {
 // duplicate needs a meaningful text overlap AND the same answer. Where there's no
 // answer to compare, only near-identical text counts. Surveys are skipped outright
 // — parallel phrasings ("How satisfied are you with X / with Y") are the point.
+// Words that carry no topic signal. Leaving them in wrecks the comparison: two
+// questions about the SAME joke, worded differently, shared only 12% of their words
+// because "which/what/do/for/the" padded both sides of the ratio.
+const STOP = new Set(('a an the of in on at to for from by with and or but is are was were ' +
+  'be been being do does did what which who whom whose when where why how that this these ' +
+  'those it its as if then than so you your yours their there here have has had can could ' +
+  'would should will shall may might must about into over under again more most some any ' +
+  'according known associate associated call called say said').split(' '));
+// Crude stemmer: enough to make "millennial" and "millennials" the same word, which
+// is the difference between catching a repeat and missing it. Not linguistics — just
+// the endings that show up in question text.
+function stem(w) {
+  return w.replace(/(ies)$/, 'y').replace(/(ing|ed|es|s)$/, '');
+}
 function wordSet(s) {
-  return new Set(String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean));
+  return new Set(String(s || '').toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/)
+    .filter(Boolean).filter(w => !STOP.has(w) && w.length > 1).map(stem));
 }
 function jaccard(a, b) {
   if (!a.size || !b.size) return 0;
@@ -378,9 +393,13 @@ function containment(a, b) {
 }
 function answerKey(ans) {
   return (Array.isArray(ans) ? ans : [ans])
-    .map(a => String(a == null ? '' : a).toLowerCase().trim())
+    .map(a => String(a == null ? '' : a).toLowerCase().trim().replace(/^(the|a|an)\s+/, '').replace(/[^a-z0-9 ]/g, ''))
     .filter(Boolean).sort().join('|');
 }
+/* Answers too common to identify anything. Every true/false question in a deck
+ * shares the answer "true" — treating that as a repeat would delete most of a quiz. */
+const GENERIC_ANSWER = new Set(['true','false','yes','no','none','both','neither','other',
+  'all of the above','none of the above','maybe','it depends','0','1']);
 function dropRepeats(questions, avoid, type) {
   if (type === 'survey') return questions;
   const isStudy = type === 'study';
@@ -397,10 +416,24 @@ function dropRepeats(questions, avoid, type) {
       : answerKey((q.correctAnswers || []).map(i => (q.options || [])[i]));
     const dupe = seen.some(s => {
       if (s.k && k) {
-        if (s.k !== k) return false;                                    // different answer = different question
-        return jaccard(w, s.w) > 0.35 || containment(w, s.w) > 0.8;     // same answer + related wording
+        if (s.k !== k) return false;                       // different answer = different question
+        /* SAME ANSWER is the signal that actually works.
+         * Text similarity alone can never catch the real failure: "What food is
+         * blamed for millennials not owning homes?" and "According to boomers,
+         * which brunch item cost millennials a mortgage?" share ONE content word
+         * and are obviously the same question — because both answer "avocado
+         * toast". In a quiz, the answer IS the question's identity.
+         *
+         * And a quiz with the same answer twice reads as repetitive even when the
+         * two questions test different facts, which is the complaint this is
+         * fixing. So a repeated distinctive answer is enough on its own.
+         * Generic answers (true/false/yes/no) identify nothing and are exempt. */
+        if (!GENERIC_ANSWER.has(s.k)) return true;
+        return jaccard(w, s.w) > 0.5 || containment(w, s.w) > 0.8;
       }
-      return jaccard(w, s.w) > 0.85;                                    // nothing to compare: near-identical text only
+      // Nothing to compare answers with — content words only, now that stopwords
+      // no longer dilute the ratio.
+      return jaccard(w, s.w) > 0.6;
     });
     if (!dupe) { kept.push(q); seen.push({ w, k }); }
   }
@@ -591,3 +624,7 @@ module.exports = async function handler(req, res) {
     return res.status(502).json({ error: 'Polly failed', detail: String((fatal && fatal.message) || fatal) });
   }
 };
+
+// Exported for scripts/tests/polly-dedupe.test.js. Repeat suppression is judged by
+// thresholds, and thresholds that nobody measures are just someone's guess.
+module.exports.__test = { dropRepeats, wordSet, jaccard, containment, answerKey };
