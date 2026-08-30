@@ -358,6 +358,55 @@ function esc(s){
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+/* ── Did they leave the screen? ────────────────────────────────────────────
+ * WHAT A WEB PAGE CANNOT DO: stop someone leaving. There is no browser API that
+ * locks a tab, blocks app-switching or prevents a second window — that needs a
+ * managed device (Apple Classroom, MDM kiosk mode, a locked-down exam browser).
+ * Anyone claiming otherwise in a normal browser is wrong.
+ *
+ * WHAT IT CAN DO, and what this does: notice, tell the student plainly BEFORE they
+ * start, and record it for the teacher. Announced deterrence is the honest version
+ * of this feature, and in a classroom it does most of the work.
+ *
+ * Deliberately records only counts and durations — never what they switched TO.
+ * We cannot see that, and a feature that implied we could would be worse than
+ * useless.
+ * ------------------------------------------------------------------------- */
+let FOCUS_TRACK = false;   // per-deck; the teacher opts in
+let _focusAway = 0;        // how many times they left this question
+let _focusAwayMs = 0;      // total time away, this question
+let _awayAt = null;
+let _focusWatching = false;
+
+function focusResetForQuestion(){ _focusAway = 0; _focusAwayMs = 0; _awayAt = null; }
+
+function _focusLeft(){
+  if (!_focusWatching || _awayAt) return;
+  _awayAt = Date.now(); _focusAway++;
+}
+function _focusReturned(){
+  if (!_awayAt) return;
+  _focusAwayMs += Date.now() - _awayAt; _awayAt = null;
+  // Tell them it was noticed. Silent recording would be a trap rather than a
+  // deterrent, and a student who does not know cannot choose differently.
+  if (FOCUS_TRACK) toast(t('focusNoticed','You left the screen — your teacher will see this.'), 'warn');
+}
+function startFocusWatch(){
+  if (_focusWatching) return;
+  _focusWatching = true;
+  document.addEventListener('visibilitychange', () => {
+    document.visibilityState === 'hidden' ? _focusLeft() : _focusReturned();
+  });
+  window.addEventListener('blur', _focusLeft);
+  window.addEventListener('focus', _focusReturned);
+}
+// Close the clock before reading it — otherwise a student still away when they
+// submit records zero time away.
+function focusSnapshot(){
+  if (_awayAt) { _focusAwayMs += Date.now() - _awayAt; _awayAt = Date.now(); }
+  return { leftScreen: _focusAway, awayMs: _focusAwayMs };
+}
+
 // ── Live audience translation ───────────────────────────────────────────────
 // LANG = the language THIS viewer reads in (chrome + content). DECK_LANG = the
 // language the presenter authored in (the source). When they differ, question
@@ -715,6 +764,10 @@ async function bootApp() {
   // Team play (pub-quiz mode): presenter toggles it per deck. When on, everyone picks or
   // creates a team after entering their name, and each response carries the team name.
   try { const tm = await db.ref(`quiz_builder/${SESSION}/teamMode`).get(); TEAM_MODE = tm.exists() && tm.val() === true; } catch(e) {}
+  // Off unless the teacher ticked it for this deck. Watching by default would be
+  // surveillance nobody asked for.
+  try { const ft = await db.ref(`quiz_builder/${SESSION}/focusTrack`).get(); FOCUS_TRACK = ft.exists() && ft.val() === true; } catch(e) {}
+  if (FOCUS_TRACK) startFocusWatch();
 
   // Game mode, and keep following it — the presenter can switch between rounds.
   try { const gm = await db.ref(`sessions/${SESSION}/meta/gameMode`).get(); if (gm.exists() && gm.val()) GAME_MODE = String(gm.val()); } catch(e) {}
@@ -905,6 +958,7 @@ async function followLive(){
 function goToQuestion(idx){
   if (idx === Q_INDEX) return;
   Q_INDEX = idx;
+  focusResetForQuestion();   // per question, so a teacher sees WHICH one they left on
   STABLE_QID = (_liveQ && _liveQ.id && Number(_liveQ.qIndex) === idx)
     ? _liveQ.id
     : PSQid.bucket(null, idx, SESSION);   // legacy key until the presenter tells us
@@ -1315,7 +1369,10 @@ async function submitToDb(answer) {
       answer: answer === null || answer === undefined ? '__none__' : JSON.stringify(answer),
       elapsed,
       isCorrect,
-      submittedAt: Date.now()
+      submittedAt: Date.now(),
+      // Only when the presenter turned it on for this deck. Absent means not
+      // watched — which must read differently from "watched and never left".
+      ...(FOCUS_TRACK ? focusSnapshot() : {}),
     });
   } catch(e) {
     submitting = false;

@@ -127,7 +127,10 @@ const CAPABILITIES = [
   {
     id: 'topbar-overflow', label: 'One primary action + ⋯ overflow',
     appliesTo: ['authoring'],
-    detect: /more-menu|id=["']moreMenu["']/,
+    // Match the shared class, not one page's id — the concept is "a ⋯ overflow
+    // exists", and pinning it to an id makes the check fail on a correct second
+    // implementation.
+    detect: /class=["'][^"']*more-wrap/,
     why: 'Secondary controls sit loose in the top bar, so nothing signals what the main action is.',
   },
   {

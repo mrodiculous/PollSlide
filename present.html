@@ -112,6 +112,13 @@
   .rz-grip.qr{right:auto;left:-9px;cursor:nesw-resize;}
   /* Move handle — same reveal-on-hover behaviour as the resize grip, opposite corner
      so the two never sit under each other. */
+  /* ⋯ overflow — mirrors the Presenter Studio's grouping so the two feel like
+     one product rather than two apps that happen to share a logo. */
+  .more-wrap{position:relative;}
+  .ps-more-group{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:9px 11px 4px;}
+  #psMoreMenu .menu-item{display:flex;align-items:center;gap:9px;width:100%;padding:8px 11px;border:none;background:transparent;color:var(--text);font-size:12.5px;font-family:inherit;text-align:left;border-radius:7px;cursor:pointer;}
+  #psMoreMenu .menu-item:hover{background:var(--chrome2);}
+  #psMoreMenu .mini{max-width:118px;}
   .mv-grip{display:none;}
   .editing .mv-grip{display:flex;align-items:center;justify-content:center;position:absolute;left:-10px;top:-10px;width:19px;height:19px;border-radius:50%;background:#fff;color:var(--accent);border:2px solid var(--accent);box-shadow:0 1px 6px rgba(0,0,0,.5);cursor:grab;z-index:42;opacity:0;transition:opacity .12s,transform .1s;touch-action:none;font-size:11px;line-height:1;user-select:none;}
   .editing .rz-region:hover .mv-grip,.mv-grip.mv-active{opacity:1;}
@@ -388,9 +395,22 @@
   <div class="spacer"></div>
   <span id="acct"></span>
   <button class="pill-btn ghost" id="authBtn" onclick="toggleAuth()" style="display:none;">Sign in</button>
-  <select class="mini" id="langSel" onchange="setLang(this.value)" title="Language"></select>
-  <button class="pill-btn ghost" onclick="openReset()" title="Clear counts for a fresh run — answers are saved to your report history first">🧹 Reset tallies</button>
+  <!-- Same shape as the Presenter Studio: ONE prominent action, everything else
+       behind ⋯. Reset, language and account were sitting loose beside ▶ Present,
+       so nothing signalled which was the thing you came here to do. The controls
+       below are the same elements as before — same ids, same handlers — relocated,
+       so setLang() and the auth wiring keep working untouched. -->
   <button class="pill-btn" onclick="startPresent(currentIdx<0?0:currentIdx)">▶ Present</button>
+  <div class="more-wrap rib-group" id="psMoreWrap">
+    <button class="pill-btn ghost" id="psMoreBtn" onclick="toggleMenu('psMoreMenu')" title="Everything else">⋯</button>
+    <div class="menu hidden" id="psMoreMenu" style="min-width:232px;right:0;left:auto;">
+      <div class="ps-more-group" data-i18n="more.deck">Deck</div>
+      <button class="menu-item" onclick="closeMenus();openReset()" title="Clear counts for a fresh run — answers are saved to your report history first">🧹 <span data-i18n="more.reset">Reset tallies</span></button>
+      <div class="ps-more-group" data-i18n="more.settings">Settings</div>
+      <label class="menu-item" style="cursor:default;" title="Language of the PollSlide interface">🌐 <span data-i18n="more.language">Language</span>
+        <select class="mini" id="langSel" onchange="setLang(this.value)" style="margin-left:auto;"></select></label>
+    </div>
+  </div>
 
   <input type="file" id="pdfInput" accept="application/pdf" class="hidden" onchange="onPdf(this.files[0])">
   <input type="file" id="imgInput" accept="image/*" multiple class="hidden" onchange="onImages(this.files)">

@@ -163,7 +163,12 @@ function pushDataset(out, presId, presName, source, date, questions, responses){
     Object.entries(byPid||{}).forEach(([pid, r]) => {
       out.push({ presId, presName, source, date: r.submittedAt || date || null,
         qIdx, qText:q.text||'', qType:q.type||'', options:q.options||null, correctAnswer:(q.correctAnswer!=null?q.correctAnswer:null),
-        pid: r.participantId || pid, name: r.name || 'Anonymous', team: r.team || null, wager: r.wager || null, answer: r.answer, isCorrect: r.isCorrect, elapsed: r.elapsed||0 });
+        pid: r.participantId || pid, name: r.name || 'Anonymous', team: r.team || null, wager: r.wager || null, answer: r.answer, isCorrect: r.isCorrect, elapsed: r.elapsed||0,
+        // Present only when the teacher turned screen-leaving on for that deck.
+        // undefined must stay distinguishable from 0 — "not watched" is not the same
+        // claim as "watched and never left", and blurring the two would let a teacher
+        // accuse someone on the strength of a missing field.
+        leftScreen: r.leftScreen, awayMs: r.awayMs });
     });
   });
 }

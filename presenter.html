@@ -2431,6 +2431,7 @@ async function saveCurrentPresentation() {
       await db.ref(`quiz_builder/${pres.sessionCode}/productType`).set(presType(pres));
       await db.ref(`quiz_builder/${pres.sessionCode}/language`).set(pres.language || 'en');
       await db.ref(`quiz_builder/${pres.sessionCode}/teamMode`).set(!!pres.teamMode);
+      await db.ref(`quiz_builder/${pres.sessionCode}/focusTrack`).set(!!pres.focusTrack);
     }
     markSaved();
   } catch(e) { document.getElementById('saveText').textContent='Save failed'; }
@@ -2570,6 +2571,7 @@ function selectPresentation(id) {
     db.ref(`quiz_builder/${pres.sessionCode}/questions`).set(questions).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/productType`).set(presType(pres)).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/teamMode`).set(!!pres.teamMode).catch(()=>{});
+    db.ref(`quiz_builder/${pres.sessionCode}/focusTrack`).set(!!pres.focusTrack).catch(()=>{});
   }
 
   // Update topbar
@@ -3384,6 +3386,7 @@ function openDeckMenu(id, ev) {
       { icon: p.pinned ? '☆' : '★', label: p.pinned ? 'Unpin' : 'Pin to top', act: `togglePin('${escAttr(id)}')` },
       { icon: '📁', label: 'Move to folder…', act: `openMoveModal(['${escAttr(id)}'])` },
     ]),
+    { icon: '👁', label: (p.focusTrack ? 'Screen-leaving: reported' : 'Screen-leaving: not tracked'), act: `toggleFocusTrack('${escAttr(id)}')` },
     { icon: '📤', label: 'Share a copy…', act: `openDeckShareModal('${escAttr(id)}')` },
     ...(isCollabDeck(id)
       ? [{ icon: '🚪', label: 'Leave this shared deck', act: `leaveCollab('${escAttr(id)}')`, danger: true }]
@@ -3417,6 +3420,23 @@ async function setDeckField(id, field, value) {
     await db.ref(deckPath(id) + '/' + field)
       .set(value === '' ? null : value).catch(() => {});
   }
+}
+
+/* Per-deck, opt-in, and honest with the student.
+ * A browser cannot stop anyone leaving a quiz — no API locks a tab or blocks
+ * app-switching; that needs a managed device. What it can do is notice, tell the
+ * student on screen the moment it happens, and put it in the teacher's report.
+ * Announced deterrence is the version that actually works in a classroom, and
+ * silent recording would be a trap rather than a deterrent. */
+async function toggleFocusTrack(id) {
+  const p = presentations[id]; if (!p) return;
+  const on = !p.focusTrack;
+  await setDeckField(id, 'focusTrack', on ? true : null);
+  if (p.sessionCode) db.ref(`quiz_builder/${p.sessionCode}/focusTrack`).set(on).catch(()=>{});
+  renderPresList();
+  toast(on
+    ? '👁 Students will be told on screen if they leave, and it appears in your report.'
+    : 'Screen-leaving is no longer tracked or reported.', 'success');
 }
 
 async function togglePin(id) {
@@ -6033,6 +6053,7 @@ function toggleTeamMode() {
   pres.teamMode = !pres.teamMode;
   scheduleSave();
   if (pres.sessionCode) db.ref(`quiz_builder/${pres.sessionCode}/teamMode`).set(!!pres.teamMode).catch(()=>{});
+    db.ref(`quiz_builder/${pres.sessionCode}/focusTrack`).set(!!pres.focusTrack).catch(()=>{});
   syncTeamModeBtn();
   toast(pres.teamMode
     ? '👥 Team play ON — the audience will pick or create a team when they join. Leaderboards rank teams (average member score).'
