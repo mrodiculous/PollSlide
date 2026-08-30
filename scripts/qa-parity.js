@@ -40,15 +40,21 @@ const ROOT = path.resolve(__dirname, '..');
  * A capability applies to a surface when their roles overlap. Getting these tags
  * right is what stops the tool demanding a leaderboard on the billing page. */
 const SURFACES = {
-  'presenter.html': { name: 'Presenter Studio', roles: ['authoring', 'presenting', 'live-host'] },
-  'present.html':   { name: 'PresentSlide',     roles: ['authoring', 'presenting', 'live-host'] },
+  'presenter.html': { name: 'Presenter Studio', roles: ['authoring', 'owns-screen', 'live-host'] },
+  'present.html':   { name: 'PresentSlide',     roles: ['authoring', 'owns-screen', 'live-host'] },
   'answer.html':    { name: 'Audience page',    roles: ['audience'] },
-  'live.html':      { name: 'Big screen',       roles: ['projection', 'audience-visible'] },
+  'live.html':      { name: 'Big screen',       roles: ['owns-screen', 'audience-visible'] },
   'results.html':   { name: 'Results',          roles: ['audience-visible'] },
   'recap.html':     { name: 'Recap',            roles: ['audience-visible'] },
   'report.html':    { name: 'Reports',          roles: ['analysis'] },
-  'companion.html': { name: 'Mac companion',    roles: ['projection'] },
-  'powerpoint.html':{ name: 'PowerPoint add-in',roles: ['presenting', 'projection'] },
+  // NOT 'owns-screen'. Both of these sit BESIDE the thing the room is watching —
+  // the companion floats over Keynote, and the add-in is an Office task pane docked
+  // inside PowerPoint. Neither can go full screen, and neither should: the host app
+  // drives the display and already holds the screen awake during a slideshow.
+  // Tagging them 'projection' made the tool demand full screen for a side panel,
+  // which is exactly the false positive that gets a checker ignored.
+  'companion.html': { name: 'Mac companion',    roles: ['companion', 'audience-visible'] },
+  'powerpoint.html':{ name: 'PowerPoint add-in',roles: ['companion'] },
 };
 
 /* ── What we know how to look for ──────────────────────────────────────────
@@ -58,13 +64,13 @@ const SURFACES = {
 const CAPABILITIES = [
   {
     id: 'error-reporting', label: 'Client error reporting',
-    appliesTo: ['authoring', 'audience', 'projection', 'analysis', 'presenting'],
+    appliesTo: ['authoring', 'audience', 'owns-screen', 'analysis', 'companion'],
     detect: /errors\.js\?v=/,
     why: 'A page that throws for real users reports nothing, so a break here is invisible until somebody emails.',
   },
   {
     id: 'output-escaping', label: 'Escapes presenter/model text before rendering',
-    appliesTo: ['audience', 'audience-visible', 'projection', 'analysis'],
+    appliesTo: ['audience', 'audience-visible', 'analysis'],
     detect: /\b(esc|escT|escHtml|escapeHtml|escapeQa|rich)\s*\(/,
     why: 'Unescaped question text lets a stray "<" swallow the rest of a question, and lets model output run as HTML on every phone.',
   },
@@ -76,7 +82,7 @@ const CAPABILITIES = [
   },
   {
     id: 'stable-qids', label: 'Stable question ids (PSQid)',
-    appliesTo: ['live-host', 'audience', 'projection', 'analysis'],
+    appliesTo: ['live-host', 'audience', 'companion', 'analysis'],
     detect: /PSQid\./,
     why: 'Response buckets keyed by array position get mis-attributed the moment anything is reordered or deleted.',
   },
@@ -100,7 +106,9 @@ const CAPABILITIES = [
   },
   {
     id: 'present-display', label: 'Full screen + wake lock while presenting',
-    appliesTo: ['presenting', 'projection'],
+    // Only surfaces that OWN the screen the room is watching. A task pane or an
+    // overlay beside the real presentation has nothing to go full screen with.
+    appliesTo: ['owns-screen'],
     detect: /PSDisplay|present-display\.js/,
     why: 'Browser chrome stays on screen in front of the room, and the display can dim mid-session.',
   },
