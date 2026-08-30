@@ -110,6 +110,20 @@
   .editing .rz-region:hover .rz-grip,.rz-grip.rz-active{opacity:1;}
   .rz-grip:hover,.rz-grip.rz-active{transform:scale(1.25);}
   .rz-grip.qr{right:auto;left:-9px;cursor:nesw-resize;}
+  /* Move handle — same reveal-on-hover behaviour as the resize grip, opposite corner
+     so the two never sit under each other. */
+  .mv-grip{display:none;}
+  .editing .mv-grip{display:flex;align-items:center;justify-content:center;position:absolute;left:-10px;top:-10px;width:19px;height:19px;border-radius:50%;background:#fff;color:var(--accent);border:2px solid var(--accent);box-shadow:0 1px 6px rgba(0,0,0,.5);cursor:grab;z-index:42;opacity:0;transition:opacity .12s,transform .1s;touch-action:none;font-size:11px;line-height:1;user-select:none;}
+  .editing .rz-region:hover .mv-grip,.mv-grip.mv-active{opacity:1;}
+  .mv-grip:hover{transform:scale(1.15);}
+  .mv-grip.mv-active{cursor:grabbing;transform:scale(1.15);}
+  .mv-grip.qr{left:auto;right:-10px;}
+  /* The offset a presenter dragged the region to. Defaults to zero, so a slide that
+     was never moved renders exactly as its template always did. */
+  .rz-region{transform:translate(var(--rg-dx,0%), var(--rg-dy,0%));}
+  .q-wrap{--rg-dx:var(--q-dx,0%);--rg-dy:var(--q-dy,0%);}
+  .r-wrap{--rg-dx:var(--r-dx,0%);--rg-dy:var(--r-dy,0%);}
+  .qr-card{--rg-dx:var(--qr-dx,0%);--rg-dy:var(--qr-dy,0%);}
   /* zoom controls + add-between-thumbs */
   .zoomctl{display:flex;align-items:center;gap:6px;margin-left:auto;flex-shrink:0;}
   .zoomctl button{background:var(--chrome2);border:1px solid var(--border2);color:var(--text);border-radius:7px;padding:4px 9px;font-size:12px;cursor:pointer;}
@@ -814,6 +828,8 @@ function renderCanvas(){
     ${(s.kind==='title'||s.kind==='content')?`<button class="st-btn" onclick="bgImgInput.click()" title="Background image for this slide">🌄 BG</button>${s.bgImg?`<input type="range" min="0" max="0.7" step="0.05" value="${s.bgDim!=null?s.bgDim:.35}" oninput="setBgDim(this.value)" title="Darken background" style="width:52px;accent-color:var(--accent);"><button class="st-btn" onclick="clearBg()" title="Remove background image">✕BG</button>`:''}`:''}
     <span id="fmtBar" style="display:none;align-items:center;gap:5px;"></span>
     ${((s.kind==='poll'||s.kind==='quiz')&&(s.question.type||'').indexOf('multiple_choice')===0)?`<select class="st-btn" onchange="setDisplay(this.value)" title="How results are shown"><option value="bars"${(s.question.displayMode||'bars')==='bars'?' selected':''}>▭ Bars</option><option value="column"${s.question.displayMode==='column'?' selected':''}>▮ Columns</option><option value="donut"${s.question.displayMode==='donut'?' selected':''}>◐ Donut</option><option value="bignum"${s.question.displayMode==='bignum'?' selected':''}># Big numbers</option></select>`:''}
+    ${slideHasPoll(s)?`<label class="st-btn" title="Wordplay, spelling and language questions get mangled by auto-translation. Ticking this keeps this question in the deck's language for every viewer." style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;">
+      <input type="checkbox" ${s.question.noTranslate?'checked':''} onchange="setNoTranslate(this.checked)" style="width:14px;height:14px;accent-color:var(--accent);">Keep original language</label>`:''}
     ${sizeControls(s)}
     <select class="st-btn" onchange="setSlideTheme(this.value)" title="Theme for THIS slide (Theme menu sets the whole deck)"><option value="">🎨 Deck theme</option>${Object.entries(THEMES).map(([k,th])=>`<option value="${k}"${s.theme===k?" selected":""}>${th.name}</option>`).join("")}</select>
     <select class="st-btn" onchange="setTransition(this.value)" title="Slide transition"><option value="fade"${(s.transition||'fade')==='fade'?' selected':''}>⇋ Fade</option><option value="push"${s.transition==='push'?' selected':''}>→ Push</option><option value="wipe"${s.transition==='wipe'?' selected':''}>◧ Wipe</option><option value="zoom"${s.transition==='zoom'?' selected':''}>⤢ Zoom</option><option value="none"${s.transition==='none'?' selected':''}>∅ None</option></select>
@@ -828,7 +844,7 @@ function renderCanvas(){
   slide.classList.add('editing');
   slide.insertAdjacentHTML('beforeend', elLayer(s, true));  // free-form elements on top
   slide.insertAdjacentHTML('beforeend','<div class="guide" id="vGuide"></div><div class="guide" id="hGuide"></div>'); // smart guides live inside the canvas — recreate after every render
-  wireElementDrag(); renderFmtBar(); wireSlideResize();
+  wireElementDrag(); renderFmtBar(); wireSlideResize(); wireSlideMove();
   if(hasQR(s)){ const box=slide.querySelector('.qr-card .qrbox'); if(box) renderQR(box, answerUrl(s)); }
   scheduleFit(slide);   // shrink-to-fit after layout + fonts settle
 }
@@ -837,7 +853,21 @@ function renderCanvas(){
 function applySizes(el, s){ const z=(s&&s.sz)||{};
   el.style.setProperty('--q-scale', z.q||1);
   el.style.setProperty('--r-scale', z.r||1);
-  el.style.setProperty('--qr-scale', z.qr||1); }
+  el.style.setProperty('--qr-scale', z.qr||1);
+  applyPos(el, s); }
+
+/* Where the presenter dragged each region to, as a percentage of the slide.
+ * Stored per slide beside s.sz and applied as a translate, so the template still
+ * decides the starting layout and nothing breaks for a deck that was never moved —
+ * an absent s.pos is simply no offset. Applied in the EDITOR and in PRESENT from the
+ * same function, because a slide that looks different in the show than in the editor
+ * is worse than one you cannot move at all. */
+function applyPos(el, s){ const p=(s&&s.pos)||{};
+  ['q','r','qr'].forEach(k=>{
+    const v=p[k]||{};
+    el.style.setProperty('--'+k+'-dx', (v.x||0)+'%');
+    el.style.setProperty('--'+k+'-dy', (v.y||0)+'%');
+  }); }
 /* Shrink-to-fit: scale the .fit block down so a slide's question + response always
    fit inside the slide with a border, however much was imported. Only scales DOWN —
    the base/manual sizes are the ceiling, so it never fights the presenter's resize. */
@@ -859,7 +889,12 @@ function scheduleFit(el){ requestAnimationFrame(()=>fitSlide(el));
   if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>fitSlide(el)); }
 // Drag handle for the built-in slide elements (question/answers/QR). Hidden in present.
 function rzGrip(key){ const tip={q:'question',r:'answers',qr:'QR'}[key]||'';
-  return `<span class="rz-grip${key==='qr'?' qr':''}" data-rzkey="${key}" title="Drag to resize the ${tip}"></span>`; }
+  // A separate MOVE handle, not a drag on the region itself: the question and answer
+  // regions are contenteditable, so dragging from their body would fight text
+  // selection — the same conflict that makes free text elements need a double-click
+  // to edit. A dedicated handle keeps "click to type" and "drag to position" apart.
+  return `<span class="mv-grip${key==='qr'?' qr':''}" data-mvkey="${key}" title="Drag to move the ${tip}">✥</span>`
+       + `<span class="rz-grip${key==='qr'?' qr':''}" data-rzkey="${key}" title="Drag to resize the ${tip}"></span>`; }
 function bind(field, idx){ return `oninput="deck.slides[${idx}].${field}=this.innerHTML;scheduleSave()" `; }
 function bindQ(field, idx){ return `oninput="deck.slides[${idx}].question.${field}=this.innerHTML;scheduleSave();schedulePublish()" `; }
 function bgLayer(s){ if(!s.bgImg)return ''; const dim=s.bgDim!=null?s.bgDim:.35;
@@ -898,6 +933,15 @@ function editHtml(s){
     <div class="q-wrap rz-region"><div class="s-title" contenteditable="true" ${bindQ('text',i)}>${rich(s.question.text||'')}</div>${rzGrip('q')}</div>
     ${optsHtml}</div>${qrCard(s)}</div>`;
 }
+/* Parity with Polls / Surveys / Quizzes / Study, where this has existed for months.
+ * answer.html already honours question.noTranslate — it skips translation entirely
+ * and shows the deck language — so this only ever needed to be settable and
+ * published from here. */
+function setNoTranslate(v){
+  const s=deck.slides[currentIdx]; if(!s||!s.question)return;
+  if(v) s.question.noTranslate=true; else delete s.question.noTranslate;
+  renderCanvas(); scheduleSave(); schedulePublish();
+}
 function setCorrect(oi){ deck.slides[currentIdx].question.correctAnswer=oi; renderCanvas(); scheduleSave(); schedulePublish(); }
 function setDisplay(v){ const s=deck.slides[currentIdx]; if(s&&s.question){ s.question.displayMode=v; scheduleSave(); toast('Results shown as: '+v); } }
 /* Per-element resize (question / response / QR). Stored on s.sz and applied as CSS
@@ -925,6 +969,43 @@ function sizeControls(s){
 // Drag the corner grip on the question / answers / QR to resize it — same s.sz scale
 // as the toolbar. Anchored to the region's opposite corner so "pull the corner out =
 // bigger" feels natural; auto-fit keeps everything inside the slide live during the drag.
+/* Drag a built-in region to reposition it. Percentages of the slide, so a deck
+ * looks the same at any projector size — the whole slide scales, and the offset
+ * scales with it. Clamped so a region can't be dragged entirely off the slide and
+ * become unreachable. */
+function wireSlideMove(){
+  const slide=document.getElementById('canvasSlide');
+  slide.querySelectorAll('.mv-grip').forEach(grip=>{
+    grip.onpointerdown=(e)=>{
+      e.preventDefault(); e.stopPropagation();
+      const key=grip.dataset.mvkey, region=grip.closest('.rz-region');
+      const s=deck.slides[currentIdx]; if(!s||!region) return;
+      const rect=slide.getBoundingClientRect(); if(!rect.width||!rect.height) return;
+      if(!s.pos) s.pos={};
+      const start=s.pos[key]||{x:0,y:0};
+      const sx=e.clientX, sy=e.clientY;
+      grip.classList.add('mv-active');
+      pushUndo('Move '+({q:'question',r:'answers',qr:'QR'}[key]||'region'));
+      const mm=(m)=>{
+        const nx=start.x+(m.clientX-sx)/rect.width*100;
+        const ny=start.y+(m.clientY-sy)/rect.height*100;
+        s.pos[key]={ x:+Math.max(-45,Math.min(45,nx)).toFixed(2),
+                     y:+Math.max(-45,Math.min(45,ny)).toFixed(2) };
+        applyPos(slide, s);
+      };
+      const mu=()=>{ document.removeEventListener('pointermove',mm); document.removeEventListener('pointerup',mu);
+        grip.classList.remove('mv-active'); scheduleSave(); schedulePublish(); };
+      document.addEventListener('pointermove',mm); document.addEventListener('pointerup',mu);
+    };
+    // Double-click the handle to put the region back where the template had it.
+    grip.ondblclick=(e)=>{ e.preventDefault(); e.stopPropagation();
+      const s=deck.slides[currentIdx]; if(!s||!s.pos) return;
+      pushUndo('Reset position'); delete s.pos[grip.dataset.mvkey];
+      applyPos(document.getElementById('canvasSlide'), s); scheduleSave(); schedulePublish();
+      toast('Back to its default position'); };
+  });
+}
+
 function wireSlideResize(){
   const slide=document.getElementById('canvasSlide');
   slide.querySelectorAll('.rz-grip').forEach(grip=>{
@@ -1380,6 +1461,7 @@ function revealBuilds(){ const st=document.getElementById('pStage'); const sl=de
     else if(!show) n.classList.add('b-hidden'); }); }
 function slideHasPoll(s){ return s && isInteractive(s) && s.kind!=='qa'; }
 function renderPresentSlide(i){ const s=deck.slides[i]; const st=document.getElementById('pStage'); const el=document.getElementById('present');
+  publishPresentSlide(s);       // phones follow the presenter, like every other product
   setTimeout(revealBuilds,0);   // apply build visibility after this render paints
   applyThemeTo(el, (s&&s.theme)||deck.theme||'gamified');
   st.classList.toggle('tr-fade', !(s&&s.transition==='none')); // per-slide transition
@@ -1406,6 +1488,39 @@ function renderPresentSlide(i){ const s=deck.slides[i]; const st=document.getEle
 function qrPresent(s){ return `<div class="qr-card" style="bottom:9%;"><div class="qrbox"></div><div class="qrl">${qrLabel(s)}</div></div>`; }
 function afterPresentQR(s){ const box=document.querySelector('#pStage .qr-card .qrbox'); if(box)renderQR(box, answerUrl(s)); }
 function respFor(s){ const fx=window.__PRESENT_FIXTURE; if(fx&&fx.responses&&fx.responses[s.id])return fx.responses[s.id]; return _liveResp[s.id]||[]; }
+/* Tell the room's phones which slide is up.
+ *
+ * The other products publish sessions/CODE/currentQuestion every time the presenter
+ * moves, and answer.html follows that node — it is how a phone tracks the presenter
+ * instead of sitting on whatever it joined at. PresentSlide read responses back but
+ * never published, so answer.html's followLive() found nothing, never set its follow
+ * flag, and every phone stayed frozen on the slide whose QR it happened to scan.
+ *
+ * Deliberately only published for slides that HAVE a question: on a content slide
+ * between two polls the phone should keep showing the last question rather than go
+ * blank, which is what a presenter talking over a slide actually wants.
+ * ------------------------------------------------------------------------- */
+function publishPresentSlide(s){
+  try{
+    if(typeof fbDb==='undefined'||!fbDb) return;
+    const q=s&&s.question; const code=q&&q.sessionCode;
+    if(!code||!slideHasPoll(s)) return;
+    const idx=q.qIndex||0;
+    fbDb.ref('sessions/'+code+'/currentQuestion').set({
+      // The bucket id must match what attachLive() reads responses from, or the
+      // slide would count answers the phone never wrote.
+      id: PSQid.bucket(q, idx, code),
+      qIndex: idx, index: idx+1, total: deck.slides.filter(slideHasPoll).length,
+      text: q.text||'', type: q.type||'multiple_choice',
+      options: q.options||null,
+      correctAnswer: (q.correctAnswer!==undefined&&q.correctAnswer!==null)?q.correctAnswer:null,
+      ratingMax: q.ratingMax||null, ratingLabels: q.ratingLabels||null,
+      image: q.image||null, noTranslate: !!q.noTranslate,
+      phase:'live', status:'active', launchedAt: Date.now(),
+    }).catch(()=>{});
+  }catch(e){ /* never let publishing break the show */ }
+}
+
 function attachLive(s){ const fx=window.__PRESENT_FIXTURE; if(fx&&fx.responses&&fx.responses[s.id])return; if(_liveSlide===s.id)return; detachLive(); _liveSlide=s.id;
   if(typeof fbDb==='undefined'||!fbDb||!s.question.sessionCode)return; const code=s.question.sessionCode,qId=PSQid.bucket(s.question,(s.question.qIndex||0),code); const ref=fbDb.ref('sessions/'+code+'/responses/'+qId);
   const fn=ref.on('value',sn=>{ _liveResp[s.id]=sn.exists()?Object.values(sn.val()):[]; if(deck.slides[presentIdx]&&deck.slides[presentIdx].id===s.id)paintLive(s); }); _liveUnsub=()=>ref.off('value',fn); }
@@ -1546,7 +1661,8 @@ async function publishDeck(){
   deck.slides.forEach(s=>{ if(s.kind==='qa'){ s.question=s.question||{}; s.question.sessionCode=code; } });
   const questions = live.map((s,i)=>{ s.question=s.question||{}; s.question.sessionCode=code; s.question.qIndex=i;
     if(s.kind==='study') return { type:'flashcard', front:plain(s.question.front||''), back:plain(s.question.back||''), text:plain(s.question.front||'') };
-    return { text:plain(s.question.text||''), type:s.question.type||'multiple_choice', options:(s.question.options||[]).map(o=>({text:plain(o.text||'')})), correctAnswer:(s.question.correctAnswer!=null?s.question.correctAnswer:null) }; });
+    return { text:plain(s.question.text||''), type:s.question.type||'multiple_choice', options:(s.question.options||[]).map(o=>({text:plain(o.text||'')})), correctAnswer:(s.question.correctAnswer!=null?s.question.correctAnswer:null),
+             noTranslate: !!s.question.noTranslate }; });
   try{
     if(questions.length){
       await fbDb.ref('quiz_builder/'+code+'/questions').set(questions);
