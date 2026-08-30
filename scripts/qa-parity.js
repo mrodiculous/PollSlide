@@ -105,12 +105,39 @@ const CAPABILITIES = [
     why: 'Browser chrome stays on screen in front of the room, and the display can dim mid-session.',
   },
   {
+    id: 'ui-language-switcher', label: 'User can change the interface language',
+    appliesTo: ['authoring', 'audience'],
+    detect: /setViewerLang|id=["']langSel["']|setUiLang/,
+    why: 'The interface language is inherited and cannot be changed — a presenter whose browser is in the wrong language is stuck with it.',
+  },
+  {
+    id: 'ui-translated', label: 'Interface strings actually translated',
+    appliesTo: ['authoring', 'audience'],
+    detect: /\bt\(['"][a-zA-Z._]/g, minCount: 20,
+    why: 'Offering a language picker over untranslated strings changes nothing the user can see.',
+  },
+  {
+    id: 'topbar-overflow', label: 'One primary action + ⋯ overflow',
+    appliesTo: ['authoring'],
+    detect: /more-menu|id=["']moreMenu["']/,
+    why: 'Secondary controls sit loose in the top bar, so nothing signals what the main action is.',
+  },
+  {
     id: 'qa-panel', label: 'Audience Q&A',
     appliesTo: ['live-host'],
     detect: /sessions\/.*\/qa|openQAPanel|startPresentQa|\/qa'/,
     why: 'The room cannot ask questions back during this product.',
   },
 ];
+
+/* Gaps you have looked at and decided NOT to close, with the reason. This is the
+ * other half of the loop: a gap you have judged and rejected must stop appearing, or
+ * the report slowly fills with things you already said no to and you stop reading it.
+ * Key is "capabilityId@surface". Delete a line to reopen the question.
+ *   e.g. 'qa-panel@present.html': 'PresentSlide decks are one-way; Q&A lives in the poll.'
+ */
+const DECIDED = {
+};
 
 /* Triaged discovery candidates: things that look shared but are deliberately not.
  * Recording a decision here stops the tool re-suggesting it every run — a checker
@@ -139,7 +166,9 @@ function run() {
   for (const cap of CAPABILITIES) {
     const cells = files.map(f => {
       if (!applies(cap, f)) return '·'.padEnd(10);            // not relevant here
-      const has = cap.detect.test(src[f]);
+      const has = cap.minCount
+        ? ((src[f].match(cap.detect) || []).length >= cap.minCount)
+        : cap.detect.test(src[f]);
       if (!has) gaps.push({ cap, surface: f });
       return (has ? 'yes' : 'MISSING').padEnd(10);
     });
@@ -152,20 +181,34 @@ function run() {
    * others do not; that is the divergence this tool exists to catch. */
   const real = gaps.filter(g => {
     const applicable = files.filter(f => applies(g.cap, f));
-    return applicable.some(f => g.cap.detect.test(src[f]));
+    const present = (f) => g.cap.minCount
+      ? ((src[f].match(g.cap.detect) || []).length >= g.cap.minCount)
+      : g.cap.detect.test(src[f]);
+    return applicable.some(present);
   });
 
+  const open = real.filter(g => !DECIDED[g.cap.id + '@' + g.surface]);
+  const closed = real.filter(g => DECIDED[g.cap.id + '@' + g.surface]);
+
   console.log('═══ GAPS — implemented somewhere, missing here ═══\n');
-  if (!real.length) console.log('  None. Every capability that exists is in every surface it applies to.\n');
-  for (const g of real) {
-    const hasIt = files.filter(f => applies(g.cap, f) && g.cap.detect.test(src[f]));
+  if (!open.length) console.log('  None open. Every capability that exists is in every surface it applies to,\n  or the difference has been decided on deliberately.\n');
+  for (const g of open) {
+    const hasIt = files.filter(f => applies(g.cap, f) && (g.cap.minCount
+      ? ((src[f].match(g.cap.detect) || []).length >= g.cap.minCount)
+      : g.cap.detect.test(src[f])));
     console.log(`  ▸ ${g.cap.label}`);
     console.log(`      missing from : ${SURFACES[g.surface].name} (${g.surface})`);
     console.log(`      already in   : ${hasIt.map(f => SURFACES[f].name).join(', ')}`);
-    console.log(`      what it costs: ${g.cap.why}\n`);
+    console.log(`      what it costs: ${g.cap.why}`);
+    console.log(`      decide        : add '${g.cap.id}@${g.surface}' to DECIDED to close it with a reason\n`);
+  }
+  if (closed.length) {
+    console.log('  Decided against, not shown above:');
+    closed.forEach(g => console.log(`    · ${g.cap.label} in ${SURFACES[g.surface].name} — ${DECIDED[g.cap.id + '@' + g.surface]}`));
+    console.log('');
   }
 
-  if (gapsOnly) { console.log(`${real.length} gap(s).\n`); return; }
+  if (gapsOnly) { console.log(`${open.length} open gap(s)` + (closed.length ? `, ${closed.length} decided against` : '') + '.\n'); return; }
 
   /* ── Discovery ────────────────────────────────────────────────────────────
    * Functions defined in exactly ONE surface whose name suggests something general.
@@ -194,7 +237,7 @@ function run() {
     console.log('');
   }
 
-  console.log(`${real.length} gap(s) · ${candidates.length} candidate(s) to triage\n`);
+  console.log(`${open.length} open gap(s) · ${closed.length} decided against · ${candidates.length} candidate(s) to triage\n`);
 }
 run();
 process.exit(0);   // advisory, like the other qa-* checkers
