@@ -168,7 +168,11 @@ function pushDataset(out, presId, presName, source, date, questions, responses){
         // undefined must stay distinguishable from 0 — "not watched" is not the same
         // claim as "watched and never left", and blurring the two would let a teacher
         // accuse someone on the strength of a missing field.
-        leftScreen: r.leftScreen, awayMs: r.awayMs });
+        leftScreen: r.leftScreen, awayMs: r.awayMs,
+        // The identity that survives a different device, a cleared browser and a
+        // differently-typed name. Present only for decks assigned to a class —
+        // grouping by name is the best an open session can do.
+        studentId: r.studentId || null });
     });
   });
 }
@@ -226,6 +230,12 @@ function onPresChange(keep){
 }
 
 /* ─── Filtering ────────────────────────────────────────────────────────────── */
+/* A stable student id beats a typed name whenever we have one: the same person
+ * answering from a phone one week and a laptop the next is ONE row, which is the
+ * whole reason classes exist. Top level on purpose — three different functions
+ * call it, and nesting it inside filtered() made those throw. */
+function respondentKey(r){ return r.studentId || ('name:' + String(r.name||'').trim().toLowerCase()); }
+
 function filtered(){
   const presId=el('fPres').value, q=el('fQ').value, resp=el('fResp').value.trim().toLowerCase(),
         from=el('fFrom').value?new Date(el('fFrom').value).getTime():null,
@@ -251,7 +261,9 @@ function render(){
     : view==='summary' ? renderSummary(data) : view==='question' ? renderByQuestion(data) : renderByRespondent(data);
 }
 function renderStats(data){
-  const people = new Set(data.map(r=>r.pid)).size;
+  // Count PEOPLE, not devices — respondentKey folds the same student's phone and
+  // laptop into one when the deck belongs to a class.
+  const people = new Set(data.map(respondentKey)).size;
   const graded = data.filter(r=>r.isCorrect===true||r.isCorrect===false);
   const acc = graded.length ? Math.round(data.filter(r=>r.isCorrect===true).length/graded.length*100)+'%' : '—';
   const times = data.filter(r=>r.elapsed>0).map(r=>r.elapsed);
@@ -264,7 +276,7 @@ function renderSummary(data){
   const byPres = {};
   data.forEach(r=>{ (byPres[r.presId]=byPres[r.presId]||{name:r.presName,recs:[]}).recs.push(r); });
   return Object.values(byPres).map(p=>{
-    const people=new Set(p.recs.map(r=>r.pid)).size;
+    const people=new Set(p.recs.map(respondentKey)).size;
     const graded=p.recs.filter(r=>r.isCorrect===true||r.isCorrect===false);
     const acc=graded.length?Math.round(p.recs.filter(r=>r.isCorrect===true).length/graded.length*100)+'%':'—';
     const qn=new Set(p.recs.map(r=>r.qIdx)).size;
@@ -638,7 +650,9 @@ function renderReportInsights(d){
 }
 function renderByRespondent(data){
   const people={};
-  data.forEach(r=>{ (people[r.pid]=people[r.pid]||{name:r.name,recs:[]}).recs.push(r); });
+  // Group the by-respondent view by student where we have one, so a term's work
+  // shows as one person's row instead of one row per device they used.
+  data.forEach(r=>{ const k=respondentKey(r); (people[k]=people[k]||{name:r.name,recs:[]}).recs.push(r); });
   return Object.values(people).sort((a,b)=>b.recs.length-a.recs.length).map(p=>{
     const graded=p.recs.filter(r=>r.isCorrect===true||r.isCorrect===false);
     const score=graded.length?Math.round(p.recs.filter(r=>r.isCorrect===true).length/graded.length*100)+'%':'—';

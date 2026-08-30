@@ -10,6 +10,7 @@
 <script src="/errors.js?v=1"></script>
 <script src="/present-display.js?v=1"></script>
 <script src="/qid.js?v=1"></script>
+<script src="/roster.js?v=1"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root {
@@ -2327,6 +2328,166 @@ function scheduleSave() {
 }
 
 // ─── PRESENTATIONS — LOAD / SAVE ─────────────────────────────────────────────
+/* ── CLASSES ───────────────────────────────────────────────────────────────
+ * A class is a named list of students the teacher owns. Assign a deck to a class
+ * and the audience page shows that roster instead of a name box, so every answer
+ * carries a STABLE student id — which is what finally lets a report follow one
+ * student across decks and across a term.
+ *
+ * PRIVACY, and why the published roster is not the stored one:
+ * quiz_builder/$code is public-read (it has to be — the audience has no account),
+ * so anything published there is readable by anyone holding the session code, and
+ * that code is on a screen in front of a room. Publishing a class list of
+ * children's full names there would be indefensible. The teacher's own tree keeps
+ * full names; what gets published is first name + last initial, which is enough
+ * for a student to find themselves and not enough to be a class list.
+ * ------------------------------------------------------------------------- */
+let classes = {};        // classId -> { name, createdAt, students: { studentId: {name, addedAt, left} } }
+
+async function loadClasses() {
+  classes = {};
+  if (!userId) return;
+  try {
+    const snap = await db.ref(`users/${userId}/classes`).get();
+    classes = snap.exists() ? (snap.val() || {}) : {};
+    // Drop the PIN hashes on the way in. Rules can't stop the owner reading their
+    // own subtree, so the browser is where this gets minimised: nothing on this
+    // page needs them, and anything held in memory can end up in a bug report.
+    Object.values(classes).forEach(c => Object.values((c && c.students) || {})
+      .forEach(st => { if (st) { delete st.pinHash; delete st.pinSalt; } }));
+  } catch (e) { /* no classes yet */ }
+}
+
+// What the audience is allowed to see: enough to recognise yourself, not a roster.
+function publicRoster(cls) {
+  return PSRoster.activeStudents((cls && cls.students) || {}).map(st => {
+    const parts = String(st.name).trim().split(/\s+/);
+    const shown = parts.length > 1
+      ? parts[0] + ' ' + parts[parts.length - 1][0].toUpperCase() + '.'
+      : parts[0];
+    return { id: st.id, name: shown };
+  });
+}
+
+async function publishRosterFor(pres) {
+  if (!pres || !pres.sessionCode) return;
+  const cls = pres.classId && classes[pres.classId];
+  try {
+    await db.ref(`quiz_builder/${pres.sessionCode}/roster`).set(cls ? publicRoster(cls) : null);
+    await db.ref(`quiz_builder/${pres.sessionCode}/className`).set(cls ? (cls.name || null) : null);
+    // api/student-claim needs to find the roster in MY tree to check a PIN. A uid
+    // and a class id are opaque handles, not personal data — and the PIN hash they
+    // lead to is only ever readable by the Admin SDK, never by the browser.
+    await db.ref(`quiz_builder/${pres.sessionCode}/ownerUid`).set(cls ? userId : null);
+    await db.ref(`quiz_builder/${pres.sessionCode}/classId`).set(cls ? pres.classId : null);
+  } catch (e) { /* best effort — a failed publish falls back to the name box */ }
+}
+
+function openClassManager(preselectDeckId) {
+  let m = document.getElementById('classModal');
+  if (!m) { m = document.createElement('div'); m.id = 'classModal'; m.className = 'overlay';
+            m.onclick = e => { if (e.target === m) closeClassManager(); }; document.body.appendChild(m); }
+  const list = Object.entries(classes).sort((a,b) => (a[1].name||'').localeCompare(b[1].name||''));
+  m.innerHTML = `<div class="modal" style="max-width:520px;">
+    <h2 style="margin-bottom:2px;">Your classes</h2>
+    <p style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">Give a class a list of students once, and every deck you assign to it records who answered — by person, not by whatever they typed that day.</p>
+    <div id="classList">${list.length ? list.map(([cid, c]) => {
+      const n = PSRoster.activeStudents(c.students || {}).length;
+      const assigned = preselectDeckId && presentations[preselectDeckId] && presentations[preselectDeckId].classId === cid;
+      return `<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-top:1px solid var(--border);">
+        <span style="flex:1;min-width:0;"><b>${escapeHtml(c.name || 'Untitled class')}</b>
+          <span style="color:var(--muted);font-size:11.5px;"> · ${n} student${n===1?'':'s'}</span></span>
+        <button class="btn btn-ghost btn-sm" onclick="openRosterEditor('${escAttr(cid)}')">Students</button>
+        ${preselectDeckId ? `<button class="btn ${assigned?'btn-ghost':'btn-primary'} btn-sm" onclick="assignDeckToClass('${escAttr(preselectDeckId)}','${escAttr(cid)}')">${assigned?'✓ Assigned':'Assign'}</button>` : ''}
+      </div>`; }).join('') : '<p style="color:var(--muted);padding:10px 0;">No classes yet.</p>'}</div>
+    <button class="btn btn-primary" style="width:100%;margin-top:12px;" onclick="createClass()">＋ New class</button>
+    ${preselectDeckId && presentations[preselectDeckId] && presentations[preselectDeckId].classId
+      ? `<button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="assignDeckToClass('${escAttr(preselectDeckId)}','')">Unassign this deck</button>` : ''}
+    <button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="closeClassManager()">Close</button>
+  </div>`;
+  m.style.display = 'flex';
+}
+function closeClassManager() { const m = document.getElementById('classModal'); if (m) m.remove(); }
+
+async function createClass() {
+  const name = (prompt('Class name — e.g. "Biology 101, Period 3":') || '').trim();
+  if (!name) return;
+  const cid = 'cl_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
+  classes[cid] = { name: name.slice(0,80), createdAt: Date.now(), students: {} };
+  if (userId) await db.ref(`users/${userId}/classes/${cid}`).set(classes[cid]).catch(()=>{});
+  openRosterEditor(cid);
+}
+
+function openRosterEditor(cid) {
+  const c = classes[cid]; if (!c) return;
+  closeClassManager();
+  let m = document.getElementById('rosterModal');
+  if (!m) { m = document.createElement('div'); m.id = 'rosterModal'; m.className = 'overlay';
+            m.onclick = e => { if (e.target === m) closeRosterEditor(); }; document.body.appendChild(m); }
+  const current = PSRoster.activeStudents(c.students || {});
+  const dupes = PSRoster.possibleDuplicates(c.students || {});
+  m.innerHTML = `<div class="modal" style="max-width:520px;">
+    <h2 style="margin-bottom:2px;">${escapeHtml(c.name || 'Class')}</h2>
+    <p style="color:var(--muted);font-size:12.5px;margin-bottom:12px;">Paste your class list — one name per line, or straight out of a spreadsheet. Re-paste any time to add or remove people; nobody's past answers are ever lost.</p>
+    <textarea id="rosterPaste" placeholder="Ana Ruiz\nBen Cole\nCara Diaz" style="width:100%;height:150px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;padding:10px;font-size:13px;font-family:inherit;">${current.map(s => escapeHtml(s.name)).join('\n')}</textarea>
+    ${dupes.length ? `<div style="margin-top:10px;padding:10px 12px;background:rgba(247,183,49,.12);border-left:3px solid var(--accent4);border-radius:0 8px 8px 0;font-size:12.5px;color:var(--muted);">
+      <b style="color:var(--accent4);">Two names look like one person</b><br>${dupes.map(p => escapeHtml(p[0].name) + ' / ' + escapeHtml(p[1].name)).join('<br>')}<br>
+      <span style="font-size:11.5px;">They're kept separate — merging automatically could put a grade on the wrong student. Edit the list above if they are the same person.</span></div>` : ''}
+    <p style="color:var(--muted);font-size:11.5px;margin-top:10px;line-height:1.5;">🔒 Students see only a first name and last initial when they pick themselves. Full names stay in your account.</p>
+    ${current.length ? `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+      <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Forgotten PIN</div>
+      <p style="color:var(--muted);font-size:12px;line-height:1.5;margin-bottom:8px;">Students set their own PIN the first time they pick their name. Clear one and they'll set a new PIN next time — nothing they've already answered is affected.</p>
+      <select id="pinResetPick" style="width:100%;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;padding:9px 10px;font-size:13px;">
+        ${current.map(st => `<option value="${escapeHtml(st.id)}">${escapeHtml(st.name)}</option>`).join('')}
+      </select>
+      <button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="resetStudentPin('${escAttr(cid)}')">Clear this student's PIN</button>
+    </div>` : ''}
+    <button class="btn btn-primary" style="width:100%;margin-top:12px;" onclick="saveRoster('${escAttr(cid)}')">Save class list</button>
+    <button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="closeRosterEditor();openClassManager()">Back</button>
+  </div>`;
+  m.style.display = 'flex';
+}
+function closeRosterEditor() { const m = document.getElementById('rosterModal'); if (m) m.remove(); }
+
+async function saveRoster(cid) {
+  const c = classes[cid]; if (!c) return;
+  const names = PSRoster.parseRoster(document.getElementById('rosterPaste').value || '');
+  const r = PSRoster.mergeRoster(c.students || {}, names);
+  c.students = r.roster;
+  if (userId) await db.ref(`users/${userId}/classes/${cid}/students`).set(r.roster).catch(()=>{});
+  // Any deck already assigned to this class needs the new list.
+  for (const [pid, p] of Object.entries(presentations)) if (p.classId === cid) await publishRosterFor(p);
+  closeRosterEditor();
+  const bits = [];
+  if (r.added.length)    bits.push(r.added.length + ' added');
+  if (r.rejoined.length) bits.push(r.rejoined.length + ' back');
+  if (r.left.length)     bits.push(r.left.length + ' removed');
+  toast(bits.length ? '👥 ' + bits.join(' · ') : 'Class list unchanged', 'success');
+  renderPresList();
+}
+
+async function resetStudentPin(cid) {
+  const sel = document.getElementById('pinResetPick'); if (!sel || !sel.value) return;
+  const sid = sel.value, c = classes[cid];
+  const name = (c && c.students && c.students[sid] && c.students[sid].name) || 'this student';
+  if (!confirm(`Clear ${name}'s PIN?\n\nThey'll set a new one the next time they pick their name. Their answers are untouched.`)) return;
+  try {
+    await db.ref(`users/${userId}/classes/${cid}/students/${sid}`).update({ pinHash: null, pinSalt: null, pinSetAt: null });
+    if (c && c.students && c.students[sid]) { delete c.students[sid].pinHash; delete c.students[sid].pinSalt; }
+    toast(`PIN cleared for ${name}`, 'success');
+  } catch (e) { toast('Could not clear it: ' + e.message, 'danger'); }
+}
+
+async function assignDeckToClass(deckId, cid) {
+  const p = presentations[deckId]; if (!p) return;
+  await setDeckField(deckId, 'classId', cid || null);
+  await publishRosterFor(p);
+  closeClassManager();
+  renderPresList();
+  toast(cid ? `👥 Answers will be recorded against ${escapeHtml(classes[cid]?.name || 'the class')}`
+            : 'Unassigned — anyone can join with a typed name.', 'success');
+}
+
 /* ── COLLABORATION: where does a deck actually live? ──────────────────────────
  * A deck someone shared with you for editing stays in THEIR tree — you hold a grant,
  * not a copy. So every read and write has to address the owner's path, not yours.
@@ -2381,6 +2542,7 @@ async function loadPresentations() {
     }
   } catch(e) { console.error('Load failed', e); }
 
+  await loadClasses();       // class rosters — stable student identity
   await loadCollabDecks();   // decks other people let me edit
   await loadMyGrants();      // ...and which of mine other people can edit
 
@@ -2432,6 +2594,7 @@ async function saveCurrentPresentation() {
       await db.ref(`quiz_builder/${pres.sessionCode}/language`).set(pres.language || 'en');
       await db.ref(`quiz_builder/${pres.sessionCode}/teamMode`).set(!!pres.teamMode);
       await db.ref(`quiz_builder/${pres.sessionCode}/focusTrack`).set(!!pres.focusTrack);
+      await publishRosterFor(pres);
     }
     markSaved();
   } catch(e) { document.getElementById('saveText').textContent='Save failed'; }
@@ -3386,6 +3549,7 @@ function openDeckMenu(id, ev) {
       { icon: p.pinned ? '☆' : '★', label: p.pinned ? 'Unpin' : 'Pin to top', act: `togglePin('${escAttr(id)}')` },
       { icon: '📁', label: 'Move to folder…', act: `openMoveModal(['${escAttr(id)}'])` },
     ]),
+    { icon: '👥', label: (p.classId && classes[p.classId] ? 'Class: ' + (classes[p.classId].name || 'assigned') : 'Assign to a class…'), act: `openClassManager('${escAttr(id)}')` },
     { icon: '👁', label: (p.focusTrack ? 'Screen-leaving: reported' : 'Screen-leaving: not tracked'), act: `toggleFocusTrack('${escAttr(id)}')` },
     { icon: '📤', label: 'Share a copy…', act: `openDeckShareModal('${escAttr(id)}')` },
     ...(isCollabDeck(id)
