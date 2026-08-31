@@ -22,6 +22,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="/errors.js?v=1"></script>
 <script src="/qid.js?v=1"></script>
+<script src="/retakes.js?v=1"></script>
+<script src="/gradebook.js?v=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
@@ -79,7 +81,8 @@
       PollSlide Reports
     </div>
     <span id="acct" class="muted" style="font-size:12px;"></span>
-    <button class="btn btn-ghost" onclick="exportCSV()" id="csvBtn" disabled>⤓ CSV</button>
+    <button class="btn btn-ghost" onclick="exportCSV()" id="csvBtn" disabled title="Every answer, one row each — for reading what people said">⤓ Answers</button>
+    <button class="btn btn-ghost" onclick="exportGradebook()" id="gradebookBtn" disabled title="One row per student, one column per question — the shape Google Classroom and Canvas import">🎓 Gradebook</button>
     <button class="btn btn-ghost" onclick="makeRecap()" id="recapBtn" disabled title="Build a shareable recap page for one session — winner, toughest question and the highlights — then send the link to everyone who took part">🎁 Share recap</button>
     <button class="btn btn-ghost" onclick="window.print()">🖨 Print</button>
     <button class="btn btn-ghost" id="signOutBtn" onclick="ppSignOut()" style="display:none;">Sign out</button>
@@ -172,7 +175,10 @@ function pushDataset(out, presId, presName, source, date, questions, responses){
         // The identity that survives a different device, a cleared browser and a
         // differently-typed name. Present only for decks assigned to a class —
         // grouping by name is the best an open session can do.
-        studentId: r.studentId || null });
+        studentId: r.studentId || null,
+        // Which try produced the graded answer. Absent on every deck without retakes,
+        // which is the default — so 1-or-missing both mean "answered once".
+        attempt: r.attempt || 1 });
     });
   });
 }
@@ -209,6 +215,7 @@ async function loadAll(){
   const pre = new URLSearchParams(location.search).get('pres');
   if (pre && PRES[pre]) { el('fPres').value = pre; onPresChange(); }
   el('csvBtn').disabled = RECORDS.length===0;
+  el('gradebookBtn').disabled = RECORDS.length===0;
   const _rb = el('recapBtn'); if (_rb) _rb.disabled = RECORDS.length===0;
   render();
 }
@@ -234,6 +241,16 @@ function onPresChange(keep){
  * answering from a phone one week and a laptop the next is ONE row, which is the
  * whole reason classes exist. Top level on purpose — three different functions
  * call it, and nesting it inside filtered() made those throw. */
+/* Shown only when a student actually used a second attempt. A column that says
+ * "1st" against every row on the great majority of decks — the ones with retakes off —
+ * would be noise on every report to buy clarity on a few. */
+function attemptPill(r){
+  const n = r && r.attempt;
+  if (!(n > 1)) return '';
+  const ord = n === 2 ? '2nd' : n === 3 ? '3rd' : n + 'th';
+  return ' <span class="pill" style="background:rgba(247,183,49,.16);color:var(--accent4);" ' +
+         'title="Graded from attempt ' + n + '">' + ord + ' try</span>';
+}
 function respondentKey(r){ return r.studentId || ('name:' + String(r.name||'').trim().toLowerCase()); }
 
 function filtered(){
@@ -308,7 +325,7 @@ function renderByQuestion(data){
         return `<div class="bar"><div class="bar-top"><span>${'ABCDEFGH'[i]}. ${esc(o.text||'')}${c?' ✓':''}</span><span>${counts[i]} (${pct}%)</span></div>
           <div class="bar-track"><div class="bar-fill ${c?'correct':''}" style="width:${pct}%"></div></div></div>`; }).join('');
     }
-    const rows=g.recs.slice(0,200).map(r=>`<tr><td>${esc(r.name)}</td><td>${esc(answerText(q,r.answer))}</td>
+    const rows=g.recs.slice(0,200).map(r=>`<tr><td>${esc(r.name)}${attemptPill(r)}</td><td>${esc(answerText(q,r.answer))}</td>
       <td>${r.isCorrect===true?'<span class="pill ok">✓</span>':r.isCorrect===false?'<span class="pill no">✗</span>':'<span class="muted">·</span>'}</td>
       <td class="muted">${r.elapsed?(r.elapsed/1000).toFixed(1)+'s':'—'}</td>
       <td class="muted">${r.date?new Date(r.date).toLocaleDateString():'—'}</td></tr>`).join('');
@@ -677,7 +694,7 @@ function renderByRespondent(data){
     const graded=p.recs.filter(r=>r.isCorrect===true||r.isCorrect===false);
     const score=graded.length?Math.round(p.recs.filter(r=>r.isCorrect===true).length/graded.length*100)+'%':'—';
     const rows=p.recs.map(r=>`<tr><td class="muted">${esc(r.presName)}</td><td>Q${r.qIdx+1}: ${esc(String(r.qText).slice(0,40))}</td>
-      <td>${esc(answerText(r,r.answer))}</td>
+      <td>${esc(answerText(r,r.answer))}${attemptPill(r)}</td>
       <td>${r.isCorrect===true?'<span class="pill ok">✓</span>':r.isCorrect===false?'<span class="pill no">✗</span>':'<span class="muted">·</span>'}</td></tr>`).join('');
     return `<div class="card"><h3>${esc(p.name)} <span class="muted" style="font-weight:400;font-size:12px;">· ${p.recs.length} answers · score ${score}</span></h3>
       <table><thead><tr><th>Presentation</th><th>Question</th><th>Answer</th><th>Correct</th></tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -685,14 +702,46 @@ function renderByRespondent(data){
 }
 
 /* ─── CSV export of the current filtered view ─────────────────────────────────── */
+function download(csv, name){
+  // BOM: without it Excel opens UTF-8 as Latin-1 and "Renée" arrives as "RenÃ©e".
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
+  a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+
+/* Every answer, one row each — for reading what people said. The gradebook below is
+ * the other shape: one row per student, for filing a mark. */
 function exportCSV(){
   const data=filtered(); if(!data.length) return;
-  const head=['Presentation','Question #','Question','Type','Respondent','Answer','Correct','Time (ms)','Date','Source'];
+  const head=['Presentation','Question #','Question','Type','Respondent','Answer','Correct','Attempt','Time (ms)','Date','Source'];
   const rows=data.map(r=>[r.presName,'Q'+(r.qIdx+1),r.qText,r.qType,r.name,answerText(r,r.answer),
-    r.isCorrect===true?'Yes':r.isCorrect===false?'No':'',r.elapsed||'',r.date?new Date(r.date).toLocaleString():'',r.source]);
-  const csv=[head,...rows].map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(',')).join('\n');
-  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download='pollslide-report-'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+    r.isCorrect===true?'Yes':r.isCorrect===false?'No':'',r.attempt||1,r.elapsed||'',r.date?new Date(r.date).toLocaleString():'',r.source]);
+  // PSGradebook.toCSV, not a local join: it neutralises cells a spreadsheet would run
+  // as a formula. Respondent names and typed answers come from people, so `=1+1` in a
+  // free-text answer became a live formula in the teacher's spreadsheet.
+  download(PSGradebook.toCSV([head,...rows]),
+           'pollslide-report-'+new Date().toISOString().slice(0,10)+'.csv');
+}
+
+/* The gradebook. Needs ONE presentation — a matrix of students against questions has
+ * no meaning across two different decks, so rather than exporting something subtly
+ * wrong it says which filter to set. */
+function exportGradebook(){
+  const data=filtered();
+  if(!data.length){ alert('No responses in the current filter.'); return; }
+  const presIds=[...new Set(data.map(r=>r.presId))];
+  if(presIds.length>1){ alert('Choose ONE presentation in the filter above — a gradebook is one deck\'s marks, and two decks\' questions cannot share a row.'); return; }
+  const title=(PRES[presIds[0]]&&PRES[presIds[0]].name)||data[0].presName||'PollSlide';
+  const g=PSGradebook.buildGradebook(data);
+  if(!g.questions.length){
+    alert('Nothing to grade here yet.\n\n'+g.warnings.join('\n')+'\n\nSet a correct answer on at least one question, then export again.');
+    return;
+  }
+  download(PSGradebook.gradebookCSV(data,{title}), PSGradebook.fileName(title));
+  // Say what was left out. A silent export is one a teacher has to audit by hand.
+  const note=g.warnings.length?'\n\n'+g.warnings.join('\n'):'';
+  setTimeout(()=>alert(`Gradebook exported.\n\n${g.rows.length} student${g.rows.length===1?'':'s'} × ${g.questions.length} question${g.questions.length===1?'':'s'}.${note}`),150);
 }
 
 /* ─── Auth ─────────────────────────────────────────────────────────────────── */

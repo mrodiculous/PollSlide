@@ -11,6 +11,7 @@
 <script src="/present-display.js?v=1"></script>
 <script src="/qid.js?v=1"></script>
 <script src="/roster.js?v=1"></script>
+<script src="/retakes.js?v=1"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root {
@@ -2667,6 +2668,7 @@ async function saveCurrentPresentation() {
       await db.ref(`quiz_builder/${pres.sessionCode}/language`).set(pres.language || 'en');
       await db.ref(`quiz_builder/${pres.sessionCode}/teamMode`).set(!!pres.teamMode);
       await db.ref(`quiz_builder/${pres.sessionCode}/focusTrack`).set(!!pres.focusTrack);
+      db.ref(`quiz_builder/${pres.sessionCode}/retakes`).set(pres.retakes ? PSRetakes.retakePolicy(pres.retakes) : null).catch(()=>{});
       await publishRosterFor(pres);
     }
     markSaved();
@@ -2808,6 +2810,7 @@ function selectPresentation(id) {
     db.ref(`quiz_builder/${pres.sessionCode}/productType`).set(presType(pres)).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/teamMode`).set(!!pres.teamMode).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/focusTrack`).set(!!pres.focusTrack).catch(()=>{});
+    db.ref(`quiz_builder/${pres.sessionCode}/retakes`).set(pres.retakes ? PSRetakes.retakePolicy(pres.retakes) : null).catch(()=>{});
   }
 
   // Update topbar
@@ -3624,6 +3627,11 @@ function openDeckMenu(id, ev) {
     ]),
     { icon: '👥', label: (p.classId && classes[p.classId] ? 'Class: ' + (classes[p.classId].name || 'assigned') : 'Assign to a class…'), act: `openClassManager('${escAttr(id)}')` },
     { icon: '👁', label: (p.focusTrack ? 'Screen-leaving: reported' : 'Screen-leaving: not tracked'), act: `toggleFocusTrack('${escAttr(id)}')` },
+    /* Not on polls. A poll is a snapshot of what the room thinks right now, and
+     * letting people revise it turns a reading of the room into a negotiation. */
+    ...((p.productType || 'poll') === 'poll' ? [] : [
+      { icon: '🔁', label: PSRetakes.shortLabel(p.retakes), act: `openRetakeModal('${escAttr(id)}')` },
+    ]),
     { icon: '📤', label: 'Share a copy…', act: `openDeckShareModal('${escAttr(id)}')` },
     ...(isCollabDeck(id)
       ? [{ icon: '🚪', label: 'Leave this shared deck', act: `leaveCollab('${escAttr(id)}')`, danger: true }]
@@ -3674,6 +3682,65 @@ async function toggleFocusTrack(id) {
   toast(on
     ? '👁 Students will be told on screen if they leave, and it appears in your report.'
     : 'Screen-leaving is no longer tracked or reported.', 'success');
+}
+
+/* Second attempts, per deck. Two choices, and they are genuinely separate: whether a
+ * student may try again, and which try is graded. Rolling them into one list of
+ * presets ("2 tries best of") would hide the second decision behind the first, and
+ * the second is the one that decides someone's mark. */
+function openRetakeModal(deckId) {
+  const p = presentations[deckId]; if (!p) return;
+  const pol = PSRetakes.retakePolicy(p.retakes);
+  let m = document.getElementById('retakeModal');
+  if (!m) { m = document.createElement('div'); m.id = 'retakeModal'; m.className = 'overlay';
+            m.onclick = e => { if (e.target === m) closeRetakeModal(); }; document.body.appendChild(m); }
+
+  const tries = [2, 3, 5].map(n => `<button class="btn ${pol.allowed && pol.max === n ? 'btn-primary' : 'btn-ghost'} btn-sm"
+      onclick="setRetakes('${escAttr(deckId)}',true,${n},'${escAttr(pol.counts)}')">${n} tries</button>`).join(' ');
+
+  const modes = [
+    ['best',  'Best attempt',  'The point of a retake is to let someone show they have got it now.'],
+    ['last',  'Last attempt',  'Their most recent answer is where their understanding stands.'],
+    ['first', 'First attempt', 'The retake is recorded for you to see, but the original is graded.'],
+  ].map(([v, label, why]) => `<button class="rt-mode ${pol.counts === v ? 'on' : ''}"
+      onclick="setRetakes('${escAttr(deckId)}',true,${pol.max},'${v}')" ${pol.allowed ? '' : 'disabled'}>
+      <b>${label}</b><span>${why}</span></button>`).join('');
+
+  m.innerHTML = `<div class="modal" style="max-width:470px;">
+    <h2 style="margin-bottom:2px;">Second attempts</h2>
+    <p style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">${escapeHtml(p.name || 'This deck')}</p>
+    <style>
+      .rt-mode{display:block;width:100%;text-align:left;background:var(--surface2);border:1px solid var(--border2);
+        border-radius:10px;padding:10px 12px;margin-bottom:7px;color:var(--text);cursor:pointer;font-family:inherit;}
+      .rt-mode.on{border-color:var(--accent);background:rgba(108,99,255,.12);}
+      .rt-mode:disabled{opacity:.4;cursor:default;}
+      .rt-mode b{display:block;font-size:13.5px;margin-bottom:2px;}
+      .rt-mode span{font-size:11.5px;color:var(--muted);line-height:1.4;}
+    </style>
+    <div style="display:flex;gap:7px;margin-bottom:14px;">
+      <button class="btn ${pol.allowed ? 'btn-ghost' : 'btn-primary'} btn-sm"
+        onclick="setRetakes('${escAttr(deckId)}',false,2,'best')">Off</button>
+      ${tries}
+    </div>
+    <p style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:7px;">
+      Which attempt is graded</p>
+    ${modes}
+    <p style="color:var(--muted);font-size:12px;margin-top:12px;line-height:1.5;">
+      ${escapeHtml(PSRetakes.describePolicy(pol, 'teacher'))}</p>
+    <button class="btn btn-ghost" style="width:100%;margin-top:12px;" onclick="closeRetakeModal()">Done</button>
+  </div>`;
+  m.style.display = 'flex';
+}
+function closeRetakeModal() { const m = document.getElementById('retakeModal'); if (m) m.remove(); }
+
+async function setRetakes(deckId, allowed, max, counts) {
+  const p = presentations[deckId]; if (!p) return;
+  const pol = PSRetakes.retakePolicy({ allowed, max, counts });
+  // Store null when off, so a deck that never used retakes carries no field at all.
+  await setDeckField(deckId, 'retakes', pol.allowed ? pol : null);
+  if (p.sessionCode) db.ref(`quiz_builder/${p.sessionCode}/retakes`).set(pol.allowed ? pol : null).catch(()=>{});
+  openRetakeModal(deckId);      // repaint so the selection is visibly current
+  renderPresList();
 }
 
 async function togglePin(id) {
@@ -6303,6 +6370,7 @@ function toggleTeamMode() {
   scheduleSave();
   if (pres.sessionCode) db.ref(`quiz_builder/${pres.sessionCode}/teamMode`).set(!!pres.teamMode).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/focusTrack`).set(!!pres.focusTrack).catch(()=>{});
+    db.ref(`quiz_builder/${pres.sessionCode}/retakes`).set(pres.retakes ? PSRetakes.retakePolicy(pres.retakes) : null).catch(()=>{});
   syncTeamModeBtn();
   toast(pres.teamMode
     ? '👥 Team play ON — the audience will pick or create a team when they join. Leaderboards rank teams (average member score).'

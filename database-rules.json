@@ -65,6 +65,9 @@
         "responses": {
           ".write": true
         },
+        "attempts": {
+          ".write": true
+        },
         "currentQuestion": {
           ".write": "auth != null"
         },
