@@ -3,7 +3,7 @@
 Living punch list. Updated as things land. Owner-only items are things only Rod can do
 (they need a console login, a card, or a lawyer).
 
-Last updated: 2026-08-31 (fourteenth pass)
+Last updated: 2026-08-31 (fifteenth pass)
 
 ---
 
@@ -40,6 +40,12 @@ Last updated: 2026-08-31 (fourteenth pass)
 | ✅ | Compliance register | Admin → Compliance. `lib/compliance-register.js` (54 tests) + `api/compliance-register.js`. Who accepted what and when, what's outstanding, 15 controls with evidence, two CSV exports. The external-audit row is permanently red and the caveat is in the page **and** in both exported files. |
 
 ## Site, marketing & help
+
+| | Item | Notes |
+|---|---|---|
+| ⬜ | **Homepage has no product imagery at all** | No screenshots, no video — the hero is a CSS mock-up. Nothing shows GIFs, the progress view, classes or the reveal. Fresh screenshots of the real UI are the highest-value marketing change left. |
+| 🔸 | PowerPoint / Keynote import | **Removed from the UI and the site** — it needed a converter service that was never stood up, so every attempt fell back to "export to PDF". PDF import works and is client-side. `api/convert-deck.js` + `converter-service/` are still in the repo: stand the service up, set `CONVERT_API_URL`, restore the menu item from git history. |
+
 
 | | Item | Notes |
 |---|---|---|

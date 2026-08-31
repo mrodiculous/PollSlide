@@ -9093,7 +9093,15 @@ function togglePresentTheme() {
 // how PollSlide has always behaved), so anyone who doesn't care just hits Start. The
 // choice is remembered per presentation, and published so the audience phones and the
 // big screen score the same way.
-function currentGameMode() { return psModeOk(presentations[activePresId]?.gameMode || 'classic'); }
+/* Falls back to classic when the deck has nothing to score. Disabling the picker is not
+   enough on its own: a deck can be set to Survival while it has correct answers and
+   then have them removed, or arrive by duplication or a shared copy. This is the guard
+   that means a room is never eliminated on question one by a setting nobody revisited. */
+function currentGameMode() {
+  const saved = psModeOk(presentations[activePresId]?.gameMode || 'classic');
+  if (saved !== 'classic' && !deckHasGradedQuestions(activePresId)) return 'classic';
+  return saved;
+}
 function publishGameMode(mode) {
   if (!activePresId) return;
   const pres = presentations[activePresId];
@@ -9146,6 +9154,21 @@ function openPresentMode() {
   _presentDisplay = presentDisplayPref();
   renderModePicker();
 }
+/* Does this deck have anything to score? Asked of the QUESTIONS, not the product type:
+   a "survey" full of graded questions plays fine, and a quiz whose author has not set
+   any answers yet does not. The product name is a label; the correct answers are the
+   fact. */
+function deckHasGradedQuestions(deckId) {
+  const p = presentations[deckId];
+  if (!p || !Array.isArray(p.questions)) return false;
+  return p.questions.some(q => {
+    if (!q) return false;
+    const ca = q.correctAnswer;
+    if (ca === null || ca === undefined || ca === '') return false;
+    return !(Array.isArray(ca) && ca.length === 0);
+  });
+}
+
 function renderModePicker() {
   let m = document.getElementById('modePickerModal');
   if (!m) {
@@ -9153,17 +9176,28 @@ function renderModePicker() {
     m.onclick = e => { if (e.target === m) closeModePicker(); };
     document.body.appendChild(m);
   }
+  /* EVERY game mode scores from right and wrong answers. A deck with no correct
+     answers — a poll, an ungraded survey — scores zero for everyone in every mode, and
+     Survival is worse than useless: it eliminates the entire room on question one.
+     Nothing stopped a presenter choosing it, so they found out in front of an audience.
+     The modes are now disabled with the reason, rather than silently broken. */
+  const graded = deckHasGradedQuestions(activePresId);
   const cards = Object.entries(GAME_MODES).map(([id, g]) => {
-    const on = id === _pickedMode;
-    return `<button onclick="pickMode('${id}')" style="display:flex;gap:12px;align-items:flex-start;text-align:left;width:100%;margin-bottom:8px;padding:12px 14px;border-radius:12px;cursor:pointer;font-family:inherit;
+    const locked = !graded && id !== 'classic';
+    const on = id === _pickedMode && !locked;
+    return `<button ${locked ? 'disabled' : `onclick="pickMode('${id}')"`}
+      title="${locked ? escAttr(g.name + ' scores from correct answers, and this deck has none.') : ''}"
+      style="display:flex;gap:12px;align-items:flex-start;text-align:left;width:100%;margin-bottom:8px;padding:12px 14px;border-radius:12px;font-family:inherit;
+        cursor:${locked ? 'default' : 'pointer'};opacity:${locked ? '.45' : '1'};
         background:${on ? 'rgba(108,99,255,0.16)' : 'var(--surface2)'};border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};color:var(--text);">
       <span style="font-size:22px;line-height:1.1;flex-shrink:0;">${g.icon}</span>
       <span style="flex:1;min-width:0;">
         <span style="display:block;font-family:Syne,sans-serif;font-weight:800;font-size:14px;">${g.name}${id==='classic'?' <span style="font-weight:400;font-size:11px;color:var(--muted);">· default</span>':''}</span>
         <span style="display:block;font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:2px;">${g.blurb}</span>
-        <span style="display:block;font-size:11px;color:var(--accent3);margin-top:4px;">Best for: ${g.bestFor}</span>
+        <span style="display:block;font-size:11px;color:${locked ? 'var(--accent4)' : 'var(--accent3)'};margin-top:4px;">${
+          locked ? 'Needs questions with a correct answer' : 'Best for: ' + g.bestFor}</span>
       </span>
-      <span style="flex-shrink:0;font-size:16px;color:var(--accent);">${on ? '●' : '○'}</span>
+      <span style="flex-shrink:0;font-size:16px;color:var(--accent);">${locked ? '' : (on ? '●' : '○')}</span>
     </button>`;
   }).join('');
   m.innerHTML = `<div class="modal" style="max-width:520px;">

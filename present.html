@@ -325,9 +325,8 @@
     <button class="rib-btn" onclick="toggleMenu('fileMenu')">File <span class="caret">▾</span></button>
     <div class="menu hidden" id="fileMenu">
       <div class="menu-item" onclick="newDeck()"><span class="mi-ico">✨</span><span>New deck</span></div>
-      <div class="menu-item" onclick="pdfInput.click()"><span class="mi-ico">📄</span><span>Import PDF<span class="mi-sub">Each page → a slide</span></span></div>
+      <div class="menu-item" onclick="pdfInput.click()"><span class="mi-ico">📄</span><span>Import PDF<span class="mi-sub">Each page → a slide. From Keynote or PowerPoint: File → Export as PDF</span></span></div>
       <div class="menu-item" onclick="imgInput.click()"><span class="mi-ico">🖼️</span><span>Import images</span></div>
-      <div class="menu-item" onclick="deckInput.click()"><span class="mi-ico">📊</span><span>Import PowerPoint / Keynote<span class="mi-sub">.pptx · .ppt · .key → slides</span></span></div>
       <div class="menu-item" onclick="openOrganizer()"><span class="mi-ico">🗂️</span><span>Open my presentations<span class="mi-sub">Import your saved questions</span></span></div>
       <div class="menu-sep"></div>
       <div class="menu-item" onclick="exportPDF()"><span class="mi-ico">🖨️</span><span>Export as PDF<span class="mi-sub">Print dialog → Save as PDF</span></span></div>
@@ -414,7 +413,6 @@
 
   <input type="file" id="pdfInput" accept="application/pdf" class="hidden" onchange="onPdf(this.files[0])">
   <input type="file" id="imgInput" accept="image/*" multiple class="hidden" onchange="onImages(this.files)">
-  <input type="file" id="deckInput" accept=".pptx,.ppt,.key,application/vnd.openxmlformats-officedocument.presentationml.presentation" class="hidden" onchange="onDeckFile(this.files[0])">
   <input type="file" id="elImgInput" accept="image/*" class="hidden" onchange="onElImg(this.files[0])">
   <input type="file" id="bgImgInput" accept="image/*" class="hidden" onchange="onBgImg(this.files[0])">
   <input type="file" id="mediaInput" accept="video/*,audio/*" class="hidden" onchange="onMediaEl(this.files[0])">
@@ -625,7 +623,6 @@
 
 <script>
 /* ─── Flags + i18n (English source; t() falls back to English) ─────────────────*/
-const FLAGS = { deckImport:true };
 const LANG_NAMES = { en:'English', es:'Español', de:'Deutsch', fr:'Français', pt:'Português', it:'Italiano' };
 let LANG = localStorage.getItem('ps_user_lang')||'en'; if(!LANG_NAMES[LANG]) LANG='en';
 /* Every language was an empty object, so t() fell back to English for all of them and
@@ -1406,15 +1403,14 @@ async function renderPdfData(blob){ const lib=await ensurePdf(); const pdf=await
 async function onPdf(file){ if(!file)return; toast('Reading PDF…'); try{ const n=await renderPdfData(file); toast(n+' slides imported'); }catch(e){ toast('Could not read that PDF'); } }
 // PowerPoint/Keynote → server converts to PDF → render pixel-faithfully. Falls back
 // to a clear "export to PDF" message when conversion isn't configured/available.
-async function onDeckFile(file){ if(!file)return; toast('Converting '+file.name+'…');
-  try{
-    const r=await fetch('/api/convert-deck',{method:'POST',headers:{'x-filename':file.name,'x-target':'pdf','Content-Type':'application/octet-stream'},body:file});
-    const ct=(r.headers.get('content-type')||'');
-    if(r.ok && ct.indexOf('application/pdf')!==-1){ const blob=await r.blob(); const n=await renderPdfData(blob); toast(n+' slides imported'); return; }
-    let msg='Export your deck to PDF and import that.'; try{ const j=await r.json(); if(j&&j.message)msg=j.message; }catch(e){}
-    toast(msg);
-  }catch(e){ toast('Could not convert — export your deck to PDF and import that.'); }
-}
+/* PowerPoint / Keynote import was removed from the UI. The endpoint (api/convert-deck.js)
+   and converter-service/ are still in the repo and still correct — what was never
+   finished is the converter they need to talk to, so every attempt fell back to
+   "export to PDF and import that". Offering an import that cannot import is worse than
+   not offering one. PDF import (onPdf, below) is client-side and genuinely works, and
+   both Keynote and PowerPoint export to PDF in two clicks.
+   To bring it back: stand up converter-service/, set CONVERT_API_URL in Vercel, then
+   restore the menu item, the file input and this function from git history. */
 let _imgReplace=null;
 function replaceSlideImage(){ _imgReplace=currentIdx; document.getElementById('imgInput').click(); }
 function onImages(files){
@@ -2163,8 +2159,11 @@ function renderPanel(){ const el=document.getElementById('rpInner'); if(!el||!_p
       <div class="rp-grid">
         <div class="rp-tile" onclick="pdfInput.click()"><span class="ico">📄</span>PDF</div>
         <div class="rp-tile" onclick="imgInput.click()"><span class="ico">🖼️</span>Images</div>
-        <div class="rp-tile" onclick="deckInput.click()"><span class="ico">📊</span>PowerPoint / Keynote</div>
         <div class="rp-tile" onclick="openCloudDecks()"><span class="ico">📂</span>Cloud decks</div>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:9px;line-height:1.5;">
+        Keynote or PowerPoint? Export it as a PDF first — <b>File → Export as PDF</b> — then import that.
+        Every page becomes a slide you can edit here.
       </div>`; }
 }
 function addTextPreset(k){ const s=deck.slides[currentIdx]; if(!s){toast('Add a slide first.');return;} pushUndo('Add '+k);
