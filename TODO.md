@@ -3,7 +3,7 @@
 Living punch list. Updated as things land. Owner-only items are things only Rod can do
 (they need a console login, a card, or a lawyer).
 
-Last updated: 2026-08-31 (fourth pass — admin sweep)
+Last updated: 2026-08-31 (seventh pass)
 
 ---
 
@@ -18,27 +18,37 @@ Last updated: 2026-08-31 (fourth pass — admin sweep)
 | ✅ | Attempts / retakes | `retakes.js`. Off by default. Teacher picks tries (2/3/5) and which attempt is graded (best/last/first). Every attempt kept at `sessions/$code/attempts`. |
 | ✅ | Gradebook CSV export | `gradebook.js`. One row per student. A blank is not a zero; ungraded questions excluded; formula-injection neutralised (this also fixed the existing answers export). |
 
+## Next up — found during the 2026-08-31 review
+
+| | Item | Notes |
+|---|---|---|
+| ⬜ | **Presenter UI has no language switcher** | `pollyLang` sets what language Polly *writes questions in* — a content setting. The presenter interface itself has **0 translated strings**. A Spanish-speaking teacher builds in English and their students answer in Spanish. |
+| ⬜ | **PresentSlide's switcher is buried and thin** | It exists at `⋯ → Settings → 🌐 Language` but covers **7 strings** (the presentation overlay only). Compare: `answer.html` has 180. |
+| ⬜ | **`live.html` (Big screen) has no i18n at all** | No selector, no strings — and it's the screen the whole room looks at. |
+| ⬜ | Retake history has no admin view | Classes are now in the user detail panel; attempts are not. If a grade is disputed there's nothing to look at. |
+| ✅ | Contextual GIFs | `gifs.js` + `api/gif-search.js`. Per-deck toggles for question and answer GIFs, fetched at build time and reviewed before presenting. Tenor with the content filter locked server-side. **Needs `TENOR_API_KEY` in Vercel.** |
+
 ## Admin
 
 | | Item | Notes |
 |---|---|---|
 | ✅ | SEO / Marketing section | Admin → Growth. `api/seo-status.js` reads the LIVE site (not the repo) via `lib/seo.js`; shows findings, a search-result preview per page, and the owner-only checklist. Logs each run to `admin/seo_log`. |
 | ✅ | Full admin sweep | All 19 pages driven. Found: Billing had **never rendered** (wrote to a non-existent `#pageBody`, silent because async); 5 headers disagreed with their nav label; Admin had **zero** visibility into classes/rosters. All fixed. 142 dynamic controls checked, none dead. |
-| ⬜ | Security controls register | ISO/SOC **cannot** be self-certified. The automatable part is a controls register mapped to evidence that already exists. |
+| ✅ | Compliance register | Admin → Compliance. `lib/compliance-register.js` (54 tests) + `api/compliance-register.js`. Who accepted what and when, what's outstanding, 15 controls with evidence, two CSV exports. The external-audit row is permanently red and the caveat is in the page **and** in both exported files. |
 
 ## Site, marketing & help
 
 | | Item | Notes |
 |---|---|---|
 | ✅ | Document everything shipped | New /help sections + a "For teachers" group: class lists, verification, second attempts, gradebook export. Screen-leaving, folders, sharing and collaboration were already documented. Technical SEO clean across all 21 pages. |
-| 🔸 | i18n for the new copy | 30 strings × 5 languages hand-authored in `help-translations-teachers.js` (headings, TOC, card titles and bodies). Step lists, leads and callouts stay English — inline `<b>` tags fragment them, same as the rest of the help centre. Fixing that is a `data-i18n-html` refactor. |
+| ✅ | i18n for the new copy | Done properly. 30 keyed strings + **18 whole blocks** (`help-teachers-blocks.js`) via `data-i18n-html`, so step lists, leads and callouts translate as units instead of fragmenting. Markup, links and `<li>` counts verified in all 5 languages. UI labels stay English — the app is English, so translating a button name sends people hunting for something that isn't there. |
 
 ## Owner-only (Rod)
 
 | | Item | Why it needs you |
 |---|---|---|
-| ⬜ | **Two lines in `consent.js`** | The cookie banner is unreadable on a phone — text squeezed into a narrow column, banner 344px tall covering half the screen, on every page. I could not edit the file (sandboxed), but the fix is verified in the browser: it halves to 168px. See below. |
-| ⬜ | Publish `database-rules.json` | Collaboration + any new node stays default-denied until this is published in the Firebase console. |
+| ✅ | Cookie banner on mobile | Fixed via `consent-mobile.css`, linked from all 15 pages. Uses `body #…` specificity rather than `!important`, so it beats the runtime-injected style regardless of load order. Verified: 344px → 168px. Still worth merging into `consent.js` one day and deleting the file. |
+| ⬜ | Publish `database-rules.json` | Sent, and now validated by `scripts/qa-rules.js`. Retake history (`sessions/$code/attempts`) is silently denied until published. |
 | ⬜ | Submit sitemap to Search Console | Needs the Google account. |
 | ⬜ | Counsel review of legal docs | Terms/privacy wording. |
 | ⬜ | Stripe go-live | Follow `STRIPE-GO-LIVE.md`. Business verification is not instant — start it first. |

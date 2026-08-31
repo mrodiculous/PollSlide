@@ -264,6 +264,10 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Legal actions
     </div>
 
+    <div class="nav-item" onclick="showPage('compliance')" id="nav-compliance">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Compliance<span id="compBadge" class="pill pill-warn" style="margin-left:auto;display:none;"></span>
+    </div>
+
     <div class="nav-section">Growth</div>
     <div class="nav-item" onclick="showPage('seo')" id="nav-seo">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>SEO &amp; marketing<span id="seoBadge" class="pill pill-danger" style="margin-left:auto;display:none;"></span>
@@ -445,14 +449,14 @@ function showPage(page){
      itself something else makes you wonder whether you clicked the wrong thing.
      The badge (an unread count) and the icon are stripped; `titles` is only a
      fallback for a page with no nav entry. */
-  const titles={dashboard:'Dashboard',users:'Users',teams:'Teams',tickets:'Tickets',comms:'Send message',flows:'Message flows',legal:'Legal actions',health:'System health',security:'Security',ai:'AI / Polly',tiers:'Plans & tiers',search:'Lookup',architecture:'How it works',runbook:'Runbook · Fix-it',billing:'Billing / Stripe',errors:'Errors in the wild',autopilot:'Auto-pilot',sharing:'Sharing & collaboration',seo:'SEO & marketing'};
+  const titles={dashboard:'Dashboard',users:'Users',teams:'Teams',tickets:'Tickets',comms:'Send message',flows:'Message flows',legal:'Legal actions',health:'System health',security:'Security',ai:'AI / Polly',tiers:'Plans & tiers',search:'Lookup',architecture:'How it works',runbook:'Runbook · Fix-it',billing:'Billing / Stripe',errors:'Errors in the wild',autopilot:'Auto-pilot',sharing:'Sharing & collaboration',seo:'SEO & marketing',compliance:'Compliance'};
   let label='';
   if(nav){ const c=nav.cloneNode(true); c.querySelectorAll('.pill,.nav-badge,svg').forEach(e=>e.remove()); label=c.textContent.replace(/\s+/g,' ').trim(); }
   document.getElementById('pageTitle').textContent=label||titles[page]||page;
   closeDetail();renderPage();
 }
 function renderPage(){
-  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture,runbook:renderRunbook,billing:renderBilling,errors:renderErrors,autopilot:renderAutopilot,sharing:renderSharing,seo:renderSEO};
+  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture,runbook:renderRunbook,billing:renderBilling,errors:renderErrors,autopilot:renderAutopilot,sharing:renderSharing,seo:renderSEO,compliance:renderCompliance};
   const fn=map[currentPage];
   if(!fn) return;
   /* A page that fails must SAY so. Two of these renderers are async, so a throw inside
@@ -2020,6 +2024,179 @@ async function loadIncidents(){
 // ─── SECURITY ─────────────────────────────────────────────────────────────────
 // Runs /api/security-status: config checks, safe auto-fixes (orphaned invites,
 // stale rate-limit rows) and a logged report of what it found and fixed.
+/* ─── COMPLIANCE ───────────────────────────────────────────────────────────────
+   The two things a school or a procurement team asks for, in one place:
+   who accepted what and when, and what controls exist with the evidence behind them.
+
+   The register is a READINESS register. ISO 27001 and SOC 2 cannot be self-certified,
+   and the page says so in its own words — the AU-1 row is permanently red and the
+   header carries the caveat. Anything else would be a false claim about a security
+   posture, made to exactly the audience least able to check it.                     */
+let _compliance = null;
+
+function renderCompliance(){
+  document.getElementById('content').innerHTML=`
+  <div class="card"><div class="card-hd"><h2>Evidence register</h2>
+    <div style="display:flex;gap:6px;">
+      <button class="btn btn-sm btn-ghost" onclick="exportAttestations()">⤓ Attestations CSV</button>
+      <button class="btn btn-sm btn-ghost" onclick="exportControls()">⤓ Controls CSV</button>
+      <button class="btn btn-sm btn-ghost" onclick="runComplianceRegister()">▶ Refresh</button>
+    </div></div>
+    <div id="compBody" style="padding:14px 18px;color:var(--muted);font-size:13px;">Gathering evidence…</div></div>
+  <div class="card"><div class="card-hd"><h2>Who accepted what</h2></div>
+    <div id="compAtt" style="padding:14px 18px;color:var(--muted);font-size:13px;">…</div></div>
+  <div class="card"><div class="card-hd"><h2>Outstanding</h2></div>
+    <div id="compGaps" style="padding:14px 18px;color:var(--muted);font-size:13px;">…</div></div>
+  <div class="card"><div class="card-hd"><h2>Controls &amp; evidence</h2></div>
+    <div id="compControls" style="padding:14px 18px;color:var(--muted);font-size:13px;">…</div></div>`;
+  runComplianceRegister();
+}
+
+const COMP_STATUS = {
+  met:     { pill:'pill-resolved', word:'Evidenced' },
+  partial: { pill:'pill-warn',     word:'Partial'   },
+  none:    { pill:'pill-danger',   word:'No evidence' },
+};
+
+async function runComplianceRegister(){
+  const body=document.getElementById('compBody'); if(!body) return;
+  body.innerHTML='Gathering evidence…';
+  try{
+    const tk=await auth.currentUser.getIdToken();
+    const r=await fetch('/api/compliance-register',{headers:{'Authorization':'Bearer '+tk}});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||('HTTP '+r.status));
+    _compliance=d;
+    const s=d.summary;
+    const met=d.controls.filter(c=>c.status==='met').length;
+    const part=d.controls.filter(c=>c.status==='partial').length;
+    const none=d.controls.filter(c=>c.status==='none').length;
+
+    const badge=document.getElementById('compBadge');
+    const outstanding=d.gaps.policyOutstanding.length+d.gaps.classesWithoutAttestation.length;
+    if(badge){ badge.style.display=outstanding?'':'none'; badge.textContent=outstanding||''; }
+
+    body.innerHTML=`
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;">
+        ${[['Controls evidenced',met,''],['Partial',part,part?'var(--accent4)':''],
+           ['No evidence',none,none?'var(--accent2)':''],
+           ['Attestations on file',d.attestations.length,''],
+           ['Outstanding',outstanding,outstanding?'var(--accent4)':'']]
+          .map(([l,v,c])=>`<div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;min-width:112px;">
+            <div style="font-size:22px;font-weight:800;${c?'color:'+c+';':''}">${v}</div>
+            <div style="font-size:11px;color:var(--muted);">${l}</div></div>`).join('')}
+      </div>
+      <div style="font-size:12px;margin-bottom:8px;">
+        ${s.policyVersion
+          ? `Current policy <b>v${s.policyVersion}</b> — accepted by <b>${s.usersOnCurrentPolicy}</b> of ${s.usersTotal} users.`
+          : `No policy version published yet, so nobody has been asked to accept one.`}
+      </div>
+      <div style="background:rgba(247,183,49,.10);border:1px solid rgba(247,183,49,.3);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.5;">
+        <b>This is a readiness register, not a certification.</b> ISO 27001 and SOC 2 require an
+        accredited external auditor and cannot be self-certified. The framework columns say which
+        control each piece of evidence <i>would</i> map to in an audit — useful for answering a
+        security questionnaire honestly, and for seeing what is missing before paying an auditor.
+        Do not describe PollSlide as ISO- or SOC-compliant on the strength of this page.
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:8px;">
+        Generated ${new Date(d.generatedAt).toLocaleString()} by ${esc(d.generatedBy||'')}${d.truncated?' · truncated to the first 2000 accounts':''}
+      </div>`;
+
+    // ── who accepted what ───────────────────────────────────────────────────
+    const att=d.attestations;
+    document.getElementById('compAtt').innerHTML = att.length ? `
+      <p style="font-size:12px;margin-bottom:8px;">Every recorded acceptance, newest first. This is the answer to "show me they agreed".</p>
+      <table><thead><tr><th>When</th><th>Who</th><th>What they accepted</th><th>Documents</th></tr></thead><tbody>
+      ${att.slice(0,200).map(a=>`<tr>
+        <td style="white-space:nowrap;">${a.at?new Date(a.at).toLocaleDateString():'—'}</td>
+        <td>${esc(a.who)}</td>
+        <td>${a.kind==='class'?'👥 ':'📄 '}${esc(a.what)}${a.detail?`<div style="font-size:11px;color:var(--muted);">${esc(a.detail)}</div>`:''}</td>
+        <td class="muted">${esc(a.documents||'—')}</td></tr>`).join('')}
+      </tbody></table>
+      ${att.length>200?`<p class="muted" style="margin-top:6px;">Showing 200 of ${att.length}. The CSV export has all of them.</p>`:''}`
+      : '<span style="color:var(--muted);">No acceptances recorded yet. Publish a policy version from the Legal page to start the record.</span>';
+
+    // ── outstanding ─────────────────────────────────────────────────────────
+    const g=d.gaps;
+    document.getElementById('compGaps').innerHTML =
+      (!g.policyOutstanding.length && !g.classesWithoutAttestation.length)
+      ? '<span style="color:var(--accent3);">Nothing outstanding — every user is on the current policy, and every class storing email addresses has an attestation.</span>'
+      : `
+      ${g.classesWithoutAttestation.length?`
+        <h3 style="font-size:12px;margin-bottom:6px;color:var(--accent2);">Storing student email addresses with no recorded attestation (${g.classesWithoutAttestation.length})</h3>
+        <p style="font-size:11.5px;color:var(--muted);margin-bottom:6px;">These classes use emailed codes, so they hold personal data about children, and nobody has confirmed the school may use those addresses. This is the one to deal with first.</p>
+        ${g.classesWithoutAttestation.map(c=>`<div class="dp-row"><span>${esc(c.who)}</span><span class="muted">${esc(c.className)}</span></div>`).join('')}`:''}
+      ${g.policyOutstanding.length?`
+        <h3 style="font-size:12px;margin:12px 0 6px;color:var(--accent4);">Have not accepted the current policy (${g.policyOutstanding.length})</h3>
+        <p style="font-size:11.5px;color:var(--muted);margin-bottom:6px;">They see the re-consent banner next time they sign in. "Not yet accepted" is not the same as "refused".</p>
+        ${g.policyOutstanding.slice(0,60).map(u=>`<div class="dp-row"><span>${esc(u.who)}</span><span class="muted">on v${u.on||0}</span></div>`).join('')}
+        ${g.policyOutstanding.length>60?`<div class="lbl" style="margin-top:4px;">…and ${g.policyOutstanding.length-60} more</div>`:''}`:''}`;
+
+    // ── controls ────────────────────────────────────────────────────────────
+    document.getElementById('compControls').innerHTML = d.controls.map(c=>`
+      <div style="padding:11px 0;border-top:1px solid var(--border);">
+        <div style="display:flex;gap:9px;align-items:baseline;">
+          <span class="pill ${COMP_STATUS[c.status].pill}" style="flex-shrink:0;">${COMP_STATUS[c.status].word}</span>
+          <code style="font-size:11px;color:var(--muted);flex-shrink:0;">${esc(c.id)}</code>
+          <div style="flex:1;min-width:0;">
+            <div style="color:var(--text);">${esc(c.claim)}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px;">${esc(c.detail)}</div>
+            ${c.evidence.length?`<div style="font-size:11px;color:var(--muted);margin-top:4px;">Evidence: ${c.evidence.map(e=>`<code>${esc(e)}</code>`).join(' · ')}</div>`:''}
+          </div>
+          <span style="font-size:10.5px;color:var(--muted);text-align:right;flex-shrink:0;white-space:nowrap;">
+            ${esc(c.maps.iso)}<br>${esc(c.maps.soc2)}</span>
+        </div>
+      </div>`).join('');
+  }catch(e){
+    body.innerHTML=`<span style="color:var(--accent2);">Could not build the register: ${esc(String(e.message||e))}</span>
+      <div style="margin-top:6px;font-size:12px;">If this says 404, /api/compliance-register has not been deployed yet.</div>`;
+  }
+}
+
+/* Exports. These are the files that get attached to a procurement email, so they
+   carry the caveat in the file itself — a CSV gets separated from this page within
+   minutes of being downloaded. */
+function compCsv(rows, name){
+  const csv=rows.map(r=>r.map(c=>{
+    let s=(c===null||c===undefined)?'':String(c);
+    if(/^[=+\-@\t\r]/.test(s)) s="'"+s;      // never let a cell run as a spreadsheet formula
+    return '"'+s.replace(/"/g,'""')+'"';
+  }).join(',')).join('\r\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'}));
+  a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+}
+
+function exportAttestations(){
+  if(!_compliance){ toast('Build the register first.','warning'); return; }
+  const d=_compliance;
+  compCsv([
+    ['PollSlide — record of acceptances'],
+    ['Generated', new Date(d.generatedAt).toISOString(), 'by', d.generatedBy||''],
+    ['Note','This is a record of acceptances held by PollSlide. It is not a certification.'],
+    [],
+    ['Type','When (UTC)','Who','What they accepted','Documents','Detail'],
+    ...d.attestations.map(a=>[
+      a.kind==='class'?'Class data attestation':'Policy acceptance',
+      a.at?new Date(a.at).toISOString():'', a.who, a.what, a.documents||'', a.detail||'']),
+  ], 'pollslide-attestations-'+new Date().toISOString().slice(0,10)+'.csv');
+}
+
+function exportControls(){
+  if(!_compliance){ toast('Build the register first.','warning'); return; }
+  const d=_compliance;
+  compCsv([
+    ['PollSlide — controls and evidence (readiness register)'],
+    ['Generated', new Date(d.generatedAt).toISOString(), 'by', d.generatedBy||''],
+    ['IMPORTANT','This is NOT a certification. ISO 27001 and SOC 2 require an accredited external auditor and cannot be self-certified. The framework columns indicate which control each piece of evidence would map to in an audit.'],
+    [],
+    ['ID','Area','Status','Control claim','Evidence','Detail','ISO 27001','SOC 2'],
+    ...d.controls.map(c=>[c.id,c.area,COMP_STATUS[c.status].word,c.claim,
+                          (c.evidence||[]).join(' | '),c.detail,c.maps.iso,c.maps.soc2]),
+  ], 'pollslide-controls-'+new Date().toISOString().slice(0,10)+'.csv');
+}
+
 /* ─── SEO & MARKETING ──────────────────────────────────────────────────────────
    Reads the LIVE marketing site through /api/seo-status (server-side, so it sees
    what actually shipped rather than what is in the repo) and shows three things:

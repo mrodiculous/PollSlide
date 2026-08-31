@@ -12,6 +12,7 @@
 <script src="/qid.js?v=1"></script>
 <script src="/roster.js?v=1"></script>
 <script src="/retakes.js?v=1"></script>
+<script src="/gifs.js?v=1"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root {
@@ -3632,6 +3633,7 @@ function openDeckMenu(id, ev) {
     ...((p.productType || 'poll') === 'poll' ? [] : [
       { icon: '🔁', label: PSRetakes.shortLabel(p.retakes), act: `openRetakeModal('${escAttr(id)}')` },
     ]),
+    { icon: '🎞', label: gifMenuLabel(p.gifs), act: `openGifModal('${escAttr(id)}')` },
     { icon: '📤', label: 'Share a copy…', act: `openDeckShareModal('${escAttr(id)}')` },
     ...(isCollabDeck(id)
       ? [{ icon: '🚪', label: 'Leave this shared deck', act: `leaveCollab('${escAttr(id)}')`, danger: true }]
@@ -3682,6 +3684,223 @@ async function toggleFocusTrack(id) {
   toast(on
     ? '👁 Students will be told on screen if they leave, and it appears in your report.'
     : 'Screen-leaving is no longer tracked or reported.', 'success');
+}
+
+/* ─── CONTEXTUAL GIFs ─────────────────────────────────────────────────────────
+   A per-deck setting: a GIF beside each question, beside each revealed answer, or
+   both. Candidates are fetched WHEN THE BOX IS TICKED and shown here for review —
+   nothing unvetted reaches a projector in front of a class. Search runs through
+   /api/gif-search, which holds the key and locks Tenor's content filter to its
+   strictest setting where no caller can reach it.                                  */
+/* Render one stored GIF for a slide. Two things this does that a bare <img> would not:
+ *
+ * REDUCED MOTION. A looping GIF on a projector is a genuine problem for people with
+ * vestibular disorders, and for some photosensitive epilepsy it is a hazard, not a
+ * preference. CSS cannot swap an <img> src, so the choice is made here at render time
+ * and the still frame is used instead. This is a room full of people who did not opt in.
+ *
+ * ALT TEXT. Tenor's own content_description, which is a real sentence. A GIF with no
+ * description is never stored in the first place (see lib/gifs.js pickBest), so this
+ * always has something to say. */
+function gifTag(g, maxVh) {
+  if (!g || !g.url) return '';
+  const still = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const src = still ? (g.still || g.url) : g.url;
+  const vh = maxVh || 24;
+  return `<div style="flex-shrink:0;width:100%;border-radius:10px;overflow:hidden;margin-bottom:10px;max-height:${vh}vh;position:relative;">
+    <img src="${escAttr(src)}" alt="${escAttr(g.alt || '')}"
+         style="width:100%;max-height:${vh}vh;object-fit:contain;border-radius:10px;"
+         onerror="this.parentElement.style.display='none'">
+    <span style="position:absolute;right:5px;bottom:4px;font-size:8.5px;color:rgba(255,255,255,.72);
+      background:rgba(0,0,0,.42);padding:1px 5px;border-radius:20px;">via Tenor</span>
+  </div>`;
+}
+
+function gifMenuLabel(raw) {
+  const p = PSGifs.gifPolicy(raw);
+  if (p.question && p.answer) return 'GIFs: questions + answers';
+  if (p.question) return 'GIFs: on questions';
+  if (p.answer)   return 'GIFs: on answers';
+  return 'GIFs: off';
+}
+
+function openGifModal(deckId) {
+  const p = presentations[deckId]; if (!p) return;
+  const pol = PSGifs.gifPolicy(p.gifs);
+  const qs = p.questions || [];
+  let m = document.getElementById('gifModal');
+  if (!m) { m = document.createElement('div'); m.id = 'gifModal'; m.className = 'overlay';
+            m.onclick = e => { if (e.target === m) closeGifModal(); }; document.body.appendChild(m); }
+
+  const have = qs.filter(q => q && (q.gifQ || q.gifA)).length;
+  m.innerHTML = `<div class="modal" style="max-width:560px;">
+    <h2 style="margin-bottom:2px;">GIFs</h2>
+    <p style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">${escapeHtml(p.name || 'This deck')} · ${qs.length} question${qs.length===1?'':'s'}</p>
+    <style>
+      .gif-opt{display:flex;gap:10px;align-items:flex-start;background:var(--surface2);border:1px solid var(--border2);
+        border-radius:10px;padding:11px 13px;margin-bottom:8px;cursor:pointer;}
+      .gif-opt.on{border-color:var(--accent);background:rgba(108,99,255,.12);}
+      .gif-opt input{margin-top:3px;flex-shrink:0;}
+      .gif-opt b{display:block;font-size:13.5px;margin-bottom:2px;}
+      .gif-opt span{font-size:11.5px;color:var(--muted);line-height:1.4;}
+      .gif-row{display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--border);}
+      .gif-row img{width:88px;height:62px;object-fit:cover;border-radius:7px;background:var(--surface2);flex-shrink:0;}
+      .gif-row .gr-t{flex:1;min-width:0;font-size:12px;}
+      .gif-row .gr-t i{color:var(--muted);font-style:normal;font-size:11px;display:block;margin-top:2px;}
+    </style>
+    <label class="gif-opt ${pol.question?'on':''}">
+      <input type="checkbox" ${pol.question?'checked':''} onchange="setGifPolicy('${escAttr(deckId)}',this.checked,${pol.answer})">
+      <span><b>A GIF on each question</b>Chosen from the words in the question itself.</span></label>
+    <label class="gif-opt ${pol.answer?'on':''}">
+      <input type="checkbox" ${pol.answer?'checked':''} onchange="setGifPolicy('${escAttr(deckId)}',${pol.question},this.checked)">
+      <span><b>A GIF on each revealed answer</b>From the answer where it can be pictured — a celebration where it can't, because "42" and "B" have nothing to show.</span></label>
+
+    <div id="gifReview" style="margin-top:12px;">
+      ${have ? `<p style="font-size:12px;color:var(--muted);margin-bottom:4px;">${have} of ${qs.length} questions have a GIF. Review them below — remove or reshuffle any before you present.</p>` : ''}
+      ${renderGifReview(deckId)}
+    </div>
+
+    <div style="display:flex;gap:7px;margin-top:12px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="fetchDeckGifs('${escAttr(deckId)}')"
+        ${(pol.question||pol.answer)?'':'disabled'}>${have?'↻ Fetch again':'Find GIFs'}</button>
+      ${have?`<button class="btn btn-ghost" onclick="clearDeckGifs('${escAttr(deckId)}')">Remove all</button>`:''}
+    </div>
+    <p style="font-size:10.5px;color:var(--muted);margin-top:9px;line-height:1.5;">
+      Powered by Tenor, with safe search locked on. Nothing appears on screen until you've seen it here.
+      Students on <b>reduced motion</b> see a still frame instead of the animation.
+    </p>
+    <button class="btn btn-ghost" style="width:100%;margin-top:10px;" onclick="closeGifModal()">Done</button>
+  </div>`;
+  m.style.display = 'flex';
+}
+function closeGifModal(){ const m=document.getElementById('gifModal'); if(m) m.remove(); }
+
+function renderGifReview(deckId) {
+  const p = presentations[deckId]; if (!p) return '';
+  const qs = p.questions || [];
+  const rows = [];
+  qs.forEach((q, i) => {
+    ['gifQ','gifA'].forEach(slot => {
+      const g = q && q[slot];
+      if (!g) return;
+      rows.push(`<div class="gif-row">
+        <img src="${escAttr(g.still || g.url)}" alt="${escAttr(g.alt||'')}" loading="lazy">
+        <div class="gr-t"><b>Q${i+1}</b> · ${slot==='gifQ'?'question':'answer'}
+          <i>${escapeHtml(g.alt || 'no description')}</i></div>
+        <button class="btn btn-ghost btn-sm" title="Pick a different one" onclick="reshuffleGif('${escAttr(deckId)}',${i},'${slot}')">↻</button>
+        <button class="btn btn-ghost btn-sm" title="Remove this GIF" onclick="removeGif('${escAttr(deckId)}',${i},'${slot}')">✕</button>
+      </div>`);
+    });
+  });
+  return rows.join('') || '<p style="font-size:12px;color:var(--muted);">No GIFs yet.</p>';
+}
+
+async function setGifPolicy(deckId, question, answer) {
+  const p = presentations[deckId]; if (!p) return;
+  const pol = PSGifs.gifPolicy({ question, answer });
+  await setDeckField(deckId, 'gifs', (pol.question || pol.answer) ? pol : null);
+  openGifModal(deckId);
+  renderPresList();
+}
+
+/* One search per slot per question. Sequential rather than parallel: 30 questions is
+ * 60 searches, and firing those at once is how a free API key gets rate limited. */
+async function fetchDeckGifs(deckId) {
+  const p = presentations[deckId]; if (!p) return;
+  const pol = PSGifs.gifPolicy(p.gifs);
+  const qs = p.questions || [];
+  if (!qs.length) { toast('This deck has no questions yet.', 'warn'); return; }
+
+  const btn = document.querySelector('#gifModal .btn-primary');
+  const restore = btn ? btn.textContent : '';
+  let done = 0, failed = 0, firstError = '';
+
+  const search = async (term, seed) => {
+    if (!term) return null;
+    try {
+      const tk = await auth.currentUser.getIdToken();
+      const r = await fetch('/api/gif-search', { method:'POST',
+        headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tk },
+        body: JSON.stringify({ q: term, deck: deckId, limit: 8 }) });
+      const d = await r.json();
+      if (!r.ok) { failed++; if(!firstError) firstError = d.error || ('HTTP '+r.status); return null; }
+      return PSGifs.pickBest(d.results, { seed });
+    } catch (e) { failed++; if(!firstError) firstError = String(e.message||e); return null; }
+  };
+
+  for (let i = 0; i < qs.length; i++) {
+    const q = qs[i]; if (!q) continue;
+    if (btn) btn.textContent = `Finding… ${i+1}/${qs.length}`;
+    if (pol.question) {
+      const g = await search(PSGifs.searchTerm(q.text || ''), (q.id||i)+':q');
+      if (g) { q.gifQ = g; done++; }
+    }
+    if (pol.answer) {
+      const correct = correctAnswerText(q);
+      const g = await search(PSGifs.answerTerm(correct, { seed:(q.id||i)+':a' }), (q.id||i)+':a');
+      if (g) { q.gifA = g; done++; }
+    }
+    if (failed && done === 0 && i === 0) break;   // configuration problem: stop, don't hammer
+  }
+  if (btn) btn.textContent = restore;
+  scheduleSave();
+  await publishDeckGifs(deckId);
+  openGifModal(deckId);
+  if (done) toast(`Added ${done} GIF${done===1?'':'s'}. Review them before you present.`, 'success');
+  else toast(firstError || 'No GIFs found for these questions.', 'warn');
+}
+
+/* The text a GIF for the ANSWER should be about. Multiple choice stores an index, so
+ * the option text has to be looked up — searching for "2" would be meaningless. */
+function correctAnswerText(q) {
+  if (!q) return '';
+  const ca = q.correctAnswer;
+  if (ca === null || ca === undefined) return '';
+  if (Array.isArray(q.options) && q.options.length) {
+    const idx = Array.isArray(ca) ? ca[0] : ca;
+    const opt = q.options[Number(idx)];
+    if (opt && opt.text) return String(opt.text);
+  }
+  return String(ca);
+}
+
+async function reshuffleGif(deckId, qIdx, slot) {
+  const p = presentations[deckId]; if (!p) return;
+  const q = (p.questions||[])[qIdx]; if (!q) return;
+  const term = slot === 'gifQ'
+    ? PSGifs.searchTerm(q.text || '')
+    : PSGifs.answerTerm(correctAnswerText(q), { seed: Math.random() });
+  try {
+    const tk = await auth.currentUser.getIdToken();
+    const r = await fetch('/api/gif-search', { method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tk },
+      body: JSON.stringify({ q: term, deck: deckId, limit: 12 }) });
+    const d = await r.json();
+    if (!r.ok) { toast(d.error || 'Could not search.', 'warn'); return; }
+    const g = PSGifs.pickBest(d.results, { seed: String(Math.random()) });
+    if (!g) { toast('Nothing else usable for that search.', 'warn'); return; }
+    q[slot] = g; scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
+  } catch (e) { toast('Could not search: ' + (e.message||e), 'warn'); }
+}
+
+async function removeGif(deckId, qIdx, slot) {
+  const p = presentations[deckId]; if (!p) return;
+  const q = (p.questions||[])[qIdx]; if (!q) return;
+  delete q[slot]; scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
+}
+
+async function clearDeckGifs(deckId) {
+  const p = presentations[deckId]; if (!p) return;
+  (p.questions||[]).forEach(q => { if(q){ delete q.gifQ; delete q.gifA; } });
+  scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
+  toast('All GIFs removed from this deck.', 'success');
+}
+
+// Push the questions (now carrying gifQ/gifA) to the node the audience reads.
+async function publishDeckGifs(deckId) {
+  const p = presentations[deckId];
+  if (!p || !p.sessionCode) return;
+  try { await db.ref(`quiz_builder/${p.sessionCode}/questions`).set(p.questions || []); } catch (e) {}
 }
 
 /* Second attempts, per deck. Two choices, and they are genuinely separate: whether a
@@ -8940,6 +9159,12 @@ function buildPresentChart(q, responses) {
     return `<div style="padding:12px 0;">${buildPostRevealContent(q, responses)}</div>`;
   }
 
+  /* The answer GIF, once the answer is out. Deliberately only after `revealed` — the
+     whole point is that it lands on the reveal, and showing it while people are still
+     answering would give the answer away on a quiz. */
+  const answerGif = (revealed && q.gifA)
+    ? `<div style="max-width:230px;margin:0 auto 10px;">${gifTag(q.gifA, 20)}</div>` : '';
+
   const letters = ['A','B','C','D','E','F'];
   const PS_COLORS = ['#6c63ff','#ff6584','#38d9f5','#f7b731','#a78bfa','#43e97b'];
   const total = responses.length;
@@ -8999,6 +9224,7 @@ function buildPresentChart(q, responses) {
 
   // Always render all bars — width animates from 0 so structure never shifts
   return `
+    ${answerGif}
     ${total === 0 ? `<div style="color:var(--p-25);font-size:12px;text-align:center;margin-bottom:10px;">Waiting for first response…</div>` : ''}
     <div style="display:flex;flex-direction:column;gap:9px;">
       ${counts.map(({i,count})=>{
@@ -9119,7 +9345,9 @@ function renderPresentSlide(idx) {
           ? `<video src="${q.image}" style="width:100%;max-height:28vh;object-fit:contain;background:#000;border-radius:10px;" autoplay loop muted playsinline></video>`
           : `<img src="${q.image}" style="width:100%;max-height:28vh;object-fit:contain;border-radius:10px;" onerror="this.style.display='none'">`}
        </div>`
-    : '';
+    /* The deck's own image always wins. A contextual GIF is a garnish; a picture the
+       teacher chose is the lesson, and stacking both in a narrow column serves neither. */
+    : gifTag(q.gifQ, 24);
 
   // Compact laptop/no-phone join line shown under the QR in present mode.
   const joinLine = `<div style="font-size:10px;color:var(--p-55);text-align:center;line-height:1.5;max-width:150px;">No phone? Go to <b style="color:var(--p-90);">pollslide.com/join</b> · code <b style="color:var(--accent);letter-spacing:0.06em;">${presentations[activePresId]?.sessionCode||''}</b></div>`;

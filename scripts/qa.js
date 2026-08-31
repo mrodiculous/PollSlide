@@ -17,6 +17,8 @@
  *                 failed to save got no warning — the warning was what threw
  *   reachability  team play shipped as a button nobody could click
  *   escaping      an unescaped "<" swallowed a question, and would have run as HTML
+ *   rules         a ".comment" key made the whole rules file unpastable, and the
+ *                 Firebase error just said `Line 29: Expected '{'`
  *   parity        a capability built for one product and forgotten in the other four
  *   tests         everything above only proves the page loads, not that it is right
  *
@@ -34,6 +36,7 @@ const GATES = [
   { name: 'undefined',    script: 'qa-undefined.js',    why: 'nothing is called that is not defined' },
   { name: 'reachability', script: 'qa-reachability.js', why: 'every control can actually be used' },
   { name: 'escaping',     script: 'qa-escaping.js',     why: 'nothing user-typed reaches innerHTML raw' },
+  { name: 'rules',        script: 'qa-rules.js',        why: 'database-rules.json will paste, and covers every write' },
   { name: 'parity',       script: 'qa-parity.js',       why: 'capabilities are not stranded in one product', slow: true },
 ];
 

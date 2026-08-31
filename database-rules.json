@@ -25,8 +25,7 @@
             "students": {
               "$studentId": {}
             }
-          },
-          ".comment": "Student PIN hashes live under students/$id/pinHash. RTDB rules cascade DOWNWARD and cannot be revoked by a descendant, so a '.read:false' here would be inert \u2014 the owner grant on users/$uid already applies. The real boundary is that this subtree is owner-only and the hash is NEVER published to quiz_builder, which is the node the audience can read. api/student-claim (Admin SDK) does the comparison."
+          }
         }
       }
     },
