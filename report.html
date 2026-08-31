@@ -178,7 +178,11 @@ function pushDataset(out, presId, presName, source, date, questions, responses){
         studentId: r.studentId || null,
         // Which try produced the graded answer. Absent on every deck without retakes,
         // which is the default — so 1-or-missing both mean "answered once".
-        attempt: r.attempt || 1 });
+        attempt: r.attempt || 1,
+        // Present only when the answer went through the offline queue. `queuedMs` is
+        // the gap between the student TAPPING and the answer arriving — the fact a
+        // teacher needs to judge a late answer rather than guess at one.
+        offline: r.offline === true, queuedMs: r.queuedMs || 0 });
     });
   });
 }
@@ -244,6 +248,17 @@ function onPresChange(keep){
 /* Shown only when a student actually used a second attempt. A column that says
  * "1st" against every row on the great majority of decks — the ones with retakes off —
  * would be noise on every report to buy clarity on a few. */
+/* Shown only on answers that were actually stuck. A student on bad wifi should not be
+ * marked down for it, and a teacher looking at a surprising result should be able to
+ * see "this one sat unsent for 40 seconds" rather than wonder. */
+function offlinePill(r){
+  if (!r || !r.offline) return '';
+  const s = Math.round((r.queuedMs || 0) / 1000);
+  const how = s >= 60 ? Math.round(s / 60) + ' min' : s + 's';
+  return ' <span class="pill" style="background:rgba(56,217,245,.16);color:#38d9f5;" ' +
+         'title="The student answered on time; their connection was down, so it arrived ' + how + ' later">sent late</span>';
+}
+
 function attemptPill(r){
   const n = r && r.attempt;
   if (!(n > 1)) return '';
@@ -325,7 +340,7 @@ function renderByQuestion(data){
         return `<div class="bar"><div class="bar-top"><span>${'ABCDEFGH'[i]}. ${esc(o.text||'')}${c?' ✓':''}</span><span>${counts[i]} (${pct}%)</span></div>
           <div class="bar-track"><div class="bar-fill ${c?'correct':''}" style="width:${pct}%"></div></div></div>`; }).join('');
     }
-    const rows=g.recs.slice(0,200).map(r=>`<tr><td>${esc(r.name)}${attemptPill(r)}</td><td>${esc(answerText(q,r.answer))}</td>
+    const rows=g.recs.slice(0,200).map(r=>`<tr><td>${esc(r.name)}${attemptPill(r)}${offlinePill(r)}</td><td>${esc(answerText(q,r.answer))}</td>
       <td>${r.isCorrect===true?'<span class="pill ok">✓</span>':r.isCorrect===false?'<span class="pill no">✗</span>':'<span class="muted">·</span>'}</td>
       <td class="muted">${r.elapsed?(r.elapsed/1000).toFixed(1)+'s':'—'}</td>
       <td class="muted">${r.date?new Date(r.date).toLocaleDateString():'—'}</td></tr>`).join('');
@@ -694,7 +709,7 @@ function renderByRespondent(data){
     const graded=p.recs.filter(r=>r.isCorrect===true||r.isCorrect===false);
     const score=graded.length?Math.round(p.recs.filter(r=>r.isCorrect===true).length/graded.length*100)+'%':'—';
     const rows=p.recs.map(r=>`<tr><td class="muted">${esc(r.presName)}</td><td>Q${r.qIdx+1}: ${esc(String(r.qText).slice(0,40))}</td>
-      <td>${esc(answerText(r,r.answer))}${attemptPill(r)}</td>
+      <td>${esc(answerText(r,r.answer))}${attemptPill(r)}${offlinePill(r)}</td>
       <td>${r.isCorrect===true?'<span class="pill ok">✓</span>':r.isCorrect===false?'<span class="pill no">✗</span>':'<span class="muted">·</span>'}</td></tr>`).join('');
     return `<div class="card"><h3>${esc(p.name)} <span class="muted" style="font-weight:400;font-size:12px;">· ${p.recs.length} answers · score ${score}</span></h3>
       <table><thead><tr><th>Presentation</th><th>Question</th><th>Answer</th><th>Correct</th></tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -714,9 +729,10 @@ function download(csv, name){
  * the other shape: one row per student, for filing a mark. */
 function exportCSV(){
   const data=filtered(); if(!data.length) return;
-  const head=['Presentation','Question #','Question','Type','Respondent','Answer','Correct','Attempt','Time (ms)','Date','Source'];
+  const head=['Presentation','Question #','Question','Type','Respondent','Answer','Correct','Attempt','Sent late','Time (ms)','Date','Source'];
   const rows=data.map(r=>[r.presName,'Q'+(r.qIdx+1),r.qText,r.qType,r.name,answerText(r,r.answer),
-    r.isCorrect===true?'Yes':r.isCorrect===false?'No':'',r.attempt||1,r.elapsed||'',r.date?new Date(r.date).toLocaleString():'',r.source]);
+    r.isCorrect===true?'Yes':r.isCorrect===false?'No':'',r.attempt||1,
+    r.offline?Math.round((r.queuedMs||0)/1000)+'s late':'',r.elapsed||'',r.date?new Date(r.date).toLocaleString():'',r.source]);
   // PSGradebook.toCSV, not a local join: it neutralises cells a spreadsheet would run
   // as a formula. Respondent names and typed answers come from people, so `=1+1` in a
   // free-text answer became a live formula in the teacher's spreadsheet.
