@@ -466,6 +466,21 @@ async function flushQueue() {
   // Anything that has run out of road is reported, never dropped quietly.
   const dead = PSQueue.expired(_queue, Date.now());
   if (dead.length) {
+    /* Tell the SERVER an answer was lost, not just the student. Otherwise the only
+       trace is a message on one phone that nobody else ever sees — and the ticket
+       "my student answered but it isn't in the report" has no evidence behind it.
+       Rides the existing client-error pipe, so it lands in Admin → Errors in the wild
+       with the session and question already attached. */
+    dead.forEach(x => {
+      try {
+        if (window.psReportError) {
+          window.psReportError(
+            'Answer dropped after ' + (x.attempts || 0) + ' failed sends',
+            `session=${x.session} q=${x.qid} student=${(x.record && x.record.name) || '?'} ` +
+            `queuedFor=${Math.round((Date.now() - (x.queuedAt || Date.now())) / 1000)}s`);
+        }
+      } catch (e) {}
+    });
     _queue = PSQueue.drop(_queue, dead.map(x => x.id));
     PSQueue.save(_queue);
     queueBanner('failed');

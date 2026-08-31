@@ -13,6 +13,7 @@
 <script src="/roster.js?v=1"></script>
 <script src="/retakes.js?v=1"></script>
 <script src="/gifs.js?v=1"></script>
+<script src="/starters.js?v=1"></script>
 <script src="/ui-lang.js?v=1"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -355,7 +356,20 @@
 
   /* ── MODALS ── */
   .overlay { position:fixed; inset:0; background:rgba(0,0,0,0.78); display:flex; align-items:center; justify-content:center; z-index:500; backdrop-filter:blur(4px); }
-  .modal { background:var(--surface); border:1px solid var(--border2); border-radius:18px; padding:26px; width:90%; animation:slideUp 0.3s cubic-bezier(0.16,1,0.3,1); }
+  /* max-height + overflow live HERE, not only in the mobile media query where they
+     used to. Without them a tall modal on a desktop simply ran off the bottom of the
+     screen with no way to reach its buttons — the GIF review with a few questions in
+     it, a class roster with thirty students, any of the 28 modals in this file that
+     can grow. It only looked fine because the narrow breakpoint had the fix. */
+.starter-card{display:flex;flex-direction:column;align-items:flex-start;gap:3px;width:210px;
+    background:var(--surface2);border:1px solid var(--border2);border-radius:13px;padding:13px 14px;
+    cursor:pointer;text-align:left;font-family:inherit;color:var(--text);transition:border-color .15s,transform .12s;}
+  .starter-card:hover{border-color:var(--accent);transform:translateY(-2px);}
+  .starter-card .sc-icon{font-size:20px;}
+  .starter-card .sc-name{font-family:'Syne',sans-serif;font-weight:700;font-size:13.5px;}
+  .starter-card .sc-blurb{font-size:11.5px;color:var(--muted);line-height:1.45;}
+  .starter-card .sc-meta{font-size:10.5px;color:var(--muted);margin-top:4px;opacity:.85;}
+  .modal { background:var(--surface); border:1px solid var(--border2); border-radius:18px; padding:26px; width:90%; max-height:88vh; overflow-y:auto; animation:slideUp 0.3s cubic-bezier(0.16,1,0.3,1); }
   @keyframes slideUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
   .modal h2 { font-family:'Syne',sans-serif; font-size:18px; font-weight:800; margin-bottom:7px; }
   .modal p  { color:var(--muted); font-size:13px; line-height:1.6; margin-bottom:18px; }
@@ -657,8 +671,9 @@
       <div class="setup-icon">🎯</div>
       <div>
         <h2 style="font-family:'Syne',sans-serif;font-size:21px;font-weight:800;margin-bottom:8px;" data-i18n>Welcome to PollSlide</h2>
-        <p style="color:var(--muted);font-size:14px;line-height:1.7;margin-bottom:20px;">Each presentation has its own questions and session code.<br>Create one in the sidebar to get started.</p>
+        <p style="color:var(--muted);font-size:14px;line-height:1.7;margin-bottom:20px;">Each presentation has its own questions and session code.<br>Start from scratch, or open one of these and present it right away.</p>
         <button class="btn btn-primary" style="font-size:14px;padding:11px 28px;justify-content:center;" onclick="createPresentation()" data-i18n>+ Create Your First Presentation</button>
+
       </div>
     </div>
   </div>
@@ -3697,6 +3712,57 @@ async function toggleFocusTrack(id) {
     : 'Screen-leaving is no longer tracked or reported.', 'success');
 }
 
+
+/* ─── STARTER DECKS ────────────────────────────────────────────────────────────
+   Shown only on an empty account. Three real decks — one poll, one quiz, one survey —
+   so the first thing someone does is present something rather than write something.
+   Definitions in starters.js.                                                       */
+/* Shown ONLY on a genuinely empty library. Someone who has made a deck does not need
+   examples cluttering the screen they use every day — and offering them anyway makes
+   the product feel like it does not know whether you are new. */
+function starterRowHtml() {
+  if (typeof PSStarters === 'undefined') return '';
+  if (Object.keys(presentations || {}).length) return '';
+  // The one matching this tab first: someone on Quiz wants a quiz, not an icebreaker.
+  const mine = PSStarters.forProduct(activeProduct);
+  const rest = PSStarters.STARTERS.filter(s => s.product !== activeProduct);
+  const show = mine.concat(rest);
+  return `<div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--border);">
+    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">
+      Or open one that's ready to go
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      ${show.map(s => `<button class="starter-card" onclick="createFromStarter('${escAttr(s.id)}')" title="${escAttr(s.blurb)}">
+        <span class="sc-icon">${s.icon}</span>
+        <span class="sc-name">${escapeHtml(s.name)}</span>
+        <span class="sc-blurb">${escapeHtml(s.blurb)}</span>
+        <span class="sc-meta">${s.questions.length} questions · ${escapeHtml(s.takes)}</span>
+      </button>`).join('')}
+    </div>
+  </div>`;
+}
+
+async function createFromStarter(id) {
+  const s = PSStarters.byId(id);
+  if (!s) return;
+  const limit = tierLimits().maxPresentations;
+  const owned = Object.keys(presentations).filter(pid => isDeckOwner(pid)).length;
+  if (owned >= limit) {
+    showUpgradePrompt(`You've reached the ${tierLimits().name} plan limit of ${limit} presentations.`,
+                      'Upgrade to Pro for unlimited presentations.');
+    return;
+  }
+  const id2 = 'pres_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const deck = PSStarters.deckFrom(s, { sessionCode: genCode() });
+  presentations[id2] = deck;
+  activeProduct = deck.productType;      // land them in the tab the deck belongs to
+  scheduleSave();
+  renderProductTabs();
+  renderPresList();
+  selectPresentation(id2);
+  toast(`${s.icon} "${s.name}" is ready — press ▶ Present to try it.`, 'success');
+}
+
 /* ─── CONTEXTUAL GIFs ─────────────────────────────────────────────────────────
    A per-deck setting: a GIF beside each question, beside each revealed answer, or
    both. Candidates are fetched WHEN THE BOX IS TICKED and shown here for review —
@@ -3841,10 +3907,18 @@ function openGifModal(deckId) {
       .gif-opt input{margin-top:3px;flex-shrink:0;}
       .gif-opt b{display:block;font-size:13.5px;margin-bottom:2px;}
       .gif-opt span{font-size:11.5px;color:var(--muted);line-height:1.4;}
-      .gif-row{display:flex;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--border);}
+      .gif-row{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--border);}
       .gif-row img{width:88px;height:62px;object-fit:cover;border-radius:7px;background:var(--surface2);flex-shrink:0;}
       .gif-row .gr-t{flex:1;min-width:0;font-size:12px;}
-      .gif-row .gr-t i{color:var(--muted);font-style:normal;font-size:11px;display:block;margin-top:2px;}
+      .gif-row .gr-q{font-weight:700;font-size:11px;color:var(--accent);}
+      .gif-row .gr-slot{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-left:6px;}
+      /* The question itself, clamped to two lines: enough to judge the fit without one
+         long question pushing every other row off the screen. Full text is in title=. */
+      .gif-row .gr-ctx{color:var(--text);font-size:12.5px;line-height:1.35;margin-top:3px;
+        display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+      .gif-row .gr-ctx em{color:var(--muted);font-style:normal;}
+      .gif-row .gr-t i{color:var(--muted);font-style:normal;font-size:11px;display:block;margin-top:3px;}
+      .gif-row .btn-sm{flex-shrink:0;}
     </style>
     <label class="gif-opt ${pol.question?'on':''}">
       <input type="checkbox" ${pol.question?'checked':''} onchange="setGifPolicy('${escAttr(deckId)}',this.checked,${pol.answer})">
@@ -3881,10 +3955,32 @@ function renderGifReview(deckId) {
     ['gifQ','gifA'].forEach(slot => {
       const g = q && q[slot];
       if (!g) return;
+      /* Show WHAT THE GIF IS FOR, not just "Q1". The only question worth asking here is
+         "does this picture fit this question?", and you cannot answer it from a number.
+         For an answer GIF the context is the correct answer, because that is what it is
+         meant to illustrate — and when the answer could not be pictured (a number, a
+         letter) say so, otherwise a celebration GIF next to "42" looks like a bug. */
+      const qText = String((q && q.text) || '').trim() || 'Untitled question';
+      let context, note = '';
+      if (slot === 'gifQ') {
+        context = qText;
+      } else {
+        const ans = correctAnswerText(q);
+        if (ans && PSGifs.answerIsPicturable(ans)) {
+          context = 'Answer: ' + ans;
+        } else {
+          context = 'Answer: ' + (ans || '—');
+          note = ' — nothing to picture, so this is a reaction';
+        }
+      }
       rows.push(`<div class="gif-row">
         <img src="${escAttr(g.still || g.url)}" alt="${escAttr(g.alt||'')}" loading="lazy">
-        <div class="gr-t"><b>Q${i+1}</b> · ${slot==='gifQ'?'question':'answer'}
-          <i>${escapeHtml(g.alt || 'no description')}</i></div>
+        <div class="gr-t">
+          <span class="gr-q">Q${i+1}</span>
+          <span class="gr-slot">${slot==='gifQ'?'question':'answer'}</span>
+          <div class="gr-ctx" title="${escAttr(slot==='gifQ' ? qText : context)}">${escapeHtml(context)}${note?`<em>${escapeHtml(note)}</em>`:''}</div>
+          <i>${escapeHtml(g.alt || 'no description')}</i>
+        </div>
         <button class="btn btn-ghost btn-sm" title="Pick a different one" onclick="reshuffleGif('${escAttr(deckId)}',${i},'${slot}')">↻</button>
         <button class="btn btn-ghost btn-sm" title="Remove this GIF" onclick="removeGif('${escAttr(deckId)}',${i},'${slot}')">✕</button>
       </div>`);
@@ -7288,6 +7384,7 @@ function showSetup() {
           <button class="btn btn-ghost" style="font-size:13px;padding:10px 16px;" onclick="createPresentation()">+ Blank ${prod.name.replace('Slide','')}</button>
           <a href="https://pollslide.com/setup" target="_blank" class="btn btn-ghost" style="font-size:12px;padding:10px 14px;text-decoration:none;">Setup guide →</a>
         </div>
+        ${starterRowHtml()}
       </div>
     </div>`;
 }

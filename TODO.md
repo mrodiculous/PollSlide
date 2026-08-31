@@ -3,7 +3,7 @@
 Living punch list. Updated as things land. Owner-only items are things only Rod can do
 (they need a console login, a card, or a lawyer).
 
-Last updated: 2026-08-31 (twelfth pass)
+Last updated: 2026-08-31 (thirteenth pass)
 
 ---
 
@@ -23,8 +23,8 @@ Last updated: 2026-08-31 (twelfth pass)
 | | Item | Notes |
 |---|---|---|
 | ✅ | **Answers survive bad wifi** | `offline-queue.js`. A failed submit is queued to localStorage, retried with jittered backoff, and survives the tab closing. The student sees "saved, will send automatically". The time they TAPPED is preserved; the delay is recorded so a late answer can be judged, not guessed at. Report and CSV show "sent late". |
-| ⬜ | **Longitudinal student progress** | We built stable `studentId` so one student is one person across sessions — and never used it for what teachers want: "is Ana improving?" Reports are per-session only. The data is already there (report pulls archives + live); this is a view, not a data-model change. |
-| ⬜ | Starter deck / template on first run | First run is "No presentations yet" and one button. Someone evaluating the product has to invent a quiz before they can see what it does. |
+| ✅ | Longitudinal student progress | Reports → **Progress over time**. `progress.js` (37 tests). Refuses to overclaim: under 3 sittings says "not enough yet", a move under 8 points is "steady", and the trend compares first-half to second-half so one bad day can't invert a term. "Worth a look" is not a ranking. |
+| ✅ | Starter decks on first run | `starters.js` — three real decks (poll/quiz/survey), the one matching your current tab first. Shown only on an empty library. One click to a presentable deck with real questions and real answers. |
 | ✅ | Presenter interface language | `ui-lang.js` — 152 strings × 5 languages, selector in the user menu, persisted. Keyed by the exact English text. Only `data-i18n`-tagged elements are touched, so a deck title or student name is untranslatable **by construction**. |
 | ✅ | PresentSlide's switcher actually works now | It was a shell: all five non-English dictionaries were `{}` and the `data-i18n` attributes were never read by any code, so changing language did nothing. Dictionaries filled, `applyI18n()` written and wired. |
 | ✅ | Big screen i18n | Shares `ui-lang.js` with presenter (169 strings × 5 languages). **Follows the presenter automatically** via `quiz_builder/$code/uiLang` — the projector is usually a different machine, so localStorage there is nobody's. `?lang=` overrides. Locked by `ui-lang.test.js`. |

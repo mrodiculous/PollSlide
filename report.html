@@ -24,6 +24,7 @@
 <script src="/qid.js?v=1"></script>
 <script src="/retakes.js?v=1"></script>
 <script src="/gradebook.js?v=1"></script>
+<script src="/progress.js?v=1"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
@@ -102,6 +103,7 @@
     <div class="tab active" id="tab-summary" onclick="setView('summary')">Summary</div>
     <div class="tab" id="tab-question" onclick="setView('question')">By question</div>
     <div class="tab" id="tab-respondent" onclick="setView('respondent')">By respondent</div>
+    <div class="tab" id="tab-progress" onclick="setView('progress')" title="How each student is doing across every session, not just this one">Progress over time</div>
   </div>
   <div id="content"><div class="empty" id="loadingMsg">Sign in to load your reports.</div></div>
 </div>
@@ -284,13 +286,14 @@ function filtered(){
 }
 
 /* ─── Views ────────────────────────────────────────────────────────────────── */
-function setView(v){ view=v; ['summary','question','respondent'].forEach(t=>el('tab-'+t).classList.toggle('active',t===v)); render(); }
+function setView(v){ view=v; ['summary','question','respondent','progress'].forEach(t=>el('tab-'+t).classList.toggle('active',t===v)); render(); }
 function render(){
   if (!userId && !window.__REPORT_FIXTURE){ return; }
   const data = filtered();
   renderStats(data);
   el('content').innerHTML = data.length===0 ? '<div class="empty">No responses match these filters.</div>'
-    : view==='summary' ? renderSummary(data) : view==='question' ? renderByQuestion(data) : renderByRespondent(data);
+    : view==='summary' ? renderSummary(data) : view==='question' ? renderByQuestion(data)
+    : view==='progress' ? renderProgress(data) : renderByRespondent(data);
 }
 function renderStats(data){
   // Count PEOPLE, not devices — respondentKey folds the same student's phone and
@@ -700,6 +703,92 @@ function renderReportInsights(d){
     <div style="margin-top:10px;">${themes}</div>
   </div>`;
 }
+
+/* ─── PROGRESS OVER TIME ───────────────────────────────────────────────────────
+   The view stable student identity was built for. Every other tab answers "what
+   happened in this session"; this one answers "is this student getting it?", which is
+   the question a teacher actually has.
+
+   It deliberately refuses to overclaim. Fewer than three sittings shows "not enough
+   yet" rather than a direction, and a small wobble reads as steady — because this
+   produces a sentence that may be repeated to a parent, and a computed number carries
+   an authority it has not earned from two data points. Logic in progress.js.        */
+function sparkline(scores){
+  if (!scores.length) return '';
+  const w = 88, h = 22, n = scores.length;
+  const x = i => n === 1 ? w/2 : (i/(n-1))*w;
+  const y = v => h - 2 - (v/100)*(h-4);
+  const pts = scores.map((v,i)=>`${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const last = scores[scores.length-1];
+  const col = last >= 70 ? 'var(--accent3)' : last >= 50 ? 'var(--accent4)' : 'var(--accent2)';
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true" style="overflow:visible;">
+    <polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${x(n-1).toFixed(1)}" cy="${y(last).toFixed(1)}" r="2.6" fill="${col}"/></svg>`;
+}
+
+const TREND_LABEL = {
+  improving: '<span class="pill" style="background:rgba(67,233,123,.16);color:var(--accent3);">improving</span>',
+  declining: '<span class="pill" style="background:rgba(255,101,132,.16);color:var(--accent2);">declining</span>',
+  steady:    '<span class="pill" style="background:rgba(144,144,184,.15);color:var(--muted);">steady</span>',
+  unknown:   '<span class="pill" style="background:rgba(144,144,184,.15);color:var(--muted);">not enough yet</span>',
+};
+
+function renderProgress(data){
+  const students = PSProgress.byStudent(data);
+  if (!students.length) return '<div class="empty">No graded answers in this filter yet.</div>';
+  const sum = PSProgress.classSummary(students);
+  const attn = PSProgress.needsAttention(students, 5);
+  const noIds = students.some(s => !s.studentId);
+
+  const stat=(v,l)=>`<div class="stat"><div class="v">${v}</div><div class="l">${l}</div></div>`;
+
+  return `
+  <div class="stats">
+    ${stat(sum.students, 'students')}
+    ${stat(sum.average != null ? sum.average+'%' : '—', 'class average')}
+    ${stat(sum.sittings, 'sittings')}
+    ${stat(sum.improving||0, 'improving')}
+    ${sum.declining ? stat('<span style="color:var(--accent2);">'+sum.declining+'</span>', 'declining') : ''}
+  </div>
+
+  ${noIds ? `<div class="card" style="border-color:rgba(247,183,49,.35);">
+    <div style="font-size:12.5px;color:var(--muted);">Some students here have no class ID, so they are matched on the name they typed —
+    a different spelling becomes a different person and their history splits.
+    <b style="color:var(--text);">Assign the deck to a class</b> to track people properly.</div></div>` : ''}
+
+  ${attn.length ? `<div class="card">
+    <h3>Worth a look</h3>
+    <p class="muted" style="font-size:12px;margin-bottom:8px;">Not a ranking — just who to check on. Someone dropping comes before someone consistently low, because a drop is news.</p>
+    ${attn.map(s=>`<div style="display:flex;align-items:center;gap:9px;padding:6px 0;">
+      <span style="flex:1;">${esc(s.name)}</span>
+      ${TREND_LABEL[s.trend.direction]}
+      <span class="muted" style="font-size:12px;">latest ${s.latest}%</span>
+    </div>`).join('')}
+  </div>` : ''}
+
+  <div class="card">
+    <h3>Every student</h3>
+    <table><thead><tr>
+      <th>Student</th><th>Sittings</th><th>Average</th><th>Best</th><th>Latest</th><th>Over time</th><th>Trend</th>
+    </tr></thead><tbody>
+    ${students.map(s=>`<tr title="${esc(s.trend.why)}">
+      <td>${esc(s.name)}</td>
+      <td class="muted">${s.sittingCount}</td>
+      <td>${s.average != null ? s.average+'%' : '—'}</td>
+      <td class="muted">${s.best != null ? s.best+'%' : '—'}</td>
+      <td>${s.latest != null ? s.latest+'%' : '—'}</td>
+      <td>${sparkline(s.scores)}</td>
+      <td>${TREND_LABEL[s.trend.direction]}</td>
+    </tr>`).join('')}
+    </tbody></table>
+    <p class="muted" style="font-size:11.5px;margin-top:8px;">
+      A direction needs at least ${PSProgress.MIN_FOR_TREND} sittings, and a move smaller than
+      ${PSProgress.NOISE_BAND} points reads as steady — scores bounce for reasons that have nothing to do with learning.
+      Hover a row for the reasoning.
+    </p>
+  </div>`;
+}
+
 function renderByRespondent(data){
   const people={};
   // Group the by-respondent view by student where we have one, so a term's work
