@@ -438,13 +438,38 @@ function showPage(page){
   currentPage=page;
   document.querySelectorAll('.nav-item').forEach(el=>el.classList.remove('active'));
   const nav=document.getElementById('nav-'+page);if(nav)nav.classList.add('active');
-  const titles={dashboard:'Dashboard',users:'Users',teams:'Teams',tickets:'Support Tickets',comms:'Send Message',flows:'Message Flows',legal:'Legal Quick Actions',health:'System Health',security:'Security',ai:'AI / Polly Management',tiers:'Plans & Tiers',search:'Lookup',architecture:'How PollSlide Works',runbook:'Runbook · Fix-it Guide',billing:'Billing / Stripe',errors:'Errors in the Wild',autopilot:'Auto-pilot',sharing:'Sharing & Collaboration',seo:'SEO & Marketing'};
-  document.getElementById('pageTitle').textContent=titles[page]||page;
+  /* The header is taken from the nav item you clicked, so the two can never disagree.
+     They had already drifted on five pages — clicking "How it works" landed on a page
+     headed "How PollSlide Works", "Tickets" on "Support Tickets" — and the whole nav
+     was sentence case while every header was Title Case. Landing on a page that calls
+     itself something else makes you wonder whether you clicked the wrong thing.
+     The badge (an unread count) and the icon are stripped; `titles` is only a
+     fallback for a page with no nav entry. */
+  const titles={dashboard:'Dashboard',users:'Users',teams:'Teams',tickets:'Tickets',comms:'Send message',flows:'Message flows',legal:'Legal actions',health:'System health',security:'Security',ai:'AI / Polly',tiers:'Plans & tiers',search:'Lookup',architecture:'How it works',runbook:'Runbook · Fix-it',billing:'Billing / Stripe',errors:'Errors in the wild',autopilot:'Auto-pilot',sharing:'Sharing & collaboration',seo:'SEO & marketing'};
+  let label='';
+  if(nav){ const c=nav.cloneNode(true); c.querySelectorAll('.pill,.nav-badge,svg').forEach(e=>e.remove()); label=c.textContent.replace(/\s+/g,' ').trim(); }
+  document.getElementById('pageTitle').textContent=label||titles[page]||page;
   closeDetail();renderPage();
 }
 function renderPage(){
   const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture,runbook:renderRunbook,billing:renderBilling,errors:renderErrors,autopilot:renderAutopilot,sharing:renderSharing,seo:renderSEO};
-  if(map[currentPage])map[currentPage]();
+  const fn=map[currentPage];
+  if(!fn) return;
+  /* A page that fails must SAY so. Two of these renderers are async, so a throw inside
+     one became an unhandled rejection: no error, no console message, and the previous
+     page's content left sitting under the new page's heading. That is how the Billing
+     page shipped broken — it looked like a working page showing the wrong numbers.
+     Now a failure paints an error where the page should have been. */
+  const fail=(e)=>{
+    const el=document.getElementById('content');
+    if(el) el.innerHTML=`<div class="card"><div class="card-bd" style="color:var(--accent2);">
+      This page failed to load: ${esc(String((e&&e.message)||e))}<br>
+      <span style="color:var(--muted);font-size:12px;">The details are in the browser console.</span>
+    </div></div>`;
+    console.error('renderPage('+currentPage+') failed:', e);
+  };
+  try { const r=fn(); if(r&&typeof r.catch==='function') r.catch(fail); }
+  catch(e){ fail(e); }
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
@@ -582,6 +607,10 @@ function renderDetailBody(uid){
     <button class="btn btn-sm btn-green" style="width:100%;" onclick="compUser('${uid}')">🎁 Grant free plan</button>`}
   </div>
   <div class="dp-sec">
+    <h3>👥 Classes &amp; rosters <span style="font-weight:400;font-size:11px;color:var(--muted);">— for answering "my student can't sign in"</span></h3>
+    <div id="classes_${uid}" style="font-size:12px;color:var(--muted);">Loading…</div>
+  </div>
+  <div class="dp-sec">
     <h3>💳 Stripe billing</h3>
     <div id="billing_${uid}" style="font-size:12px;color:var(--muted);">Loading…</div>
   </div>
@@ -632,6 +661,78 @@ function renderDetailBody(uid){
   loadPollyLog(uid);
   loadTimeline(uid);
   loadUserBilling(uid);
+  loadUserClasses(uid);
+}
+
+/* What a teacher's classes look like from support's side.
+ *
+ * WHY IT EXISTS: the classroom features shipped with no admin view at all, so a ticket
+ * saying "my student's code doesn't work" or "there are two rows for one child" had
+ * nothing behind it to look at. This answers those without anyone guessing.
+ *
+ * WHAT IT DELIBERATELY DOES NOT SHOW:
+ *  • PIN hashes and issued codes. They are the secret being checked; a support screen
+ *    that displays them turns every support request into a way to impersonate a
+ *    student. Whether one is SET is the part that answers the ticket.
+ *  • Full surnames. Students are shown here exactly as they appear on their own phones
+ *    — first name, last initial. This is a school's list of children in a vendor's
+ *    admin panel, and the least identifying form that still answers the question is
+ *    the right amount.
+ * Both are support decisions, not technical ones, which is why they are written down. */
+async function loadUserClasses(uid){
+  const el=document.getElementById('classes_'+uid); if(!el) return;
+  try{
+    const snap=await db.ref('users/'+uid+'/classes').get();
+    if(!snap.exists()){ el.innerHTML='<span class="lbl">No classes — this account is not using class rosters.</span>'; return; }
+    const classes=snap.val()||{};
+    const ids=Object.keys(classes);
+    if(!ids.length){ el.innerHTML='<span class="lbl">No classes.</span>'; return; }
+
+    el.innerHTML=ids.map(cid=>{
+      const c=classes[cid]||{};
+      const students=Object.values(c.students||{});
+      const active=students.filter(s=>s&&!s.left);
+      const left=students.length-active.length;
+      const mode=['pin','code','email'].includes(c.verifyMode)?c.verifyMode:'pin';
+      const modeLabel={pin:'🔢 PIN they choose',code:'🎟️ Codes you issue',email:'✉️ Emailed codes'}[mode];
+
+      // The one thing that actually answers most tickets: can this student get in?
+      const rows=active.slice(0,40).map(s=>{
+        const ready = mode==='pin' ? !!s.pinHash : !!s.code;
+        const state = mode==='pin'
+          ? (s.pinHash?'PIN set':'no PIN yet — first sign-in will set it')
+          : (s.code?'code issued':'NO CODE ISSUED — they cannot sign in');
+        return `<div class="dp-row"><span>${esc(shortName(s.name))}</span>
+          <span style="color:${ready?'var(--muted)':'var(--accent4)'};font-size:11px;">${esc(state)}</span></div>`;
+      }).join('');
+
+      const attest = c.attestedAt
+        ? `<div class="dp-row"><span class="lbl">Consent recorded</span><span style="font-size:11px;">${new Date(c.attestedAt).toLocaleDateString()} by ${esc(c.attestedBy||'—')}${c.attestedFor?' (for '+esc(c.attestedFor)+' mode)':''}</span></div>`
+        : (mode==='email'
+            ? `<div class="dp-row"><span class="lbl">Consent recorded</span><span style="color:var(--accent2);font-size:11px;">MISSING — email mode is on without an attestation</span></div>`
+            : '');
+
+      return `<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;">
+        <div style="font-weight:600;color:var(--text);margin-bottom:4px;">${esc(c.name||'Untitled class')}</div>
+        <div class="dp-row"><span class="lbl">Students</span><span>${active.length} active${left?` · ${left} left the class`:''}</span></div>
+        <div class="dp-row"><span class="lbl">How they sign in</span><span>${modeLabel}</span></div>
+        ${attest}
+        ${rows?`<div style="margin-top:6px;">${rows}</div>`:''}
+        ${active.length>40?`<div class="lbl" style="margin-top:4px;">…and ${active.length-40} more</div>`:''}
+      </div>`;
+    }).join('') +
+    `<p style="font-size:11px;color:var(--muted);margin-top:2px;">Codes and PINs are never shown — only whether one is set. A teacher resets a PIN themselves from their own class screen.</p>`;
+  }catch(e){
+    el.innerHTML=`<span style="color:var(--accent2);">Could not load classes: ${esc(String(e.message||e))}</span>`;
+  }
+}
+
+// First name + last initial — the same form the students see on their own phones.
+function shortName(n){
+  const parts=String(n||'').trim().split(/\s+/).filter(Boolean);
+  if(!parts.length) return 'Unnamed';
+  if(parts.length===1) return parts[0];
+  return parts[0]+' '+parts[parts.length-1][0].toUpperCase()+'.';
 }
 function closeDetail(){document.getElementById('detailPanel').classList.remove('open');}
 
@@ -773,7 +874,13 @@ function subPill(st){
   return `<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:${c}22;color:${c};">${esc(st)}</span>`;
 }
 async function renderBilling(){
-  const el=document.getElementById('pageBody');
+  /* #content, like every other page. This said #pageBody — an element that does not
+     exist anywhere in this file — so the Billing page never rendered at all: you got
+     whatever the previous page had left behind, under a "Billing / Stripe" heading.
+     It stayed hidden because this function is async, so the TypeError became an
+     unhandled rejection rather than an error anyone saw. renderPage now reports
+     those; see the comment there. */
+  const el=document.getElementById('content');
   el.innerHTML='<div class="card"><div class="card-bd">Loading Stripe…</div></div>';
   const d=await stripeAdmin({action:'summary'});
   if(!d.configured){ el.innerHTML=`<div class="card"><div class="card-bd">Stripe isn't configured in this environment (<code>STRIPE_SECRET_KEY</code> not set).</div></div>`; return; }

@@ -3,7 +3,7 @@
 Living punch list. Updated as things land. Owner-only items are things only Rod can do
 (they need a console login, a card, or a lawyer).
 
-Last updated: 2026-08-31 (third pass)
+Last updated: 2026-08-31 (fourth pass — admin sweep)
 
 ---
 
@@ -23,7 +23,7 @@ Last updated: 2026-08-31 (third pass)
 | | Item | Notes |
 |---|---|---|
 | ✅ | SEO / Marketing section | Admin → Growth. `api/seo-status.js` reads the LIVE site (not the repo) via `lib/seo.js`; shows findings, a search-result preview per page, and the owner-only checklist. Logs each run to `admin/seo_log`. |
-| ⬜ | **Full admin sweep** | Walk every Admin page as an admin would: does each one load, is the language consistent, does every control do what it says, do the pages agree with each other and with the product. Cohesion, not just "no errors". |
+| ✅ | Full admin sweep | All 19 pages driven. Found: Billing had **never rendered** (wrote to a non-existent `#pageBody`, silent because async); 5 headers disagreed with their nav label; Admin had **zero** visibility into classes/rosters. All fixed. 142 dynamic controls checked, none dead. |
 | ⬜ | Security controls register | ISO/SOC **cannot** be self-certified. The automatable part is a controls register mapped to evidence that already exists. |
 
 ## Site, marketing & help
