@@ -7,14 +7,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
-<script src="/errors.js?v=1"></script>
-<script src="/present-display.js?v=1"></script>
-<script src="/qid.js?v=1"></script>
-<script src="/roster.js?v=1"></script>
-<script src="/retakes.js?v=1"></script>
-<script src="/gifs.js?v=1"></script>
-<script src="/starters.js?v=1"></script>
-<script src="/ui-lang.js?v=1"></script>
+<script src="/errors.js?v=25c25f5f"></script>
+<script src="/present-display.js?v=b01c9c51"></script>
+<script src="/qid.js?v=5e6ebfdc"></script>
+<script src="/roster.js?v=88b6f2d4"></script>
+<script src="/retakes.js?v=d187d4ee"></script>
+<script src="/gifs.js?v=35062c5a"></script>
+<script src="/starters.js?v=26cc51f5"></script>
+<script src="/ui-lang.js?v=2eaed633"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root {
@@ -3918,6 +3918,12 @@ function openGifModal(deckId) {
         display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
       .gif-row .gr-ctx em{color:var(--muted);font-style:normal;}
       .gif-row .gr-t i{color:var(--muted);font-style:normal;font-size:11px;display:block;margin-top:3px;}
+.gif-row .gr-term{display:flex;align-items:center;gap:5px;margin-top:5px;}
+      .gif-row .gr-term span{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);}
+      .gif-row .gr-term input{flex:1;min-width:0;max-width:190px;background:var(--surface);
+        border:1px solid var(--border2);border-radius:6px;padding:3px 7px;font-size:11.5px;
+        font-family:inherit;color:var(--accent);}
+      .gif-row .gr-term input:focus{border-color:var(--accent);outline:none;}
       .gif-row .btn-sm{flex-shrink:0;}
     </style>
     <label class="gif-opt ${pol.question?'on':''}">
@@ -3980,6 +3986,12 @@ function renderGifReview(deckId) {
           <span class="gr-slot">${slot==='gifQ'?'question':'answer'}</span>
           <div class="gr-ctx" title="${escAttr(slot==='gifQ' ? qText : context)}">${escapeHtml(context)}${note?`<em>${escapeHtml(note)}</em>`:''}</div>
           <i>${escapeHtml(g.alt || 'no description')}</i>
+          <div class="gr-term">
+            <span>searched</span>
+            <input value="${escAttr(g.term || '')}" placeholder="type a better word"
+              onkeydown="if(event.key==='Enter'){event.preventDefault();researchGif('${escAttr(deckId)}',${i},'${slot}',this.value)}"
+              onblur="if(this.value.trim() && this.value.trim()!==this.defaultValue) researchGif('${escAttr(deckId)}',${i},'${slot}',this.value)">
+          </div>
         </div>
         <button class="btn btn-ghost btn-sm" title="Pick a different one" onclick="reshuffleGif('${escAttr(deckId)}',${i},'${slot}')">↻</button>
         <button class="btn btn-ghost btn-sm" title="Remove this GIF" onclick="removeGif('${escAttr(deckId)}',${i},'${slot}')">✕</button>
@@ -4026,13 +4038,15 @@ async function fetchDeckGifs(deckId) {
     const q = qs[i]; if (!q) continue;
     if (btn) btn.textContent = `Finding… ${i+1}/${qs.length}`;
     if (pol.question) {
-      const g = await search(PSGifs.searchTerm(q.text || ''), (q.id||i)+':q');
-      if (g) { q.gifQ = g; done++; }
+      const term = PSGifs.searchTerm(q.text || '');
+      const g = await search(term, (q.id||i)+':q');
+      if (g) { g.term = term; q.gifQ = g; done++; }
     }
     if (pol.answer) {
       const correct = correctAnswerText(q);
-      const g = await search(PSGifs.answerTerm(correct, { seed:(q.id||i)+':a' }), (q.id||i)+':a');
-      if (g) { q.gifA = g; done++; }
+      const term = PSGifs.answerTerm(correct, { seed:(q.id||i)+':a' });
+      const g = await search(term, (q.id||i)+':a');
+      if (g) { g.term = term; q.gifA = g; done++; }
     }
     if (failed && done === 0 && i === 0) break;   // configuration problem: stop, don't hammer
   }
@@ -4058,12 +4072,38 @@ function correctAnswerText(q) {
   return String(ca);
 }
 
+/* Search again with a word the teacher chose. However good the automatic guess gets,
+   it is a guess: only the person who wrote the question knows whether "the powerhouse
+   of the cell" wanted `cell` or `mitochondria`. One box beats one more heuristic. */
+async function researchGif(deckId, qIdx, slot, term) {
+  const p = presentations[deckId]; if (!p) return;
+  const q = (p.questions||[])[qIdx]; if (!q) return;
+  const clean = String(term || '').trim().slice(0, 60);
+  if (!clean) return;
+  try {
+    const tk = await auth.currentUser.getIdToken();
+    const r = await fetch('/api/gif-search', { method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tk },
+      body: JSON.stringify({ q: clean, deck: deckId, limit: 12 }) });
+    const d = await r.json();
+    if (!r.ok) { toast(d.error || 'Could not search.', 'warn'); return; }
+    const g = PSGifs.pickBest(d.results, { seed: clean });
+    if (!g) { toast(`Nothing usable for "${clean}".`, 'warn'); return; }
+    g.term = clean;
+    q[slot] = g;
+    scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
+    toast(`Found a GIF for "${clean}".`, 'success');
+  } catch (e) { toast('Could not search: ' + (e.message||e), 'warn'); }
+}
+
 async function reshuffleGif(deckId, qIdx, slot) {
   const p = presentations[deckId]; if (!p) return;
   const q = (p.questions||[])[qIdx]; if (!q) return;
-  const term = slot === 'gifQ'
+  // Whatever term is currently showing — including one the teacher typed. Reshuffle
+  // means "another GIF for this search", not "start over from my question".
+  const term = (q[slot] && q[slot].term) || (slot === 'gifQ'
     ? PSGifs.searchTerm(q.text || '')
-    : PSGifs.answerTerm(correctAnswerText(q), { seed: Math.random() });
+    : PSGifs.answerTerm(correctAnswerText(q), { seed: Math.random() }));
   try {
     const tk = await auth.currentUser.getIdToken();
     const r = await fetch('/api/gif-search', { method:'POST',
@@ -4073,6 +4113,7 @@ async function reshuffleGif(deckId, qIdx, slot) {
     if (!r.ok) { toast(d.error || 'Could not search.', 'warn'); return; }
     const g = PSGifs.pickBest(d.results, { seed: String(Math.random()) });
     if (!g) { toast('Nothing else usable for that search.', 'warn'); return; }
+    g.term = term;
     q[slot] = g; scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
   } catch (e) { toast('Could not search: ' + (e.message||e), 'warn'); }
 }

@@ -3,7 +3,7 @@
 Living punch list. Updated as things land. Owner-only items are things only Rod can do
 (they need a console login, a card, or a lawyer).
 
-Last updated: 2026-08-31 (thirteenth pass)
+Last updated: 2026-08-31 (fourteenth pass)
 
 ---
 

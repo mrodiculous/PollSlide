@@ -20,6 +20,8 @@
  *   rules         a ".comment" key made the whole rules file unpastable, and the
  *                 Firebase error just said `Line 29: Expected '{'`
  *   secrets       a live Giphy key sat in presenter.html, shipped to every browser
+ *   assets        a stale ?v= served the OLD shared .js to every returning visitor —
+ *                 three separate 'logic bugs' in one session were this
  *   parity        a capability built for one product and forgotten in the other four
  *   tests         everything above only proves the page loads, not that it is right
  *
@@ -39,6 +41,7 @@ const GATES = [
   { name: 'escaping',     script: 'qa-escaping.js',     why: 'nothing user-typed reaches innerHTML raw' },
   { name: 'rules',        script: 'qa-rules.js',        why: 'database-rules.json will paste, and covers every write' },
   { name: 'secrets',      script: 'qa-secrets.js',      why: 'no API key in a file the browser can read' },
+  { name: 'assets',       script: 'qa-assets.js',       why: 'every ?v= matches its file, so nobody gets a cached old copy' },
   { name: 'parity',       script: 'qa-parity.js',       why: 'capabilities are not stranded in one product', slow: true },
 ];
 

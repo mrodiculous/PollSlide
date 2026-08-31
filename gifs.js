@@ -42,8 +42,21 @@
     'you your yours we our us i me my he she his her him not no nor so too very just only own same ' +
     'up down out off over under again further once').split(' '));
 
-  const MAX_TERM_WORDS = 4;
-  const MAX_TERM_CHARS = 60;
+  const MAX_TERM_WORDS = 2;      // a GIF search is a keyword search, not a sentence
+  const MAX_TERM_CHARS = 40;
+
+  /* Words that appear in questions and never describe what the question is ABOUT.
+   * These are the scaffolding of asking — "which of the following best describes" —
+   * and every one of them that survives into the search dilutes the word that matters.
+   * Separate from STOP because these are specifically quiz-shaped, not generally common. */
+  const SCAFFOLD = new Set(('following best describes describe identify choose select name state '
+    + 'define definition correct incorrect true false statement statements option options answer '
+    + 'answers question questions example examples term terms called known mainly mostly primarily '
+    + 'commonly generally usually typically often sometimes always never main chief major minor '
+    + 'result results cause causes reason reasons purpose type types kind kinds part parts number '
+    + 'amount level stage step steps way ways thing things word words letter letters year years '
+    + 'time times day days did does do done use used uses using come comes came go goes went '
+    + 'get gets got make makes made take takes took give gives gave say says said').split(' '));
 
   /* Reaction terms for the reveal, when the answer itself has nothing to picture.
    * Separate lists so a wrong answer never gets a celebration. */
@@ -54,23 +67,67 @@
 
   function words(s) {
     return String(s == null ? '' : s)
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}\s'-]/gu, ' ')     // keep letters, numbers, apostrophes, hyphens
+      .replace(/[^\p{L}\p{N}\s'-]/gu, ' ')
       .split(/\s+/)
       .filter(Boolean);
   }
 
-  /* Reduce a sentence to the words that carry the picture, in their original order.
-   * Order matters: "dating millennials" and "millennials dating" return different GIFs,
-   * and the original order is the one a person would have typed. */
+  /* THE ONE THING THE QUESTION IS ABOUT.
+   *
+   * "Which of the following best describes photosynthesis?" should search for
+   * `photosynthesis`, not for `following best describes photosynthesis`. A GIF engine
+   * is a keyword engine: every extra word narrows the pool toward nothing, and the
+   * words that survive from a question are usually the ones asking it rather than the
+   * one being asked about.
+   *
+   * So candidates are SCORED rather than taken in order:
+   *   • a capitalised word mid-sentence is a proper noun, and proper nouns are the most
+   *     searchable things there are — adjacent ones stay together ("Berlin Wall")
+   *   • later words score higher: English questions put the topic at the end
+   *     ("...blame for ruining DATING?")
+   *   • longer words score higher — specific beats generic
+   *   • a gerund straight after a preposition is usually the verb of the asking
+   *     ("for RUINING dating"), not the subject
+   */
   function searchTerm(text) {
-    const w = words(text);
-    if (!w.length) return '';
-    let keep = w.filter(x => x.length > 2 && !STOP.has(x));
-    // A question made entirely of stopwords ("What is it?") keeps its longest words
-    // rather than searching for nothing at all.
-    if (!keep.length) keep = w.slice().sort((a, b) => b.length - a.length).slice(0, 2);
-    return keep.slice(0, MAX_TERM_WORDS).join(' ').slice(0, MAX_TERM_CHARS).trim();
+    const raw = words(text);
+    if (!raw.length) return '';
+    const lower = raw.map(w => w.toLowerCase());
+
+    // Keep runs of capitalised words together — "Berlin Wall", "French Revolution".
+    const proper = [];
+    for (let i = 1; i < raw.length; i++) {          // skip index 0: sentence case
+      if (!/^[A-Z][a-z'-]+$/.test(raw[i])) continue;
+      const run = [raw[i]];
+      while (i + 1 < raw.length && /^[A-Z][a-z'-]+$/.test(raw[i + 1])) { run.push(raw[i + 1]); i++; }
+      if (!run.every(w => STOP.has(w.toLowerCase()))) proper.push(run.join(' '));
+    }
+    if (proper.length) return proper[proper.length - 1].slice(0, MAX_TERM_CHARS);
+
+    const scored = [];
+    lower.forEach((w, i) => {
+      if (w.length < 3 || STOP.has(w) || SCAFFOLD.has(w)) return;
+      let score = 0;
+      score += (i / Math.max(1, lower.length - 1)) * 3;    // topic tends to come last
+      score += Math.min(w.length, 12) / 6;                 // specific words are longer
+      // "for ruining dating" — the gerund is how the question is phrased, not its subject
+      if (/ing$/.test(w) && i > 0 && ['for','of','at','by','in','on','about','with'].includes(lower[i-1])) score -= 2.5;
+      if (/ing$/.test(w)) score -= 0.6;
+      scored.push({ w: raw[i], score, i });
+    });
+    if (!scored.length) {
+      // A question made only of scaffolding still has to search for something.
+      const fallback = raw.filter(w => w.length > 3);
+      return (fallback.length ? fallback : raw).slice(-MAX_TERM_WORDS).join(' ').slice(0, MAX_TERM_CHARS);
+    }
+    const top = scored.slice().sort((a, b) => b.score - a.score).slice(0, MAX_TERM_WORDS);
+    /* Two words only when the second is nearly as good AND sits beside the first —
+     * "time zones", "programming language". A distant second word is a different idea
+     * and pairing them searches for neither. */
+    top.sort((a, b) => a.i - b.i);
+    const best = scored.slice().sort((a, b) => b.score - a.score)[0];
+    const keep = top.filter(x => x === best || (Math.abs(x.i - best.i) === 1 && x.score > best.score * 0.62));
+    return keep.map(x => x.w.toLowerCase()).join(' ').slice(0, MAX_TERM_CHARS).trim();
   }
 
   /* Is this answer worth searching for a picture of? "42", "B", "true" and "none of the
@@ -89,9 +146,22 @@
   /* The term for the reveal. `seed` makes the reaction choice stable for a given
    * question — the same deck presented twice should not shuffle its GIFs, which would
    * make a teacher think something is broken. */
+  /* An ANSWER is not a question and must not be mined like one. searchTerm exists to
+   * find the subject hiding inside a sentence that is mostly asking; an answer IS the
+   * subject already. Running it through the same extractor turned "the Amazon
+   * rainforest" into "Amazon" — which is a shopping company, not a forest.
+   * So: tidy it, do not dissect it. */
+  function cleanAnswer(answer) {
+    const w = String(answer == null ? '' : answer)
+      .replace(/[^\p{L}\p{N}\s'-]/gu, ' ').split(/\s+/).filter(Boolean);
+    // Only a leading article goes; everything else is the answer the teacher wrote.
+    while (w.length > 1 && ['the','a','an'].includes(w[0].toLowerCase())) w.shift();
+    return w.slice(0, 3).join(' ').slice(0, MAX_TERM_CHARS).trim();
+  }
+
   function answerTerm(answer, opts) {
     const o = opts || {};
-    if (answerIsPicturable(answer)) return searchTerm(answer);
+    if (answerIsPicturable(answer)) return cleanAnswer(answer);
     const list = o.correct === false ? REACTION.neutral : REACTION.correct;
     const seed = Math.abs(hash(String(o.seed == null ? answer : o.seed)));
     return list[seed % list.length];
@@ -206,7 +276,7 @@
 
   return {
   SAFE_FILTER, MAX_TERM_WORDS, REACTION,
-  searchTerm, answerTerm, answerIsPicturable, gifPolicy, gifsEnabled,
+  searchTerm, answerTerm, cleanAnswer, answerIsPicturable, gifPolicy, gifsEnabled,
   normalizeTenor, normalizeGiphy, normalizeMany, pickBest,
 };
 

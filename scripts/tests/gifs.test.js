@@ -38,20 +38,46 @@ ok('the two toggles are independent',
 ok('both can be on together',
    G.gifsEnabled({ question: true, answer: true }));
 
-console.log('\nA question becomes a search a GIF engine can answer');
-ok('stopwords are dropped, content words kept in order',
-   G.searchTerm('Which app do millennials blame for ruining dating?') === 'app millennials blame ruining',
-   G.searchTerm('Which app do millennials blame for ruining dating?'));
-ok('punctuation does not leak in',
-   !/[?!.,]/.test(G.searchTerm('What is photosynthesis, exactly?!')));
-ok('the term is capped to a few words',
-   G.searchTerm('one two three four five six seven eight nine ten eleven twelve').split(' ').length <= G.MAX_TERM_WORDS);
-ok('a question of pure stopwords still searches something',
-   G.searchTerm('What is it?').length > 0, G.searchTerm('What is it?'));
-ok('accents survive',      /café/.test(G.searchTerm('Where is the café?')));
-ok('empty input is empty', G.searchTerm('') === '' && G.searchTerm(null) === '');
-ok('emoji do not become the search term',
-   !/🎉/.test(G.searchTerm('🎉 Celebrate the harvest festival')));
+console.log('\nA question is reduced to the ONE thing it is about');
+/* A GIF engine is a keyword engine. Every extra word narrows the pool toward nothing,
+ * and the words that survive from a question are usually the ones doing the asking.
+ * Each case below is a real question shape that the previous version got wrong. */
+const term = (q) => G.searchTerm(q);
+ok('the topic wins over the verbs of asking',
+   term('Which app do millennials blame for ruining dating?') === 'dating',
+   term('Which app do millennials blame for ruining dating?'));
+ok('quiz scaffolding is dropped entirely',
+   term('Which of the following best describes photosynthesis?') === 'photosynthesis',
+   term('Which of the following best describes photosynthesis?'));
+ok('…and so is "identify the correct definition of"',
+   term('Identify the correct definition of inflation') === 'inflation',
+   term('Identify the correct definition of inflation'));
+ok('a proper noun beats everything else',
+   term('How many time zones does China officially use?') === 'China',
+   term('How many time zones does China officially use?'));
+ok('a multi-word proper noun stays together',
+   term('In what year did the Berlin Wall come down?') === 'Berlin Wall',
+   term('In what year did the Berlin Wall come down?'));
+ok('…and another',
+   term('What was the main cause of the French Revolution?') === 'French Revolution',
+   term('What was the main cause of the French Revolution?'));
+ok('two adjacent words are kept when they are one idea',
+   term('Which of these is NOT a programming language?') === 'programming language',
+   term('Which of these is NOT a programming language?'));
+ok('never more than two words — a longer phrase finds nothing',
+   ['Which of the following best describes the process by which plants convert sunlight into chemical energy?',
+    'What are the primary economic causes of long-term structural unemployment in developing nations?']
+     .every(q => term(q).split(' ').length <= G.MAX_TERM_WORDS),
+   ['Which of the following best describes the process by which plants convert sunlight into chemical energy?',
+    'What are the primary economic causes of long-term structural unemployment in developing nations?'].map(term));
+ok('punctuation never leaks in',
+   !/[?!.,]/.test(term('What is photosynthesis, exactly?!')));
+ok('accents survive',      /café/i.test(term('Where is the café?')));
+ok('empty input is empty', term('') === '' && term(null) === '');
+ok('emoji never become the search term',
+   !/🎉/.test(term('🎉 Celebrate the harvest festival')));
+ok('a question of pure scaffolding still searches something rather than nothing',
+   term('What is it?').length > 0, term('What is it?'));
 
 console.log('\nAn answer that cannot be pictured is never searched literally');
 ['B', '42', 'true', 'False', 'yes', 'no', '3.14', '1 + 1', 'all of the above', 'None of the above']
@@ -65,9 +91,16 @@ ok('a letter answer yields a reaction, not the letter',
    G.REACTION.correct.includes(t1) && t1 !== 'B', t1);
 ok('a number answer likewise',
    G.REACTION.correct.includes(G.answerTerm('42', { seed: 'q2' })));
-ok('a real answer is searched on its own words',
-   G.answerTerm('the Amazon rainforest', { seed: 'q3' }) === 'amazon rainforest',
+/* An answer is tidied, not dissected. Mining it the way a question is mined turned
+ * "the Amazon rainforest" into "Amazon" — a shopping company rather than a forest. */
+ok('a real answer keeps its own words, minus the article',
+   G.answerTerm('the Amazon rainforest', { seed: 'q3' }) === 'Amazon rainforest',
    G.answerTerm('the Amazon rainforest', { seed: 'q3' }));
+ok('a person keeps both names',  G.answerTerm('Marie Curie', { seed:'x' }) === 'Marie Curie');
+ok('capitalisation is preserved — it is a proper noun',
+   G.answerTerm('The French Revolution', { seed:'x' }) === 'French Revolution');
+ok('a long answer is capped rather than searched whole',
+   G.answerTerm('the process by which plants convert sunlight into energy', { seed:'x' }).split(' ').length <= 3);
 ok('a WRONG reveal never gets a celebration',
    G.REACTION.neutral.includes(G.answerTerm('B', { seed: 'q1', correct: false })));
 ok('the choice is stable for the same question — a deck does not reshuffle between runs',
