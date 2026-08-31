@@ -3,7 +3,7 @@
 Living punch list. Updated as things land. Owner-only items are things only Rod can do
 (they need a console login, a card, or a lawyer).
 
-Last updated: 2026-08-31 (ninth pass)
+Last updated: 2026-08-31 (eleventh pass)
 
 ---
 
@@ -24,8 +24,8 @@ Last updated: 2026-08-31 (ninth pass)
 |---|---|---|
 | ✅ | Presenter interface language | `ui-lang.js` — 152 strings × 5 languages, selector in the user menu, persisted. Keyed by the exact English text. Only `data-i18n`-tagged elements are touched, so a deck title or student name is untranslatable **by construction**. |
 | ✅ | PresentSlide's switcher actually works now | It was a shell: all five non-English dictionaries were `{}` and the `data-i18n` attributes were never read by any code, so changing language did nothing. Dictionaries filled, `applyI18n()` written and wired. |
-| ⬜ | **`live.html` (Big screen) has no i18n at all** | No selector, no strings — and it's the screen the whole room looks at. |
-| ⬜ | Retake history has no admin view | Classes are now in the user detail panel; attempts are not. If a grade is disputed there's nothing to look at. |
+| ✅ | Big screen i18n | Shares `ui-lang.js` with presenter (169 strings × 5 languages). **Follows the presenter automatically** via `quiz_builder/$code/uiLang` — the projector is usually a different machine, so localStorage there is nobody's. `?lang=` overrides. Locked by `ui-lang.test.js`. |
+| ✅ | Retake history in Admin | User detail → **🔁 Retakes & attempts**. Shows the policy, how many students used more than one try, and which attempt was graded. Student answers are never shown — that's a class's schoolwork, and "attempt 2 of 3, best-of" answers the dispute without it. |
 | ✅ | Contextual GIFs | `gifs.js` + `api/gif-search.js`. Per-deck toggles, fetched at build time and reviewed before presenting. **Provider-pluggable** since Tenor stopped issuing keys — set `GIPHY_API_KEY` (or `TENOR_API_KEY`) and redeploy. Safety rating locked server-side either way. |
 
 ## Admin
@@ -49,8 +49,8 @@ Last updated: 2026-08-31 (ninth pass)
 |---|---|---|
 | ✅ | Cookie banner on mobile | Fixed via `consent-mobile.css`, linked from all 15 pages. Uses `body #…` specificity rather than `!important`, so it beats the runtime-injected style regardless of load order. Verified: 344px → 168px. Still worth merging into `consent.js` one day and deleting the file. |
 | ⬜ | **Rotate the Giphy key, then set it in Vercel** | The key was hardcoded in `presenter.html` — public in every browser and in the GitHub history. Removed from source and both search paths now go through `api/gif-search.js`. Rotate at developers.giphy.com, set `GIPHY_API_KEY` in Vercel, redeploy. See `GIF-SETUP.md`. |
-| ⬜ | Publish `database-rules.json` | Sent, and now validated by `scripts/qa-rules.js`. Retake history (`sessions/$code/attempts`) is silently denied until published. |
-| ⬜ | Submit sitemap to Search Console | Needs the Google account. |
+| ✅ | Publish `database-rules.json` | Done 2026-08-31. Validated on every run by `scripts/qa-rules.js`. |
+| ✅ | Submit sitemap to Search Console | Done 2026-08-31 — Google **and** Bing. |
 | ⬜ | Counsel review of legal docs | Terms/privacy wording. |
 | ⬜ | Stripe go-live | Follow `STRIPE-GO-LIVE.md`. Business verification is not instant — start it first. |
 

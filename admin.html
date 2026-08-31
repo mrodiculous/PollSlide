@@ -615,6 +615,10 @@ function renderDetailBody(uid){
     <div id="classes_${uid}" style="font-size:12px;color:var(--muted);">Loading…</div>
   </div>
   <div class="dp-sec">
+    <h3>🔁 Retakes &amp; attempts <span style="font-weight:400;font-size:11px;color:var(--muted);">— for answering "why is this the grade?"</span></h3>
+    <div id="attempts_${uid}" style="font-size:12px;color:var(--muted);">Loading…</div>
+  </div>
+  <div class="dp-sec">
     <h3>💳 Stripe billing</h3>
     <div id="billing_${uid}" style="font-size:12px;color:var(--muted);">Loading…</div>
   </div>
@@ -666,6 +670,7 @@ function renderDetailBody(uid){
   loadTimeline(uid);
   loadUserBilling(uid);
   loadUserClasses(uid);
+  loadUserAttempts(uid);
 }
 
 /* What a teacher's classes look like from support's side.
@@ -728,6 +733,68 @@ async function loadUserClasses(uid){
     `<p style="font-size:11px;color:var(--muted);margin-top:2px;">Codes and PINs are never shown — only whether one is set. A teacher resets a PIN themselves from their own class screen.</p>`;
   }catch(e){
     el.innerHTML=`<span style="color:var(--accent2);">Could not load classes: ${esc(String(e.message||e))}</span>`;
+  }
+}
+
+/* Retake history, for the one question support cannot currently answer: "my child's
+ * grade is wrong". Without this, a disputed mark has nothing behind it — the report
+ * shows the answer that counted and no trace of how it was chosen.
+ *
+ * READS THE DECKS, NOT THE SESSIONS. Attempt history lives at
+ * `sessions/$code/attempts/...`, which is keyed by session code, not by user — so
+ * finding one teacher's attempts means starting from their decks and following the
+ * session code on each. Only decks with retakes switched on are worth walking.
+ *
+ * Shows WHICH attempt was graded and why, never the student's actual answers: that is
+ * the teacher's data about children, and "attempt 2 of 3 was graded, best-of policy"
+ * answers the support question without a vendor reading a class's schoolwork. */
+async function loadUserAttempts(uid){
+  const el=document.getElementById('attempts_'+uid); if(!el) return;
+  try{
+    const dSnap=await db.ref('users/'+uid+'/presentations').get();
+    if(!dSnap.exists()){ el.innerHTML='<span class="lbl">No decks.</span>'; return; }
+    const decks=dSnap.val()||{};
+    const withRetakes=Object.entries(decks).filter(([,d])=>d&&d.retakes&&d.retakes.allowed);
+    if(!withRetakes.length){
+      el.innerHTML='<span class="lbl">No deck on this account has retakes switched on, so every answer is a first attempt.</span>';
+      return;
+    }
+    const blocks=[];
+    for(const [did,d] of withRetakes.slice(0,12)){
+      const pol=d.retakes||{};
+      const which={best:'the best',last:'the most recent',first:'the first'}[pol.counts]||'the best';
+      let rows='', total=0, retaken=0;
+      if(d.sessionCode){
+        try{
+          const aSnap=await db.ref('sessions/'+d.sessionCode+'/attempts').get();
+          if(aSnap.exists()){
+            const byQ=aSnap.val()||{};
+            Object.entries(byQ).forEach(([qid,byPid])=>{
+              Object.entries(byPid||{}).forEach(([pid,tries])=>{
+                const n=Object.keys(tries||{}).length;
+                total++; if(n>1) retaken++;
+                if(n>1&&rows.split('dp-row').length<=25){
+                  const graded=Object.entries(tries).find(([,v])=>v&&v.counted);
+                  const name=(Object.values(tries)[0]||{}).name||'—';
+                  rows+=`<div class="dp-row"><span>${esc(shortName(name))}</span>
+                    <span class="muted" style="font-size:11px;">${n} attempts · graded #${graded?graded[0]:'?'}</span></div>`;
+                }
+              });
+            });
+          }
+        }catch(e){}
+      }
+      blocks.push(`<div style="border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:8px;">
+        <div style="font-weight:600;color:var(--text);margin-bottom:4px;">${esc(d.name||'Untitled deck')}</div>
+        <div class="dp-row"><span class="lbl">Policy</span><span>${pol.max||2} tries · ${which} attempt is graded</span></div>
+        <div class="dp-row"><span class="lbl">Answers recorded</span><span>${total}${retaken?` · ${retaken} used more than one try`:''}</span></div>
+        ${rows||'<div class="lbl" style="margin-top:4px;">Nobody has retaken anything yet.</div>'}
+      </div>`);
+    }
+    el.innerHTML=blocks.join('')+
+      `<p style="font-size:11px;color:var(--muted);margin-top:2px;">Answers themselves are not shown — this is a class's schoolwork. Which attempt was graded is what answers a dispute.</p>`;
+  }catch(e){
+    el.innerHTML=`<span style="color:var(--accent2);">Could not load attempts: ${esc(String(e.message||e))}</span>`;
   }
 }
 

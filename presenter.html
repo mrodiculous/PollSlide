@@ -3758,6 +3758,13 @@ function setUiLang(code) {
   /* Menus and panels are rebuilt from JS strings rather than static markup, so they
      have to be repainted for the new language to reach them. Guarded because most of
      these only exist once a deck is open. */
+  /* Publish it: the big screen and any other session display are usually a different
+     machine, so localStorage here reaches nothing. They read quiz_builder/$code/uiLang. */
+  try {
+    Object.values(presentations || {}).forEach(p => {
+      if (p && p.sessionCode) db.ref(`quiz_builder/${p.sessionCode}/uiLang`).set(code).catch(()=>{});
+    });
+  } catch (e) {}
   try { renderPresList(); } catch (e) {}
   try { if (typeof renderProductTabs === 'function') renderProductTabs(); } catch (e) {}
   try { if (activePresId) renderRightPanel(); } catch (e) {}
