@@ -628,14 +628,54 @@
 const FLAGS = { deckImport:true };
 const LANG_NAMES = { en:'English', es:'Español', de:'Deutsch', fr:'Français', pt:'Português', it:'Italiano' };
 let LANG = localStorage.getItem('ps_user_lang')||'en'; if(!LANG_NAMES[LANG]) LANG='en';
+/* Every language was an empty object, so t() fell back to English for all of them and
+   the language picker in the ⋯ menu changed nothing on screen. The `data-i18n`
+   attributes in the markup were never read by any code either. Both are fixed:
+   the dictionaries are filled, and applyI18n below actually applies them. */
 const I18N = { en:{
   'present.live':'● LIVE', 'present.revealed':'✓ Answer revealed', 'present.waiting':'Waiting for responses…',
   'present.responses':'{n} responses', 'present.flip':'Press → to flip', 'present.scan':'Scan to answer',
-  'present.nocam':'No camera?'
-}, es:{}, de:{}, fr:{}, pt:{}, it:{} };
+  'present.nocam':'No camera?',
+  'more.deck':'Deck', 'more.settings':'Settings', 'more.reset':'Reset tallies', 'more.language':'Language'
+}, es:{
+  'present.live':'● EN VIVO', 'present.revealed':'✓ Respuesta revelada', 'present.waiting':'Esperando respuestas…',
+  'present.responses':'{n} respuestas', 'present.flip':'Pulsa → para girar', 'present.scan':'Escanea para responder',
+  'present.nocam':'¿Sin cámara?',
+  'more.deck':'Baraja', 'more.settings':'Ajustes', 'more.reset':'Reiniciar recuentos', 'more.language':'Idioma'
+}, de:{
+  'present.live':'● LIVE', 'present.revealed':'✓ Antwort gezeigt', 'present.waiting':'Warten auf Antworten…',
+  'present.responses':'{n} Antworten', 'present.flip':'→ zum Umdrehen', 'present.scan':'Zum Antworten scannen',
+  'present.nocam':'Keine Kamera?',
+  'more.deck':'Deck', 'more.settings':'Einstellungen', 'more.reset':'Zählungen zurücksetzen', 'more.language':'Sprache'
+}, fr:{
+  'present.live':'● EN DIRECT', 'present.revealed':'✓ Réponse révélée', 'present.waiting':'En attente de réponses…',
+  'present.responses':'{n} réponses', 'present.flip':'Appuyez sur → pour retourner', 'present.scan':'Scannez pour répondre',
+  'present.nocam':'Pas de caméra ?',
+  'more.deck':'Jeu', 'more.settings':'Paramètres', 'more.reset':'Réinitialiser les décomptes', 'more.language':'Langue'
+}, pt:{
+  'present.live':'● AO VIVO', 'present.revealed':'✓ Resposta revelada', 'present.waiting':'A aguardar respostas…',
+  'present.responses':'{n} respostas', 'present.flip':'Prima → para virar', 'present.scan':'Digitalize para responder',
+  'present.nocam':'Sem câmara?',
+  'more.deck':'Baralho', 'more.settings':'Definições', 'more.reset':'Repor contagens', 'more.language':'Idioma'
+}, it:{
+  'present.live':'● IN DIRETTA', 'present.revealed':'✓ Risposta rivelata', 'present.waiting':'In attesa di risposte…',
+  'present.responses':'{n} risposte', 'present.flip':'Premi → per girare', 'present.scan':'Inquadra per rispondere',
+  'present.nocam':'Nessuna fotocamera?',
+  'more.deck':'Mazzo', 'more.settings':'Impostazioni', 'more.reset':'Azzera i conteggi', 'more.language':'Lingua'
+} };
 function t(k,v){ let s=(I18N[LANG]&&I18N[LANG][k])||I18N.en[k]||k; if(v)for(const x in v)s=s.replace('{'+x+'}',v[x]); return s; }
-function initLang(){ const sel=document.getElementById('langSel'); sel.innerHTML=Object.entries(LANG_NAMES).map(([c,n])=>`<option value="${c}" ${c===LANG?'selected':''}>${n}</option>`).join(''); }
-function setLang(l){ if(!LANG_NAMES[l])return; LANG=l; localStorage.setItem('ps_user_lang',l); if(isPresenting())renderPresentSlide(presentIdx); }
+function initLang(){ const sel=document.getElementById('langSel'); sel.innerHTML=Object.entries(LANG_NAMES).map(([c,n])=>`<option value="${c}" ${c===LANG?'selected':''}>${n}</option>`).join(''); applyI18n(); }
+/* The data-i18n attributes existed in the markup but nothing ever read them. */
+function applyI18n(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const k=el.getAttribute('data-i18n');
+    const v=(I18N[LANG]&&I18N[LANG][k])||I18N.en[k];
+    if(v!=null) el.textContent=v;
+  });
+  document.documentElement.lang=LANG;
+}
+function setLang(l){ if(!LANG_NAMES[l])return; LANG=l; localStorage.setItem('ps_user_lang',l);
+  applyI18n(); if(isPresenting())renderPresentSlide(presentIdx); }
 
 /* ─── Themes (registry; scoped to slides via CSS vars on #present / canvas) ─────*/
 const THEMES = {

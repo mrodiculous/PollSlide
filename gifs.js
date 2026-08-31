@@ -111,20 +111,27 @@
   }
   const gifsEnabled = (raw) => { const p = gifPolicy(raw); return p.question || p.answer; };
 
-  /* One Tenor result → the small record stored on the question. Everything the renderer
-   * and the audit log need, and nothing else. */
-  function normalizeResult(r) {
+  /* PROVIDER SHAPES LIVE HERE AND NOWHERE ELSE.
+   * Tenor and Giphy return completely different JSON. Keeping both normalisers in one
+   * place means adding a third provider is a change to this file and the endpoint, and
+   * to nothing else — the presenter, the review UI and the slide renderer only ever see
+   * the normalised record below.
+   *
+   * THE RECORD: { id, url, still, width, height, alt, source }
+   *   url    the animation
+   *   still  a single frame, for anyone who asked for reduced motion
+   *   alt    a real sentence. A result without one is dropped in pickBest.
+   */
+  function normalizeTenor(r) {
     if (!r || typeof r !== 'object') return null;
     const media = (r.media_formats || r.media || {});
     const pick = (...names) => {
       for (const n of names) {
         const m = media[n];
-        const url = m && (m.url || (Array.isArray(m) ? null : null));
-        if (url) return { url, dims: m.dims || null };
+        if (m && m.url) return { url: m.url, dims: m.dims || null };
       }
       return null;
     };
-    // gif is the animation; gifpreview/tinygif is the still shown under reduced motion.
     const anim = pick('tinygif', 'gif', 'mediumgif');
     const still = pick('gifpreview', 'tinygifpreview', 'nanogifpreview');
     if (!anim) return null;
@@ -134,19 +141,55 @@
       still: still ? still.url : null,
       width: (anim.dims && anim.dims[0]) || null,
       height: (anim.dims && anim.dims[1]) || null,
-      // content_description is Tenor's own alt text — a real sentence, not a filename.
       alt: String(r.content_description || r.title || '').slice(0, 140),
       source: 'tenor',
     };
+  }
+
+  /* Giphy. Different enough to be worth spelling out: images are a named map of
+   * objects with STRING width/height, and the alt text is `alt_text` — a newer field
+   * that is often absent, in which case `title` is the only thing left. */
+  function normalizeGiphy(r) {
+    if (!r || typeof r !== 'object') return null;
+    const im = r.images || {};
+    const pick = (...names) => {
+      for (const n of names) {
+        const m = im[n];
+        if (m && m.url) return { url: m.url, w: parseInt(m.width, 10) || null, h: parseInt(m.height, 10) || null };
+      }
+      return null;
+    };
+    const anim = pick('fixed_height_small', 'downsized', 'fixed_height', 'original');
+    const still = pick('fixed_height_small_still', 'downsized_still', 'fixed_height_still', 'original_still');
+    if (!anim) return null;
+    return {
+      id: String(r.id || ''),
+      url: anim.url,
+      still: still ? still.url : null,
+      width: anim.w, height: anim.h,
+      alt: String(r.alt_text || r.title || '').slice(0, 140),
+      source: 'giphy',
+    };
+  }
+
+  // Raw provider list → normalised records. The ONE place a provider name is mapped.
+  function normalizeMany(list, source) {
+    const fn = source === 'giphy' ? normalizeGiphy : normalizeTenor;
+    return (Array.isArray(list) ? list : []).map(fn).filter(Boolean);
   }
 
   /* Choose from the candidates. Wildly wide or tall GIFs break the slide layout, and a
    * result with no description cannot be given alt text — which would make the slide
    * inaccessible to a student using a screen reader, so it is skipped rather than
    * shipped with an empty alt. */
-  function pickBest(results, opts) {
+  function pickBest(records, opts) {
     const o = opts || {};
-    const list = (Array.isArray(results) ? results : []).map(normalizeResult).filter(Boolean);
+    /* These are ALREADY normalised — the endpoint does that, because only the server
+     * knows which provider answered. An earlier version normalised here as well, so
+     * every real result was normalised twice and came back null; it only looked fine
+     * because the test stub returned raw provider JSON instead of what the endpoint
+     * actually sends. Hence the contract is stated, and tested, rather than assumed. */
+    const list = (Array.isArray(records) ? records : []).filter(g => g && g.url);
     const usable = list.filter(g => {
       if (!g.alt) return false;
       if (!g.width || !g.height) return true;              // unknown dims: allow
@@ -164,7 +207,7 @@
   return {
   SAFE_FILTER, MAX_TERM_WORDS, REACTION,
   searchTerm, answerTerm, answerIsPicturable, gifPolicy, gifsEnabled,
-  normalizeResult, pickBest,
+  normalizeTenor, normalizeGiphy, normalizeMany, pickBest,
 };
 
 });

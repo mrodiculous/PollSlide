@@ -3,7 +3,7 @@
 Living punch list. Updated as things land. Owner-only items are things only Rod can do
 (they need a console login, a card, or a lawyer).
 
-Last updated: 2026-08-31 (seventh pass)
+Last updated: 2026-08-31 (ninth pass)
 
 ---
 
@@ -22,11 +22,11 @@ Last updated: 2026-08-31 (seventh pass)
 
 | | Item | Notes |
 |---|---|---|
-| ⬜ | **Presenter UI has no language switcher** | `pollyLang` sets what language Polly *writes questions in* — a content setting. The presenter interface itself has **0 translated strings**. A Spanish-speaking teacher builds in English and their students answer in Spanish. |
-| ⬜ | **PresentSlide's switcher is buried and thin** | It exists at `⋯ → Settings → 🌐 Language` but covers **7 strings** (the presentation overlay only). Compare: `answer.html` has 180. |
+| ✅ | Presenter interface language | `ui-lang.js` — 152 strings × 5 languages, selector in the user menu, persisted. Keyed by the exact English text. Only `data-i18n`-tagged elements are touched, so a deck title or student name is untranslatable **by construction**. |
+| ✅ | PresentSlide's switcher actually works now | It was a shell: all five non-English dictionaries were `{}` and the `data-i18n` attributes were never read by any code, so changing language did nothing. Dictionaries filled, `applyI18n()` written and wired. |
 | ⬜ | **`live.html` (Big screen) has no i18n at all** | No selector, no strings — and it's the screen the whole room looks at. |
 | ⬜ | Retake history has no admin view | Classes are now in the user detail panel; attempts are not. If a grade is disputed there's nothing to look at. |
-| ✅ | Contextual GIFs | `gifs.js` + `api/gif-search.js`. Per-deck toggles for question and answer GIFs, fetched at build time and reviewed before presenting. Tenor with the content filter locked server-side. **Needs `TENOR_API_KEY` in Vercel.** |
+| ✅ | Contextual GIFs | `gifs.js` + `api/gif-search.js`. Per-deck toggles, fetched at build time and reviewed before presenting. **Provider-pluggable** since Tenor stopped issuing keys — set `GIPHY_API_KEY` (or `TENOR_API_KEY`) and redeploy. Safety rating locked server-side either way. |
 
 ## Admin
 
@@ -48,6 +48,7 @@ Last updated: 2026-08-31 (seventh pass)
 | | Item | Why it needs you |
 |---|---|---|
 | ✅ | Cookie banner on mobile | Fixed via `consent-mobile.css`, linked from all 15 pages. Uses `body #…` specificity rather than `!important`, so it beats the runtime-injected style regardless of load order. Verified: 344px → 168px. Still worth merging into `consent.js` one day and deleting the file. |
+| ⬜ | **Rotate the Giphy key, then set it in Vercel** | The key was hardcoded in `presenter.html` — public in every browser and in the GitHub history. Removed from source and both search paths now go through `api/gif-search.js`. Rotate at developers.giphy.com, set `GIPHY_API_KEY` in Vercel, redeploy. See `GIF-SETUP.md`. |
 | ⬜ | Publish `database-rules.json` | Sent, and now validated by `scripts/qa-rules.js`. Retake history (`sessions/$code/attempts`) is silently denied until published. |
 | ⬜ | Submit sitemap to Search Console | Needs the Google account. |
 | ⬜ | Counsel review of legal docs | Terms/privacy wording. |

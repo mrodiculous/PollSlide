@@ -13,6 +13,7 @@
 <script src="/roster.js?v=1"></script>
 <script src="/retakes.js?v=1"></script>
 <script src="/gifs.js?v=1"></script>
+<script src="/ui-lang.js?v=1"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root {
@@ -463,10 +464,10 @@
   <div style="width:100%;max-width:400px;background:var(--surface);border:1px solid var(--border2);border-radius:18px;padding:36px 30px;">
     <div style="display:flex;align-items:center;gap:9px;margin-bottom:6px;">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="30" height="30" style="flex-shrink:0;border-radius:9px;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>
-      <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:21px;">PollSlide</span>
+      <span style="font-family:'Syne',sans-serif;font-weight:800;font-size:21px;" data-i18n>PollSlide</span>
     </div>
-    <h2 id="authTitle" style="font-family:'Syne',sans-serif;font-size:21px;font-weight:800;margin:18px 0 6px;">Welcome back</h2>
-    <p id="authSubtitle" style="color:var(--muted);font-size:14px;margin-bottom:22px;">Sign in to manage your presentations.</p>
+    <h2 id="authTitle" style="font-family:'Syne',sans-serif;font-size:21px;font-weight:800;margin:18px 0 6px;" data-i18n>Welcome back</h2>
+    <p id="authSubtitle" style="color:var(--muted);font-size:14px;margin-bottom:22px;" data-i18n>Sign in to manage your presentations.</p>
 
     <button onclick="signInGoogle()" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:16px;">
       <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 01-1.8 2.72v2.26h2.92c1.71-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.34A9 9 0 009 18z"/><path fill="#FBBC05" d="M3.97 10.72c-.18-.54-.28-1.12-.28-1.72s.1-1.18.28-1.72V4.94H.96A9 9 0 000 9c0 1.45.35 2.83.96 4.06l3.01-2.34z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 00.96 4.94l3.01 2.34C4.68 5.16 6.66 3.58 9 3.58z"/></svg>
@@ -477,18 +478,18 @@
       <div style="flex:1;height:1px;background:var(--border);"></div>OR<div style="flex:1;height:1px;background:var(--border);"></div>
     </div>
 
-    <input type="email" id="authEmail" placeholder="Email address" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:15px;outline:none;margin-bottom:10px;">
-    <input type="password" id="authPass" placeholder="Password" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:15px;outline:none;margin-bottom:14px;">
+    <input type="email" id="authEmail" placeholder="Email address data-i18n-ph" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:15px;outline:none;margin-bottom:10px;">
+    <input type="password" id="authPass" placeholder="Password data-i18n-ph" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:15px;outline:none;margin-bottom:14px;">
     <label id="ageGateRow" style="display:none;align-items:flex-start;gap:8px;margin:0 0 14px;font-size:12px;color:var(--muted);line-height:1.45;cursor:pointer;text-align:left;">
       <input type="checkbox" id="ageConfirm" style="margin-top:2px;flex-shrink:0;">
       <span>I'm at least 16 years old, and I agree to the <a href="https://pollslide.com/terms" target="_blank" rel="noopener" style="color:var(--accent);">Terms</a> and <a href="https://pollslide.com/privacy" target="_blank" rel="noopener" style="color:var(--accent);">Privacy Policy</a>.</span>
     </label>
-    <button id="authSubmitBtn" onclick="submitAuth()" style="width:100%;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Sign In</button>
+    <button id="authSubmitBtn" onclick="submitAuth()" style="width:100%;padding:12px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-family:'Syne',sans-serif;font-weight:700;font-size:14px;cursor:pointer;" data-i18n>Sign In</button>
 
     <p id="authError" style="color:var(--accent2);font-size:13px;margin-top:12px;text-align:center;min-height:18px;"></p>
 
     <p style="text-align:center;font-size:13px;color:var(--muted);margin-top:8px;">
-      <span id="authToggleText">New to PollSlide?</span>
+      <span id="authToggleText" data-i18n>New to PollSlide?</span>
       <a id="authToggleLink" onclick="toggleAuthMode()" style="color:var(--accent);cursor:pointer;font-weight:600;">Create an account</a>
     </p>
     <p style="text-align:center;font-size:12px;color:var(--muted);margin-top:10px;">
@@ -500,13 +501,13 @@
 <!-- ── TOP BAR ── -->
 <div class="topbar">
   <div class="brand-switch" id="brandSwitcher" style="position:relative;flex-shrink:0;">
-    <button class="logo" onclick="toggleBrandMenu()" title="Switch product" style="background:none;border:none;cursor:pointer;padding:4px 8px 4px 4px;border-radius:9px;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg><span id="brandName">PollSlide</span><span style="color:var(--muted);font-size:10px;margin-left:3px;">▾</span></button>
+    <button class="logo" onclick="toggleBrandMenu()" title="Switch product data-i18n-title" style="background:none;border:none;cursor:pointer;padding:4px 8px 4px 4px;border-radius:9px;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg><span id="brandName" data-i18n>PollSlide</span><span style="color:var(--muted);font-size:10px;margin-left:3px;">▾</span></button>
     <div id="brandMenu" style="display:none;position:absolute;top:calc(100% + 6px);left:0;background:var(--surface);border:1px solid var(--border2);border-radius:12px;min-width:248px;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,0.4);padding:6px;"></div>
   </div>
-  <div class="active-pres" id="activePres">Select a presentation</div>
+  <div class="active-pres" id="activePres" data-i18n>Select a presentation</div>
   <div class="save-status">
     <span class="save-dot" id="saveDot"></span>
-    <span id="saveText">Saved</span>
+    <span id="saveText" data-i18n>Saved</span>
   </div>
   <div class="topbar-right">
     <!-- ONE primary action. Everything that isn't "start the thing" lives behind ⋯,
@@ -514,30 +515,30 @@
          before — same ids, same handlers — just relocated, so every enable/disable
          and sync function keeps working untouched. -->
     <button class="btn btn-primary" id="presentBtn" onclick="openPresentPicker()" disabled
-            title="Present this deck — choose where it goes">▶ Present</button>
+            title="Present this deck — choose where it goes data-i18n-title" data-i18n>▶ Present</button>
 
     <div class="more-wrap" id="moreWrap">
-      <button class="btn btn-ghost" id="moreBtn" onclick="toggleMoreMenu()" title="Everything else">⋯</button>
+      <button class="btn btn-ghost" id="moreBtn" onclick="toggleMoreMenu()" title="Everything else data-i18n-title">⋯</button>
       <div class="more-menu" id="moreMenu">
-        <div class="more-group">While you present</div>
-        <button class="btn btn-ghost" id="bigScreenBtn" onclick="openBigScreen()" disabled title="Open the big-screen join + live results view (projector / second screen)">🖥️ Big screen</button>
-        <button class="btn btn-ghost" id="teamModeBtn" onclick="toggleTeamMode()" disabled title="Team play (pub-quiz mode): the audience joins as teams and the leaderboard ranks teams. Team score = average of the members' scores, so team size doesn't matter.">👥 Teams: Off</button>
-        <button class="btn btn-ghost" id="qaBtn" onclick="openQAPanel()" disabled title="Audience Q&amp;A — questions & upvotes">💬 Q&amp;A</button>
-        <div class="more-group">Send it out</div>
-        <button class="btn btn-primary" id="shareBtn" onclick="openShareModal()" style="display:none;" title="Share link / QR for this survey">🔗 Share</button>
-        <button class="btn btn-ghost" id="studyNowBtn" onclick="studyNow()" style="display:none;" title="Study this set yourself, right now — spaced repetition, streaks and study games">📚 Study now</button>
-        <button class="btn btn-ghost" id="makeStudyBtn" onclick="studyThisDeck()" style="display:none;" title="Turn this deck into a StudySlide set of flashcards you can revise with">📚 Study this deck</button>
-        <div class="more-group">Results</div>
-        <button class="btn btn-ghost" id="reportBtn" onclick="window.open('/report'+(activePresId?('?pres='+encodeURIComponent(activePresId)):''),'_blank')" disabled title="Open the full report">📊 Report</button>
-        <button class="btn btn-reset" id="resetBtn" onclick="confirmResetAll()" disabled>↺ Reset All Tallies</button>
+        <div class="more-group" data-i18n>While you present</div>
+        <button class="btn btn-ghost" id="bigScreenBtn" onclick="openBigScreen()" disabled title="Open the big-screen join + live results view (projector / second screen)" data-i18n>🖥️ Big screen</button>
+        <button class="btn btn-ghost" id="teamModeBtn" onclick="toggleTeamMode()" disabled title="Team play (pub-quiz mode): the audience joins as teams and the leaderboard ranks teams. Team score = average of the members' scores, so team size doesn't matter." data-i18n>👥 Teams: Off</button>
+        <button class="btn btn-ghost" id="qaBtn" onclick="openQAPanel()" disabled title="Audience Q&amp;A — questions & upvotes data-i18n-title" data-i18n>💬 Q&amp;A</button>
+        <div class="more-group" data-i18n>Send it out</div>
+        <button class="btn btn-primary" id="shareBtn" onclick="openShareModal()" style="display:none;" title="Share link / QR for this survey data-i18n-title" data-i18n>🔗 Share</button>
+        <button class="btn btn-ghost" id="studyNowBtn" onclick="studyNow()" style="display:none;" title="Study this set yourself, right now — spaced repetition, streaks and study games" data-i18n>📚 Study now</button>
+        <button class="btn btn-ghost" id="makeStudyBtn" onclick="studyThisDeck()" style="display:none;" title="Turn this deck into a StudySlide set of flashcards you can revise with" data-i18n>📚 Study this deck</button>
+        <div class="more-group" data-i18n>Results</div>
+        <button class="btn btn-ghost" id="reportBtn" onclick="window.open('/report'+(activePresId?('?pres='+encodeURIComponent(activePresId)):''),'_blank')" disabled title="Open the full report data-i18n-title" data-i18n>📊 Report</button>
+        <button class="btn btn-reset" id="resetBtn" onclick="confirmResetAll()" disabled data-i18n>↺ Reset All Tallies</button>
         <div class="more-sep"></div>
-        <button class="btn btn-ghost" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark">🌙</button>
+        <button class="btn btn-ghost" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark data-i18n-title">🌙</button>
       </div>
     </div>
 
     <!-- User chip — shows email, opens a proper dropdown menu -->
     <div id="userChip" style="display:none;position:relative;">
-      <button id="userBtn" onclick="toggleUserMenu()" title="Account"
+      <button id="userBtn" onclick="toggleUserMenu()" title="Account data-i18n-title"
         style="display:flex;align-items:center;gap:7px;padding:6px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer;max-width:220px;overflow:hidden;">
         <span style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;" id="userAvatar">?</span>
         <span id="userEmailDisplay" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
@@ -565,13 +566,13 @@
   <div style="max-width:900px;margin:0 auto;padding:24px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
       <div>
-        <h1 style="font-family:'Syne',sans-serif;font-weight:800;font-size:24px;" id="reportTitle">Response Report</h1>
+        <h1 style="font-family:'Syne',sans-serif;font-weight:800;font-size:24px;" id="reportTitle" data-i18n>Response Report</h1>
         <div style="color:var(--muted);font-size:13px;" id="reportMeta"></div>
       </div>
       <div style="display:flex;gap:8px;">
-        <button class="btn btn-ghost" onclick="exportCSV()">⬇ CSV</button>
-        <button class="btn btn-ghost" onclick="printReport()">🖨 Print / PDF</button>
-        <button class="btn btn-ghost" onclick="closeReport()">✕ Close</button>
+        <button class="btn btn-ghost" onclick="exportCSV()" data-i18n>⬇ CSV</button>
+        <button class="btn btn-ghost" onclick="printReport()" data-i18n>🖨 Print / PDF</button>
+        <button class="btn btn-ghost" onclick="closeReport()" data-i18n>✕ Close</button>
       </div>
     </div>
     <div id="reportStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:24px;"></div>
@@ -593,38 +594,38 @@
            never changes height as you go deeper. -->
       <div class="folder-ribbon" id="folderRibbon"></div>
       <div class="deck-toolbar">
-        <input id="deckSearch" type="search" placeholder="Search decks and questions…" autocomplete="off"
-               oninput="onDeckSearch(this.value)" title="Searches every folder, not just this one">
-        <select id="deckSort" onchange="onDeckSort(this.value)" title="Sort order">
-          <option value="recent">Recent</option>
-          <option value="created">Newest</option>
+        <input id="deckSearch" type="search" placeholder="Search decks and questions… data-i18n-ph" autocomplete="off"
+               oninput="onDeckSearch(this.value)" title="Searches every folder, not just this one data-i18n-title">
+        <select id="deckSort" onchange="onDeckSort(this.value)" title="Sort order data-i18n-title">
+          <option value="recent" data-i18n>Recent</option>
+          <option value="created" data-i18n>Newest</option>
           <option value="name">A–Z</option>
         </select>
-        <button class="icon-btn" id="selectModeBtn" onclick="toggleSelectMode()" title="Select several decks">☑</button>
+        <button class="icon-btn" id="selectModeBtn" onclick="toggleSelectMode()" title="Select several decks data-i18n-title">☑</button>
       </div>
       <div class="bulk-bar" id="bulkBar" style="display:none;">
-        <span id="bulkCount">0 selected</span>
-        <button class="btn btn-ghost btn-sm" id="bulkMove" onclick="bulkMove()">📁 Move</button>
-        <button class="btn btn-ghost btn-sm" id="bulkArchive" onclick="bulkArchive()">📦 Archive</button>
+        <span id="bulkCount" data-i18n>0 selected</span>
+        <button class="btn btn-ghost btn-sm" id="bulkMove" onclick="bulkMove()" data-i18n>📁 Move</button>
+        <button class="btn btn-ghost btn-sm" id="bulkArchive" onclick="bulkArchive()" data-i18n>📦 Archive</button>
         <button class="btn btn-ghost btn-sm" id="bulkDelete" onclick="bulkDelete()" style="color:var(--accent2);">🗑</button>
       </div>
       <div class="collab-bar" id="collabBar" style="display:none;"></div>
       <div class="pres-list" id="presList">
-        <div style="padding:16px;text-align:center;color:var(--muted);font-size:12px;">No presentations yet.</div>
+        <div style="padding:16px;text-align:center;color:var(--muted);font-size:12px;" data-i18n>No presentations yet.</div>
       </div>
       <div style="padding:8px;border-top:1px solid var(--border);flex-shrink:0;">
-        <button class="btn btn-primary" id="createPresBtn" style="width:100%;justify-content:center;padding:9px 14px;font-size:12px;" onclick="createPresentation()">+ Create New</button>
+        <button class="btn btn-primary" id="createPresBtn" style="width:100%;justify-content:center;padding:9px 14px;font-size:12px;" onclick="createPresentation()" data-i18n>+ Create New</button>
         <div style="display:flex;gap:6px;margin-top:6px;">
-          <button class="btn btn-ghost" onclick="createFolder()" style="flex:1;justify-content:center;padding:6px 8px;font-size:11px;color:var(--muted);" title="Group decks by class, unit or event">📁 New folder</button>
-          <button class="btn btn-ghost" id="archivedBtn" onclick="toggleArchivedView()" style="flex:1;justify-content:center;padding:6px 8px;font-size:11px;color:var(--muted);" title="Decks you've put away without deleting">📦 Archived</button>
+          <button class="btn btn-ghost" onclick="createFolder()" style="flex:1;justify-content:center;padding:6px 8px;font-size:11px;color:var(--muted);" title="Group decks by class, unit or event data-i18n-title" data-i18n>📁 New folder</button>
+          <button class="btn btn-ghost" id="archivedBtn" onclick="toggleArchivedView()" style="flex:1;justify-content:center;padding:6px 8px;font-size:11px;color:var(--muted);" title="Decks you've put away without deleting data-i18n-title" data-i18n>📦 Archived</button>
         </div>
-        <button class="btn btn-ghost" id="inboxBtn" style="display:none;width:100%;justify-content:center;padding:6px 14px;font-size:11px;margin-top:6px;color:var(--accent);border-color:rgba(108,99,255,0.4);" onclick="openInbox()" title="Decks other people have shared with you">📥 Shared with me</button>
-        <button class="btn btn-ghost" id="trashBtn" style="width:100%;justify-content:center;padding:6px 14px;font-size:11px;margin-top:6px;color:var(--muted);" onclick="openTrash()" title="Restore a deleted presentation">🗑 Recently deleted</button>
+        <button class="btn btn-ghost" id="inboxBtn" style="display:none;width:100%;justify-content:center;padding:6px 14px;font-size:11px;margin-top:6px;color:var(--accent);border-color:rgba(108,99,255,0.4);" onclick="openInbox()" title="Decks other people have shared with you data-i18n-title" data-i18n>📥 Shared with me</button>
+        <button class="btn btn-ghost" id="trashBtn" style="width:100%;justify-content:center;padding:6px 14px;font-size:11px;margin-top:6px;color:var(--muted);" onclick="openTrash()" title="Restore a deleted presentation data-i18n-title" data-i18n>🗑 Recently deleted</button>
       </div>
     </div>
 
     <!-- ── VERTICAL RESIZE: presentations ↔ questions ── -->
-    <div class="resize-handle-y" id="resizeVertical" title="Drag to resize"></div>
+    <div class="resize-handle-y" id="resizeVertical" title="Drag to resize data-i18n-title"></div>
 
     <!-- QUESTIONS panel -->
     <div class="q-panel">
@@ -632,18 +633,18 @@
         <span class="panel-hd-title">Questions (<span id="qCount">0</span>)</span>
       </div>
       <div class="q-list" id="qList">
-        <div style="padding:16px;text-align:center;color:var(--muted);font-size:12px;">Select a presentation first.</div>
+        <div style="padding:16px;text-align:center;color:var(--muted);font-size:12px;" data-i18n>Select a presentation first.</div>
       </div>
       <div class="sidebar-foot">
-        <button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:11px;" id="addQBtn2" onclick="addQuestion()" disabled>+ Add Question</button>
-        <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:11px;margin-top:6px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#fff;" onclick="openPolly()">✨ Ask Polly</button>
+        <button class="btn btn-ghost" style="width:100%;justify-content:center;font-size:11px;" id="addQBtn2" onclick="addQuestion()" disabled data-i18n>+ Add Question</button>
+        <button class="btn btn-primary" style="width:100%;justify-content:center;font-size:11px;margin-top:6px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#fff;" onclick="openPolly()" data-i18n>✨ Ask Polly</button>
       </div>
     </div>
 
   </div>
 
   <!-- ── HORIZONTAL RESIZE: sidebar ↔ center ── -->
-  <div class="resize-handle-x" id="resizeLeft" title="Drag to resize"></div>
+  <div class="resize-handle-x" id="resizeLeft" title="Drag to resize data-i18n-title"></div>
 
   <!-- ── CENTER ── -->
   <div class="center-panel">
@@ -655,26 +656,26 @@
     <div class="setup">
       <div class="setup-icon">🎯</div>
       <div>
-        <h2 style="font-family:'Syne',sans-serif;font-size:21px;font-weight:800;margin-bottom:8px;">Welcome to PollSlide</h2>
+        <h2 style="font-family:'Syne',sans-serif;font-size:21px;font-weight:800;margin-bottom:8px;" data-i18n>Welcome to PollSlide</h2>
         <p style="color:var(--muted);font-size:14px;line-height:1.7;margin-bottom:20px;">Each presentation has its own questions and session code.<br>Create one in the sidebar to get started.</p>
-        <button class="btn btn-primary" style="font-size:14px;padding:11px 28px;justify-content:center;" onclick="createPresentation()">+ Create Your First Presentation</button>
+        <button class="btn btn-primary" style="font-size:14px;padding:11px 28px;justify-content:center;" onclick="createPresentation()" data-i18n>+ Create Your First Presentation</button>
       </div>
     </div>
   </div>
   </div>
 
   <!-- ── HORIZONTAL RESIZE: center ↔ right ── -->
-  <div class="resize-handle-x" id="resizeRight" title="Drag to resize"></div>
+  <div class="resize-handle-x" id="resizeRight" title="Drag to resize data-i18n-title"></div>
 
   <!-- ── RIGHT ── -->
   <div class="right-panel" id="rightPanel">
     <div class="right-hd">
-      <span style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);">Live Results</span>
+      <span style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);" data-i18n>Live Results</span>
       <div style="display:flex;align-items:center;gap:8px;">
         <span id="respCounter" style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent);font-size:12px;">—</span>
         <button onclick="toggleLiveDetail()" id="liveDetailBtn" title="Live results are showing — click to hide them until you reveal" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">👁</button>
-        <button onclick="toggleSfx()" id="sfxBtn" title="Sound effects on/off" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">🔊</button>
-        <button onclick="toggleMaximize()" id="maxBtn" title="Maximize results (great for projecting)" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">⛶</button>
+        <button onclick="toggleSfx()" id="sfxBtn" title="Sound effects on/off data-i18n-title" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">🔊</button>
+        <button onclick="toggleMaximize()" id="maxBtn" title="Maximize results (great for projecting) data-i18n-title" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">⛶</button>
       </div>
     </div>
     <div id="revealBar" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border);min-height:20px;"></div>
@@ -684,7 +685,7 @@
     <div class="right-foot">
       <div class="sect-title">Respondents (<span id="pCount">0</span>)</div>
       <div id="pList" style="max-height:180px;overflow-y:auto;">
-        <div style="color:var(--muted);font-size:12px;">No responses yet.</div>
+        <div style="color:var(--muted);font-size:12px;" data-i18n>No responses yet.</div>
       </div>
     </div>
   </div>
@@ -694,11 +695,11 @@
 <!-- Reset Tally Modal -->
 <div class="overlay hidden" id="resetModal">
   <div class="modal" style="max-width:400px;">
-    <h2>Reset Tally?</h2>
+    <h2 data-i18n>Reset Tally?</h2>
     <p>This clears all scores, responses, and answer history for <strong id="resetPresName" style="color:var(--text);"></strong>. Your questions stay intact.</p>
     <div class="modal-btns">
-      <button class="btn btn-ghost" onclick="closeReset()">Cancel</button>
-      <button class="btn btn-danger" onclick="doReset()">Yes, Reset Everything</button>
+      <button class="btn btn-ghost" onclick="closeReset()" data-i18n>Cancel</button>
+      <button class="btn btn-danger" onclick="doReset()" data-i18n>Yes, Reset Everything</button>
     </div>
   </div>
 </div>
@@ -706,30 +707,30 @@
 <!-- Polly AI Modal -->
 <div class="overlay hidden" id="pollyModal" onclick="if(event.target===this)closePolly()">
   <div class="modal" style="max-width:460px;">
-    <h2 id="pollyTitle">✨ Polly</h2>
-    <p id="pollySub" style="color:var(--muted);">Describe a topic and Polly drafts ready-to-go questions.</p>
+    <h2 id="pollyTitle" data-i18n>✨ Polly</h2>
+    <p id="pollySub" style="color:var(--muted);" data-i18n>Describe a topic and Polly drafts ready-to-go questions.</p>
     <div id="pollyBalance" style="font-size:12px;color:var(--muted);margin-bottom:12px;display:none;"></div>
-    <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Topic or description <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);">(be as specific as you like — ⌘/Ctrl+Enter to generate)</span></label>
+    <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Topic or description <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);" data-i18n>(be as specific as you like — ⌘/Ctrl+Enter to generate)</span></label>
     <textarea id="pollyTopic" maxlength="1000" rows="3" placeholder="e.g. 1990s British sitcoms — mix of easy and hard, include a couple on theme tunes, skip Only Fools and Horses   (optional if you add material below)" style="width:100%;min-height:78px;margin-bottom:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 12px;resize:vertical;font-family:inherit;box-sizing:border-box;" onkeydown="if(event.key==='Enter'&&(event.metaKey||event.ctrlKey))runPolly()"></textarea>
     <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">From your material <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted);">(optional — drop a PDF or paste notes; Polly builds questions from it)</span></label>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
       <input type="file" id="pollyPdf" accept="application/pdf,.pdf" onchange="pollyReadPdf(this)" style="display:none;">
-      <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('pollyPdf').click()" style="flex-shrink:0;">📄 Upload PDF</button>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('pollyPdf').click()" style="flex-shrink:0;" data-i18n>📄 Upload PDF</button>
       <span id="pollyMatInfo" style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
     </div>
-    <textarea id="pollyNotes" placeholder="…or paste lecture notes / an article here" style="width:100%;min-height:64px;margin-bottom:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 12px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea>
+    <textarea id="pollyNotes" placeholder="…or paste lecture notes / an article here data-i18n-ph" style="width:100%;min-height:64px;margin-bottom:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 12px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea>
     <div style="display:flex;gap:10px;margin-bottom:12px;">
       <div style="flex:1;">
-        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">How many</label>
+        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;" data-i18n>How many</label>
         <input type="number" id="pollyCount" min="1" max="30" value="5" style="width:100%;">
       </div>
       <div style="flex:1;">
-        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Difficulty</label>
-        <select id="pollyDiff" style="width:100%;"><option value="">Any</option><option>Easy</option><option selected>Medium</option><option>Hard</option></select>
+        <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;" data-i18n>Difficulty</label>
+        <select id="pollyDiff" style="width:100%;"><option value="" data-i18n>Any</option><option data-i18n>Easy</option><option selected data-i18n>Medium</option><option data-i18n>Hard</option></select>
       </div>
     </div>
-    <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Style</label>
-    <select id="pollyStyle" style="width:100%;margin-bottom:12px;"><option value="">Auto</option><option>Fun &amp; casual</option><option>Professional</option><option>Trivia challenge</option><option>Thought-provoking</option><option>Quick &amp; punchy</option></select>
+    <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;" data-i18n>Style</label>
+    <select id="pollyStyle" style="width:100%;margin-bottom:12px;"><option value="" data-i18n>Auto</option><option data-i18n>Fun &amp; casual</option><option data-i18n>Professional</option><option data-i18n>Trivia challenge</option><option data-i18n>Thought-provoking</option><option data-i18n>Quick &amp; punchy</option></select>
     <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;">Language <span style="font-weight:400;text-transform:none;letter-spacing:0;">(questions are written in this language; your audience’s answer page matches it)</span></label>
     <select id="pollyLang" onchange="setPresLanguage(this.value)" style="width:100%;margin-bottom:12px;"></select>
     <div id="pollyStatus" style="display:none;margin-top:12px;padding:9px 12px;border-radius:8px;background:var(--surface2);border:1px solid var(--border2);font-size:13px;color:var(--text);"></div>
@@ -738,8 +739,8 @@
       <span>You're using AI. Questions are <b>AI-generated drafts</b> — please review and edit them before you present. <a href="https://pollslide.com/terms#ai" target="_blank" rel="noopener" style="color:var(--accent);">How we use AI</a></span>
     </div>
     <div class="modal-btns">
-      <button class="btn btn-ghost" onclick="closePolly()">Cancel</button>
-      <button class="btn btn-primary" id="pollyGoBtn" onclick="runPolly()">✨ Generate</button>
+      <button class="btn btn-ghost" onclick="closePolly()" data-i18n>Cancel</button>
+      <button class="btn btn-primary" id="pollyGoBtn" onclick="runPolly()" data-i18n>✨ Generate</button>
     </div>
   </div>
 </div>
@@ -747,22 +748,22 @@
 <!-- Copy Presentation To Another Product Modal -->
 <div class="overlay hidden" id="copyPresModal" onclick="if(event.target===this)document.getElementById('copyPresModal').classList.add('hidden')">
   <div class="modal" style="max-width:420px;">
-    <h2>Copy to another tab</h2>
-    <p id="copyPresDesc" style="color:var(--muted);">Make a copy of this set as a different product.</p>
+    <h2 data-i18n>Copy to another tab</h2>
+    <p id="copyPresDesc" style="color:var(--muted);" data-i18n>Make a copy of this set as a different product.</p>
     <div id="copyPresOptions" style="display:flex;flex-direction:column;gap:8px;margin-bottom:6px;"></div>
-    <div class="modal-btns"><button class="btn btn-ghost" onclick="document.getElementById('copyPresModal').classList.add('hidden')">Cancel</button></div>
+    <div class="modal-btns"><button class="btn btn-ghost" onclick="document.getElementById('copyPresModal').classList.add('hidden')" data-i18n>Cancel</button></div>
   </div>
 </div>
 
 <!-- Reset Presentation Tally Modal -->
 <div class="overlay hidden" id="resetPresModal">
   <div class="modal" style="max-width:400px;">
-    <h2>Reset Presentation Tally?</h2>
+    <h2 data-i18n>Reset Presentation Tally?</h2>
     <p>This clears all scores and responses for <strong id="resetPresModalName" style="color:var(--text);"></strong>. All questions stay live and QR codes keep working.</p>
     <p style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:12px;color:var(--muted);">🗄 A dated copy is saved to <strong style="color:var(--text);">History</strong> first — you can download or recover it anytime.</p>
     <div class="modal-btns">
-      <button class="btn btn-ghost" onclick="closeResetPres()">Cancel</button>
-      <button class="btn btn-danger" onclick="doResetPres()">Yes, Reset Tally</button>
+      <button class="btn btn-ghost" onclick="closeResetPres()" data-i18n>Cancel</button>
+      <button class="btn btn-danger" onclick="doResetPres()" data-i18n>Yes, Reset Tally</button>
     </div>
   </div>
 </div>
@@ -772,16 +773,16 @@
   <div class="modal" style="max-width:560px;padding:0;overflow:hidden;">
     <div style="padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;">
       <div style="min-width:0;">
-        <h2 style="margin:0 0 2px;">👥 Team admin</h2>
-        <p style="margin:0;font-size:12px;color:var(--muted);" id="teamSub">Manage members and invites for your workspace.</p>
+        <h2 style="margin:0 0 2px;" data-i18n>👥 Team admin</h2>
+        <p style="margin:0;font-size:12px;color:var(--muted);" id="teamSub" data-i18n>Manage members and invites for your workspace.</p>
       </div>
       <div id="teamSeats" style="flex-shrink:0;font-family:Syne,sans-serif;font-weight:800;font-size:13px;background:var(--surface2);border:1px solid var(--border2);border-radius:100px;padding:6px 12px;">—</div>
     </div>
     <div id="teamBody" style="max-height:62vh;overflow-y:auto;padding:6px 0;">
-      <div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;">Loading workspace…</div>
+      <div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;" data-i18n>Loading workspace…</div>
     </div>
     <div style="padding:12px 20px;border-top:1px solid var(--border);text-align:right;">
-      <button class="btn btn-ghost" onclick="document.getElementById('teamModal').classList.add('hidden')">Close</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('teamModal').classList.add('hidden')" data-i18n>Close</button>
     </div>
   </div>
 </div>
@@ -791,17 +792,17 @@
   <div class="modal" style="max-width:560px;padding:0;overflow:hidden;">
     <div style="padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;">
       <div style="min-width:0;">
-        <h2 style="margin:0 0 2px;">💬 Audience Q&amp;A</h2>
-        <p style="margin:0;font-size:12px;color:var(--muted);" id="qaPanelSub">Questions from your audience, ranked by upvotes.</p>
+        <h2 style="margin:0 0 2px;" data-i18n>💬 Audience Q&amp;A</h2>
+        <p style="margin:0;font-size:12px;color:var(--muted);" id="qaPanelSub" data-i18n>Questions from your audience, ranked by upvotes.</p>
       </div>
-      <button class="btn btn-primary" onclick="openQAShare()" style="flex-shrink:0;" title="Share the Q&amp;A link / QR">🔗 Share Q&amp;A</button>
+      <button class="btn btn-primary" onclick="openQAShare()" style="flex-shrink:0;" title="Share the Q&amp;A link / QR data-i18n-title" data-i18n>🔗 Share Q&amp;A</button>
     </div>
     <div id="qaPanelBody" style="max-height:62vh;overflow-y:auto;padding:6px 0;">
-      <div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;">Loading…</div>
+      <div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;" data-i18n>Loading…</div>
     </div>
     <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;">
-      <button class="btn btn-reset" onclick="clearQA()" title="Delete all questions for this event">↺ Clear all questions</button>
-      <button class="btn btn-ghost" onclick="closeQAPanel()">Close</button>
+      <button class="btn btn-reset" onclick="clearQA()" title="Delete all questions for this event data-i18n-title" data-i18n>↺ Clear all questions</button>
+      <button class="btn btn-ghost" onclick="closeQAPanel()" data-i18n>Close</button>
     </div>
   </div>
 </div>
@@ -810,12 +811,12 @@
 <div class="overlay hidden" id="historyModal" onclick="if(event.target===this)document.getElementById('historyModal').classList.add('hidden')">
   <div class="modal" style="max-width:520px;padding:0;overflow:hidden;">
     <div style="padding:18px 20px 14px;border-bottom:1px solid var(--border);">
-      <h2 style="margin:0 0 2px;">🗄 History — saved sessions</h2>
+      <h2 style="margin:0 0 2px;" data-i18n>🗄 History — saved sessions</h2>
       <p style="margin:0;font-size:12px;color:var(--muted);">Every reset is saved here with its date. Download the CSV or keep it for your records.</p>
     </div>
     <div id="historyBody" style="max-height:60vh;overflow-y:auto;"></div>
     <div style="padding:12px 20px;border-top:1px solid var(--border);text-align:right;">
-      <button class="btn btn-ghost" onclick="document.getElementById('historyModal').classList.add('hidden')">Close</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('historyModal').classList.add('hidden')" data-i18n>Close</button>
     </div>
   </div>
 </div>
@@ -823,11 +824,11 @@
 <!-- Delete Presentation Modal -->
 <div class="overlay hidden" id="deletePresModal">
   <div class="modal" style="max-width:400px;">
-    <h2>Delete Presentation?</h2>
+    <h2 data-i18n>Delete Presentation?</h2>
     <p>This moves <strong id="deletePresName" style="color:var(--text);"></strong> and all its questions to <strong style="color:var(--text);">Recently deleted</strong>. You can restore it for 30 days.</p>
     <div class="modal-btns">
-      <button class="btn btn-ghost" onclick="document.getElementById('deletePresModal').classList.add('hidden')">Cancel</button>
-      <button class="btn btn-danger" onclick="doDeletePres()">Delete</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('deletePresModal').classList.add('hidden')" data-i18n>Cancel</button>
+      <button class="btn btn-danger" onclick="doDeletePres()" data-i18n>Delete</button>
     </div>
   </div>
 </div>
@@ -835,11 +836,11 @@
 <!-- Recently deleted (trash) Modal -->
 <div class="overlay hidden" id="trashModal">
   <div class="modal" style="max-width:460px;">
-    <h2>🗑 Recently deleted</h2>
+    <h2 data-i18n>🗑 Recently deleted</h2>
     <p style="color:var(--muted);font-size:13px;margin-top:-4px;">Deleted presentations are kept here for 30 days so you can undo a mistake.</p>
     <div id="trashList" style="max-height:340px;overflow-y:auto;margin:12px 0;"></div>
     <div class="modal-btns">
-      <button class="btn btn-ghost" onclick="document.getElementById('trashModal').classList.add('hidden')">Close</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('trashModal').classList.add('hidden')" data-i18n>Close</button>
     </div>
   </div>
 </div>
@@ -847,12 +848,12 @@
 <!-- Rename Presentation Modal -->
 <div class="overlay hidden" id="renamePresModal" onclick="if(event.target===this)document.getElementById('renamePresModal').classList.add('hidden')">
   <div class="modal" style="max-width:380px;">
-    <h2>Rename Presentation</h2>
-    <p>Enter a new name below.</p>
-    <input type="text" id="renameInput" maxlength="60" placeholder="Presentation name..." style="margin-bottom:0;">
+    <h2 data-i18n>Rename Presentation</h2>
+    <p data-i18n>Enter a new name below.</p>
+    <input type="text" id="renameInput" maxlength="60" placeholder="Presentation name... data-i18n-ph" style="margin-bottom:0;">
     <div class="modal-btns">
-      <button class="btn btn-ghost" onclick="document.getElementById('renamePresModal').classList.add('hidden')">Cancel</button>
-      <button class="btn btn-primary" onclick="doRenamePres()">Save</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('renamePresModal').classList.add('hidden')" data-i18n>Cancel</button>
+      <button class="btn btn-primary" onclick="doRenamePres()" data-i18n>Save</button>
     </div>
   </div>
 </div>
@@ -860,11 +861,11 @@
 <!-- Duplicate Presentation Modal -->
 <div class="overlay hidden" id="duplicatePresModal" onclick="if(event.target===this)document.getElementById('duplicatePresModal').classList.add('hidden')">
   <div class="modal" style="max-width:400px;">
-    <h2>Duplicate Presentation?</h2>
+    <h2 data-i18n>Duplicate Presentation?</h2>
     <p>This will create a copy of <strong id="duplicatePresName" style="color:var(--text);"></strong> with all its questions and a new session code.</p>
     <div class="modal-btns">
-      <button class="btn btn-ghost" onclick="document.getElementById('duplicatePresModal').classList.add('hidden')">Cancel</button>
-      <button class="btn btn-primary" onclick="doDuplicatePresentation()">Duplicate</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('duplicatePresModal').classList.add('hidden')" data-i18n>Cancel</button>
+      <button class="btn btn-primary" onclick="doDuplicatePresentation()" data-i18n>Duplicate</button>
     </div>
   </div>
 </div>
@@ -872,11 +873,11 @@
 <!-- Copy Questions Modal -->
 <div class="overlay hidden" id="copyQuestionsModal" onclick="if(event.target===this)document.getElementById('copyQuestionsModal').classList.add('hidden')">
   <div class="modal" style="max-width:420px;">
-    <h2>Copy Question(s) To...</h2>
-    <p>Select a presentation to copy to:</p>
+    <h2 data-i18n>Copy Question(s) To...</h2>
+    <p data-i18n>Select a presentation to copy to:</p>
     <div id="copyQuestionsPresListModal" style="max-height:240px;overflow-y:auto;margin-bottom:12px;border:1px solid var(--border);border-radius:8px;"></div>
     <div class="modal-btns">
-      <button class="btn btn-ghost" onclick="document.getElementById('copyQuestionsModal').classList.add('hidden')">Cancel</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('copyQuestionsModal').classList.add('hidden')" data-i18n>Cancel</button>
     </div>
   </div>
 </div>
@@ -892,35 +893,35 @@
   <div data-view="list" style="flex:1;flex-direction:column;min-height:0;">
     <div data-slot="list-items" style="flex:1;overflow-y:auto;padding:12px;"></div>
     <div style="padding:12px;border-top:1px solid var(--border);flex-shrink:0;">
-      <button data-action="new-req" class="btn btn-primary" style="width:100%;justify-content:center;">+ New request</button>
+      <button data-action="new-req" class="btn btn-primary" style="width:100%;justify-content:center;" data-i18n>+ New request</button>
     </div>
   </div>
 
   <!-- NEW request view -->
   <div data-view="new" style="flex:1;flex-direction:column;min-height:0;overflow-y:auto;padding:14px 16px;">
-    <button data-action="back-list-1" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:0;margin-bottom:10px;text-align:left;">← Back</button>
+    <button data-action="back-list-1" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:0;margin-bottom:10px;text-align:left;" data-i18n>← Back</button>
     <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">From <span data-slot="user-email" style="color:var(--text);"></span></div>
-    <label style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">Subject</label>
-    <input data-slot="subj" type="text" maxlength="120" placeholder="Brief summary" style="width:100%;margin:5px 0 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 11px;">
-    <label style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">Category</label>
+    <label style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);" data-i18n>Subject</label>
+    <input data-slot="subj" type="text" maxlength="120" placeholder="Brief summary data-i18n-ph" style="width:100%;margin:5px 0 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 11px;">
+    <label style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);" data-i18n>Category</label>
     <select data-slot="cat" style="width:100%;margin:5px 0 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 11px;">
-      <option value="general">General question</option>
-      <option value="billing">Billing</option>
-      <option value="bug">Bug report</option>
-      <option value="feature">Feature request</option>
+      <option value="general" data-i18n>General question</option>
+      <option value="billing" data-i18n>Billing</option>
+      <option value="bug" data-i18n>Bug report</option>
+      <option value="feature" data-i18n>Feature request</option>
     </select>
-    <label style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);">Message</label>
-    <textarea data-slot="msg" rows="5" placeholder="Describe it (at least 10 characters)…" style="width:100%;margin:5px 0 6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 11px;resize:vertical;font-family:inherit;"></textarea>
+    <label style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);" data-i18n>Message</label>
+    <textarea data-slot="msg" rows="5" placeholder="Describe it (at least 10 characters)… data-i18n-ph" style="width:100%;margin:5px 0 6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 11px;resize:vertical;font-family:inherit;"></textarea>
     <div data-slot="err" style="color:var(--accent2);font-size:12px;min-height:15px;margin-bottom:8px;"></div>
     <div style="display:flex;gap:8px;">
-      <button data-action="cancel-new" class="btn btn-ghost" style="flex:1;justify-content:center;">Cancel</button>
-      <button data-action="submit" class="btn btn-primary" style="flex:1;justify-content:center;">Submit request</button>
+      <button data-action="cancel-new" class="btn btn-ghost" style="flex:1;justify-content:center;" data-i18n>Cancel</button>
+      <button data-action="submit" class="btn btn-primary" style="flex:1;justify-content:center;" data-i18n>Submit request</button>
     </div>
   </div>
 
   <!-- THREAD view -->
   <div data-view="thread" style="flex:1;flex-direction:column;min-height:0;overflow-y:auto;padding:14px 16px;">
-    <button data-action="back-list-2" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:0;margin-bottom:10px;text-align:left;">← Back to requests</button>
+    <button data-action="back-list-2" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:0;margin-bottom:10px;text-align:left;" data-i18n>← Back to requests</button>
     <strong data-slot="thread-subj" style="font-size:14px;display:block;"></strong>
     <span data-slot="thread-status" style="font-size:11px;color:var(--muted);"></span>
     <div data-slot="thread-items" style="margin-top:12px;"></div>
@@ -930,37 +931,37 @@
 <!-- Full QR Modal -->
 <div class="overlay hidden" id="qrModal" onclick="if(event.target===this)closeQRModal()">
   <div class="modal" style="max-width:320px;text-align:center;">
-    <h2 id="qrModalTitle" style="margin-bottom:4px;">QR Code</h2>
+    <h2 id="qrModalTitle" style="margin-bottom:4px;" data-i18n>QR Code</h2>
     <p id="qrModalDesc" style="margin-bottom:16px;"></p>
     <div id="qrModalCode"></div>
     <!-- Slide snippet: the "no phone? go here + enter code" line presenters paste UNDER the QR on their slide -->
     <div id="qrSlideSnippet" style="margin:14px 0 10px;padding:12px 12px 10px;border:1px dashed var(--border2);border-radius:10px;background:var(--surface3);text-align:left;">
-      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:7px;">📋 Put this under the QR on your slide</div>
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:7px;" data-i18n>📋 Put this under the QR on your slide</div>
       <div style="font-size:13.5px;line-height:1.6;">📱 Scan the QR — or go to <b style="color:var(--accent);">pollslide.com/join</b><br>and enter code <b id="qrSnippetCode" style="letter-spacing:.08em;">—</b></div>
-      <button class="btn btn-ghost" onclick="copySlideSnippet()" style="width:100%;justify-content:center;margin-top:9px;padding:8px;font-size:12px;">📋 Copy this line</button>
+      <button class="btn btn-ghost" onclick="copySlideSnippet()" style="width:100%;justify-content:center;margin-top:9px;padding:8px;font-size:12px;" data-i18n>📋 Copy this line</button>
     </div>
     <div class="qr-modal-url" id="qrModalURL" onclick="copyQRURL()">—</div>
-    <button class="btn btn-primary" onclick="copyQRURL()" style="width:100%;justify-content:center;margin-bottom:7px;padding:10px;">Copy Link</button>
-    <button class="btn btn-ghost"   id="qrEmailBtn" onclick="openEmailCompose()" style="display:none;width:100%;justify-content:center;margin-bottom:7px;padding:10px;">✉️ Email it</button>
-    <button class="btn btn-ghost"   onclick="closeQRModal()" style="width:100%;justify-content:center;padding:10px;">Close</button>
+    <button class="btn btn-primary" onclick="copyQRURL()" style="width:100%;justify-content:center;margin-bottom:7px;padding:10px;" data-i18n>Copy Link</button>
+    <button class="btn btn-ghost"   id="qrEmailBtn" onclick="openEmailCompose()" style="display:none;width:100%;justify-content:center;margin-bottom:7px;padding:10px;" data-i18n>✉️ Email it</button>
+    <button class="btn btn-ghost"   onclick="closeQRModal()" style="width:100%;justify-content:center;padding:10px;" data-i18n>Close</button>
   </div>
 </div>
 
 <!-- Email Compose Modal (sends from the user's OWN mail client via mailto) -->
 <div class="overlay hidden" id="emailComposeModal" onclick="if(event.target===this)document.getElementById('emailComposeModal').classList.add('hidden')">
   <div class="modal" style="max-width:460px;">
-    <h2 style="margin-bottom:4px;">Email this survey</h2>
+    <h2 style="margin-bottom:4px;" data-i18n>Email this survey</h2>
     <p style="margin-bottom:14px;">Opens your own mail app with everything filled in — it sends <strong style="color:var(--text);">from your address</strong>, so replies come back to you.</p>
     <label>Recipients <span style="color:var(--muted);font-weight:400;">(comma or new line — added as BCC so they can't see each other)</span></label>
-    <textarea id="emailRecipients" rows="3" placeholder="alice@example.com, bob@example.com" style="margin-bottom:12px;"></textarea>
-    <label>Subject</label>
+    <textarea id="emailRecipients" rows="3" placeholder="alice@example.com, bob@example.com data-i18n-ph" style="margin-bottom:12px;"></textarea>
+    <label data-i18n>Subject</label>
     <input type="text" id="emailSubject" style="margin-bottom:12px;">
-    <label>Message</label>
+    <label data-i18n>Message</label>
     <textarea id="emailBody" rows="5" style="margin-bottom:6px;"></textarea>
     <p id="emailErr" style="color:var(--accent2);font-size:12px;margin:0 0 12px;min-height:14px;"></p>
     <div class="modal-btns">
-      <button class="btn btn-ghost" onclick="document.getElementById('emailComposeModal').classList.add('hidden')">Cancel</button>
-      <button class="btn btn-primary" onclick="sendSurveyEmail()">✉️ Open in my mail app</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('emailComposeModal').classList.add('hidden')" data-i18n>Cancel</button>
+      <button class="btn btn-primary" onclick="sendSurveyEmail()" data-i18n>✉️ Open in my mail app</button>
     </div>
   </div>
 </div>
@@ -969,10 +970,10 @@
 <div class="overlay hidden" id="tallyModal" onclick="if(event.target===this)document.getElementById('tallyModal').classList.add('hidden')">
   <div class="modal" style="max-width:680px;width:95%;max-height:88vh;overflow-y:auto;">
     <h2>📊 Question Tally — <span id="tallyPresName" style="color:var(--accent4);"></span></h2>
-    <p>Responses for this question.</p>
+    <p data-i18n>Responses for this question.</p>
     <div id="tallyContent"></div>
     <div class="modal-btns">
-      <button class="btn btn-ghost" onclick="document.getElementById('tallyModal').classList.add('hidden')">Close</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('tallyModal').classList.add('hidden')" data-i18n>Close</button>
     </div>
   </div>
 </div>
@@ -984,7 +985,7 @@
     <p style="color:var(--muted);font-size:13px;margin-bottom:16px;">Ranked by most correct answers across all questions. All respondents shown.</p>
     <div id="presTallyContent"></div>
     <div class="modal-btns">
-      <button class="btn btn-ghost" onclick="document.getElementById('presTallyModal').classList.add('hidden')">Close</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('presTallyModal').classList.add('hidden')" data-i18n>Close</button>
     </div>
   </div>
 </div>
@@ -999,8 +1000,8 @@
         <div style="display:flex;align-items:center;gap:10px;">
           <span style="font-size:28px;">📊</span>
           <div>
-            <div style="font-family:Syne,sans-serif;font-weight:800;font-size:20px;color:#fff;">PowerPoint Live Results</div>
-            <div style="font-size:12px;color:rgba(255,255,255,0.75);">Show live poll results inside your presentation deck</div>
+            <div style="font-family:Syne,sans-serif;font-weight:800;font-size:20px;color:#fff;" data-i18n>PowerPoint Live Results</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.75);" data-i18n>Show live poll results inside your presentation deck</div>
           </div>
         </div>
         <button onclick="closePPTGuide()" style="background:rgba(255,255,255,0.15);border:none;border-radius:8px;width:30px;height:30px;cursor:pointer;color:#fff;font-size:16px;display:flex;align-items:center;justify-content:center;">✕</button>
@@ -1011,7 +1012,7 @@
 
       <!-- What it does -->
       <div style="background:rgba(108,99,255,0.08);border:1px solid rgba(108,99,255,0.2);border-radius:12px;padding:14px 16px;margin-bottom:22px;">
-        <div style="font-family:Syne,sans-serif;font-weight:700;font-size:12px;color:var(--accent);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.1em;">What this does</div>
+        <div style="font-family:Syne,sans-serif;font-weight:700;font-size:12px;color:var(--accent);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.1em;" data-i18n>What this does</div>
         <div style="font-size:13px;color:var(--text);line-height:1.6;">The PollSlide PowerPoint Add-in embeds a <strong>live results pane</strong> directly inside PowerPoint. As audience members submit answers on their phones, the chart updates in real time — right on your slide, no switching windows.</div>
       </div>
 
@@ -1019,7 +1020,7 @@
       <div style="display:flex;gap:14px;margin-bottom:18px;">
         <div style="width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-family:Syne,sans-serif;font-weight:800;font-size:13px;color:#fff;flex-shrink:0;">1</div>
         <div style="flex:1;">
-          <div style="font-family:Syne,sans-serif;font-weight:700;font-size:14px;margin-bottom:4px;">Install the Add-in</div>
+          <div style="font-family:Syne,sans-serif;font-weight:700;font-size:14px;margin-bottom:4px;" data-i18n>Install the Add-in</div>
           <div style="font-size:13px;color:var(--muted);line-height:1.6;margin-bottom:8px;">In PowerPoint, go to <strong style="color:var(--text);">Insert → Get Add-ins</strong> and search for <strong style="color:var(--accent);">PollSlide</strong>. Click Add. It will appear in your Home ribbon.</div>
           <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--muted);">
             💡 <strong style="color:var(--text);">Sideload for testing:</strong> In PowerPoint → Insert → Add-ins → Upload My Add-in → select <code style="background:var(--surface3);padding:1px 5px;border-radius:4px;">powerpoint-manifest.xml</code> from your PollSlide download.
@@ -1031,10 +1032,10 @@
       <div style="display:flex;gap:14px;margin-bottom:18px;">
         <div style="width:28px;height:28px;border-radius:50%;background:var(--accent2);display:flex;align-items:center;justify-content:center;font-family:Syne,sans-serif;font-weight:800;font-size:13px;color:#fff;flex-shrink:0;">2</div>
         <div style="flex:1;">
-          <div style="font-family:Syne,sans-serif;font-weight:700;font-size:14px;margin-bottom:4px;">Launch a Question</div>
+          <div style="font-family:Syne,sans-serif;font-weight:700;font-size:14px;margin-bottom:4px;" data-i18n>Launch a Question</div>
           <div style="font-size:13px;color:var(--muted);line-height:1.6;">In PollSlide Presenter (this page), click a question in the sidebar to go live. The question becomes active and its <strong style="color:var(--text);">Session Code</strong> is shown below.</div>
           <div id="pptLiveCode" style="margin-top:8px;background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;font-size:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;">
-            <span style="color:var(--muted);">No question live yet — launch one first.</span>
+            <span style="color:var(--muted);" data-i18n>No question live yet — launch one first.</span>
           </div>
         </div>
       </div>
@@ -1043,7 +1044,7 @@
       <div style="display:flex;gap:14px;margin-bottom:18px;">
         <div style="width:28px;height:28px;border-radius:50%;background:var(--accent3);display:flex;align-items:center;justify-content:center;font-family:Syne,sans-serif;font-weight:800;font-size:13px;color:#000;flex-shrink:0;">3</div>
         <div style="flex:1;">
-          <div style="font-family:Syne,sans-serif;font-weight:700;font-size:14px;margin-bottom:4px;">Connect in PowerPoint</div>
+          <div style="font-family:Syne,sans-serif;font-weight:700;font-size:14px;margin-bottom:4px;" data-i18n>Connect in PowerPoint</div>
           <div style="font-size:13px;color:var(--muted);line-height:1.6;">Open the PollSlide panel inside PowerPoint. Paste the <strong style="color:var(--text);">Session Code</strong> (or the full results URL) into the add-in. The live chart will appear immediately and update as responses come in.</div>
         </div>
       </div>
@@ -1052,24 +1053,24 @@
       <div style="display:flex;gap:14px;margin-bottom:22px;">
         <div style="width:28px;height:28px;border-radius:50%;background:var(--accent4);display:flex;align-items:center;justify-content:center;font-family:Syne,sans-serif;font-weight:800;font-size:13px;color:#000;flex-shrink:0;">4</div>
         <div style="flex:1;">
-          <div style="font-family:Syne,sans-serif;font-weight:700;font-size:14px;margin-bottom:4px;">Present — Results Update Live</div>
+          <div style="font-family:Syne,sans-serif;font-weight:700;font-size:14px;margin-bottom:4px;" data-i18n>Present — Results Update Live</div>
           <div style="font-size:13px;color:var(--muted);line-height:1.6;">Run your slideshow normally. The PollSlide panel shows the results chart in real time. Click <strong style="color:var(--text);">Reveal</strong> here in Presenter to highlight correct answers — the add-in updates instantly.</div>
         </div>
       </div>
 
       <!-- Direct link option -->
       <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:16px;">
-        <div style="font-family:Syne,sans-serif;font-weight:700;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Alternative: Embed in Browser / OBS / Companion</div>
+        <div style="font-family:Syne,sans-serif;font-weight:700;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;" data-i18n>Alternative: Embed in Browser / OBS / Companion</div>
         <div style="font-size:12px;color:var(--muted);line-height:1.6;margin-bottom:10px;">You can also embed the live results view in any browser window, OBS Studio overlay, or the PollSlide Keynote companion app using this URL format:</div>
-        <div id="pptEmbedUrl" onclick="copyPPTUrl()" style="background:var(--surface3);border:1px solid var(--border);border-radius:7px;padding:9px 12px;font-size:11px;font-family:monospace;cursor:pointer;word-break:break-all;color:var(--accent);">https://app.pollslide.com/answer?session=YOUR_CODE</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:5px;">↑ Click to copy · Replace YOUR_CODE with your session code</div>
+        <div id="pptEmbedUrl" onclick="copyPPTUrl()" style="background:var(--surface3);border:1px solid var(--border);border-radius:7px;padding:9px 12px;font-size:11px;font-family:monospace;cursor:pointer;word-break:break-all;color:var(--accent);" data-i18n>https://app.pollslide.com/answer?session=YOUR_CODE</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:5px;" data-i18n>↑ Click to copy · Replace YOUR_CODE with your session code</div>
       </div>
 
     </div>
 
     <div style="padding:0 28px 24px;display:flex;gap:8px;justify-content:flex-end;">
-      <button class="btn btn-ghost" onclick="closePPTGuide()">Close</button>
-      <button class="btn btn-primary" onclick="window.open('https://pollslide.com/setup','_blank')">Full setup guide →</button>
+      <button class="btn btn-ghost" onclick="closePPTGuide()" data-i18n>Close</button>
+      <button class="btn btn-primary" onclick="window.open('https://pollslide.com/setup','_blank')" data-i18n>Full setup guide →</button>
     </div>
   </div>
 </div>
@@ -2081,9 +2082,19 @@ function toggleUserMenu() {
     ];
     itemsEl.innerHTML = menuItems.map(m =>
       '<button onclick="' + m.fn + ';closeUserMenu()" style="width:100%;padding:10px 14px;background:none;border:none;cursor:pointer;font-family:DM Sans,sans-serif;font-size:13px;color:' + (m.danger ? 'var(--accent2)' : 'var(--text)') + ';text-align:left;display:flex;align-items:center;gap:8px;">' +
-        m.icon + ' ' + m.label + '</button>'
+        m.icon + ' <span data-i18n>' + m.label + '</span></button>'
     ) +
-    '<button onclick="openSupportChat();closeUserMenu()" style="width:100%;padding:10px 14px;background:none;border:none;cursor:pointer;font-family:DM Sans,sans-serif;font-size:13px;color:var(--text);text-align:left;display:flex;align-items:center;justify-content:space-between;">' +'<span style="display:flex;align-items:center;gap:8px;">💬 Support Chat</span>' +'<span id="supportChatDot" style="display:none;width:8px;height:8px;border-radius:50%;background:#43e97b;"></span></button>';
+    /* Interface language. In the user menu rather than buried in a deck's ⋯ menu:
+       it is an account preference, not a property of one deck, and someone looking
+       for it looks under their own name. */
+    '<div style="padding:10px 14px;display:flex;align-items:center;gap:8px;font-family:DM Sans,sans-serif;font-size:13px;color:var(--text);border-top:1px solid var(--border);">' +
+      '🌐 <span data-i18n>Language</span>' +
+      '<select onchange="setUiLang(this.value)" onclick="event.stopPropagation()" ' +
+        'style="margin-left:auto;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:7px;padding:4px 7px;font-size:12px;font-family:inherit;">' +
+        Object.entries(UI_LANGS).map(([c,n]) =>
+          '<option value="' + c + '"' + (c === UI_LANG ? ' selected' : '') + '>' + n + '</option>').join('') +
+      '</select></div>' +
+    '<button onclick="openSupportChat();closeUserMenu()" style="width:100%;padding:10px 14px;background:none;border:none;cursor:pointer;font-family:DM Sans,sans-serif;font-size:13px;color:var(--text);text-align:left;display:flex;align-items:center;justify-content:space-between;">' +'<span style="display:flex;align-items:center;gap:8px;">💬 <span data-i18n>Support Chat</span></span>' +'<span id="supportChatDot" style="display:none;width:8px;height:8px;border-radius:50%;background:#43e97b;"></span></button>';
   }
   dd.style.display = 'block';
 }
@@ -3692,6 +3703,86 @@ async function toggleFocusTrack(id) {
    nothing unvetted reaches a projector in front of a class. Search runs through
    /api/gif-search, which holds the key and locks Tenor's content filter to its
    strictest setting where no caller can reach it.                                  */
+/* ─── INTERFACE LANGUAGE ───────────────────────────────────────────────────────
+   The presenter's own chrome — buttons, menus, labels — in the teacher's language.
+   Until now this surface was English-only while answer.html had 180 translated
+   strings, so a Spanish-speaking teacher built in English and their students
+   answered in Spanish.
+
+   HOW THE KEY WORKS: the English text IS the key. `<button data-i18n>Cancel</button>`
+   needs no invented key name, cannot drift out of sync with the markup, and reads as
+   what it is. The English original is captured once on first apply, so switching back
+   to English restores the source exactly even for a string with no entry.
+
+   WHAT IS DELIBERATELY NOT TRANSLATED: anything a user typed. Deck names, question
+   text, class names, student names, session codes. Only elements explicitly tagged
+   `data-i18n` are touched, which makes that guarantee structural rather than a rule
+   somebody has to remember — an untagged element is untouchable by construction.
+   This is why there is no text-node walker here, though it would have been less work:
+   a walker that mistakes a teacher's deck title for UI copy would translate it.       */
+const UI_LANGS = { en:'English', es:'Español', de:'Deutsch', fr:'Français', pt:'Português', it:'Italiano' };
+let UI_LANG = localStorage.getItem('ps_ui_lang') || 'en';
+if (!UI_LANGS[UI_LANG]) UI_LANG = 'en';
+
+// Populated by ui-lang.js. Keyed by the exact English string.
+window.PS_UI = window.PS_UI || {};
+
+function tr(en) {
+  if (UI_LANG === 'en') return en;
+  const d = window.PS_UI[UI_LANG];
+  const v = d && d[String(en).trim()];
+  return v == null ? en : v;
+}
+
+function applyUiLang() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    if (el._psEn === undefined) el._psEn = el.textContent;
+    el.textContent = UI_LANG === 'en' ? el._psEn : tr(el._psEn);
+  });
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    if (el._psTitle === undefined) el._psTitle = el.getAttribute('title') || '';
+    el.setAttribute('title', UI_LANG === 'en' ? el._psTitle : tr(el._psTitle));
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el => {
+    if (el._psPh === undefined) el._psPh = el.getAttribute('placeholder') || '';
+    el.setAttribute('placeholder', UI_LANG === 'en' ? el._psPh : tr(el._psPh));
+  });
+  document.documentElement.lang = UI_LANG;
+}
+
+function setUiLang(code) {
+  if (!UI_LANGS[code]) return;
+  UI_LANG = code;
+  localStorage.setItem('ps_ui_lang', code);
+  applyUiLang();
+  /* Menus and panels are rebuilt from JS strings rather than static markup, so they
+     have to be repainted for the new language to reach them. Guarded because most of
+     these only exist once a deck is open. */
+  try { renderPresList(); } catch (e) {}
+  try { if (typeof renderProductTabs === 'function') renderProductTabs(); } catch (e) {}
+  try { if (activePresId) renderRightPanel(); } catch (e) {}
+  closeUserMenu();
+  toast(tr('Interface language changed.'), 'success');
+}
+
+/* Applied once at startup, and again whenever new markup is injected — a modal built
+   after load has never been through applyUiLang. Cheap: it only ever touches tagged
+   elements, of which there are a few hundred at most. */
+function initUiLang() {
+  applyUiLang();
+  const mo = new MutationObserver(muts => {
+    if (UI_LANG === 'en') return;
+    for (const m of muts) {
+      for (const n of m.addedNodes) {
+        if (n.nodeType === 1 && (n.hasAttribute?.('data-i18n') || n.querySelector?.('[data-i18n],[data-i18n-title],[data-i18n-ph]'))) {
+          applyUiLang(); return;
+        }
+      }
+    }
+  });
+  mo.observe(document.body, { childList: true, subtree: true });
+}
+
 /* Render one stored GIF for a slide. Two things this does that a bare <img> would not:
  *
  * REDUCED MOTION. A looping GIF on a projector is a genuine problem for people with
@@ -4258,6 +4349,10 @@ document.addEventListener('click', (e) => {
 // you just triggered is the classic overflow-menu annoyance.
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('#moreMenu .btn').forEach(b => b.addEventListener('click', () => setTimeout(closeMoreMenu, 0)));
+  // Apply the saved interface language before anything is read, and keep applying it
+  // to markup injected later. try/catch because a broken dictionary must never stop
+  // the app booting — English is a perfectly usable fallback.
+  try { initUiLang(); } catch (e) { console.error('interface language:', e); }
 });
 
 /* ── "Present" asks WHERE, once ────────────────────────────────────────────
@@ -8747,8 +8842,12 @@ function buildWordCloud(q, counts, responses) {
   return `<div style="display:flex;flex-wrap:wrap;gap:4px 8px;justify-content:center;align-items:center;padding:10px 4px;line-height:1.6;">${html}</div>`;
 }
 
-// ─── GIF PICKER MODAL ────────────────────────────────────────────────────────
-const GIPHY_KEY = '45s8aUZ5MTLF5zMjtbJTu0Kqk4jfbUTe';
+/* ─── GIF PICKER MODAL ────────────────────────────────────────────────────────
+   Searches through /api/gif-search, the same endpoint the per-deck contextual GIFs
+   use. It used to call Giphy directly with the key written into this file — which
+   meant the key shipped to every browser and was readable from dev tools, and the
+   `rating=g` sat in a URL the browser controlled, so it guaranteed nothing. Both are
+   now server-side, where a caller cannot reach them, and every search is logged.   */
 let _gifPickerCallback = null;
 let _gifDebounceTimer = null;
 
@@ -8786,31 +8885,34 @@ function runGifSearch(query) {
   if (!grid) return;
   grid.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px;text-align:center;width:100%;">Searching…</div>';
   if (status) status.textContent = '';
-  fetch(`https://api.giphy.com/v1/gifs/search?api_key=${GIPHY_KEY}&q=${encodeURIComponent(query)}&limit=24&rating=g&lang=en`)
-    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    .then(data => {
-      if (!data.data || !data.data.length) {
+  (async () => {
+    try {
+      const tk = await auth.currentUser.getIdToken();
+      const r = await fetch('/api/gif-search', { method:'POST',
+        headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tk },
+        body: JSON.stringify({ q: query, limit: 24 }) });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+      const list = d.results || [];
+      if (!list.length) {
         grid.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px;text-align:center;width:100%;">No GIFs found — try different keywords</div>';
+        if (status) status.textContent = '';
         return;
       }
-      if (status) status.textContent = `${data.data.length} results for "${query}"`;
-      grid.innerHTML = data.data.map(g => {
-        const thumb = g.images?.fixed_height_small?.url || g.images?.preview_gif?.url || '';
-        const full  = g.images?.original?.url || g.images?.downsized?.url || thumb;
-        const title = (g.title || '').replace(/"/g, '&quot;');
-        return `<div class="gif-thumb" data-url="${full.replace(/"/g,'&quot;')}" title="${title}"
+      if (status) status.textContent = `${list.length} results for "${query}"`;
+      // One normalised shape whichever provider answered, so this renders the same either way.
+      grid.innerHTML = list.map(g => `<div class="gif-thumb" data-url="${escAttr(g.full || g.url)}" title="${escAttr(g.alt || '')}"
           style="width:calc(25% - 5px);aspect-ratio:4/3;border-radius:8px;overflow:hidden;cursor:pointer;border:2px solid transparent;transition:border-color 0.15s,transform 0.12s;flex-shrink:0;"
           onmouseover="this.style.borderColor='var(--accent)';this.style.transform='scale(1.04)'"
           onmouseout="this.style.borderColor='transparent';this.style.transform='scale(1)'"
           onclick="gifPickerSelect(this.dataset.url)">
-          <img src="${thumb}" style="width:100%;height:100%;object-fit:cover;display:block;" loading="lazy">
-        </div>`;
-      }).join('');
-    })
-    .catch(err => {
-      grid.innerHTML = `<div style="color:var(--accent2);font-size:13px;padding:20px;text-align:center;width:100%;">Search failed — ${err.message||err}. Check your network connection.</div>`;
+          <img src="${escAttr(g.still || g.url)}" alt="${escAttr(g.alt || '')}" style="width:100%;height:100%;object-fit:cover;display:block;" loading="lazy">
+        </div>`).join('');
+    } catch (err) {
+      grid.innerHTML = `<div style="color:var(--accent2);font-size:13px;padding:20px;text-align:center;width:100%;">${escapeHtml(String(err.message||err))}</div>`;
       if (status) status.textContent = '';
-    });
+    }
+  })();
 }
 
 function gifPickerSelect(url) {

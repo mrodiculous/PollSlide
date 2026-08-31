@@ -75,42 +75,80 @@ ok('the choice is stable for the same question — a deck does not reshuffle bet
 ok('but different questions can differ',
    new Set(['a','b','c','d','e','f'].map(s => G.answerTerm('B', { seed: s }))).size > 1);
 
-console.log('\nTurning a Tenor result into what we store');
+console.log('\nTurning a provider result into what we store');
 const raw = { id: '123', content_description: 'a cat knocking a glass off a table',
   media_formats: { tinygif: { url: 'https://t.test/a.gif', dims: [220, 160] },
                    gifpreview: { url: 'https://t.test/a.png', dims: [220, 160] } } };
-const n = G.normalizeResult(raw);
-ok('id, url and still are kept', n.id === '123' && /a\.gif$/.test(n.url) && /a\.png$/.test(n.still));
-ok('dimensions are kept',        n.width === 220 && n.height === 160);
-ok('Tenor\'s description becomes alt text', n.alt === 'a cat knocking a glass off a table');
-ok('the source is recorded — needed for attribution', n.source === 'tenor');
-ok('alt text is capped',
-   G.normalizeResult({ id:'x', content_description:'y'.repeat(400),
+const n = G.normalizeTenor(raw);
+ok('tenor: id, url and still are kept', n.id === '123' && /a\.gif$/.test(n.url) && /a\.png$/.test(n.still));
+ok('tenor: dimensions are kept',        n.width === 220 && n.height === 160);
+ok('tenor: content_description becomes alt text', n.alt === 'a cat knocking a glass off a table');
+ok('tenor: the source is recorded — needed for attribution', n.source === 'tenor');
+ok('tenor: alt text is capped',
+   G.normalizeTenor({ id:'x', content_description:'y'.repeat(400),
      media_formats:{ tinygif:{url:'u'} } }).alt.length <= 140);
-ok('a result with no usable media is dropped',
-   G.normalizeResult({ id: 'x', content_description: 'd', media_formats: {} }) === null);
-ok('junk is dropped', G.normalizeResult(null) === null && G.normalizeResult('x') === null);
+ok('tenor: a result with no usable media is dropped',
+   G.normalizeTenor({ id: 'x', content_description: 'd', media_formats: {} }) === null);
+ok('tenor: junk is dropped', G.normalizeTenor(null) === null && G.normalizeTenor('x') === null);
 
-console.log('\nChoosing one');
-const mk = (id, alt, w, h) => ({ id, content_description: alt,
-  media_formats: { tinygif: { url: 'https://t.test/' + id + '.gif', dims: [w, h] } } });
+/* Giphy exists because Tenor stopped issuing keys. A feature resting on one free
+ * third-party service is a feature that breaks without warning. */
+const graw = { id: 'g1', alt_text: 'a dog running through a sprinkler',
+  images: { fixed_height_small: { url: 'https://g.test/b.gif', width: '200', height: '150' },
+            fixed_height_small_still: { url: 'https://g.test/b.png', width: '200', height: '150' } } };
+const gn = G.normalizeGiphy(graw);
+ok('giphy: url and still are kept',  /b\.gif$/.test(gn.url) && /b\.png$/.test(gn.still));
+ok('giphy: STRING dimensions become numbers', gn.width === 200 && gn.height === 150);
+ok('giphy: alt_text becomes alt text', gn.alt === 'a dog running through a sprinkler');
+ok('giphy: falls back to title when alt_text is absent — it often is',
+   G.normalizeGiphy({ id:'g2', title:'a shrug', images:{ fixed_height_small:{url:'u'} } }).alt === 'a shrug');
+ok('giphy: the source is recorded',  gn.source === 'giphy');
+ok('giphy: no usable image is dropped', G.normalizeGiphy({ id:'g3', title:'t', images:{} }) === null);
+
+ok('BOTH PROVIDERS PRODUCE THE SAME RECORD SHAPE — nothing downstream can tell them apart',
+   JSON.stringify(Object.keys(n).sort()) === JSON.stringify(Object.keys(gn).sort()),
+   { tenor: Object.keys(n).sort(), giphy: Object.keys(gn).sort() });
+ok('normalizeMany dispatches on the provider name',
+   G.normalizeMany([raw], 'tenor')[0].source === 'tenor' &&
+   G.normalizeMany([graw], 'giphy')[0].source === 'giphy');
+ok('…and an unknown provider name falls back rather than throwing',
+   Array.isArray(G.normalizeMany([raw], 'nope')));
+ok('normalizeMany on junk is empty, not a crash',
+   G.normalizeMany(null, 'giphy').length === 0 && G.normalizeMany([null, 'x'], 'tenor').length === 0);
+
+console.log('\nChoosing one — from records that are ALREADY normalised');
+/* The contract that nearly shipped broken: the endpoint normalises, because only the
+ * server knows which provider answered. pickBest must therefore take normalised
+ * records. An earlier version normalised again here, so every real result became null
+ * — and the browser test missed it because its stub returned raw provider JSON
+ * instead of what the endpoint actually sends. */
+const rec = (id, alt, w, h) => ({ id, url: 'https://t.test/' + id + '.gif', still: null,
+                                  width: w, height: h, alt, source: 'tenor' });
+ok('a record straight from the endpoint is usable',
+   G.pickBest([rec('a', 'a cat', 200, 200)], { seed: 'x' }).id === 'a');
+ok('…which is exactly what normalizeMany produces',
+   G.pickBest(G.normalizeMany([raw], 'tenor'), { seed: 'x' }).id === '123');
+ok('and a giphy one too',
+   G.pickBest(G.normalizeMany([graw], 'giphy'), { seed: 'x' }).id === 'g1');
 ok('a GIF with NO description is never chosen — it could not be given alt text',
-   G.pickBest([mk('a', '', 200, 200)]) === null);
+   G.pickBest([rec('a', '', 200, 200)]) === null);
 ok('…even when others exist, the described one wins',
-   G.pickBest([mk('a', '', 200, 200), mk('b', 'a dog', 200, 200)], { seed: 'x' }).id === 'b');
+   G.pickBest([rec('a', '', 200, 200), rec('b', 'a dog', 200, 200)], { seed: 'x' }).id === 'b');
 ok('an absurdly wide GIF is skipped — it breaks the slide',
-   G.pickBest([mk('wide', 'a banner', 1200, 100), mk('ok', 'a dog', 200, 200)], { seed: 's' }).id === 'ok');
+   G.pickBest([rec('wide', 'a banner', 1200, 100), rec('ok', 'a dog', 200, 200)], { seed: 's' }).id === 'ok');
 ok('an absurdly tall one too',
-   G.pickBest([mk('tall', 'a tower', 100, 900), mk('ok', 'a dog', 200, 200)], { seed: 's' }).id === 'ok');
+   G.pickBest([rec('tall', 'a tower', 100, 900), rec('ok', 'a dog', 200, 200)], { seed: 's' }).id === 'ok');
 ok('unknown dimensions are allowed rather than discarded',
-   !!G.pickBest([{ id:'u', content_description:'d', media_formats:{ tinygif:{ url:'u' } } }]));
+   !!G.pickBest([rec('u', 'd', null, null)]));
 ok('the same seed always picks the same GIF',
-   G.pickBest([mk('a','x',200,200), mk('b','y',200,200), mk('c','z',200,200)], { seed:'q7' }).id ===
-   G.pickBest([mk('a','x',200,200), mk('b','y',200,200), mk('c','z',200,200)], { seed:'q7' }).id);
+   G.pickBest([rec('a','x',200,200), rec('b','y',200,200), rec('c','z',200,200)], { seed:'q7' }).id ===
+   G.pickBest([rec('a','x',200,200), rec('b','y',200,200), rec('c','z',200,200)], { seed:'q7' }).id);
 ok('nothing usable returns null, not a broken record',
    G.pickBest([]) === null && G.pickBest(null) === null);
+ok('a record with no url is ignored',
+   G.pickBest([{ id:'x', alt:'a thing' }, rec('ok','a dog',200,200)], { seed:'s' }).id === 'ok');
 ok('if every result is oddly shaped, a described one is still used rather than none',
-   G.pickBest([mk('w','a banner',1200,100)], { seed:'s' }) !== null);
+   G.pickBest([rec('w','a banner',1200,100)], { seed:'s' }) !== null);
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
