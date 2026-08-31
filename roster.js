@@ -73,8 +73,13 @@ function parseRoster(text) {
 
     line = line.replace(/\s+/g, ' ').trim();
     if (!line) continue;
-    // A header row names a column, not a person.
-    if (/^(name|student|students|full name|first|last|surname|email)$/i.test(line)) continue;
+    /* A header row names a column, not a person. An exact-match list was too
+     * brittle — a real school export says "Student Name", "Last Name" or
+     * "Pupil Full Name", and one of those became a student called Student Name.
+     * So: a line made up ENTIRELY of header words is a header. A real person is
+     * vanishingly unlikely to be called "Full Name". */
+    const HEADER_WORD = /^(name|names|student|students|pupil|pupils|full|first|last|given|family|sur|surname|forename|email|e-mail|address|id|no|number|#|row)$/i;
+    if (line.split(/\s+/).every(w => HEADER_WORD.test(w.replace(/[^\w#-]/g, '')))) continue;
     if (line.length > 80) line = line.slice(0, 80);
 
     const key = normName(line);

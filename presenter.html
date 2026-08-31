@@ -2380,6 +2380,7 @@ async function publishRosterFor(pres) {
     // lead to is only ever readable by the Admin SDK, never by the browser.
     await db.ref(`quiz_builder/${pres.sessionCode}/ownerUid`).set(cls ? userId : null);
     await db.ref(`quiz_builder/${pres.sessionCode}/classId`).set(cls ? pres.classId : null);
+    await db.ref(`quiz_builder/${pres.sessionCode}/verifyMode`).set(cls ? (cls.verifyMode || 'pin') : null);
   } catch (e) { /* best effort — a failed publish falls back to the name box */ }
 }
 
@@ -2434,6 +2435,33 @@ function openRosterEditor(cid) {
       <b style="color:var(--accent4);">Two names look like one person</b><br>${dupes.map(p => escapeHtml(p[0].name) + ' / ' + escapeHtml(p[1].name)).join('<br>')}<br>
       <span style="font-size:11.5px;">They're kept separate — merging automatically could put a grade on the wrong student. Edit the list above if they are the same person.</span></div>` : ''}
     <p style="color:var(--muted);font-size:11.5px;margin-top:10px;line-height:1.5;">🔒 Students see only a first name and last initial when they pick themselves. Full names stay in your account.</p>
+    ${(() => {
+      const mode = c.verifyMode || 'pin';
+      const comp = PSRoster.complianceFor(mode);
+      const opt = (id, icon, name, sub) => `<button onclick="setVerifyMode('${escAttr(cid)}','${id}')" style="flex:1;text-align:left;padding:9px 10px;border-radius:10px;cursor:pointer;font-family:inherit;
+        background:${id===mode?'rgba(108,99,255,.16)':'var(--surface2)'};border:1px solid ${id===mode?'var(--accent)':'var(--border)'};color:var(--text);">
+        <span style="display:block;font-size:15px;line-height:1.1;">${icon}</span>
+        <span style="display:block;font-family:Syne,sans-serif;font-weight:700;font-size:12px;margin-top:3px;">${name}</span>
+        <span style="display:block;font-size:10px;color:var(--muted);margin-top:1px;line-height:1.35;">${sub}</span></button>`;
+      return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">How students prove it's them</div>
+        <div style="display:flex;gap:7px;">
+          ${opt('pin','🔢','PIN they choose','No setup for you')}
+          ${opt('code','🎟️','Codes you issue','You print or read them out')}
+          ${opt('email','✉️','Emailed codes','Needs student emails')}
+        </div>
+        <div style="margin-top:9px;padding:9px 11px;background:${comp.collectsPersonalData?'rgba(255,101,132,.10)':'var(--surface2)'};border-left:3px solid ${comp.collectsPersonalData?'var(--accent2)':'var(--border2)'};border-radius:0 8px 8px 0;">
+          <div style="font-size:11.5px;font-weight:600;color:${comp.collectsPersonalData?'var(--accent2)':'var(--text)'};margin-bottom:4px;">${escapeHtml(comp.title)}</div>
+          <ul style="margin:0;padding-left:16px;font-size:11.5px;color:var(--muted);line-height:1.55;">
+            ${comp.points.map(pt => `<li>${escapeHtml(pt)}</li>`).join('')}
+          </ul>
+          ${comp.needsAttestation ? (c.attestedAt
+            ? `<div style="font-size:11px;color:var(--accent3);margin-top:6px;">✓ Confirmed ${new Date(c.attestedAt).toLocaleDateString()} — recorded for your records.</div>`
+            : `<div style="font-size:11px;color:var(--accent2);margin-top:6px;">Not yet confirmed — students can't be emailed codes until you do.</div>`) : ''}
+        </div>
+        ${mode === 'code' ? `<button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="issueCodes('${escAttr(cid)}')">🎟️ Issue codes &amp; show the printable list</button>` : ''}
+      </div>`;
+    })()}
     ${current.length ? `<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
       <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">Forgotten PIN</div>
       <p style="color:var(--muted);font-size:12px;line-height:1.5;margin-bottom:8px;">Students set their own PIN the first time they pick their name. Clear one and they'll set a new PIN next time — nothing they've already answered is affected.</p>
@@ -2464,6 +2492,51 @@ async function saveRoster(cid) {
   if (r.left.length)     bits.push(r.left.length + ' removed');
   toast(bits.length ? '👥 ' + bits.join(' · ') : 'Class list unchanged', 'success');
   renderPresList();
+}
+
+/* Switching to emailed codes collects personal data, so the confirmation is
+ * RECORDED — who accepted it and when. An attestation nobody can produce later is
+ * not an attestation, and this is the artefact an auditor or a DPO asks for. */
+async function setVerifyMode(cid, mode) {
+  const c = classes[cid]; if (!c) return;
+  const comp = PSRoster.complianceFor(mode);
+  if (comp.needsAttestation && !c.attestedAt) {
+    if (!confirm(comp.title + '\n\n' + comp.points.join('\n\n') + '\n\n' + comp.confirm)) return;
+    c.attestedAt = Date.now(); c.attestedBy = userEmail || null; c.attestedFor = mode;
+    if (userId) await db.ref(`users/${userId}/classes/${cid}`).update({
+      attestedAt: c.attestedAt, attestedBy: c.attestedBy, attestedFor: mode }).catch(()=>{});
+  }
+  c.verifyMode = mode;
+  if (userId) await db.ref(`users/${userId}/classes/${cid}/verifyMode`).set(mode).catch(()=>{});
+  for (const p of Object.values(presentations)) if (p.classId === cid) await publishRosterFor(p);
+  openRosterEditor(cid);
+  toast(mode === 'pin' ? '🔢 Students will choose their own PIN'
+      : mode === 'code' ? '🎟️ Issue codes below, then hand them out'
+      : '✉️ Codes will be emailed — add each student\'s address', 'success');
+}
+
+// Only students without one get a code, so re-running never invalidates a list
+// you have already handed out.
+async function issueCodes(cid) {
+  const c = classes[cid]; if (!c || !c.students) return;
+  let made = 0;
+  Object.values(c.students).forEach(st => { if (st && !st.left && !st.code) { st.code = PSRoster.newStudentCode(); made++; } });
+  if (userId) await db.ref(`users/${userId}/classes/${cid}/students`).set(c.students).catch(()=>{});
+  const rows = PSRoster.activeStudents(c.students).map(st =>
+    `<tr><td style="padding:6px 10px;border-bottom:1px solid #ddd;">${escapeHtml(st.name)}</td>
+         <td style="padding:6px 10px;border-bottom:1px solid #ddd;font-family:ui-monospace,monospace;font-size:15px;letter-spacing:.12em;">${escapeHtml(c.students[st.id].code || '—')}</td></tr>`).join('');
+  const w = window.open('', '_blank');
+  if (w) {
+    w.document.write(`<title>${escapeHtml(c.name || 'Class')} — student codes</title>
+      <body style="font-family:system-ui,sans-serif;padding:28px;color:#111;">
+      <h1 style="font-size:20px;margin:0 0 4px;">${escapeHtml(c.name || 'Class')}</h1>
+      <p style="color:#666;font-size:13px;margin:0 0 16px;">Each student enters their own code after picking their name. Cut them up or read them out — don't post the whole list where the class can see it.</p>
+      <table style="border-collapse:collapse;font-size:14px;"><thead><tr>
+        <th style="text-align:left;padding:6px 10px;border-bottom:2px solid #111;">Student</th>
+        <th style="text-align:left;padding:6px 10px;border-bottom:2px solid #111;">Code</th></tr></thead><tbody>${rows}</tbody></table>`);
+    w.document.close();
+  }
+  toast(made ? `🎟️ ${made} new code${made===1?'':'s'} issued` : 'Everyone already has a code', 'success');
 }
 
 async function resetStudentPin(cid) {
@@ -5081,6 +5154,18 @@ function showImageCopyModal(src, label) {
 function escapeHtml(s){
   return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
+/* Used by the support chat panel for ticket and message timestamps. It was called
+ * there and never defined, so every ticket with a createdAt — which is all of them —
+ * threw a ReferenceError mid-render and took the rest of the panel with it.
+ * Same behaviour as admin.html's, so a ticket reads identically on both sides. */
+function timeAgo(ts){
+  const s = Math.floor((Date.now() - ts) / 1000);
+  if (s < 60)     return 'just now';
+  if (s < 3600)   return Math.floor(s / 60) + 'm ago';
+  if (s < 86400)  return Math.floor(s / 3600) + 'h ago';
+  if (s < 604800) return Math.floor(s / 86400) + 'd ago';
+  return new Date(ts).toLocaleDateString();
+}
 function roundRect(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();}
 
 // ─── LISTEN RESPONSES ────────────────────────────────────────────────────────
@@ -6265,15 +6350,31 @@ function psStandings(mode, questions, all, code) {
   mode = psModeOk(mode);
   const qs = Array.isArray(questions) ? questions : [];
   const people = {};
-  const rowFor = (pid) => people[pid] || (people[pid] = {
-    pid, name: 'Anonymous', team: null, score: 0, correct: 0, answered: 0, elapsed: 0,
+  const rowFor = (key) => people[key] || (people[key] = {
+    pid: key, name: 'Anonymous', team: null, score: 0, correct: 0, answered: 0, elapsed: 0,
     streak: 0, bestStreak: 0, alive: true, outAt: null,
   });
+  /* Score PEOPLE, not devices. A response is stored under the device that sent it
+   * (participantId), which was the only identity we had before class rosters — and
+   * still is in an open session, so it stays the fallback. But a student in a class
+   * carries a studentId with them: answer two questions on the shared Chromebook and
+   * the rest on your phone, and without this you appear on the leaderboard twice,
+   * each half right, and the winner is whoever didn't move. */
+  const whoIs = (pid, r) => (r && r.studentId) || pid;
+  const sentAt = (r) => (r && r.submittedAt) || 0;
 
   qs.forEach((q, i) => {
     const bucket = (all || {})[PSQid.bucket(q, i, code)] || {};
+    /* One answer per person per question. Two devices can both submit for the same
+     * question, so pick the EARLIEST — otherwise a second device is a free retry on
+     * a question you already got wrong. */
+    const oneEach = {};
     Object.entries(bucket).forEach(([pid, r]) => {
-      const p = rowFor(pid);
+      const who = whoIs(pid, r);
+      if (!oneEach[who] || sentAt(r) < sentAt(oneEach[who])) oneEach[who] = r;
+    });
+    Object.entries(oneEach).forEach(([who, r]) => {
+      const p = rowFor(who);
       if (r && r.name) p.name = r.name;
       if (r && r.team) p.team = r.team;
       p.answered += 1;

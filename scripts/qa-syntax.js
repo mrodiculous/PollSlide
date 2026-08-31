@@ -27,7 +27,13 @@ let failed = 0;
 for (const f of files) {
   const full = path.join(ROOT, f);
   if (!fs.existsSync(full)) { console.log(`${f}: (missing — skipped)`); continue; }
-  const html = fs.readFileSync(full, 'utf8');
+  /* A file that exists but will not open (permissions, or something else writing it)
+   * used to throw here and kill the run — after every earlier file had already
+   * printed "0 failed", so the gate looked like it had passed and merely exited 1.
+   * Report it as its own failure instead: unchecked is not the same as clean. */
+  let html;
+  try { html = fs.readFileSync(full, 'utf8'); }
+  catch (e) { failed++; console.log(`FAIL ${f}: could not read (${e.code || e.message})`); continue; }
   const re = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
   let m, i = 0, bad = 0;
   while ((m = re.exec(html))) {
@@ -45,11 +51,15 @@ for (const f of files) {
 for (const dir of ['api', 'lib']) {
   const d = path.join(ROOT, dir);
   if (!fs.existsSync(d)) continue;
-  for (const f of fs.readdirSync(d).filter(x => x.endsWith('.js'))) {
-    try { new vm.Script(fs.readFileSync(path.join(d, f), 'utf8'), { filename: `${dir}/${f}` }); }
-    catch (e) { failed++; console.log(`FAIL ${dir}/${f}: ${e.message}`); }
+  let names;
+  try { names = fs.readdirSync(d).filter(x => x.endsWith('.js')); }
+  catch (e) { failed++; console.log(`FAIL ${dir}/: could not list (${e.code || e.message})`); continue; }
+  let n = 0;
+  for (const f of names) {
+    try { new vm.Script(fs.readFileSync(path.join(d, f), 'utf8'), { filename: `${dir}/${f}` }); n++; }
+    catch (e) { failed++; console.log(`FAIL ${dir}/${f}: ${e.code === 'EPERM' ? 'could not read' : e.message}`); }
   }
-  console.log(`${dir}/: all .js parsed`);
+  console.log(`${dir}/: ${n} of ${names.length} .js parsed`);
 }
 
 console.log(failed ? `\n${failed} syntax failure(s)` : '\nAll clean');

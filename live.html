@@ -814,15 +814,31 @@ function psStandings(mode, questions, all, code) {
   mode = psModeOk(mode);
   const qs = Array.isArray(questions) ? questions : [];
   const people = {};
-  const rowFor = (pid) => people[pid] || (people[pid] = {
-    pid, name: 'Anonymous', team: null, score: 0, correct: 0, answered: 0, elapsed: 0,
+  const rowFor = (key) => people[key] || (people[key] = {
+    pid: key, name: 'Anonymous', team: null, score: 0, correct: 0, answered: 0, elapsed: 0,
     streak: 0, bestStreak: 0, alive: true, outAt: null,
   });
+  /* Score PEOPLE, not devices. A response is stored under the device that sent it
+   * (participantId), which was the only identity we had before class rosters — and
+   * still is in an open session, so it stays the fallback. But a student in a class
+   * carries a studentId with them: answer two questions on the shared Chromebook and
+   * the rest on your phone, and without this you appear on the leaderboard twice,
+   * each half right, and the winner is whoever didn't move. */
+  const whoIs = (pid, r) => (r && r.studentId) || pid;
+  const sentAt = (r) => (r && r.submittedAt) || 0;
 
   qs.forEach((q, i) => {
     const bucket = (all || {})[PSQid.bucket(q, i, code)] || {};
+    /* One answer per person per question. Two devices can both submit for the same
+     * question, so pick the EARLIEST — otherwise a second device is a free retry on
+     * a question you already got wrong. */
+    const oneEach = {};
     Object.entries(bucket).forEach(([pid, r]) => {
-      const p = rowFor(pid);
+      const who = whoIs(pid, r);
+      if (!oneEach[who] || sentAt(r) < sentAt(oneEach[who])) oneEach[who] = r;
+    });
+    Object.entries(oneEach).forEach(([who, r]) => {
+      const p = rowFor(who);
       if (r && r.name) p.name = r.name;
       if (r && r.team) p.team = r.team;
       p.answered += 1;

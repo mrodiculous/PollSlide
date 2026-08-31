@@ -32,8 +32,12 @@ ok('siblings',          !R.sameStudent('Alex Chen', 'Alexa Chen'));
 console.log('\nPasting a class list');
 ok('one name per line', R.parseRoster('Ana Ruiz\nBen Cole\nCara Diaz').length === 3);
 ok('blank lines dropped', R.parseRoster('Ana Ruiz\n\n\nBen Cole').length === 2);
-ok('a header row is not a student',
-   !R.parseRoster('Name\nAna Ruiz\nBen Cole').includes('Name'));
+/* Found by pasting a real-looking export in the browser: "Student Name" was
+ * accepted as a student, because the header check was an exact-match list. */
+['Name','Student Name','Full Name','Last Name','First Name','Student ID','Email Address','Pupil','Surname','No.']
+  .forEach(h => ok(`header "${h}" is not a student`, !R.parseRoster(h + '\nAna Ruiz').includes(h)));
+['Ana Ruiz','Mary-Jane Watson','Li Wei','Jo','Renée Dubois']
+  .forEach(n => ok(`but "${n}" still is`, R.parseRoster(n).includes(n)));
 ok('"Last, First" is flipped',
    R.parseRoster('Ruiz, Ana').join() === 'Ana Ruiz', R.parseRoster('Ruiz, Ana'));
 ok('CSV takes the first column',
