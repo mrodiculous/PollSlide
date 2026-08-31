@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "app",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8138", "--directory", "/Users/Rod/Documents/GitHub/PollSlide"],
+      "port": 8138
+    },
+    {
+      "name": "website",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "8140", "--directory", "/Users/Rod/Documents/GitHub/pollslide-website"],
+      "port": 8140
+    }
+  ]
+}
