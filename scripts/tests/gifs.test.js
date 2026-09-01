@@ -183,5 +183,37 @@ ok('a record with no url is ignored',
 ok('if every result is oddly shaped, a described one is still used rather than none',
    G.pickBest([rec('w','a banner',1200,100)], { seed:'s' }) !== null);
 
+/* ── ANSWER TERMS ────────────────────────────────────────────────────────────
+   The bug these exist to catch: a fetch came back with a GIF on every question and
+   none on any answer. cleanAnswer sliced the FIRST three words, so a real answer
+   became a sentence stub — "Converting light into" — and image search returns nothing
+   for a fragment ending on a preposition. The question terms were keywords and worked;
+   the answer terms were stubs and silently found nothing. */
+ok('an answer keeps its END, where English puts the subject',
+   G.cleanAnswer('Converting light into chemical energy') === 'chemical energy');
+ok('the old first-three-words slice is gone — no stub ending on a preposition',
+   G.cleanAnswer('Converting light into chemical energy') !== 'Converting light into');
+ok('a preposition INSIDE the window is dropped, not just one on the edge',
+   G.cleanAnswer('Absorbing water through the stem') === 'water stem');
+ok('…and an infinitive in the middle likewise',
+   G.cleanAnswer('Using stored sugar to grow') === 'sugar grow');
+ok('a leading article still goes',
+   G.cleanAnswer('The chloroplast') === 'chloroplast');
+ok('a short capitalised run is a NAME and survives whole — not "War Two"',
+   G.cleanAnswer('World War Two') === 'World War Two');
+ok('the rainforest stays a rainforest and does not become the shopping company',
+   G.cleanAnswer('the Amazon rainforest') === 'Amazon rainforest');
+ok('a capitalised name inside a longer sentence still takes the tail',
+   G.cleanAnswer('A tropical rainforest in South America') === 'South America');
+ok('every answer term is a keyword, never a multi-word sentence fragment',
+   ['Converting light into chemical energy','Absorbing water through the stem',
+    'Using stored sugar to grow','A tropical rainforest in South America']
+     .every(a => G.cleanAnswer(a).split(/\s+/).length <= 2));
+ok('an unpicturable answer still yields a searchable reaction, never an empty term',
+   ['42','B','true','none of the above',''].every(a => {
+     const t = G.answerTerm(a, { seed: 'x' });
+     return typeof t === 'string' && t.length > 0;
+   }));
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

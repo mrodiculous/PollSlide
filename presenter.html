@@ -12,7 +12,7 @@
 <script src="/qid.js?v=5e6ebfdc"></script>
 <script src="/roster.js?v=88b6f2d4"></script>
 <script src="/retakes.js?v=d187d4ee"></script>
-<script src="/gifs.js?v=35062c5a"></script>
+<script src="/gifs.js?v=948b696c"></script>
 <script src="/starters.js?v=26cc51f5"></script>
 <script src="/ui-lang.js?v=2eaed633"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -313,7 +313,10 @@
   .resp-big span { font-size:12px; color:var(--muted); font-weight:400; font-family:'DM Sans',sans-serif; }
   .bar-wrap { margin-bottom:10px; }
   .bar-label { display:flex; justify-content:space-between; font-size:12px; margin-bottom:3px; }
-  .bar-label .bn { font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:70%; }
+  /* flex:1 + min-width:0 gives the label every pixel the count doesn't need, and lets it
+     shrink far enough to actually ellipsize. The old max-width:70% capped it well short
+     of the space available and cost ~4 characters for no reason. */
+  .bar-label .bn { font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; }
   .bar-label .bv { font-family:'Syne',sans-serif; font-weight:700; color:var(--accent); flex-shrink:0; }
   .bar-bg   { height:7px; background:var(--surface2); border-radius:100px; overflow:hidden; }
   .bar-fill { height:100%; border-radius:100px; background:linear-gradient(90deg,var(--accent),#a78bfa); transition:width 0.4s ease; }
@@ -3767,8 +3770,17 @@ async function createFromStarter(id) {
    A per-deck setting: a GIF beside each question, beside each revealed answer, or
    both. Candidates are fetched WHEN THE BOX IS TICKED and shown here for review —
    nothing unvetted reaches a projector in front of a class. Search runs through
-   /api/gif-search, which holds the key and locks Tenor's content filter to its
-   strictest setting where no caller can reach it.                                  */
+   /api/gif-search, which holds the key and locks the provider's content filter to
+   its strictest setting where no caller can reach it.
+
+   ATTRIBUTION IS NOT DECORATION. Giphy's API terms require their mark to be shown
+   wherever their content is. This panel used to say "Powered by Tenor" as a hard-
+   coded string — written when Tenor was the provider, left behind when Tenor
+   discontinued their API and Giphy took over. So it was crediting the wrong company,
+   in breach of the terms of the one actually serving the GIFs. The endpoint has
+   always returned the right name in `attribution`; nothing read it. Now the credit
+   is derived from the GIFs on screen (each record carries its `source`), which means
+   it cannot go stale again the next time a provider changes.                       */
 /* ─── INTERFACE LANGUAGE ───────────────────────────────────────────────────────
    The presenter's own chrome — buttons, menus, labels — in the teacher's language.
    Until now this surface was English-only while answer.html had 180 translated
@@ -3866,6 +3878,15 @@ function initUiLang() {
  * ALT TEXT. Tenor's own content_description, which is a real sentence. A GIF with no
  * description is never stored in the first place (see lib/gifs.js pickBest), so this
  * always has something to say. */
+/* The watermark that goes on the projector. It read "via Tenor" on every GIF regardless
+   of who served it — hardcoded when Tenor was the provider, and left crediting the wrong
+   company in front of the room after Giphy took over. Each record carries its own
+   `source`, so the credit follows the actual image. */
+function gifSourceLabel(g) {
+  const map = { giphy: 'via GIPHY', tenor: 'via Tenor' };
+  return map[g && g.source] || 'via GIPHY';
+}
+
 function gifTag(g, maxVh) {
   if (!g || !g.url) return '';
   const still = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -3876,7 +3897,7 @@ function gifTag(g, maxVh) {
          style="width:100%;max-height:${vh}vh;object-fit:contain;border-radius:10px;"
          onerror="this.parentElement.style.display='none'">
     <span style="position:absolute;right:5px;bottom:4px;font-size:8.5px;color:rgba(255,255,255,.72);
-      background:rgba(0,0,0,.42);padding:1px 5px;border-radius:20px;">via Tenor</span>
+      background:rgba(0,0,0,.42);padding:1px 5px;border-radius:20px;">${escapeHtml(gifSourceLabel(g))}</span>
   </div>`;
 }
 
@@ -3944,7 +3965,7 @@ function openGifModal(deckId) {
       ${have?`<button class="btn btn-ghost" onclick="clearDeckGifs('${escAttr(deckId)}')">Remove all</button>`:''}
     </div>
     <p style="font-size:10.5px;color:var(--muted);margin-top:9px;line-height:1.5;">
-      Powered by Tenor, with safe search locked on. Nothing appears on screen until you've seen it here.
+      ${escapeHtml(gifAttribution(deckId))}, with safe search locked on. Nothing appears on screen until you've seen it here.
       Students on <b>reduced motion</b> see a still frame instead of the animation.
     </p>
     <button class="btn btn-ghost" style="width:100%;margin-top:10px;" onclick="closeGifModal()">Done</button>
@@ -3952,6 +3973,23 @@ function openGifModal(deckId) {
   m.style.display = 'flex';
 }
 function closeGifModal(){ const m=document.getElementById('gifModal'); if(m) m.remove(); }
+
+/* Who to credit. The last search's answer is remembered, but the GIFs already saved on
+ * the deck are the better source: they are what is actually on screen, and they survive
+ * a page reload where a variable does not. A deck fetched before a provider switch can
+ * legitimately hold both, so both get named rather than one silently misattributed. */
+let GIF_ATTRIBUTION = '';
+const GIF_CREDITS = { giphy: 'Powered by GIPHY', tenor: 'Powered by Tenor' };
+function gifAttribution(deckId) {
+  const seen = new Set();
+  const qs = (presentations[deckId] || {}).questions || [];
+  qs.forEach(q => ['gifQ','gifA'].forEach(s => {
+    const src = q && q[s] && q[s].source;
+    if (src && GIF_CREDITS[src]) seen.add(GIF_CREDITS[src]);
+  }));
+  if (seen.size) return [...seen].join(' · ');
+  return GIF_ATTRIBUTION || 'GIF search';
+}
 
 function renderGifReview(deckId) {
   const p = presentations[deckId]; if (!p) return '';
@@ -4029,6 +4067,7 @@ async function fetchDeckGifs(deckId) {
         headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tk },
         body: JSON.stringify({ q: term, deck: deckId, limit: 8 }) });
       const d = await r.json();
+      if (d && d.attribution) GIF_ATTRIBUTION = d.attribution;
       if (!r.ok) { failed++; if(!firstError) firstError = d.error || ('HTTP '+r.status); return null; }
       return PSGifs.pickBest(d.results, { seed });
     } catch (e) { failed++; if(!firstError) firstError = String(e.message||e); return null; }
@@ -4044,8 +4083,16 @@ async function fetchDeckGifs(deckId) {
     }
     if (pol.answer) {
       const correct = correctAnswerText(q);
-      const term = PSGifs.answerTerm(correct, { seed:(q.id||i)+':a' });
-      const g = await search(term, (q.id||i)+':a');
+      let term = PSGifs.answerTerm(correct, { seed:(q.id||i)+':a' });
+      let g = await search(term, (q.id||i)+':a');
+      /* The panel promises a GIF on EVERY revealed answer — "a celebration where it
+         can't be pictured". A literal answer that finds nothing used to leave the slot
+         silently empty, so a fetch came back with a GIF on every question and none on
+         any answer. Fall back to the reaction term, which always has results. */
+      if (!g && correct) {
+        term = PSGifs.answerTerm('', { seed:(q.id||i)+':a' });
+        g = await search(term, (q.id||i)+':a');
+      }
       if (g) { g.term = term; q.gifA = g; done++; }
     }
     if (failed && done === 0 && i === 0) break;   // configuration problem: stop, don't hammer
@@ -4086,6 +4133,7 @@ async function researchGif(deckId, qIdx, slot, term) {
       headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tk },
       body: JSON.stringify({ q: clean, deck: deckId, limit: 12 }) });
     const d = await r.json();
+    if (d && d.attribution) GIF_ATTRIBUTION = d.attribution;
     if (!r.ok) { toast(d.error || 'Could not search.', 'warn'); return; }
     const g = PSGifs.pickBest(d.results, { seed: clean });
     if (!g) { toast(`Nothing usable for "${clean}".`, 'warn'); return; }
@@ -4110,6 +4158,7 @@ async function reshuffleGif(deckId, qIdx, slot) {
       headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tk },
       body: JSON.stringify({ q: term, deck: deckId, limit: 12 }) });
     const d = await r.json();
+    if (d && d.attribution) GIF_ATTRIBUTION = d.attribution;
     if (!r.ok) { toast(d.error || 'Could not search.', 'warn'); return; }
     const g = PSGifs.pickBest(d.results, { seed: String(Math.random()) });
     if (!g) { toast('Nothing else usable for that search.', 'warn'); return; }
@@ -5400,8 +5449,39 @@ const MEDIA_SIZES = {
   full: { label:'⛶', h:'62vh',   desc:'Full height' },
 };
 
+/* What a fetched GIF looks like ON the question, in the presenter's own view.
+   Without this the GIF panel was a black hole: you ticked the boxes, watched it find
+   GIFs, pressed Done — and the question looked exactly as before, because this function
+   rendered `q.image` and nothing else. The GIFs were saved and published correctly and
+   did appear in present mode, but there was no way to tell from the deck, so it read as
+   "Done didn't do anything". Labelled by slot, because when the ANSWER GIF appears is
+   the thing a teacher needs to be sure about. */
+function renderGifSlots(q, idx) {
+  const rows = [];
+  if (q.gifQ) rows.push({ g: q.gifQ, label: 'GIF on the question', when: 'shown with the question' });
+  if (q.gifA) rows.push({ g: q.gifA, label: 'GIF on the answer',   when: 'only after you reveal' });
+  if (!rows.length) return '';
+  return `<div style="margin-bottom:12px;">
+    ${rows.map(r => `
+      <div style="display:flex;gap:9px;align-items:center;padding:7px;margin-bottom:6px;
+                  border:1px solid var(--border2);border-radius:10px;background:var(--surface2);">
+        <img src="${escAttr(r.g.still || r.g.url)}" alt="${escAttr(r.g.alt || '')}"
+             style="width:66px;height:50px;object-fit:cover;border-radius:7px;flex-shrink:0;background:#000;"
+             onerror="this.style.display='none'">
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:11px;font-weight:700;">${escapeHtml(r.label)}</div>
+          <div style="font-size:10.5px;color:var(--muted);">${escapeHtml(r.when)}${
+            r.g.term ? ' · searched “' + escapeHtml(r.g.term) + '”' : ''}</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="openGifModal('${escAttr(activePresId)}')"
+                title="Open the GIF panel to change or remove this">Change</button>
+      </div>`).join('')}
+  </div>`;
+}
+
 function renderQuestionMedia(q, idx) {
-  if (!q.image || !q.image.trim()) return '';
+  const gifs = renderGifSlots(q, idx);
+  if (!q.image || !q.image.trim()) return gifs;
   const code = presentations[activePresId]?.sessionCode || '';
   const savedH = localStorage.getItem(`ql_qmedia_h_${code}_${idx}`);
   const boxStyle = savedH
@@ -5417,7 +5497,7 @@ function renderQuestionMedia(q, idx) {
   const resetBtn = savedH
     ? `<button onclick="setQMediaSize(${idx},'auto')" title="Auto-fit" style="padding:2px 7px;font-size:10px;border-radius:5px;border:1px solid var(--border2);background:var(--surface2);color:var(--muted);cursor:pointer;">↺</button>`
     : '';
-  return `
+  return gifs + `
     <div id="qMediaWrap_${idx}" style="margin-bottom:4px;">
       <div style="display:flex;align-items:center;gap:5px;margin-bottom:5px;">
         <span style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:0.06em;text-transform:uppercase;flex:1;">Media</span>
@@ -6448,7 +6528,7 @@ function renderRightPanel(q, responses) {
         const hasImg=opt.img&&opt.img.trim();
         const showCorrect = revealed && correct.includes(i);
         const color = showCorrect ? '#43e97b' : palette[i % palette.length];
-        const correctBadge = showCorrect ? ` <span style="font-size:10px;font-weight:700;color:#43e97b;background:rgba(67,233,123,0.16);padding:1px 7px;border-radius:100px;margin-left:4px;">✓</span>` : '';
+        const correctBadge = showCorrect ? ` <span style="font-size:10px;font-weight:700;color:#43e97b;background:rgba(67,233,123,0.16);padding:1px 7px;border-radius:100px;margin-left:4px;flex-shrink:0;">✓</span>` : '';
         const imgRow = hasImg ? `<div style="margin-bottom:5px;">${isVideoUrl(opt.img)
           ? `<video src="${opt.img}" style="width:100%;max-height:80px;border-radius:7px;object-fit:cover;background:#000;" autoplay loop muted playsinline></video>`
           : `<img src="${opt.img}" style="width:100%;max-height:80px;border-radius:7px;object-fit:cover;display:block;" onerror="this.parentElement.style.display='none'">`
@@ -6456,9 +6536,16 @@ function renderRightPanel(q, responses) {
         return `<div class="bar-wrap" style="border-left:3px solid ${color}20;padding-left:4px;">
         ${imgRow}
         <div class="bar-label">
-          <span class="bn" style="display:flex;align-items:center;gap:6px;">
+          <!-- The ellipsis lives on the TEXT span, not on .bn. .bn sets text-overflow in
+               CSS, but the inline display:flex here (added to seat the letter badge
+               beside the label) makes that inert — ellipsis applies to a block's inline
+               content, never to a flex container. The result was an option label sheared
+               mid-word with no "…", so a projected result read "Converting light into
+               chemi". min-width:0 is what lets the text actually shrink inside the flex
+               row; without it the span refuses to go below its content width. -->
+          <span class="bn" style="display:flex;align-items:center;gap:6px;min-width:0;">
             <span style="display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;border-radius:5px;background:${color};color:#fff;font-size:10px;font-weight:800;flex-shrink:0;">${letters[i]}</span>
-            <span>${opt.text||''}${correctBadge}</span>
+            <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;" title="${escAttr(opt.text||'')}">${opt.text||''}</span>${correctBadge}
           </span>
           <span class="bv" style="color:${color};font-size:13px;">${count}</span>
         </div>
@@ -9037,6 +9124,12 @@ function runGifSearch(query) {
         headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+tk },
         body: JSON.stringify({ q: query, limit: 24 }) });
       const d = await r.json();
+      // Credit whoever actually answered, not whoever was the provider when this was written.
+      if (d && d.attribution) {
+        GIF_ATTRIBUTION = d.attribution;
+        const credit = document.getElementById('gifPickerCredit');
+        if (credit) credit.textContent = d.attribution;
+      }
       if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
       const list = d.results || [];
       if (!list.length) {
@@ -9795,7 +9888,7 @@ function renderPresentSlide(idx) {
     </div>
     <!-- Footer -->
     <div style="padding:8px 16px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
-      <span style="font-size:10px;color:var(--muted);">Powered by <strong>Giphy</strong> · Click any GIF to insert it</span>
+      <span style="font-size:10px;color:var(--muted);"><strong id="gifPickerCredit">Powered by GIPHY</strong> · Click any GIF to insert it</span>
       <span style="font-size:10px;color:var(--muted);">Tip: results update as you type</span>
     </div>
   </div>

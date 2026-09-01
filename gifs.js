@@ -45,6 +45,13 @@
   const MAX_TERM_WORDS = 2;      // a GIF search is a keyword search, not a sentence
   const MAX_TERM_CHARS = 40;
 
+  /* Prepositions STOP does not carry. STOP is tuned for scoring question words, where
+   * these are rare; an ANSWER is where they show up ("water THROUGH the stem"), and one
+   * left in front turns the search into a phrase nothing matches. */
+  const PREP = new Set(('through during before after above below between among within without '
+    + 'across behind beyond toward towards upon against along around near per via versus '
+    + 'inside outside beside besides despite except including regarding until while since').split(' '));
+
   /* Words that appear in questions and never describe what the question is ABOUT.
    * These are the scaffolding of asking — "which of the following best describes" —
    * and every one of them that survives into the search dilutes the word that matters.
@@ -156,7 +163,27 @@
       .replace(/[^\p{L}\p{N}\s'-]/gu, ' ').split(/\s+/).filter(Boolean);
     // Only a leading article goes; everything else is the answer the teacher wrote.
     while (w.length > 1 && ['the','a','an'].includes(w[0].toLowerCase())) w.shift();
-    return w.slice(0, 3).join(' ').slice(0, MAX_TERM_CHARS).trim();
+    if (!w.length) return '';
+    /* Keep the END, not the start. An English answer is head-final — the thing it is
+     * ABOUT is the last noun phrase ("converting light into CHEMICAL ENERGY"). Taking
+     * the first three words instead produced "Converting light into": a fragment ending
+     * on a preposition that image search returns nothing for. That is why a fetch came
+     * back with a GIF on every question and none on any answer — the question terms
+     * were real words, the answer terms were sentence stubs.
+     *
+     * Function words are dropped everywhere, not just at the ends: trimming only the
+     * ends still left "through the stem" and "sugar to grow", because the preposition
+     * sits inside the window rather than on its edge. */
+    const content = w.filter(x => !STOP.has(x.toLowerCase()) && !PREP.has(x.toLowerCase()));
+    /* A short capitalised run is a NAME, and a name survives whole or not at all —
+     * cutting "World War Two" to the last two words gives "War Two", which is not a
+     * thing. Only applies when the entire answer is that name; a capitalised word inside
+     * a longer sentence still goes through the normal tail. */
+    if (content.length && content.length <= 3 && content.every(x => /^\p{Lu}/u.test(x))) {
+      return content.join(' ').slice(0, MAX_TERM_CHARS).trim();
+    }
+    const out = (content.length ? content : w).slice(-MAX_TERM_WORDS);
+    return out.join(' ').slice(0, MAX_TERM_CHARS).trim();
   }
 
   function answerTerm(answer, opts) {
