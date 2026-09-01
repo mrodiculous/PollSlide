@@ -15,7 +15,7 @@
 <script src="/gifs.js?v=ed7add18"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=0ea2fafb"></script>
-<script src="/ui-lang.js?v=2eaed633"></script>
+<script src="/ui-lang.js?v=aae811e5"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root {
@@ -221,7 +221,10 @@
   .cm-tag.setup { background:rgba(255,255,255,.08); color:var(--muted); }
   .cm-tag.edit  { background:rgba(247,183,49,.16); color:var(--accent4); }
   .cm-tag.ready { background:rgba(108,99,255,.16); color:var(--accent); }
-  .cm-tag.live  { background:rgba(255,101,132,.18); color:var(--accent2); }
+  /* Green, matching .live-bar, .live-badge and the pulsing .live-dot. It was pink —
+     the one colour the rest of the app uses for wrong answers and destructive actions,
+     which is the wrong signal for "this is up and working in front of your audience". */
+  .cm-tag.live  { background:rgba(67,233,123,.18); color:var(--accent3); }
   .cm-what { flex:1; min-width:0; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .cm-switch { background:var(--surface3); border:1px solid var(--border2); color:var(--text);
     border-radius:7px; padding:4px 11px; font-size:11.5px; font-family:'DM Sans',sans-serif;
@@ -3834,11 +3837,70 @@ function tr(en) {
   return v == null ? en : v;
 }
 
+/* ── CONTROLS RENDERED FROM JAVASCRIPT ────────────────────────────────────────
+   The static markup carries 144 `data-i18n` tags. Every control built inside a
+   template literal — which is most of the ones a teacher actually presses — carried
+   none, so changing language left ▶ Present, 📊 Tally, ✓ Done & Go Live and the rest
+   in English. Tagging several hundred template literals by hand would fix today and
+   rot tomorrow: the next `<button>` someone writes is untagged again, silently.
+
+   So controls are translated by EXACT DICTIONARY MATCH instead. A string with no entry
+   is left exactly as it is, which means the worst case is the English we already had.
+
+   WHAT IT WILL NOT TOUCH, so a deck's own words stay as the teacher typed them:
+     • anything inside the deck list or the question list
+     • anything inside an element marked data-noi18n
+     • any text that is not an exact key in the dictionary — a deck named "Tally" is
+       still safe because deck names are not rendered inside <button> chrome here.
+   Emoji stay attached to their label: a leading glyph is split off, the words behind it
+   are looked up, and the glyph is put back, so "📊 Tally" needs one entry, not two. */
+const UI_NO_TR = '#presList, #qList, [data-noi18n]';
+const UI_GLYPH = /^([^\p{L}\p{N}]*\s*)(.*)$/u;
+
+function translateControlNode(node) {
+  const raw = node.nodeValue;
+  const trimmed = raw.trim();
+  if (!trimmed) return;
+  if (node._psEn === undefined) node._psEn = raw;
+  if (UI_LANG === 'en') { node.nodeValue = node._psEn; return; }
+
+  const original = node._psEn;
+  const t = original.trim();
+  let out = tr(t);
+  if (out === t) {
+    // Try again without a leading glyph, then put the glyph back on the front.
+    const m = UI_GLYPH.exec(t);
+    if (m && m[1] && m[2]) {
+      const inner = tr(m[2]);
+      if (inner !== m[2]) out = m[1] + inner;
+    }
+  }
+  if (out === t) return;                       // not a known control string: leave it
+  node.nodeValue = original.replace(t, out);   // keeps the surrounding whitespace
+}
+
+function applyUiLangControls() {
+  document.querySelectorAll('button, [role="button"], summary, legend, th, option').forEach(el => {
+    if (el.closest(UI_NO_TR)) return;
+    if (el.closest('[data-i18n]')) return;     // already handled by the tagged pass
+    for (const node of el.childNodes) {
+      if (node.nodeType === 3) translateControlNode(node);
+    }
+    // A tooltip is functionality too — it is often the only explanation an icon has.
+    if (el.hasAttribute('title') && !el.hasAttribute('data-i18n-title')) {
+      if (el._psCtrlTitle === undefined) el._psCtrlTitle = el.getAttribute('title');
+      const en = el._psCtrlTitle;
+      el.setAttribute('title', UI_LANG === 'en' ? en : tr(en));
+    }
+  });
+}
+
 function applyUiLang() {
   document.querySelectorAll('[data-i18n]').forEach(el => {
     if (el._psEn === undefined) el._psEn = el.textContent;
     el.textContent = UI_LANG === 'en' ? el._psEn : tr(el._psEn);
   });
+  applyUiLangControls();
   document.querySelectorAll('[data-i18n-title]').forEach(el => {
     if (el._psTitle === undefined) el._psTitle = el.getAttribute('title') || '';
     el.setAttribute('title', UI_LANG === 'en' ? el._psTitle : tr(el._psTitle));
@@ -3881,7 +3943,14 @@ function initUiLang() {
     if (UI_LANG === 'en') return;
     for (const m of muts) {
       for (const n of m.addedNodes) {
-        if (n.nodeType === 1 && (n.hasAttribute?.('data-i18n') || n.querySelector?.('[data-i18n],[data-i18n-title],[data-i18n-ph]'))) {
+        /* Also fires for untagged CONTROLS. Watching only tagged nodes is what let a
+           freshly-rendered panel of buttons stay English: nothing in it was tagged, so
+           nothing woke the translator up. */
+        if (n.nodeType === 1 && (
+              n.hasAttribute?.('data-i18n')
+              || n.querySelector?.('[data-i18n],[data-i18n-title],[data-i18n-ph]')
+              || n.matches?.('button, [role="button"]')
+              || n.querySelector?.('button, [role="button"]'))) {
           applyUiLang(); return;
         }
       }
@@ -4647,7 +4716,7 @@ function syncCenterMode(idx) {
       ? ' · your audience is on question ' + (liveQIdx + 1)
       : ' · nothing is live yet';
     bar.innerHTML = '<span class="cm-tag ' + (isLive ? 'live' : 'ready') + '">' +
-        (isLive ? '🔴 Live' : '👁 Preview') + '</span>' +
+        (isLive ? '🟢 Live' : '👁 Preview') + '</span>' +
       '<span class="cm-what">' + escapeHtml(pos) +
         (isLive ? ' · this is what your audience sees right now' : where) + '</span>' +
       '<button class="cm-switch" onclick="editQuestion(' + i + ')">✏️ Edit this question</button>';
