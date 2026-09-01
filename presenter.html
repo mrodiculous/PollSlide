@@ -12,7 +12,7 @@
 <script src="/qid.js?v=5e6ebfdc"></script>
 <script src="/roster.js?v=88b6f2d4"></script>
 <script src="/retakes.js?v=d187d4ee"></script>
-<script src="/gifs.js?v=719813e5"></script>
+<script src="/gifs.js?v=e45a70a2"></script>
 <script src="/starters.js?v=26cc51f5"></script>
 <script src="/ui-lang.js?v=2eaed633"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -2792,7 +2792,11 @@ function selectPresentation(id) {
   // here on the id travels with the question through reorders and deletes.
   // See qid.js.
   const qarr = toQArr(pres.questions);
-  if (PSQid.backfill(qarr)) {
+  /* Same pass moves any GIFs still living in the retired gifQ/gifA/gifOpts fields into
+     the media boxes, so a deck fetched before that change keeps its pictures — and shows
+     them in the editor, where they were previously invisible. */
+  const migrated = qarr.reduce((n, q) => n + (migrateLegacyGifs(q) ? 1 : 0), 0);
+  if (PSQid.backfill(qarr) || migrated) {
     pres.questions = qarr;
     if (userId) db.ref(deckPath(id) + '/questions').set(qarr).catch(() => {});
   }
@@ -3930,7 +3934,7 @@ function openGifModal(deckId) {
   if (!m) { m = document.createElement('div'); m.id = 'gifModal'; m.className = 'overlay';
             m.onclick = e => { if (e.target === m) closeGifModal(); }; document.body.appendChild(m); }
 
-  const have = qs.filter(q => q && (q.gifQ || q.gifA || (q.gifOpts && Object.keys(q.gifOpts).length))).length;
+  const have = qs.filter(q => q && (q.imageGif || (q.options || []).some(o => o && o.imgGif))).length;
   m.innerHTML = `<div class="modal" style="max-width:560px;">
     <h2 style="margin-bottom:2px;">GIFs</h2>
     <p style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">${escapeHtml(p.name || 'This deck')} · ${qs.length} question${qs.length===1?'':'s'}</p>
@@ -3961,14 +3965,15 @@ function openGifModal(deckId) {
       .gif-row .btn-sm{flex-shrink:0;}
     </style>
     <label class="gif-opt ${pol.question?'on':''}">
-      <input type="checkbox" ${pol.question?'checked':''} onchange="setGifPolicy('${escAttr(deckId)}',this.checked,${pol.answer},${pol.allAnswers})">
-      <span><b>A GIF on each question</b>Chosen from the words in the question itself.</span></label>
-    <label class="gif-opt ${pol.answer?'on':''}">
-      <input type="checkbox" ${pol.answer?'checked':''} onchange="setGifPolicy('${escAttr(deckId)}',${pol.question},this.checked,${pol.allAnswers})">
-      <span><b>GIF on the right answer only — held until the reveal</b>One GIF, and it stays hidden while people are answering, so it can't point at the correct card. From the answer where it can be pictured; a celebration where it can't, because "42" and "B" have nothing to show.</span></label>
-    <label class="gif-opt ${pol.allAnswers?'on':''}">
-      <input type="checkbox" ${pol.allAnswers?'checked':''} onchange="setGifPolicy('${escAttr(deckId)}',${pol.question},${pol.answer},this.checked)">
-      <span><b>A GIF on every answer choice</b>Every option gets its own, so a picture never marks out the right one. Shown with the choices from the start. Costs one search per option — a 10-question deck with 4 choices is 40.</span></label>
+      <input type="checkbox" ${pol.question?'checked':''} onchange="setGifPolicy('${escAttr(deckId)}',this.checked,${pol.answers})">
+      <span><b>Fill each question's media box</b>Searched on the words in the question itself. Drops the GIF straight into the question's own image box, so you can swap or clear it there like any other picture.</span></label>
+    <label class="gif-opt ${pol.answers?'on':''}">
+      <input type="checkbox" ${pol.answers?'checked':''} onchange="setGifPolicy('${escAttr(deckId)}',${pol.question},this.checked)">
+      <span><b>Fill every answer's media box</b>Each choice searched on its own words, into its own image box. Every option gets one, so a picture never marks out the right answer. One search per option — a 10-question deck with 4 choices is 40.</span></label>
+    <p style="font-size:11px;color:var(--muted);margin:2px 0 10px;line-height:1.5;">
+      These fill the same boxes you type into by hand. Anything you set yourself is left alone,
+      and you can edit or clear any of them in the question editor afterwards.
+    </p>
 
     <div id="gifReview" style="margin-top:12px;">
       ${have ? `<p style="font-size:12px;color:var(--muted);margin-bottom:4px;">${have} of ${qs.length} questions have a GIF. Review them below — remove or reshuffle any before you present.</p>` : ''}
@@ -3977,7 +3982,7 @@ function openGifModal(deckId) {
 
     <div style="display:flex;gap:7px;margin-top:12px;">
       <button class="btn btn-primary" style="flex:1;" onclick="fetchDeckGifs('${escAttr(deckId)}')"
-        ${(pol.question||pol.answer)?'':'disabled'}>${have?'↻ Fetch again':'Find GIFs'}</button>
+        ${(pol.question||pol.answers)?'':'disabled'}>${have?'↻ Fetch again':'Find GIFs'}</button>
       ${have?`<button class="btn btn-ghost" onclick="clearDeckGifs('${escAttr(deckId)}')">Remove all</button>`:''}
     </div>
     <p style="font-size:10.5px;color:var(--muted);margin-top:9px;line-height:1.5;">
@@ -3999,36 +4004,84 @@ const GIF_CREDITS = { giphy: 'Powered by GIPHY', tenor: 'Powered by Tenor' };
 function gifAttribution(deckId) {
   const seen = new Set();
   const qs = (presentations[deckId] || {}).questions || [];
-  const note = (g) => { const src = g && g.source; if (src && GIF_CREDITS[src]) seen.add(GIF_CREDITS[src]); };
+  const note = (m) => { const src = m && m.source; if (src && GIF_CREDITS[src]) seen.add(GIF_CREDITS[src]); };
   qs.forEach(q => {
     if (!q) return;
-    note(q.gifQ); note(q.gifA);
-    Object.values(q.gifOpts || {}).forEach(note);
+    note(q.imageGif);
+    (q.options || []).forEach(o => note(o && o.imgGif));
   });
   if (seen.size) return [...seen].join(' · ');
   return GIF_ATTRIBUTION || 'GIF search';
 }
 
-/* A slot is either a plain field on the question (gifQ / gifA) or one option's GIF,
-   addressed as "opt:2". Reviewing, reshuffling, retyping a term and removing all work
-   the same on every slot, so they all go through these three rather than each function
-   knowing where a GIF lives. */
-function gifSlotGet(q, slot) {
-  if (!q) return null;
-  const m = /^opt:(\d+)$/.exec(slot);
-  return m ? ((q.gifOpts || {})[m[1]] || null) : (q[slot] || null);
-}
-function gifSlotSet(q, slot, g) {
-  const m = /^opt:(\d+)$/.exec(slot);
-  if (m) { q.gifOpts = q.gifOpts || {}; q.gifOpts[m[1]] = g; } else { q[slot] = g; }
-}
-function gifSlotDelete(q, slot) {
-  const m = /^opt:(\d+)$/.exec(slot);
-  if (m) { if (q.gifOpts) delete q.gifOpts[m[1]]; } else { delete q[slot]; }
-}
+/* ── WHERE A FETCHED GIF ACTUALLY GOES ────────────────────────────────────────
+   Into the media boxes the editor already shows: 'image' is the question's own box,
+   'opt:2' is the third choice's. THE URL IN THE BOX IS THE ONLY SOURCE OF TRUTH — it
+   renders everywhere images already render, and the teacher edits or clears it like any
+   other picture.
+
+   This replaced a parallel set of fields (gifQ / gifA / gifOpts) that held fetched GIFs
+   beside the boxes rather than in them. They rendered through their own code paths, so
+   the boxes stayed visibly empty, "Done" looked like it had done nothing, and there was
+   no way to change one by hand. Two places to store one picture is one too many.
+
+   The small record kept next to the URL (`imageGif` / `imgGif`) is metadata only — the
+   search term, so the review row can show and re-run it, and the provider, for credit.
+   Its OTHER job is provenance: a box holding a hand-typed URL has no record beside it,
+   and that is exactly how "don't overwrite the teacher's own picture" is decided. */
 function gifSlotOptIndex(slot) {
   const m = /^opt:(\d+)$/.exec(slot);
   return m ? Number(m[1]) : null;
+}
+function gifSlotUrl(q, slot) {
+  if (!q) return '';
+  const oi = gifSlotOptIndex(slot);
+  return oi === null ? (q.image || '') : ((((q.options || [])[oi]) || {}).img || '');
+}
+function gifSlotMeta(q, slot) {
+  if (!q) return null;
+  const oi = gifSlotOptIndex(slot);
+  return oi === null ? (q.imageGif || null) : ((((q.options || [])[oi]) || {}).imgGif || null);
+}
+function gifSlotWrite(q, slot, url, meta) {
+  const oi = gifSlotOptIndex(slot);
+  if (oi === null) {
+    if (url === null) { q.image = ''; delete q.imageGif; return; }
+    q.image = url;
+    if (meta) q.imageGif = meta; else delete q.imageGif;
+  } else {
+    const o = (q.options || [])[oi];
+    if (!o) return;
+    if (url === null) { o.img = ''; delete o.imgGif; return; }
+    o.img = url;
+    if (meta) o.imgGif = meta; else delete o.imgGif;
+  }
+}
+/* Fill a box — unless the teacher already put something there themselves. */
+function gifFill(q, slot, g, term) {
+  if (gifSlotUrl(q, slot) && !gifSlotMeta(q, slot)) return false;
+  gifSlotWrite(q, slot, g.url, { term, source: g.source || '', alt: g.alt || '',
+                                 still: g.still || '', id: g.id || '' });
+  return true;
+}
+
+/* Old decks carry GIFs in the retired fields. Move them into the boxes on open, once,
+   so nobody loses the GIFs they already fetched — and so the editor finally shows them. */
+function migrateLegacyGifs(q) {
+  if (!q || typeof q !== 'object') return false;
+  let moved = false;
+  const take = (g, slot) => {
+    if (!g || !g.url) return;
+    if (gifSlotUrl(q, slot)) return;                 // a real picture is already there
+    gifSlotWrite(q, slot, g.url, { term: g.term || '', source: g.source || '',
+                                   alt: g.alt || '', still: g.still || '', id: g.id || '' });
+    moved = true;
+  };
+  take(q.gifQ, 'image');
+  take(q.gifA, 'image');                             // no reveal-only box exists; fold it in
+  Object.keys(q.gifOpts || {}).forEach(k => take(q.gifOpts[k], 'opt:' + k));
+  if (q.gifQ || q.gifA || q.gifOpts) { delete q.gifQ; delete q.gifA; delete q.gifOpts; moved = true; }
+  return moved;
 }
 
 function renderGifReview(deckId) {
@@ -4036,11 +4089,14 @@ function renderGifReview(deckId) {
   const qs = p.questions || [];
   const rows = [];
   qs.forEach((q, i) => {
-    const optSlots = Object.keys((q && q.gifOpts) || {})
-      .map(Number).sort((a,b) => a-b).map(n => 'opt:' + n);
-    ['gifQ','gifA', ...optSlots].forEach(slot => {
-      const g = gifSlotGet(q, slot);
-      if (!g) return;
+    const optSlots = ((q && q.options) || []).map((_, n) => 'opt:' + n);
+    ['image', ...optSlots].forEach(slot => {
+      /* Only rows for boxes THIS filled. A picture the teacher put in the box themselves
+         has no record beside it and does not belong in a list of "GIFs we found". */
+      const meta = gifSlotMeta(q, slot);
+      const url = gifSlotUrl(q, slot);
+      if (!meta || !url) return;
+      const g = { url, still: meta.still || url, alt: meta.alt || '', term: meta.term || '' };
       /* Show WHAT THE GIF IS FOR, not just "Q1". The only question worth asking here is
          "does this picture fit this question?", and you cannot answer it from a number.
          For an answer GIF the context is the correct answer, because that is what it is
@@ -4049,28 +4105,20 @@ function renderGifReview(deckId) {
       const qText = String((q && q.text) || '').trim() || 'Untitled question';
       const optIdx = gifSlotOptIndex(slot);
       let context, note = '';
-      if (slot === 'gifQ') {
+      if (optIdx === null) {
         context = qText;
-      } else if (optIdx !== null) {
+      } else {
         const letters = ['A','B','C','D','E','F'];
         const optText = ((q.options || [])[optIdx] || {}).text || '';
         context = `Choice ${letters[optIdx] || optIdx+1}: ` + (optText || '—');
         if (!PSGifs.answerIsPicturable(optText)) note = ' — nothing to picture, so this is a reaction';
-      } else {
-        const ans = correctAnswerText(q);
-        if (ans && PSGifs.answerIsPicturable(ans)) {
-          context = 'Answer: ' + ans;
-        } else {
-          context = 'Answer: ' + (ans || '—');
-          note = ' — nothing to picture, so this is a reaction';
-        }
       }
       rows.push(`<div class="gif-row">
         <img src="${escAttr(g.still || g.url)}" alt="${escAttr(g.alt||'')}" loading="lazy">
         <div class="gr-t">
           <span class="gr-q">Q${i+1}</span>
-          <span class="gr-slot">${slot==='gifQ'?'question':(gifSlotOptIndex(slot)!==null?'choice':'answer')}</span>
-          <div class="gr-ctx" title="${escAttr(slot==='gifQ' ? qText : context)}">${escapeHtml(context)}${note?`<em>${escapeHtml(note)}</em>`:''}</div>
+          <span class="gr-slot">${optIdx === null ? 'question' : 'choice'}</span>
+          <div class="gr-ctx" title="${escAttr(optIdx === null ? qText : context)}">${escapeHtml(context)}${note?`<em>${escapeHtml(note)}</em>`:''}</div>
           <i>${escapeHtml(g.alt || 'no description')}</i>
           <div class="gr-term">
             <span>searched</span>
@@ -4087,9 +4135,9 @@ function renderGifReview(deckId) {
   return rows.join('') || '<p style="font-size:12px;color:var(--muted);">No GIFs yet.</p>';
 }
 
-async function setGifPolicy(deckId, question, answer, allAnswers) {
+async function setGifPolicy(deckId, question, answers) {
   const p = presentations[deckId]; if (!p) return;
-  const pol = PSGifs.gifPolicy({ question, answer, allAnswers });
+  const pol = PSGifs.gifPolicy({ question, answers });
   await setDeckField(deckId, 'gifs', PSGifs.gifsEnabled(pol) ? pol : null);
   openGifModal(deckId);
   renderPresList();
@@ -4127,38 +4175,26 @@ async function fetchDeckGifs(deckId) {
     if (pol.question) {
       const term = PSGifs.searchTerm(q.text || '');
       const g = await search(term, (q.id||i)+':q');
-      if (g) { g.term = term; q.gifQ = g; done++; }
-    }
-    if (pol.answer) {
-      const correct = correctAnswerText(q);
-      let term = PSGifs.answerTerm(correct, { seed:(q.id||i)+':a' });
-      let g = await search(term, (q.id||i)+':a');
-      /* The panel promises a GIF on EVERY revealed answer — "a celebration where it
-         can't be pictured". A literal answer that finds nothing used to leave the slot
-         silently empty, so a fetch came back with a GIF on every question and none on
-         any answer. Fall back to the reaction term, which always has results. */
-      if (!g && correct) {
-        term = PSGifs.answerTerm('', { seed:(q.id||i)+':a' });
-        g = await search(term, (q.id||i)+':a');
-      }
-      if (g) { g.term = term; q.gifA = g; done++; }
+      if (g && gifFill(q, 'image', g, term)) done++;
     }
     /* Every choice, not just the right one. Each option is searched on its own text; an
        option that can't be pictured ("42", "B") falls back to a NEUTRAL reaction rather
        than a celebration, because a celebration on a wrong answer reads as a hint. */
-    if (pol.allAnswers && Array.isArray(q.options) && q.options.length) {
-      q.gifOpts = q.gifOpts || {};
+    if (pol.answers && Array.isArray(q.options) && q.options.length) {
       for (let oi = 0; oi < q.options.length; oi++) {
         if (btn) btn.textContent = `Finding… ${i+1}/${qs.length} · choice ${oi+1}/${q.options.length}`;
         const text = (q.options[oi] || {}).text || '';
         const seed = (q.id||i) + ':o' + oi;
         let term = PSGifs.answerTerm(text, { seed, correct: false });
         let g = await search(term, seed);
+        /* A literal answer that finds nothing used to leave the box empty, so a fetch
+           came back with a picture on every question and none on any choice. The
+           reaction term always has results. */
         if (!g && text) {
           term = PSGifs.answerTerm('', { seed, correct: false });
           g = await search(term, seed);
         }
-        if (g) { g.term = term; q.gifOpts[oi] = g; done++; }
+        if (g && gifFill(q, 'opt:' + oi, g, term)) done++;
       }
     }
     if (failed && done === 0 && i === 0) break;   // configuration problem: stop, don't hammer
@@ -4203,8 +4239,8 @@ async function researchGif(deckId, qIdx, slot, term) {
     if (!r.ok) { toast(d.error || 'Could not search.', 'warn'); return; }
     const g = PSGifs.pickBest(d.results, { seed: clean });
     if (!g) { toast(`Nothing usable for "${clean}".`, 'warn'); return; }
-    g.term = clean;
-    gifSlotSet(q, slot, g);
+    gifSlotWrite(q, slot, g.url, { term: clean, source: g.source || '', alt: g.alt || '',
+                                   still: g.still || '', id: g.id || '' });
     scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
     toast(`Found a GIF for "${clean}".`, 'success');
   } catch (e) { toast('Could not search: ' + (e.message||e), 'warn'); }
@@ -4215,13 +4251,11 @@ async function reshuffleGif(deckId, qIdx, slot) {
   const q = (p.questions||[])[qIdx]; if (!q) return;
   // Whatever term is currently showing — including one the teacher typed. Reshuffle
   // means "another GIF for this search", not "start over from my question".
-  const _cur = gifSlotGet(q, slot);
+  const _meta = gifSlotMeta(q, slot);
   const _oi = gifSlotOptIndex(slot);
-  const term = (_cur && _cur.term) || (slot === 'gifQ'
+  const term = (_meta && _meta.term) || (_oi === null
     ? PSGifs.searchTerm(q.text || '')
-    : _oi !== null
-      ? PSGifs.answerTerm(((q.options||[])[_oi]||{}).text || '', { seed: Math.random(), correct: false })
-      : PSGifs.answerTerm(correctAnswerText(q), { seed: Math.random() }));
+    : PSGifs.answerTerm(((q.options||[])[_oi]||{}).text || '', { seed: Math.random(), correct: false }));
   try {
     const tk = await auth.currentUser.getIdToken();
     const r = await fetch('/api/gif-search', { method:'POST',
@@ -4232,25 +4266,35 @@ async function reshuffleGif(deckId, qIdx, slot) {
     if (!r.ok) { toast(d.error || 'Could not search.', 'warn'); return; }
     const g = PSGifs.pickBest(d.results, { seed: String(Math.random()) });
     if (!g) { toast('Nothing else usable for that search.', 'warn'); return; }
-    g.term = term;
-    gifSlotSet(q, slot, g); scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
+    gifSlotWrite(q, slot, g.url, { term, source: g.source || '', alt: g.alt || '',
+                                   still: g.still || '', id: g.id || '' });
+    scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
   } catch (e) { toast('Could not search: ' + (e.message||e), 'warn'); }
 }
 
 async function removeGif(deckId, qIdx, slot) {
   const p = presentations[deckId]; if (!p) return;
   const q = (p.questions||[])[qIdx]; if (!q) return;
-  gifSlotDelete(q, slot); scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
+  gifSlotWrite(q, slot, null);          // empties the box and forgets it was ours
+  scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
 }
 
+/* Clears only what the GIF search put there. A picture the teacher chose has no record
+   beside it and survives — "Remove all" must not throw away someone's own uploads. */
 async function clearDeckGifs(deckId) {
   const p = presentations[deckId]; if (!p) return;
-  (p.questions||[]).forEach(q => { if(q){ delete q.gifQ; delete q.gifA; delete q.gifOpts; } });
+  let removed = 0;
+  (p.questions||[]).forEach(q => {
+    if (!q) return;
+    if (q.imageGif) { gifSlotWrite(q, 'image', null); removed++; }
+    (q.options||[]).forEach((o, oi) => { if (o && o.imgGif) { gifSlotWrite(q, 'opt:'+oi, null); removed++; } });
+  });
   scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
-  toast('All GIFs removed from this deck.', 'success');
+  toast(removed ? `Removed ${removed} fetched GIF${removed===1?'':'s'}. Your own pictures are untouched.`
+                : 'No fetched GIFs to remove.', 'success');
 }
 
-// Push the questions (now carrying gifQ/gifA) to the node the audience reads.
+// Push the questions (carrying their media URLs) to the node the audience reads.
 async function publishDeckGifs(deckId) {
   const p = presentations[deckId];
   if (!p || !p.sessionCode) return;
@@ -5519,47 +5563,11 @@ const MEDIA_SIZES = {
   full: { label:'⛶', h:'62vh',   desc:'Full height' },
 };
 
-/* What a fetched GIF looks like ON the question, in the presenter's own view.
-   Without this the GIF panel was a black hole: you ticked the boxes, watched it find
-   GIFs, pressed Done — and the question looked exactly as before, because this function
-   rendered `q.image` and nothing else. The GIFs were saved and published correctly and
-   did appear in present mode, but there was no way to tell from the deck, so it read as
-   "Done didn't do anything". Labelled by slot, because when the ANSWER GIF appears is
-   the thing a teacher needs to be sure about. */
-function renderGifSlots(q, idx) {
-  const rows = [];
-  if (q.gifQ) rows.push({ g: q.gifQ, label: 'GIF on the question', when: 'shown with the question' });
-  if (q.gifA) rows.push({ g: q.gifA, label: 'GIF on the right answer', when: 'held back until you reveal' });
-  const optCount = Object.values(q.gifOpts || {}).filter(g => g && g.url).length;
-  if (optCount) {
-    const letters = ['A','B','C','D','E','F'];
-    const which = Object.keys(q.gifOpts).map(Number).sort((a,b)=>a-b).map(n => letters[n] || n+1).join(' ');
-    rows.push({ g: Object.values(q.gifOpts).find(g => g && g.url),
-                label: `A GIF on ${optCount} answer choice${optCount===1?'':'s'} (${which})`,
-                when: 'shown with the choices from the start' });
-  }
-  if (!rows.length) return '';
-  return `<div style="margin-bottom:12px;">
-    ${rows.map(r => `
-      <div style="display:flex;gap:9px;align-items:center;padding:7px;margin-bottom:6px;
-                  border:1px solid var(--border2);border-radius:10px;background:var(--surface2);">
-        <img src="${escAttr(r.g.still || r.g.url)}" alt="${escAttr(r.g.alt || '')}"
-             style="width:66px;height:50px;object-fit:cover;border-radius:7px;flex-shrink:0;background:#000;"
-             onerror="this.style.display='none'">
-        <div style="flex:1;min-width:0;">
-          <div style="font-size:11px;font-weight:700;">${escapeHtml(r.label)}</div>
-          <div style="font-size:10.5px;color:var(--muted);">${escapeHtml(r.when)}${
-            r.g.term ? ' · searched “' + escapeHtml(r.g.term) + '”' : ''}</div>
-        </div>
-        <button class="btn btn-ghost btn-sm" onclick="openGifModal('${escAttr(activePresId)}')"
-                title="Open the GIF panel to change or remove this">Change</button>
-      </div>`).join('')}
-  </div>`;
-}
-
+/* No separate "here are your GIFs" strip any more: a fetched GIF now sits in the
+   question's own media box, so the existing media renderer below shows it like any
+   other picture — which is the whole point of putting it in the box. */
 function renderQuestionMedia(q, idx) {
-  const gifs = renderGifSlots(q, idx);
-  if (!q.image || !q.image.trim()) return gifs;
+  if (!q.image || !q.image.trim()) return '';
   const code = presentations[activePresId]?.sessionCode || '';
   const savedH = localStorage.getItem(`ql_qmedia_h_${code}_${idx}`);
   const boxStyle = savedH
@@ -5575,7 +5583,7 @@ function renderQuestionMedia(q, idx) {
   const resetBtn = savedH
     ? `<button onclick="setQMediaSize(${idx},'auto')" title="Auto-fit" style="padding:2px 7px;font-size:10px;border-radius:5px;border:1px solid var(--border2);background:var(--surface2);color:var(--muted);cursor:pointer;">↺</button>`
     : '';
-  return gifs + `
+  return `
     <div id="qMediaWrap_${idx}" style="margin-bottom:4px;">
       <div style="display:flex;align-items:center;gap:5px;margin-bottom:5px;">
         <span style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:0.06em;text-transform:uppercase;flex:1;">Media</span>
@@ -7818,10 +7826,20 @@ function renderEditor(idx) {
 }
 
 // ─── EDITOR HELPERS ───────────────────────────────────────────────────────────
-function updateQ(idx,key,val){ questions[idx][key]=val; saveBack(); }
+/* Editing a media box by hand makes it YOURS. Dropping the gif record is what stops a
+   later "Find GIFs" or "Remove all" from touching the picture you just chose. */
+function updateQ(idx,key,val){
+  questions[idx][key]=val;
+  if (key === 'image') delete questions[idx].imageGif;
+  saveBack();
+}
 function updateQNested(idx,key,sub,val){ if(!questions[idx][key])questions[idx][key]={}; questions[idx][key][sub]=val; saveBack(); }
 function updateOpt(idx,oi,val){ questions[idx].options[oi].text=val; saveBack(); }
-function updateOptImg(idx,oi,val){ questions[idx].options[oi].img=val; saveBack(); }
+function updateOptImg(idx,oi,val){
+  questions[idx].options[oi].img=val;
+  delete questions[idx].options[oi].imgGif;   // hand-set: no longer ours to overwrite
+  saveBack();
+}
 
 // ─── VIDEO DETECTION & PLAYBACK OPTIONS ──────────────────────────────────────
 function isVideoUrl(url) {
@@ -9611,11 +9629,11 @@ function buildPresentChart(q, responses) {
     return `<div style="padding:12px 0;">${buildPostRevealContent(q, responses)}</div>`;
   }
 
-  /* The answer GIF, once the answer is out. Deliberately only after `revealed` — the
-     whole point is that it lands on the reveal, and showing it while people are still
-     answering would give the answer away on a quiz. */
-  const answerGif = (revealed && q.gifA)
-    ? `<div style="max-width:230px;margin:0 auto 10px;">${gifTag(q.gifA, 20)}</div>` : '';
+  /* There is no reveal-only GIF any more. It lived in a field of its own with no box in
+     the editor, so it could not be seen or changed before it went up in front of a room —
+     and a picture on the correct answer alone is a tell the moment it appears. Answer
+     GIFs now fill every choice's own image box instead. */
+  const answerGif = '';
 
   const letters = ['A','B','C','D','E','F'];
   const PS_COLORS = ['#6c63ff','#ff6584','#38d9f5','#f7b731','#a78bfa','#43e97b'];
@@ -9760,12 +9778,15 @@ function renderPresentSlide(idx) {
           const isRight = revealed && correct.includes(i);
           const isWrong = revealed && _hasC && !correct.includes(i);
           const color = isRight ? '#43e97b' : PS_COLORS[i % PS_COLORS.length];
-          /* A picture the teacher attached always wins; the fetched GIF is the fallback.
-             Every option carries one or none of them — a GIF on only the right answer
-             would mark it out before anyone had answered. */
+          /* One box, one picture — whether the teacher typed the URL or the GIF search
+             filled it in. `imgGif` only says where it came from, so a fetched GIF gets
+             the reduced-motion still frame that a hand-picked image doesn't need. */
           const imgHtml = opt.img
-            ? `<img src="${opt.img}" style="height:34px;width:auto;border-radius:6px;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">`
-            : gifThumb((q.gifOpts || {})[i], 34);
+            ? (opt.imgGif
+                ? gifThumb({ url: opt.img, still: opt.imgGif.still, alt: opt.imgGif.alt,
+                             source: opt.imgGif.source }, 34)
+                : `<img src="${escAttr(opt.img)}" style="height:34px;width:auto;border-radius:6px;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">`)
+            : '';
           return `<div style="background:${isRight?'rgba(67,233,123,0.14)':'var(--p-card-04)'};border:${isRight?'3px':'1.5px'} solid ${isRight?'#43e97b':color+'55'};border-radius:14px;padding:12px 14px;min-height:58px;display:flex;align-items:center;gap:10px;position:relative;overflow:hidden;box-shadow:${isRight?'0 0 0 4px rgba(67,233,123,0.22),0 0 40px rgba(67,233,123,0.55)':'0 0 18px '+color+'22'};transition:border-color 0.4s,box-shadow 0.4s,opacity 0.4s,transform 0.4s,filter 0.4s;${isWrong?'opacity:0.28;filter:grayscale(0.9);':''}${isRight?'transform:scale(1.04);':''}">
             <div style="position:absolute;bottom:0;left:0;height:3px;width:${(!hidden&&total>0)?pct(cnt):0}%;background:${color};box-shadow:0 0 10px ${color};transition:width 0.6s ease;border-radius:0 3px 0 0;"></div>
             <span style="width:28px;height:28px;border-radius:50%;background:${isRight?'#43e97b':color+'22'};border:1.5px solid ${color};display:inline-flex;align-items:center;justify-content:center;font-family:Syne,sans-serif;font-size:${isRight?'16px':'13px'};font-weight:900;color:${isRight?'#04120a':color};flex-shrink:0;box-shadow:0 0 8px ${color}66;">${isRight?'✓':letters[i]}</span>
@@ -9779,9 +9800,9 @@ function renderPresentSlide(idx) {
         /* Option GIFs carry no per-image badge — four of them would clutter the cards —
            so the provider credit their terms require goes once under the grid. Only
            shown when option GIFs are actually on screen. */
-        const shown = Object.values(q.gifOpts || {}).filter(g => g && g.url);
+        const shown = (q.options || []).filter(o => o && o.img && o.imgGif).map(o => o.imgGif);
         if (!shown.length) return '';
-        const src = shown.find(g => g.source);
+        const src = shown.find(m => m.source);
         return `<div style="text-align:right;font-size:9.5px;color:var(--p-38);margin-top:5px;">${
           escapeHtml(gifSourceLabel(src).replace(/^via /, 'GIFs via '))}</div>`;
       })()}`
@@ -9809,9 +9830,8 @@ function renderPresentSlide(idx) {
           ? `<video src="${q.image}" style="width:100%;max-height:28vh;object-fit:contain;background:#000;border-radius:10px;" autoplay loop muted playsinline></video>`
           : `<img src="${q.image}" style="width:100%;max-height:28vh;object-fit:contain;border-radius:10px;" onerror="this.style.display='none'">`}
        </div>`
-    /* The deck's own image always wins. A contextual GIF is a garnish; a picture the
-       teacher chose is the lesson, and stacking both in a narrow column serves neither. */
-    : gifTag(q.gifQ, 24);
+    /* Nothing to fall back to: a fetched GIF IS q.image now, so hasMedia already covers it. */
+    : '';
 
   // Compact laptop/no-phone join line shown under the QR in present mode.
   const joinLine = `<div style="font-size:10px;color:var(--p-55);text-align:center;line-height:1.5;max-width:150px;">No phone? Go to <b style="color:var(--p-90);">pollslide.com/join</b> · code <b style="color:var(--accent);letter-spacing:0.06em;">${presentations[activePresId]?.sessionCode||''}</b></div>`;

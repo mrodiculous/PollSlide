@@ -33,10 +33,10 @@ ok('question:"true" (a string) is NOT on', !G.gifPolicy({ question: 'true' }).qu
 ok('question:1 is not on',                 !G.gifPolicy({ question: 1 }).question);
 ok('only a real boolean turns it on',      G.gifPolicy({ question: true }).question);
 ok('the two toggles are independent',
-   G.gifPolicy({ question: true }).answer === false &&
-   G.gifPolicy({ answer: true }).question === false);
+   G.gifPolicy({ question: true }).answers === false &&
+   G.gifPolicy({ answers: true }).question === false);
 ok('both can be on together',
-   G.gifsEnabled({ question: true, answer: true }));
+   G.gifsEnabled({ question: true, answers: true }));
 
 console.log('\nA question is reduced to the ONE thing it is about');
 /* A GIF engine is a keyword engine. Every extra word narrows the pool toward nothing,
@@ -215,21 +215,30 @@ ok('an unpicturable answer still yields a searchable reaction, never an empty te
      return typeof t === 'string' && t.length > 0;
    }));
 
-/* ── THREE SLOTS ─────────────────────────────────────────────────────────────
-   allAnswers is what stops a GIF on the right answer alone from being a tell. */
-ok('allAnswers is off unless explicitly true',
-   G.gifPolicy({ question: true }).allAnswers === false &&
-   G.gifPolicy({ allAnswers: 'yes' }).allAnswers === false &&
-   G.gifPolicy(null).allAnswers === false);
-ok('allAnswers turns on when set',
-   G.gifPolicy({ allAnswers: true }).allAnswers === true);
-ok('the three slots are independent',
-   JSON.stringify(G.gifPolicy({ question:false, answer:true, allAnswers:true })) ===
-   JSON.stringify({ question:false, answer:true, allAnswers:true }));
-ok('allAnswers alone is enough to count as enabled',
-   G.gifsEnabled({ allAnswers: true }) === true);
-ok('all three off is still off',
-   G.gifsEnabled({ question:false, answer:false, allAnswers:false }) === false);
+/* ── TWO LEVELS, ONE PER MEDIA BOX ───────────────────────────────────────────
+   The policy names the boxes it fills: the question's own, and every answer's. */
+ok('answers is off unless explicitly true',
+   G.gifPolicy({ question: true }).answers === false &&
+   G.gifPolicy({ answers: 'yes' }).answers === false &&
+   G.gifPolicy(null).answers === false);
+ok('answers turns on when set',
+   G.gifPolicy({ answers: true }).answers === true);
+ok('the two levels are independent',
+   JSON.stringify(G.gifPolicy({ question:false, answers:true })) ===
+   JSON.stringify({ question:false, answers:true }));
+ok('answers alone is enough to count as enabled',
+   G.gifsEnabled({ answers: true }) === true);
+ok('both off is still off',
+   G.gifsEnabled({ question:false, answers:false }) === false);
+/* A deck saved before the rename must not silently lose its setting. */
+ok('a deck saved with the old `allAnswers` still reads as answers-on',
+   G.gifPolicy({ allAnswers: true }).answers === true);
+ok('a deck saved with the old `answer` still reads as answers-on',
+   G.gifPolicy({ answer: true }).answers === true);
+ok('…and such a deck still counts as enabled',
+   G.gifsEnabled({ answer: true }) === true && G.gifsEnabled({ allAnswers: true }) === true);
+ok('there is no longer a right-answer-only setting to read',
+   G.gifPolicy({ answer: true }).answer === undefined);
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
