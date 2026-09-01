@@ -13,7 +13,8 @@
 <script src="/roster.js?v=88b6f2d4"></script>
 <script src="/retakes.js?v=d187d4ee"></script>
 <script src="/gifs.js?v=e45a70a2"></script>
-<script src="/starters.js?v=26cc51f5"></script>
+<script src="/starters.js?v=2aadb83b"></script>
+<script src="/starter-media.js?v=575813d2"></script>
 <script src="/ui-lang.js?v=2eaed633"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -3730,10 +3731,11 @@ async function toggleFocusTrack(id) {
 function starterRowHtml() {
   if (typeof PSStarters === 'undefined') return '';
   if (Object.keys(presentations || {}).length) return '';
-  // The one matching this tab first: someone on Quiz wants a quiz, not an icebreaker.
-  const mine = PSStarters.forProduct(activeProduct);
-  const rest = PSStarters.STARTERS.filter(s => s.product !== activeProduct);
-  const show = mine.concat(rest);
+  /* One deck, not a shelf of them. Three starters asked a brand-new user to choose
+     before they knew what they were choosing between; the same demo for everyone is
+     also the only version we can vet the pictures in. */
+  const show = PSStarters.STARTERS.slice(0, 1);
+  if (!show.length) return '';
   return `<div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--border);">
     <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">
       Or open one that's ready to go
@@ -3749,6 +3751,22 @@ function starterRowHtml() {
   </div>`;
 }
 
+/* The watchdog repairs dead demo pictures into app_config/starterMedia. Read it here,
+   or the repair would sit in Firebase while every new account kept getting the dead
+   URLs baked into starter-media.js. It lives under app_config because that node is
+   already world-readable (a signed-out visitor can open a starter) and writable only by
+   the owner — a new top-level node would have been denied by the rules, and the repair
+   would have silently never reached anyone. Falls back to the file: a deck must never
+   fail to open because a config read did. */
+async function starterMediaMap() {
+  try {
+    const snap = await db.ref('app_config/starterMedia').once('value');
+    const live = snap.val();
+    if (live && typeof live === 'object' && Object.keys(live).length) return live;
+  } catch (e) {}
+  return (typeof PSStarterMedia === 'object' && PSStarterMedia) || {};
+}
+
 async function createFromStarter(id) {
   const s = PSStarters.byId(id);
   if (!s) return;
@@ -3760,7 +3778,7 @@ async function createFromStarter(id) {
     return;
   }
   const id2 = 'pres_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  const deck = PSStarters.deckFrom(s, { sessionCode: genCode() });
+  const deck = PSStarters.deckFrom(s, { sessionCode: genCode(), media: await starterMediaMap() });
   presentations[id2] = deck;
   activeProduct = deck.productType;      // land them in the tab the deck belongs to
   scheduleSave();

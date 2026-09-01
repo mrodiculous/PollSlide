@@ -17,6 +17,9 @@ const {
   decideNotification, isStoredBackup,
   evalShareHygiene, evalQidBackfill, evalOrphanGrants,
 } = require('../lib/watchdog');
+const {
+  urlsToCheck, planMediaRepair, evalStarterMedia, describeRepair,
+} = require('../lib/starter-media-check');
 const { setUserTier } = require('../lib/tier');
 const { tierForSubscription } = require('../lib/stripe-tier');
 const { verifyToken, tokenFrom, ADMIN_EMAILS } = require('../lib/quota');
@@ -291,6 +294,45 @@ const CHECKS = [
       if (Object.keys(updates).length) await ctx.db.ref().update(updates);
       return { note: `Cleared ${(data._dead || []).length} grant(s) for decks that no longer exist.` };
     },
+  },
+
+  /* The demo deck hardcodes 25 GIF URLs so every new account gets the same reviewed
+     set. The tradeoff is that they are somebody else's URLs: an uploader deletes a
+     post and a brand-new user's first screen is broken images. Checked here, and
+     repaired by promoting a spare that was reviewed alongside the primary — never by
+     searching, which would put an unvetted image in front of everyone. */
+  {
+    id: 'demo_media_dead',
+    title: 'A picture in the new-user demo deck has gone',
+    severity: 'medium',
+    autoFix: true,
+    async gather(ctx) {
+      const baked = (() => { try { return require('../starter-media') || {}; } catch (e) { return {}; } })();
+      let live = {};
+      try { live = (await ctx.db.ref('app_config/starterMedia').get()).val() || {}; } catch (e) {}
+      // Repairs are stored in Firebase; the file is the shipped default.
+      const media = Object.keys(live).length ? live : baked;
+      const alive = {};
+      for (const url of urlsToCheck(media)) {
+        try {
+          const r = await fetchWithTimeout(url, { method: 'HEAD' }, 6000);
+          alive[url] = r.status < 400;
+        } catch (e) { alive[url] = false; }
+      }
+      const results = Object.keys(media).sort()
+        .filter(slot => media[slot] && media[slot].url)
+        .map(slot => ({ slot, url: media[slot].url, ok: alive[media[slot].url] !== false }));
+      // `expected` is what the DECK wants, so a blanked slot can't read as a pass.
+      return { results, expected: Object.keys(baked).length, media, alive };
+    },
+    evaluate: evalStarterMedia,
+    async fix(ctx, data) {
+      const plan = planMediaRepair(data.media, data.alive);
+      if (!plan.repaired.length && !plan.blanked.length) return { note: 'Nothing repairable.' };
+      await ctx.db.ref('app_config/starterMedia').set(plan.media);
+      return { note: describeRepair(plan).join(' ') };
+    },
+    hint: 'Giphy media disappears when an uploader deletes a post. A vetted spare is promoted automatically; a slot that has run out of spares now shows no picture and needs re-vetting — see scripts/collect-starter-media.md.',
   },
 
   {
