@@ -269,9 +269,23 @@
       }
       return null;
     };
-    const anim = pick('fixed_height_small', 'downsized', 'fixed_height', 'original');
-    const still = pick('fixed_height_small_still', 'downsized_still', 'fixed_height_still', 'original_still');
+    /* SIZE ORDER MATTERS AND USED TO BE BACKWARDS. `fixed_height_small` is Giphy's
+     * 100px rendition, and asking for it FIRST meant every GIF in the product was
+     * 100×100 — including the question image, which present mode renders up to 24vh
+     * tall on a projector. A 100px source upscaled onto a classroom wall is visibly
+     * mush. `fixed_height` is 200px and still small enough for a phone on school wifi;
+     * the small one stays as the last resort rather than the first choice. */
+    const anim = pick('fixed_height', 'downsized', 'fixed_height_small', 'original');
+    let still = pick('fixed_height_still', 'downsized_still', 'fixed_height_small_still', 'original_still');
     if (!anim) return null;
+    /* Giphy's newer CDN paths name renditions in the URL (`/200.gif`), and responses
+     * are turning up with no `*_still` entries at all — which quietly broke the
+     * reduced-motion promise the GIF panel makes to students, because gifTag falls back
+     * to the animation when `still` is null. The frozen frame is the same path with
+     * `_s`, so derive it rather than give up on it. */
+    if (!still && /\/\d+\.gif(\?|$)/.test(anim.url)) {
+      still = { url: anim.url.replace(/\/(\d+)\.gif(\?|$)/, '/$1_s.gif$2') };
+    }
     return {
       id: String(r.id || ''),
       url: anim.url,
