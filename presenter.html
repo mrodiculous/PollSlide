@@ -12,7 +12,7 @@
 <script src="/qid.js?v=5e6ebfdc"></script>
 <script src="/roster.js?v=88b6f2d4"></script>
 <script src="/retakes.js?v=d187d4ee"></script>
-<script src="/gifs.js?v=948b696c"></script>
+<script src="/gifs.js?v=719813e5"></script>
 <script src="/starters.js?v=26cc51f5"></script>
 <script src="/ui-lang.js?v=2eaed633"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -3887,6 +3887,19 @@ function gifSourceLabel(g) {
   return map[g && g.source] || 'via GIPHY';
 }
 
+/* A per-option GIF sits INSIDE an answer card next to the text, so it needs a small
+   inline thumbnail rather than gifTag's full-width block. Same reduced-motion rule:
+   a still frame instead of the animation when the viewer asked for less movement. */
+function gifThumb(g, px) {
+  if (!g || !g.url) return '';
+  const still = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const src = still ? (g.still || g.url) : g.url;
+  const s = px || 34;
+  return `<img src="${escAttr(src)}" alt="${escAttr(g.alt || '')}" title="${escAttr(gifSourceLabel(g))}"
+    style="height:${s}px;width:auto;max-width:${Math.round(s * 1.7)}px;border-radius:6px;object-fit:cover;flex-shrink:0;"
+    onerror="this.style.display='none'">`;
+}
+
 function gifTag(g, maxVh) {
   if (!g || !g.url) return '';
   const still = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -3917,7 +3930,7 @@ function openGifModal(deckId) {
   if (!m) { m = document.createElement('div'); m.id = 'gifModal'; m.className = 'overlay';
             m.onclick = e => { if (e.target === m) closeGifModal(); }; document.body.appendChild(m); }
 
-  const have = qs.filter(q => q && (q.gifQ || q.gifA)).length;
+  const have = qs.filter(q => q && (q.gifQ || q.gifA || (q.gifOpts && Object.keys(q.gifOpts).length))).length;
   m.innerHTML = `<div class="modal" style="max-width:560px;">
     <h2 style="margin-bottom:2px;">GIFs</h2>
     <p style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">${escapeHtml(p.name || 'This deck')} · ${qs.length} question${qs.length===1?'':'s'}</p>
@@ -3948,11 +3961,14 @@ function openGifModal(deckId) {
       .gif-row .btn-sm{flex-shrink:0;}
     </style>
     <label class="gif-opt ${pol.question?'on':''}">
-      <input type="checkbox" ${pol.question?'checked':''} onchange="setGifPolicy('${escAttr(deckId)}',this.checked,${pol.answer})">
+      <input type="checkbox" ${pol.question?'checked':''} onchange="setGifPolicy('${escAttr(deckId)}',this.checked,${pol.answer},${pol.allAnswers})">
       <span><b>A GIF on each question</b>Chosen from the words in the question itself.</span></label>
     <label class="gif-opt ${pol.answer?'on':''}">
-      <input type="checkbox" ${pol.answer?'checked':''} onchange="setGifPolicy('${escAttr(deckId)}',${pol.question},this.checked)">
-      <span><b>A GIF on each revealed answer</b>From the answer where it can be pictured — a celebration where it can't, because "42" and "B" have nothing to show.</span></label>
+      <input type="checkbox" ${pol.answer?'checked':''} onchange="setGifPolicy('${escAttr(deckId)}',${pol.question},this.checked,${pol.allAnswers})">
+      <span><b>GIF on the right answer only — held until the reveal</b>One GIF, and it stays hidden while people are answering, so it can't point at the correct card. From the answer where it can be pictured; a celebration where it can't, because "42" and "B" have nothing to show.</span></label>
+    <label class="gif-opt ${pol.allAnswers?'on':''}">
+      <input type="checkbox" ${pol.allAnswers?'checked':''} onchange="setGifPolicy('${escAttr(deckId)}',${pol.question},${pol.answer},this.checked)">
+      <span><b>A GIF on every answer choice</b>Every option gets its own, so a picture never marks out the right one. Shown with the choices from the start. Costs one search per option — a 10-question deck with 4 choices is 40.</span></label>
 
     <div id="gifReview" style="margin-top:12px;">
       ${have ? `<p style="font-size:12px;color:var(--muted);margin-bottom:4px;">${have} of ${qs.length} questions have a GIF. Review them below — remove or reshuffle any before you present.</p>` : ''}
@@ -3983,12 +3999,36 @@ const GIF_CREDITS = { giphy: 'Powered by GIPHY', tenor: 'Powered by Tenor' };
 function gifAttribution(deckId) {
   const seen = new Set();
   const qs = (presentations[deckId] || {}).questions || [];
-  qs.forEach(q => ['gifQ','gifA'].forEach(s => {
-    const src = q && q[s] && q[s].source;
-    if (src && GIF_CREDITS[src]) seen.add(GIF_CREDITS[src]);
-  }));
+  const note = (g) => { const src = g && g.source; if (src && GIF_CREDITS[src]) seen.add(GIF_CREDITS[src]); };
+  qs.forEach(q => {
+    if (!q) return;
+    note(q.gifQ); note(q.gifA);
+    Object.values(q.gifOpts || {}).forEach(note);
+  });
   if (seen.size) return [...seen].join(' · ');
   return GIF_ATTRIBUTION || 'GIF search';
+}
+
+/* A slot is either a plain field on the question (gifQ / gifA) or one option's GIF,
+   addressed as "opt:2". Reviewing, reshuffling, retyping a term and removing all work
+   the same on every slot, so they all go through these three rather than each function
+   knowing where a GIF lives. */
+function gifSlotGet(q, slot) {
+  if (!q) return null;
+  const m = /^opt:(\d+)$/.exec(slot);
+  return m ? ((q.gifOpts || {})[m[1]] || null) : (q[slot] || null);
+}
+function gifSlotSet(q, slot, g) {
+  const m = /^opt:(\d+)$/.exec(slot);
+  if (m) { q.gifOpts = q.gifOpts || {}; q.gifOpts[m[1]] = g; } else { q[slot] = g; }
+}
+function gifSlotDelete(q, slot) {
+  const m = /^opt:(\d+)$/.exec(slot);
+  if (m) { if (q.gifOpts) delete q.gifOpts[m[1]]; } else { delete q[slot]; }
+}
+function gifSlotOptIndex(slot) {
+  const m = /^opt:(\d+)$/.exec(slot);
+  return m ? Number(m[1]) : null;
 }
 
 function renderGifReview(deckId) {
@@ -3996,8 +4036,10 @@ function renderGifReview(deckId) {
   const qs = p.questions || [];
   const rows = [];
   qs.forEach((q, i) => {
-    ['gifQ','gifA'].forEach(slot => {
-      const g = q && q[slot];
+    const optSlots = Object.keys((q && q.gifOpts) || {})
+      .map(Number).sort((a,b) => a-b).map(n => 'opt:' + n);
+    ['gifQ','gifA', ...optSlots].forEach(slot => {
+      const g = gifSlotGet(q, slot);
       if (!g) return;
       /* Show WHAT THE GIF IS FOR, not just "Q1". The only question worth asking here is
          "does this picture fit this question?", and you cannot answer it from a number.
@@ -4005,9 +4047,15 @@ function renderGifReview(deckId) {
          meant to illustrate — and when the answer could not be pictured (a number, a
          letter) say so, otherwise a celebration GIF next to "42" looks like a bug. */
       const qText = String((q && q.text) || '').trim() || 'Untitled question';
+      const optIdx = gifSlotOptIndex(slot);
       let context, note = '';
       if (slot === 'gifQ') {
         context = qText;
+      } else if (optIdx !== null) {
+        const letters = ['A','B','C','D','E','F'];
+        const optText = ((q.options || [])[optIdx] || {}).text || '';
+        context = `Choice ${letters[optIdx] || optIdx+1}: ` + (optText || '—');
+        if (!PSGifs.answerIsPicturable(optText)) note = ' — nothing to picture, so this is a reaction';
       } else {
         const ans = correctAnswerText(q);
         if (ans && PSGifs.answerIsPicturable(ans)) {
@@ -4021,7 +4069,7 @@ function renderGifReview(deckId) {
         <img src="${escAttr(g.still || g.url)}" alt="${escAttr(g.alt||'')}" loading="lazy">
         <div class="gr-t">
           <span class="gr-q">Q${i+1}</span>
-          <span class="gr-slot">${slot==='gifQ'?'question':'answer'}</span>
+          <span class="gr-slot">${slot==='gifQ'?'question':(gifSlotOptIndex(slot)!==null?'choice':'answer')}</span>
           <div class="gr-ctx" title="${escAttr(slot==='gifQ' ? qText : context)}">${escapeHtml(context)}${note?`<em>${escapeHtml(note)}</em>`:''}</div>
           <i>${escapeHtml(g.alt || 'no description')}</i>
           <div class="gr-term">
@@ -4039,10 +4087,10 @@ function renderGifReview(deckId) {
   return rows.join('') || '<p style="font-size:12px;color:var(--muted);">No GIFs yet.</p>';
 }
 
-async function setGifPolicy(deckId, question, answer) {
+async function setGifPolicy(deckId, question, answer, allAnswers) {
   const p = presentations[deckId]; if (!p) return;
-  const pol = PSGifs.gifPolicy({ question, answer });
-  await setDeckField(deckId, 'gifs', (pol.question || pol.answer) ? pol : null);
+  const pol = PSGifs.gifPolicy({ question, answer, allAnswers });
+  await setDeckField(deckId, 'gifs', PSGifs.gifsEnabled(pol) ? pol : null);
   openGifModal(deckId);
   renderPresList();
 }
@@ -4095,6 +4143,24 @@ async function fetchDeckGifs(deckId) {
       }
       if (g) { g.term = term; q.gifA = g; done++; }
     }
+    /* Every choice, not just the right one. Each option is searched on its own text; an
+       option that can't be pictured ("42", "B") falls back to a NEUTRAL reaction rather
+       than a celebration, because a celebration on a wrong answer reads as a hint. */
+    if (pol.allAnswers && Array.isArray(q.options) && q.options.length) {
+      q.gifOpts = q.gifOpts || {};
+      for (let oi = 0; oi < q.options.length; oi++) {
+        if (btn) btn.textContent = `Finding… ${i+1}/${qs.length} · choice ${oi+1}/${q.options.length}`;
+        const text = (q.options[oi] || {}).text || '';
+        const seed = (q.id||i) + ':o' + oi;
+        let term = PSGifs.answerTerm(text, { seed, correct: false });
+        let g = await search(term, seed);
+        if (!g && text) {
+          term = PSGifs.answerTerm('', { seed, correct: false });
+          g = await search(term, seed);
+        }
+        if (g) { g.term = term; q.gifOpts[oi] = g; done++; }
+      }
+    }
     if (failed && done === 0 && i === 0) break;   // configuration problem: stop, don't hammer
   }
   if (btn) btn.textContent = restore;
@@ -4138,7 +4204,7 @@ async function researchGif(deckId, qIdx, slot, term) {
     const g = PSGifs.pickBest(d.results, { seed: clean });
     if (!g) { toast(`Nothing usable for "${clean}".`, 'warn'); return; }
     g.term = clean;
-    q[slot] = g;
+    gifSlotSet(q, slot, g);
     scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
     toast(`Found a GIF for "${clean}".`, 'success');
   } catch (e) { toast('Could not search: ' + (e.message||e), 'warn'); }
@@ -4149,9 +4215,13 @@ async function reshuffleGif(deckId, qIdx, slot) {
   const q = (p.questions||[])[qIdx]; if (!q) return;
   // Whatever term is currently showing — including one the teacher typed. Reshuffle
   // means "another GIF for this search", not "start over from my question".
-  const term = (q[slot] && q[slot].term) || (slot === 'gifQ'
+  const _cur = gifSlotGet(q, slot);
+  const _oi = gifSlotOptIndex(slot);
+  const term = (_cur && _cur.term) || (slot === 'gifQ'
     ? PSGifs.searchTerm(q.text || '')
-    : PSGifs.answerTerm(correctAnswerText(q), { seed: Math.random() }));
+    : _oi !== null
+      ? PSGifs.answerTerm(((q.options||[])[_oi]||{}).text || '', { seed: Math.random(), correct: false })
+      : PSGifs.answerTerm(correctAnswerText(q), { seed: Math.random() }));
   try {
     const tk = await auth.currentUser.getIdToken();
     const r = await fetch('/api/gif-search', { method:'POST',
@@ -4163,19 +4233,19 @@ async function reshuffleGif(deckId, qIdx, slot) {
     const g = PSGifs.pickBest(d.results, { seed: String(Math.random()) });
     if (!g) { toast('Nothing else usable for that search.', 'warn'); return; }
     g.term = term;
-    q[slot] = g; scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
+    gifSlotSet(q, slot, g); scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
   } catch (e) { toast('Could not search: ' + (e.message||e), 'warn'); }
 }
 
 async function removeGif(deckId, qIdx, slot) {
   const p = presentations[deckId]; if (!p) return;
   const q = (p.questions||[])[qIdx]; if (!q) return;
-  delete q[slot]; scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
+  gifSlotDelete(q, slot); scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
 }
 
 async function clearDeckGifs(deckId) {
   const p = presentations[deckId]; if (!p) return;
-  (p.questions||[]).forEach(q => { if(q){ delete q.gifQ; delete q.gifA; } });
+  (p.questions||[]).forEach(q => { if(q){ delete q.gifQ; delete q.gifA; delete q.gifOpts; } });
   scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
   toast('All GIFs removed from this deck.', 'success');
 }
@@ -5459,7 +5529,15 @@ const MEDIA_SIZES = {
 function renderGifSlots(q, idx) {
   const rows = [];
   if (q.gifQ) rows.push({ g: q.gifQ, label: 'GIF on the question', when: 'shown with the question' });
-  if (q.gifA) rows.push({ g: q.gifA, label: 'GIF on the answer',   when: 'only after you reveal' });
+  if (q.gifA) rows.push({ g: q.gifA, label: 'GIF on the right answer', when: 'held back until you reveal' });
+  const optCount = Object.values(q.gifOpts || {}).filter(g => g && g.url).length;
+  if (optCount) {
+    const letters = ['A','B','C','D','E','F'];
+    const which = Object.keys(q.gifOpts).map(Number).sort((a,b)=>a-b).map(n => letters[n] || n+1).join(' ');
+    rows.push({ g: Object.values(q.gifOpts).find(g => g && g.url),
+                label: `A GIF on ${optCount} answer choice${optCount===1?'':'s'} (${which})`,
+                when: 'shown with the choices from the start' });
+  }
   if (!rows.length) return '';
   return `<div style="margin-bottom:12px;">
     ${rows.map(r => `
@@ -9682,9 +9760,12 @@ function renderPresentSlide(idx) {
           const isRight = revealed && correct.includes(i);
           const isWrong = revealed && _hasC && !correct.includes(i);
           const color = isRight ? '#43e97b' : PS_COLORS[i % PS_COLORS.length];
+          /* A picture the teacher attached always wins; the fetched GIF is the fallback.
+             Every option carries one or none of them — a GIF on only the right answer
+             would mark it out before anyone had answered. */
           const imgHtml = opt.img
             ? `<img src="${opt.img}" style="height:34px;width:auto;border-radius:6px;object-fit:cover;flex-shrink:0;" onerror="this.style.display='none'">`
-            : '';
+            : gifThumb((q.gifOpts || {})[i], 34);
           return `<div style="background:${isRight?'rgba(67,233,123,0.14)':'var(--p-card-04)'};border:${isRight?'3px':'1.5px'} solid ${isRight?'#43e97b':color+'55'};border-radius:14px;padding:12px 14px;min-height:58px;display:flex;align-items:center;gap:10px;position:relative;overflow:hidden;box-shadow:${isRight?'0 0 0 4px rgba(67,233,123,0.22),0 0 40px rgba(67,233,123,0.55)':'0 0 18px '+color+'22'};transition:border-color 0.4s,box-shadow 0.4s,opacity 0.4s,transform 0.4s,filter 0.4s;${isWrong?'opacity:0.28;filter:grayscale(0.9);':''}${isRight?'transform:scale(1.04);':''}">
             <div style="position:absolute;bottom:0;left:0;height:3px;width:${(!hidden&&total>0)?pct(cnt):0}%;background:${color};box-shadow:0 0 10px ${color};transition:width 0.6s ease;border-radius:0 3px 0 0;"></div>
             <span style="width:28px;height:28px;border-radius:50%;background:${isRight?'#43e97b':color+'22'};border:1.5px solid ${color};display:inline-flex;align-items:center;justify-content:center;font-family:Syne,sans-serif;font-size:${isRight?'16px':'13px'};font-weight:900;color:${isRight?'#04120a':color};flex-shrink:0;box-shadow:0 0 8px ${color}66;">${isRight?'✓':letters[i]}</span>
@@ -9694,7 +9775,16 @@ function renderPresentSlide(idx) {
             ${(!hidden&&total>0)?`<span style="font-family:Syne,sans-serif;font-size:18px;font-weight:900;color:${color};flex-shrink:0;min-width:28px;text-align:right;">${cnt}</span>`:''}
           </div>`;
         }).join('')}
-      </div>`
+      </div>${(() => {
+        /* Option GIFs carry no per-image badge — four of them would clutter the cards —
+           so the provider credit their terms require goes once under the grid. Only
+           shown when option GIFs are actually on screen. */
+        const shown = Object.values(q.gifOpts || {}).filter(g => g && g.url);
+        if (!shown.length) return '';
+        const src = shown.find(g => g.source);
+        return `<div style="text-align:right;font-size:9.5px;color:var(--p-38);margin-top:5px;">${
+          escapeHtml(gifSourceLabel(src).replace(/^via /, 'GIFs via '))}</div>`;
+      })()}`
     : (q.type==='free_text'
         ? `<div style="background:var(--p-card-06);border-radius:12px;border:1px dashed var(--p-20);padding:20px 24px;text-align:center;">
             <div style="font-size:28px;margin-bottom:8px;">💬</div>

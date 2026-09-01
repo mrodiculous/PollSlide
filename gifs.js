@@ -202,11 +202,22 @@
 
   /* Normalise the deck-level setting. Anything unrecognised means off — a malformed
    * value must never turn a feature on that puts third-party images on a projector. */
+  /* THREE INDEPENDENT SLOTS, not one setting with modes:
+   *   question   — a GIF beside the question, up the whole time
+   *   answer     — ONE GIF on the correct answer, held back until the reveal
+   *   allAnswers — a GIF on EVERY choice, so no single card is decorated
+   * The third exists because a picture on the right answer and nothing on the others
+   * is a tell the moment they are shown together. `answer` avoids that by waiting for
+   * the reveal; `allAnswers` avoids it by giving every option one. They are separate
+   * because a deck can legitimately want either, or both. */
   function gifPolicy(raw) {
     const r = (raw && typeof raw === 'object') ? raw : {};
-    return { question: r.question === true, answer: r.answer === true };
+    return { question: r.question === true, answer: r.answer === true,
+             allAnswers: r.allAnswers === true };
   }
-  const gifsEnabled = (raw) => { const p = gifPolicy(raw); return p.question || p.answer; };
+  const gifsEnabled = (raw) => {
+    const p = gifPolicy(raw); return p.question || p.answer || p.allAnswers;
+  };
 
   /* PROVIDER SHAPES LIVE HERE AND NOWHERE ELSE.
    * Tenor and Giphy return completely different JSON. Keeping both normalisers in one

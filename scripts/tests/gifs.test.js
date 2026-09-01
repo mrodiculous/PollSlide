@@ -215,5 +215,21 @@ ok('an unpicturable answer still yields a searchable reaction, never an empty te
      return typeof t === 'string' && t.length > 0;
    }));
 
+/* ── THREE SLOTS ─────────────────────────────────────────────────────────────
+   allAnswers is what stops a GIF on the right answer alone from being a tell. */
+ok('allAnswers is off unless explicitly true',
+   G.gifPolicy({ question: true }).allAnswers === false &&
+   G.gifPolicy({ allAnswers: 'yes' }).allAnswers === false &&
+   G.gifPolicy(null).allAnswers === false);
+ok('allAnswers turns on when set',
+   G.gifPolicy({ allAnswers: true }).allAnswers === true);
+ok('the three slots are independent',
+   JSON.stringify(G.gifPolicy({ question:false, answer:true, allAnswers:true })) ===
+   JSON.stringify({ question:false, answer:true, allAnswers:true }));
+ok('allAnswers alone is enough to count as enabled',
+   G.gifsEnabled({ allAnswers: true }) === true);
+ok('all three off is still off',
+   G.gifsEnabled({ question:false, answer:false, allAnswers:false }) === false);
+
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);
