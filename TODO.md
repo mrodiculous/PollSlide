@@ -3,7 +3,7 @@
 Living punch list. Updated as things land. Owner-only items are things only Rod can do
 (they need a console login, a card, or a lawyer).
 
-Last updated: 2026-08-31 (fifteenth pass)
+Last updated: 2026-09-01 (sixteenth pass)
 
 ---
 
@@ -31,6 +31,18 @@ Last updated: 2026-08-31 (fifteenth pass)
 | ✅ | Retake history in Admin | User detail → **🔁 Retakes & attempts**. Shows the policy, how many students used more than one try, and which attempt was graded. Student answers are never shown — that's a class's schoolwork, and "attempt 2 of 3, best-of" answers the dispute without it. |
 | ✅ | Contextual GIFs | `gifs.js` + `api/gif-search.js`. Per-deck toggles, fetched at build time and reviewed before presenting. **Provider-pluggable** since Tenor stopped issuing keys — set `GIPHY_API_KEY` (or `TENOR_API_KEY`) and redeploy. Safety rating locked server-side either way. |
 
+## GIFs — reworked 2026-09-01
+
+| | Item | Notes |
+|---|---|---|
+| ✅ | **GIFs fill the media boxes that already exist** | The first build stored them in parallel fields (`gifQ`/`gifA`/`gifOpts`) *beside* the boxes, so they rendered through their own code paths, never appeared in the editor's URL fields, and couldn't be hand-edited — "Done" looked like it did nothing. Now a question GIF fills `q.image` and an answer GIF fills that option's `img`. The URL in the box is the only source of truth. |
+| ✅ | Your own pictures are never overwritten | A small record (`imageGif`/`imgGif`) beside an auto-filled URL holds the search term and provider. A hand-typed URL has none — that's how "leave it alone" is decided, on re-fetch **and** on Remove all. Typing in a box drops the record. |
+| ✅ | Old decks migrate on open | `migrateLegacyGifs()` moves GIFs out of the retired fields into the boxes and deletes them. A question where you'd already chosen an image keeps yours. |
+| ✅ | Answer GIFs actually generate | `cleanAnswer` sliced the **first** three words, so "Converting light into chemical energy" searched for `"Converting light into"` — a stub image search returns nothing for. Questions worked, answers silently didn't. Now keeps the tail (head-final English) and drops function words anywhere in it. Plus a reaction fallback so a box is never left empty. |
+| ✅ | Every choice gets one, not just the right one | A picture on the correct card alone is a tell. The reveal-only GIF was **removed**: it had no box in the editor, so it couldn't be seen or changed before it went up in front of a room. |
+| ✅ | Attribution follows the real provider | Three places said "Tenor" while Giphy served the images — the review panel, the projector watermark (`gifTag`), and the picker footer. All now derive from each record's `source`. Giphy's terms require their mark. |
+| ⬜ | Option GIFs on phones | `answer.html` doesn't render them — big screen only. Probably right, since the give-away concern is about the shared screen, but it's a deliberate gap not an oversight. |
+
 ## Admin
 
 | | Item | Notes |
@@ -43,7 +55,9 @@ Last updated: 2026-08-31 (fifteenth pass)
 
 | | Item | Notes |
 |---|---|---|
-| ⬜ | **Homepage has no product imagery at all** | No screenshots, no video — the hero is a CSS mock-up. Nothing shows GIFs, the progress view, classes or the reveal. Fresh screenshots of the real UI are the highest-value marketing change left. |
+| 🔸 | **Homepage product imagery** | The earlier "no imagery at all" note was **wrong** — `#see-it` has always carried `preview_1_live_to_leaderboard.mp4`. It is from **28 June** and shows live-answers→leaderboard only: no present mode, no GIFs. Added `#big-screen`, a present-mode frame rebuilt in CSS (same technique as `/game-modes`), which reflows on a phone and can't go stale. Real captures of present mode are now possible too — see the note on html2canvas below. |
+| ⬜ | **Starter decks have no media** | 16 questions, 32 answer options, **zero images or GIFs** across all three. A new user's first impression of the product is therefore entirely text — the one moment where showing what it can do matters most. Now that GIFs fill the real media boxes, a starter can ship with them pre-filled. |
+| 📝 | Capturing present mode | html2canvas has no flexbox, so it re-draws the present-mode results panel at the left edge — the stray `13/4/3/2` in early attempts. The DOM is correct; only the capture was wrong. Workaround: hide that panel for the shot. `scripts/shot-server.js` receives the PNG; Bash `screencapture` on this Mac only grabs the wallpaper. |
 | 🔸 | PowerPoint / Keynote import | **Removed from the UI and the site** — it needed a converter service that was never stood up, so every attempt fell back to "export to PDF". PDF import works and is client-side. `api/convert-deck.js` + `converter-service/` are still in the repo: stand the service up, set `CONVERT_API_URL`, restore the menu item from git history. |
 
 
@@ -57,7 +71,8 @@ Last updated: 2026-08-31 (fifteenth pass)
 | | Item | Why it needs you |
 |---|---|---|
 | ✅ | Cookie banner on mobile | Fixed via `consent-mobile.css`, linked from all 15 pages. Uses `body #…` specificity rather than `!important`, so it beats the runtime-injected style regardless of load order. Verified: 344px → 168px. Still worth merging into `consent.js` one day and deleting the file. |
-| ⬜ | **Rotate the Giphy key, then set it in Vercel** | The key was hardcoded in `presenter.html` — public in every browser and in the GitHub history. Removed from source and both search paths now go through `api/gif-search.js`. Rotate at developers.giphy.com, set `GIPHY_API_KEY` in Vercel, redeploy. See `GIF-SETUP.md`. |
+| 🔸 | **Rotate the Giphy key, then set it in Vercel** | The old key was hardcoded in `presenter.html` — public in every browser and in the GitHub history. Removed from source; both search paths go through `api/gif-search.js`. **The key pasted in chat now returns 401**, and your GIF tool works, so production is on a rotated key already — this looks done. See `GIF-SETUP.md`. |
+| ⬜ | Giphy key for the sandbox | Only to build demo/marketing decks locally: `printf '%s' 'KEY' > ~/.pollslide-giphy-key && chmod 600 ~/.pollslide-giphy-key`, then `node scripts/demo-media.js`. Read, never logged or committed. Without it a demo deck can't get real GIFs and falls back to Wikimedia stills. |
 | ✅ | Publish `database-rules.json` | Done 2026-08-31. Validated on every run by `scripts/qa-rules.js`. |
 | ✅ | Submit sitemap to Search Console | Done 2026-08-31 — Google **and** Bing. |
 | ⬜ | Counsel review of legal docs | Terms/privacy wording. |
