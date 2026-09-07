@@ -94,6 +94,15 @@
   .live-q { padding:9px 12px; font-size:12px; font-weight:600; line-height:1.4; border-bottom:1px solid var(--border); flex-shrink:0; }
   .live-body { flex:1; overflow-y:auto; padding:10px; }
   .resp-count { font-family:'Syne',sans-serif; font-weight:800; font-size:20px; margin-bottom:10px; }
+  /* Segmented control. The task pane is narrow — often ~320px — so the two options
+     split the width evenly rather than sitting on one line at their natural size. */
+  .pp-view { display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-bottom:10px;
+    background:var(--surface); border:1px solid var(--border); border-radius:9px; padding:3px; }
+  .pp-view button { font-family:inherit; font-size:11.5px; padding:6px 4px; border:none;
+    border-radius:6px; background:transparent; color:var(--muted); cursor:pointer; }
+  .pp-view button:hover { color:var(--text); }
+  .pp-view button.on { background:var(--accent); color:#fff; font-weight:600; }
+  .pp-view button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
   .resp-count span { font-size:12px; color:var(--muted); font-weight:400; }
 
   .bar-wrap { margin-bottom:8px; }
@@ -224,6 +233,14 @@
   <div class="reveal-bar" id="revealBar"></div>
   <div class="live-body">
     <div class="resp-count" id="respCount">0 <span>responses</span></div>
+    <!-- Showing the distribution while people are still answering anchors the room:
+         late answerers drift toward whatever is already winning. For a survey, a
+         sensitive poll, or any question where you want independent answers, you still
+         want to show that people ARE answering — just not what they picked. -->
+    <div class="pp-view" id="ppViewToggle" role="group" aria-label="What to show while people answer">
+      <button type="button" data-view="results" onclick="setLiveView('results')">Live results</button>
+      <button type="button" data-view="people"  onclick="setLiveView('people')">Respondents only</button>
+    </div>
     <div id="liveResults"></div>
     <div class="qr-pane" id="qrPane"></div>
   </div>
@@ -482,10 +499,61 @@ function renderRevealBar() {
 }
 
 // ── Results chart ─────────────────────────────────────────────────────────────
+/* Which of the two views the presenter picked. Remembered on this machine, because it
+   is a habit rather than a property of the deck — someone who runs anonymous surveys
+   wants "respondents only" every time, and should not have to re-choose it. */
+let LIVE_VIEW = (() => {
+  try { return localStorage.getItem('ps_pp_view') === 'people' ? 'people' : 'results'; }
+  catch (e) { return 'results'; }        // private mode / restricted host can throw
+})();
+
+function setLiveView(v) {
+  LIVE_VIEW = (v === 'people') ? 'people' : 'results';
+  try { localStorage.setItem('ps_pp_view', LIVE_VIEW); } catch (e) {}
+  syncViewToggle();
+  if (_lastQ) renderResults(_lastQ, _lastResponses || []);
+}
+
+function syncViewToggle() {
+  document.querySelectorAll('#ppViewToggle button').forEach(b => {
+    const on = b.dataset.view === LIVE_VIEW;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+  });
+}
+
+/* The reveal is the moment the answer is public, so it overrides the preference — the
+   whole point of "respondents only" is to avoid influencing answers that have not been
+   given yet, and once you have revealed there are none left to influence. */
+function renderRespondents(responses, el) {
+  const named = responses.map(r => (r && r.name || '').trim()).filter(Boolean);
+  if (!responses.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:11px;padding:8px 0;">Waiting for responses…</div>';
+    return;
+  }
+  if (!named.length) {
+    // Anonymous session: there are no names to list, so say what is true.
+    el.innerHTML = `<div style="padding:10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;text-align:center;">
+      <div style="font-size:22px;font-family:Syne,sans-serif;font-weight:800;">${responses.length}</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:2px;">answered so far · this session is anonymous, so there are no names to show</div>
+    </div>`;
+    return;
+  }
+  el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:5px;">${
+    named.map(n => `<span style="font-size:11.5px;padding:3px 9px;border-radius:100px;background:var(--surface);border:1px solid var(--border);">${escHtml(n)}</span>`).join('')
+  }</div><div style="font-size:10.5px;color:var(--muted);margin-top:7px;">Answers are hidden until you reveal.</div>`;
+}
+
+let _lastQ = null, _lastResponses = [];
+
 function renderResults(q, responses) {
+  _lastQ = q; _lastResponses = responses;
   const count = responses.length;
   document.getElementById('respCount').innerHTML = `${count} <span>response${count!==1?'s':''}</span>`;
   const el = document.getElementById('liveResults'); if (!el) return;
+  syncViewToggle();
+
+  if (LIVE_VIEW === 'people' && !revealed) { renderRespondents(responses, el); return; }
 
   if (!q.options || (q.type !== 'multiple_choice' && q.type !== 'multiple_choice_multi')) {
     el.innerHTML = responses.map(r =>

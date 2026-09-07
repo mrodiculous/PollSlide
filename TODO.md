@@ -54,6 +54,10 @@ Last updated: 2026-09-01 (sixteenth pass)
 | 📝 | Deliberately NOT done | No music files — licensing is the last thing to take on the week payments go live; everything is synthesised via the existing WebAudio engine, so no assets and no bandwidth. Audio stays presenter-side only: thirty phones ticking out of sync is chaos, not tension. |
 | ✅ | Documented + marketed | `/help#atmosphere` (3 steps, 3 cards, 2 callouts) and a section on `/game-modes` with an FAQ entry answering "will it make noise I wasn't expecting?". All new help copy translated into 5 languages, markup counts verified against the English. |
 | ✅ | **The whole present dialog now translates** | The game-mode names and blurbs had *never* been translated — Survival, Wager and every description stayed English while the dialog changed language around them. Found while adding Atmosphere. 28 strings (title, both section headings, 5 modes × name/blurb/bestFor, 3 presets, display options) × 5 languages. Verified in-browser: the dialog is fully French end to end. |
+| ✅ | **Presenter now follows the browser language** | It was `localStorage.getItem('ps_ui_lang') \|\| 'en'` — no detection at all, so a Spanish-speaking teacher signed in to an English app until they found the picker. Every other surface already detected (`i18n.js` for the site, `answer.html` for students); the presenter was the only one that didn't. An explicit choice still wins over the browser. |
+| ⬜ | **Site copy: 446 of 742 strings are English in every language** | Measured, not guessed. Best: `index` 78%, `pricing` 71%, `integrations` 75%. Worst: `vs-kahoot`/`vs-mentimeter`/`vs-slido` **0%** (acquisition pages — a Spanish search lands on English), `game-modes` 8%, `help` 49% of loose prose. help's 41 **curated** `data-i18n-html` blocks are 100% translated — those are the substantive leads/steps/cards, so the page reads far better than the raw number suggests. |
+| 📝 | Legal pages are English-only **on purpose** | `terms` 2%, `privacy` 2%, `dpa`/`vpat`/`subprocessors` 0%. Machine-translating an indemnity clause creates liability rather than removing it. Standard practice is one authoritative language — but the pages should SAY so ("the English version governs"). Fold into the counsel review below rather than translating. |
+| ⬜ | Presenter offers 6 languages, students' phones offer 11 | `en/es/de/fr/pt/it` vs those plus `nl/ja/zh/ar/hi`. A Japanese teacher gets an English app while their own students get Japanese. |
 | ⬜ | Big screen (`live.html`) doesn't follow the atmosphere | It reads `uiLang` from the session already; the same route would carry this. Only matters when the projector is a different machine from the presenter. |
 
 ## Admin
@@ -91,7 +95,8 @@ Last updated: 2026-09-01 (sixteenth pass)
 | ✅ | Publish `database-rules.json` | Done 2026-08-31. Validated on every run by `scripts/qa-rules.js`. |
 | ✅ | Submit sitemap to Search Console | Done 2026-08-31 — Google **and** Bing. |
 | ⬜ | Counsel review of legal docs | Terms/privacy wording. |
-| ⬜ | Stripe go-live | Follow `STRIPE-GO-LIVE.md`. Business verification is not instant — start it first. |
+| ⬜ | Stripe go-live | Follow `STRIPE-GO-LIVE.md`. Business verification is not instant — start it first. **Runbook re-verified 2026-09-01** against the code: all 10 lookup keys and all 5 webhook events match exactly. Added the missing **step 6** — `STRIPE_AUTOMATIC_TAX` and `STRIPE_COLLECT_CONSENT` exist in `create-checkout.js`, are **off by default**, and were undocumented, so following the old runbook took you live with no tax collection and no recorded Terms consent. |
+| ⬜ | Publish the PowerPoint add-in | Follow `APPSOURCE-SUBMISSION.md`. Free, ~2h of work then 3–10 days of review. Add-in verified working; `icon-300.png` generated; manifest SupportUrl repointed from `/setup` (whose FAQ says the add-in is "coming soon") to `/integrations#powerpoint`. **You must create `appsource-review@pollslide.com` and put real credentials in the certification notes** — no test account is the single most common rejection. |
 
 ---
 

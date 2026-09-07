@@ -3832,7 +3832,20 @@ async function createFromStarter(id) {
    This is why there is no text-node walker here, though it would have been less work:
    a walker that mistakes a teacher's deck title for UI copy would translate it.       */
 const UI_LANGS = { en:'English', es:'Español', de:'Deutsch', fr:'Français', pt:'Português', it:'Italiano' };
-let UI_LANG = localStorage.getItem('ps_ui_lang') || 'en';
+/* Follow the browser on first visit, the way every other surface already does:
+ * i18n.js does it for the marketing site and help, answer.html does it for students'
+ * phones. Only the presenter didn't, so a Spanish-speaking teacher signed in and got an
+ * English app — the one place where the whole point is that they're the one working in
+ * it — until they went hunting for the picker in the user menu.
+ * An explicit choice still wins: that's a decision, and it outranks a browser setting. */
+let UI_LANG = (() => {
+  try {
+    const saved = localStorage.getItem('ps_ui_lang');
+    if (saved && UI_LANGS[saved]) return saved;
+    const nav = (navigator.language || navigator.userLanguage || 'en').slice(0, 2).toLowerCase();
+    return UI_LANGS[nav] ? nav : 'en';
+  } catch (e) { return 'en'; }        // private mode can throw on localStorage
+})();
 if (!UI_LANGS[UI_LANG]) UI_LANG = 'en';
 
 // Populated by ui-lang.js. Keyed by the exact English string.

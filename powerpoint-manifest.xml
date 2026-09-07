@@ -13,8 +13,13 @@
               Documents/wef/ then PowerPoint → Insert → My Add-ins.
     Web:      Insert → Office Add-ins → Upload My Add-in.
 
-  SUBMIT (AppSource): Partner Center → Office Store → new Office Add-in → upload
-  this manifest. Replace the Id GUID with one you keep stable across versions.
+  SUBMIT (AppSource): see APPSOURCE-SUBMISSION.md — the whole process in order,
+  including the two things that most often get an add-in rejected (no test account
+  for the reviewer, and a manifest Id that changed between versions).
+
+  THE Id BELOW IS PERMANENT. Do not generate a fresh GUID for a later version — to
+  Microsoft that is a different add-in, so the "update" becomes a second listing and
+  existing users never receive it. Bump <Version>, never <Id>.
 -->
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -32,7 +37,10 @@
   <!-- AppSource requires EXACT sizes: IconUrl=32x32, HighResolutionIconUrl=64x64 -->
   <IconUrl DefaultValue="https://pollslide.com/icon-32.png" />
   <HighResolutionIconUrl DefaultValue="https://pollslide.com/icon-64.png" />
-  <SupportUrl DefaultValue="https://pollslide.com/setup" />
+  <!-- Points at the add-in's OWN section, not the general setup page. A validator clicks
+       this; /setup is the Mac-companion guide and its FAQ says the add-in is "coming
+       soon", which reads as "the thing you are reviewing does not exist". -->
+  <SupportUrl DefaultValue="https://pollslide.com/integrations#powerpoint" />
 
   <!-- Domains the add-in is allowed to navigate to -->
   <AppDomains>

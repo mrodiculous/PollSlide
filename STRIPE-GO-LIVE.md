@@ -4,6 +4,9 @@ Everything needed to take real payments, in order, with the exact values to past
 The code is already written and deployed. This is configuration only.
 
 - **Time:** ~10 minutes of clicking, plus Stripe's business verification (not instant — start that first)
+- **Two switches are OFF by default and are easy to miss** — tax collection and the
+  Terms-consent checkbox. Both are step 6. Skipping it takes you live collecting no VAT
+  and recording no consent.
 - **You need:** Stripe dashboard access, Vercel access
 - **Already confirmed working in production:** `STRIPE_SECRET_KEY` is set, `STRIPE_WEBHOOK_SECRET` is set,
   Firebase Admin is set, email delivery is up, and there are no real runtime errors.
@@ -117,19 +120,95 @@ signature, and the plan never changes.
 
 ---
 
-## Step 6 — Redeploy
+## Step 6 — Tax, and the "I agree to the Terms" box
+
+**Both of these are OFF unless you switch them on, and neither was in this guide before.**
+If you follow the rest of these steps and skip this one, you go live collecting **no
+VAT/GST/sales tax** and **recording no acceptance of your Terms** — on real money, from
+real customers, in whatever country they happen to be in.
+
+They are behind environment variables on purpose: each one needs configuration in the
+Stripe Dashboard *first*, and turning them on before that breaks checkout entirely.
+
+### 6a — Tax: yes, Stripe does the hard part — once you turn it on
+
+**"Let Stripe worry about the VAT" is true, with one catch and one limit.**
+
+**The catch:** Stripe only worries about it if `STRIPE_AUTOMATIC_TAX=1` is set. Until
+then Stripe is doing *nothing* about tax — no rate is calculated, nothing is broken out
+on the invoice, and your prices are simply treated as tax-inclusive. "Stripe handles it"
+describes the switched-on state, not the default.
+
+**The limit — where Stripe stops:**
+
+| Stripe Tax does this for you | You still have to do this |
+|---|---|
+| Works out the right rate for the buyer's country/state | **Register** for VAT/GST/sales tax where you owe it |
+| Charges and collects it at checkout | **File** the returns |
+| Collects and validates business VAT numbers (reverse charge) | **Pay** the money to each tax authority |
+| Watches your sales and warns you when you cross a registration threshold | Decide, with an accountant, where you have obligations at all |
+
+So the money arrives correctly calculated and separated, and you get the reports — but
+registering and filing stays with you. Stripe calculating a rate is not the same as
+Stripe being registered on your behalf.
+
+**Why it matters at launch:** for cross-border *digital* services to EU and UK consumers
+there is no small-seller threshold — VAT is due from the first sale. US sales tax has
+per-state thresholds you can cross without noticing. This is general information rather
+than tax advice; the amount at stake justifies twenty minutes with an accountant.
+
+**To switch it on:**
+
+1. **Stripe → Settings → Tax** — enable **Stripe Tax**, set your origin address, and add
+   the jurisdictions where you are registered. Stripe's monitoring tells you where you
+   are approaching a threshold.
+2. Only then, **Vercel**:
+
+```
+STRIPE_AUTOMATIC_TAX = 1
+```
+
+That also turns on the business tax-ID field and required billing addresses — Stripe
+needs an address before it can know a rate.
+
+**If you are not ready:** leave it unset, and know that you are choosing tax-inclusive
+pricing out of your own margin until you come back to it. That is a legitimate decision
+to take deliberately; it is a bad one to arrive at by skipping a step.
+
+### 6b — Terms consent
+
+Adds a required "I agree to the Terms of Service" checkbox to Checkout, and records the
+acceptance on the session — which is what proves consent later.
+
+1. **Stripe → Settings → Business → Public details** — set the **Terms of Service URL**
+   to `https://pollslide.com/terms`. Stripe rejects the session without it.
+2. Then, **Vercel**:
+
+```
+STRIPE_COLLECT_CONSENT = 1
+```
+
+This is the same evidence trail as **Admin → Compliance**: who accepted what, and when.
+Recommended before the first real customer, not after.
+
+**Done when:** both variables are set (or you have consciously decided to leave one off),
+and a test checkout still opens.
+
+---
+
+## Step 7 — Redeploy
 
 **Vercel → Deployments → the top production deployment → ⋯ → Redeploy**
 
 Environment variables do not apply to deployments that already exist. Until you
-redeploy, none of the above is live.
+redeploy, none of the above is live — including anything you set in step 6.
 
 If checkout later says "STRIPE_SECRET_KEY not set" after you have clearly set it,
 this is the step that was missed.
 
 ---
 
-## Step 7 — Buy something with a real card, then refund yourself
+## Step 8 — Buy something with a real card, then refund yourself
 
 This is the only proof the live webhook secret is correct. It costs you nothing —
 refund it from the Stripe dashboard immediately after.
@@ -200,7 +279,9 @@ they are logged properly.
 - [ ] All ten live prices created, lookup keys verified character for character
 - [ ] `STRIPE_SECRET_KEY` swapped to `sk_live_…`
 - [ ] Live webhook endpoint created, `STRIPE_WEBHOOK_SECRET` swapped
-- [ ] Redeployed after both variable changes
+- [ ] Decided on tax: `STRIPE_AUTOMATIC_TAX` set, or consciously left off with an accountant
+- [ ] Terms of Service URL set in Stripe, `STRIPE_COLLECT_CONSENT` set
+- [ ] Redeployed after **all** variable changes
 - [ ] Bought each of the three plans once, live, and refunded
 - [ ] Bought one credit pack — a different code path from subscriptions
 - [ ] Cancelled through **Manage billing** and confirmed the plan dropped
