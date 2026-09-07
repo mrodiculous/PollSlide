@@ -16,7 +16,7 @@
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=0ea2fafb"></script>
-<script src="/ui-lang.js?v=aae811e5"></script>
+<script src="/ui-lang.js?v=924842f5"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root {
@@ -3798,8 +3798,10 @@ async function createFromStarter(id) {
 }
 
 /* ─── CONTEXTUAL GIFs ─────────────────────────────────────────────────────────
-   A per-deck setting: a GIF beside each question, beside each revealed answer, or
-   both. Candidates are fetched WHEN THE BOX IS TICKED and shown here for review —
+   A per-deck setting: fill each question's media box, fill every answer's media box,
+   or both. (There is no "right answer only" — the editor has no box for it, and a
+   picture on the correct card alone gives it away the moment the choices are up.)
+   Candidates are fetched WHEN THE BOX IS TICKED and shown here for review —
    nothing unvetted reaches a projector in front of a class. Search runs through
    /api/gif-search, which holds the key and locks the provider's content filter to
    its strictest setting where no caller can reach it.
@@ -4192,9 +4194,9 @@ function renderGifReview(deckId) {
       const g = { url, still: meta.still || url, alt: meta.alt || '', term: meta.term || '' };
       /* Show WHAT THE GIF IS FOR, not just "Q1". The only question worth asking here is
          "does this picture fit this question?", and you cannot answer it from a number.
-         For an answer GIF the context is the correct answer, because that is what it is
-         meant to illustrate — and when the answer could not be pictured (a number, a
-         letter) say so, otherwise a celebration GIF next to "42" looks like a bug. */
+         For a choice's GIF the context is that choice's own words, because that is what
+         it illustrates — and when the choice could not be pictured (a number, a letter)
+         say so, otherwise a stock reaction next to "42" looks like a bug. */
       const qText = String((q && q.text) || '').trim() || 'Untitled question';
       const optIdx = gifSlotOptIndex(slot);
       let context, note = '';
@@ -9558,21 +9560,22 @@ function renderModePicker() {
         background:${on ? 'rgba(108,99,255,0.16)' : 'var(--surface2)'};border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};color:var(--text);">
       <span style="font-size:22px;line-height:1.1;flex-shrink:0;">${g.icon}</span>
       <span style="flex:1;min-width:0;">
-        <span style="display:block;font-family:Syne,sans-serif;font-weight:800;font-size:14px;">${g.name}${id==='classic'?' <span style="font-weight:400;font-size:11px;color:var(--muted);">· default</span>':''}</span>
-        <span style="display:block;font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:2px;">${g.blurb}</span>
+        <span style="display:block;font-family:Syne,sans-serif;font-weight:800;font-size:14px;"><span data-i18n>${g.name}</span>${id==='classic'?' <span style="font-weight:400;font-size:11px;color:var(--muted);" data-i18n>· default</span>':''}</span>
+        <span data-i18n style="display:block;font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:2px;">${g.blurb}</span>
         <span style="display:block;font-size:11px;color:${locked ? 'var(--accent4)' : 'var(--accent3)'};margin-top:4px;">${
-          locked ? 'Needs questions with a correct answer' : 'Best for: ' + g.bestFor}</span>
+          locked ? '<span data-i18n>Needs questions with a correct answer</span>'
+                 : '<span data-i18n>Best for:</span> <span data-i18n>' + escapeHtml(g.bestFor) + '</span>'}</span>
       </span>
       <span style="flex-shrink:0;font-size:16px;color:var(--accent);">${locked ? '' : (on ? '●' : '○')}</span>
     </button>`;
   }).join('');
   m.innerHTML = `<div class="modal" style="max-width:520px;">
-    <h2 style="margin-bottom:2px;">How do you want to run this?</h2>
-    <p style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">Changes how points are scored and shown. Your questions, reveal and results all work the same either way — you can switch between rounds.</p>
+    <h2 data-i18n style="margin-bottom:2px;">How do you want to run this?</h2>
+    <p data-i18n style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">Changes how points are scored and shown. Your questions, reveal and results all work the same either way — you can switch between rounds.</p>
     ${cards}
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
-      <div style="font-family:Syne,sans-serif;font-weight:800;font-size:13px;margin-bottom:2px;">Atmosphere</div>
-      <p style="color:var(--muted);font-size:12px;margin-bottom:9px;line-height:1.5;">What the room hears and sees while it waits. Nothing here changes the questions or the scoring — it is only how the wait feels. Remembered per deck.</p>
+      <div data-i18n style="font-family:Syne,sans-serif;font-weight:800;font-size:13px;margin-bottom:2px;">Atmosphere</div>
+      <p data-i18n style="color:var(--muted);font-size:12px;margin-bottom:9px;line-height:1.5;">What the room hears and sees while it waits. Nothing here changes the questions or the scoring — it is only how the wait feels. Remembered per deck.</p>
       <div style="display:flex;gap:8px;">
         ${PSAtmosphere.list().map(a => {
           const on = a.id === _pickedAtmos;
@@ -9580,28 +9583,28 @@ function renderModePicker() {
             style="flex:1;text-align:left;padding:10px 12px;border-radius:11px;cursor:pointer;font-family:inherit;
             background:${on ? 'rgba(108,99,255,0.16)' : 'var(--surface2)'};border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};color:var(--text);">
             <span style="display:block;font-size:16px;line-height:1.1;">${a.icon}</span>
-            <span style="display:block;font-family:Syne,sans-serif;font-weight:700;font-size:12.5px;margin-top:3px;">${escapeHtml(a.name)}</span>
-            <span style="display:block;font-size:10.5px;color:var(--muted);margin-top:1px;line-height:1.35;">${escapeHtml(a.blurb)}</span>
+            <span data-i18n style="display:block;font-family:Syne,sans-serif;font-weight:700;font-size:12.5px;margin-top:3px;">${escapeHtml(a.name)}</span>
+            <span data-i18n style="display:block;font-size:10.5px;color:var(--muted);margin-top:1px;line-height:1.35;">${escapeHtml(a.blurb)}</span>
           </button>`;
         }).join('')}
       </div>
       ${_sfxMuted && PSAtmosphere.atmosphereFor(_pickedAtmos).pops ? `
-        <p style="font-size:11px;color:var(--accent4);margin-top:8px;line-height:1.45;">
+        <p data-i18n style="font-size:11px;color:var(--accent4);margin-top:8px;line-height:1.45;">
           🔇 Sound is muted on this device, so this one will still be silent. Unmute with the 🔊 button to hear it.
         </p>` : ''}
     </div>
     ${fsSupported() ? `
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
-      <div style="font-family:Syne,sans-serif;font-weight:800;font-size:13px;margin-bottom:2px;">Display</div>
-      <p style="color:var(--muted);font-size:12px;margin-bottom:9px;line-height:1.5;">Full screen hides your browser tabs, address bar and menu — worth it when you're mirroring to a projector. You can switch any time with the ⛶ button, or leave with Esc.</p>
+      <div data-i18n style="font-family:Syne,sans-serif;font-weight:800;font-size:13px;margin-bottom:2px;">Display</div>
+      <p data-i18n style="color:var(--muted);font-size:12px;margin-bottom:9px;line-height:1.5;">Full screen hides your browser tabs, address bar and menu — worth it when you're mirroring to a projector. You can switch any time with the ⛶ button, or leave with Esc.</p>
       <div style="display:flex;gap:8px;">
         ${[['fullscreen','⛶','Full screen','Hides browser chrome'],['window','🪟','Stay in this window','Keeps tabs and menu visible']].map(([id,icon,name,sub]) => {
           const on = id === _presentDisplay;
           return `<button onclick="pickDisplay('${id}')" style="flex:1;text-align:left;padding:10px 12px;border-radius:11px;cursor:pointer;font-family:inherit;
             background:${on ? 'rgba(108,99,255,0.16)' : 'var(--surface2)'};border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};color:var(--text);">
             <span style="display:block;font-size:16px;line-height:1.1;">${icon}</span>
-            <span style="display:block;font-family:Syne,sans-serif;font-weight:700;font-size:12.5px;margin-top:3px;">${name}</span>
-            <span style="display:block;font-size:10.5px;color:var(--muted);margin-top:1px;">${sub}</span>
+            <span data-i18n style="display:block;font-family:Syne,sans-serif;font-weight:700;font-size:12.5px;margin-top:3px;">${name}</span>
+            <span data-i18n style="display:block;font-size:10.5px;color:var(--muted);margin-top:1px;">${sub}</span>
           </button>`;
         }).join('')}
       </div>
