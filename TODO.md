@@ -43,6 +43,17 @@ Last updated: 2026-09-01 (sixteenth pass)
 | ✅ | Attribution follows the real provider | Three places said "Tenor" while Giphy served the images — the review panel, the projector watermark (`gifTag`), and the picker footer. All now derive from each record's `source`. Giphy's terms require their mark. |
 | ⬜ | Option GIFs on phones | `answer.html` doesn't render them — big screen only. Probably right, since the give-away concern is about the shared screen, but it's a deliberate gap not an oversight. |
 
+## Atmosphere — the wait, 2026-09-01
+
+| | Item | Notes |
+|---|---|---|
+| ✅ | **Selectable atmosphere, not mandatory** | `atmosphere.js` (22 tests). Three presets in the existing pre-present dialog: 🌿 Calm / 🎓 Classroom / 🎤 Game show. Remembered **per deck** like the game mode, so the Friday quiz and the Monday board update differ. Presets, not four checkboxes — someone choosing ten seconds before presenting wants to say what kind of room they are in. |
+| ✅ | Quiet is the default | An unset, unknown or malformed value lands on **Calm**. A product that starts ticking on a projector in a shared building before anyone chose anything has misjudged whose room it is. Asserted in tests. |
+| ✅ | Device mute always wins | 🔇 on this device beats a preset chosen last week; the picker says so when the two disagree. |
+| ✅ | The dead 30 seconds | Was a 13px grey pill reading "Starting reveal countdown…". Now optionally: an accelerating tick (rising pitch, louder in the last three), the numeral taking the middle of the slide for the last five, a soft pop per answer landing, and an 800ms held beat with a rising roll before the reveal. Measured: Calm 57ms to reveal and silent; Classroom/Game show ~820ms. |
+| 📝 | Deliberately NOT done | No music files — licensing is the last thing to take on the week payments go live; everything is synthesised via the existing WebAudio engine, so no assets and no bandwidth. Audio stays presenter-side only: thirty phones ticking out of sync is chaos, not tension. |
+| ⬜ | Big screen (`live.html`) doesn't follow the atmosphere | It reads `uiLang` from the session already; the same route would carry this. Only matters when the projector is a different machine from the presenter. |
+
 ## Admin
 
 | | Item | Notes |

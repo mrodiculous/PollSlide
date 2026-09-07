@@ -13,6 +13,7 @@
 <script src="/roster.js?v=88b6f2d4"></script>
 <script src="/retakes.js?v=d187d4ee"></script>
 <script src="/gifs.js?v=ed7add18"></script>
+<script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=0ea2fafb"></script>
 <script src="/ui-lang.js?v=aae811e5"></script>
@@ -63,6 +64,11 @@
   .brand-sep { height:1px; background:var(--border); margin:6px 4px; }
   .logo-dot { width:7px; height:7px; background:var(--accent); border-radius:50%; animation:pulse 2s infinite; }
   @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(1.4)} }
+  /* One kick per second behind the question during the closing seconds. Scale, not
+     opacity — a CSS animation on a hidden document never starts, and a projector that
+     just woke must still show this. */
+  @keyframes psCountPulse { 0%{transform:scale(1.35)} 60%{transform:scale(.97)} 100%{transform:scale(1)} }
+  @media (prefers-reduced-motion:reduce){ @keyframes psCountPulse { 0%,100%{transform:scale(1)} } }
   .active-pres { font-size:13px; font-weight:500; color:var(--muted); display:flex; align-items:center; gap:6px; }
   .active-pres strong { color:var(--text); font-weight:600; }
   .save-status { font-size:11px; color:var(--muted); display:flex; align-items:center; gap:5px; flex-shrink:0; }
@@ -6050,6 +6056,10 @@ function beginRevealCountdown() {
   revealTimer = setInterval(() => {
     revealRemaining--;
     updateRevealCountdownLabel();
+    /* The closing seconds, if this deck's atmosphere asks for them. Both are no-ops on
+       Calm, which is the default — see atmosphere.js for why quiet is the assumption. */
+    sfxTick(revealRemaining);
+    updateBigCountdown(revealRemaining);
     if (revealRemaining <= 0) doReveal();
   }, 1000);
 }
@@ -6074,8 +6084,64 @@ function _beep(freq, start, dur, type, gain) {
 }
 const sfx = {
   reveal() { if (_sfxMuted) return; try { _beep(523.25,0,0.18); _beep(659.25,0.10,0.18); _beep(783.99,0.20,0.32); } catch(e){} }, // C–E–G rise
-  pop()    { if (_sfxMuted) return; try { _beep(660,0,0.08,'square',0.06); } catch(e){} }
+  pop()    { if (_sfxMuted) return; try { _beep(660,0,0.08,'square',0.06); } catch(e){} },
+  /* Rising roll into the reveal — the held beat that turns a fact into a moment.
+     Only played when the atmosphere builds; Calm gets the chord with no run-up. */
+  roll()   { if (_sfxMuted) return; try {
+    for (let i = 0; i < 6; i++) _beep(300 + i * 60, i * 0.11, 0.10, 'triangle', 0.05);
+  } catch(e){} },
 };
+
+/* ── THE CLOSING SECONDS ──────────────────────────────────────────────────────
+   Both of these are deliberately no-ops unless the deck's atmosphere asks for them,
+   and the device mute always wins over the preset: someone who pressed 🔇 in a quiet
+   room must not be overridden by a deck setting chosen last week. */
+function sfxTick(secondsLeft) {
+  if (_sfxMuted) return;
+  const t = PSAtmosphere.tickFor(secondsLeft, currentAtmosphere().id);
+  if (!t) return;
+  try { _beep(t.freq, 0, t.dur, t.type, t.gain); } catch (e) {}
+}
+
+/* One soft pop per answer that just arrived, staggered so a burst reads as a flurry
+   rather than one loud click. Capped at four: a lecture hall answering at once would
+   otherwise fire two hundred oscillators in the same tick, which is both unpleasant and
+   a good way to make the browser stutter mid-question. */
+function sfxAnswersLanded(count) {
+  if (_sfxMuted || !(count > 0)) return;
+  if (!currentAtmosphere().pops) return;
+  if (revealed) return;                       // after the answer is out, silence
+  const n = Math.min(count, 4);
+  for (let i = 0; i < n; i++) setTimeout(() => sfx.pop(), i * 70);
+}
+
+/* The countdown was a 13px pill in the corner — the least visible thing on screen
+   during the most tense part of the question. For the last few seconds it takes the
+   middle of the slide instead. Transform and colour only, never opacity: CSS
+   animations do not start on a hidden document, and this must be right on a projector
+   that was asleep a moment ago. */
+function updateBigCountdown(secondsLeft) {
+  const ov = document.getElementById('presentOverlay');
+  if (!ov || ov.style.display !== 'flex') return;
+  const from = PSAtmosphere.bigCountdownFrom(currentAtmosphere().id);
+  const show = from > 0 && secondsLeft > 0 && secondsLeft <= from && !revealed;
+  let el = document.getElementById('bigCountdown');
+  if (!show) { if (el) el.remove(); return; }
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'bigCountdown';
+    el.setAttribute('aria-hidden', 'true');   // the badge already announces this to AT
+    el.style.cssText = 'position:absolute;inset:0;display:flex;align-items:center;' +
+      'justify-content:center;pointer-events:none;z-index:5;font-family:Syne,sans-serif;' +
+      'font-weight:900;line-height:1;';
+    ov.appendChild(el);
+  }
+  const urgent = secondsLeft <= 3;
+  const color = urgent ? '#ff6584' : '#f7b731';
+  el.innerHTML = `<span style="font-size:clamp(90px,22vw,260px);color:${color};
+    text-shadow:0 0 60px ${color}66;opacity:.22;transform:scale(1);
+    animation:psCountPulse .9s ease-out;">${secondsLeft}</span>`;
+}
 function toggleSfx() {
   _sfxMuted = !_sfxMuted;
   localStorage.setItem('ql_sfx', _sfxMuted ? 'off' : 'on');
@@ -6130,7 +6196,24 @@ function fireConfetti() {
   _confettiRAF = requestAnimationFrame(tick);
 }
 
+/* A held beat before the answer lands, when the deck's atmosphere asks for one.
+   Everything still goes through doReveal(): the timer, the ▶ button and the R key all
+   get the same pause, so the room never sees two different reveals. Calm holds for 0ms
+   and drops straight through, which is also what happens if anything here throws. */
+let _revealHolding = false;
 function doReveal() {
+  if (_revealHolding || revealed) return;          // a second press must not double-fire
+  let hold = 0;
+  try { hold = PSAtmosphere.revealHoldMs(currentAtmosphere().id); } catch (e) {}
+  if (!hold) return _doRevealNow();
+  _revealHolding = true;
+  if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
+  document.getElementById('bigCountdown')?.remove();   // the numeral has done its job
+  sfx.roll();
+  setTimeout(() => { _revealHolding = false; _doRevealNow(); }, hold);
+}
+
+function _doRevealNow() {
   revealed = true;
   if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
   // Immediately update the present-mode badge — the ticker interval can lag up to 1s
@@ -9423,10 +9506,17 @@ function togglePresentFullscreen() {
   return PSDisplay.toggle(msg => toast(msg, 'error')).then(syncFsBtn);
 }
 
+/* Remembered per DECK, like the game mode — the Friday quiz and the Monday board
+   update are different rooms and should not have to be re-set every time. */
+let _pickedAtmos = PSAtmosphere.DEFAULT;
+const currentAtmosphere = () =>
+  PSAtmosphere.atmosphereFor((presentations[activePresId] || {}).atmosphere);
+
 function openPresentMode() {
   const idx = liveQIdx !== null ? liveQIdx : 0;
   if (!questions || !questions[idx]) return;
   _pickedMode = currentGameMode();
+  _pickedAtmos = currentAtmosphere().id;
   _presentDisplay = presentDisplayPref();
   renderModePicker();
 }
@@ -9480,6 +9570,26 @@ function renderModePicker() {
     <h2 style="margin-bottom:2px;">How do you want to run this?</h2>
     <p style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">Changes how points are scored and shown. Your questions, reveal and results all work the same either way — you can switch between rounds.</p>
     ${cards}
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+      <div style="font-family:Syne,sans-serif;font-weight:800;font-size:13px;margin-bottom:2px;">Atmosphere</div>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:9px;line-height:1.5;">What the room hears and sees while it waits. Nothing here changes the questions or the scoring — it is only how the wait feels. Remembered per deck.</p>
+      <div style="display:flex;gap:8px;">
+        ${PSAtmosphere.list().map(a => {
+          const on = a.id === _pickedAtmos;
+          return `<button onclick="pickAtmosphere('${escAttr(a.id)}')" title="${escAttr(a.bestFor)}"
+            style="flex:1;text-align:left;padding:10px 12px;border-radius:11px;cursor:pointer;font-family:inherit;
+            background:${on ? 'rgba(108,99,255,0.16)' : 'var(--surface2)'};border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};color:var(--text);">
+            <span style="display:block;font-size:16px;line-height:1.1;">${a.icon}</span>
+            <span style="display:block;font-family:Syne,sans-serif;font-weight:700;font-size:12.5px;margin-top:3px;">${escapeHtml(a.name)}</span>
+            <span style="display:block;font-size:10.5px;color:var(--muted);margin-top:1px;line-height:1.35;">${escapeHtml(a.blurb)}</span>
+          </button>`;
+        }).join('')}
+      </div>
+      ${_sfxMuted && PSAtmosphere.atmosphereFor(_pickedAtmos).pops ? `
+        <p style="font-size:11px;color:var(--accent4);margin-top:8px;line-height:1.45;">
+          🔇 Sound is muted on this device, so this one will still be silent. Unmute with the 🔊 button to hear it.
+        </p>` : ''}
+    </div>
     ${fsSupported() ? `
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
       <div style="font-family:Syne,sans-serif;font-weight:800;font-size:13px;margin-bottom:2px;">Display</div>
@@ -9502,6 +9612,7 @@ function renderModePicker() {
   m.style.display = 'flex';
 }
 function pickMode(id) { _pickedMode = psModeOk(id); renderModePicker(); }
+function pickAtmosphere(id) { _pickedAtmos = PSAtmosphere.atmosphereFor(id).id; renderModePicker(); }
 function pickDisplay(id) {
   _presentDisplay = (id === 'window') ? 'window' : 'fullscreen';
   localStorage.setItem(PRESENT_DISPLAY_KEY, _presentDisplay);   // remember, so we ask once
@@ -9513,6 +9624,12 @@ function startPresentWithMode() {
   // inside a live user gesture, and an intervening async hop spends it.
   if (_presentDisplay === 'fullscreen' && fsSupported() && !fsElement()) enterFullscreen();
   publishGameMode(_pickedMode);
+  /* Stored on the deck so it is still chosen next week. Fire-and-forget: a failed write
+     must never stop someone presenting, and the worst case is the quiet default. */
+  if (activePresId && presentations[activePresId]) {
+    presentations[activePresId].atmosphere = _pickedAtmos;
+    try { setDeckField(activePresId, 'atmosphere', _pickedAtmos); } catch (e) {}
+  }
   closeModePicker();
   const g = GAME_MODES[currentGameMode()];
   if (currentGameMode() !== 'classic') toast(`${g.icon} ${g.name} — ${g.blurb}`, 'success');
@@ -9585,7 +9702,12 @@ function _subscribePresentResponses() {
   ref.on('value', snap => {
     if (document.getElementById('presentOverlay')?.style.display !== 'flex') return;
     const all = snap.exists() ? Object.values(snap.val()) : [];
+    const before = (_lastPresResponses || []).length;
     _lastPresResponses = all.filter(r=>(r.submittedAt||0) >= liveStartedAt);
+    /* The room hearing itself answer. Twenty answers arriving over half a minute IS the
+       build-up, and it costs nothing — the sound was already written and unused here.
+       Capped, because a lecture hall of 300 all answering at once is not a drum roll. */
+    sfxAnswersLanded(_lastPresResponses.length - before);
     renderPresentSlide(_presentIdx);
   });
   _presentFirebaseUnsub = () => ref.off('value');
