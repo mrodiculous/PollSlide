@@ -158,13 +158,18 @@ module.exports = async function handler(req, res) {
      * This lists every key checkout will ask Stripe for, whether Stripe has it, and what it
      * costs, so a broken plan is visible before a customer finds it. Read-only. */
     if (action === 'prices') {
+      /* The annual keys end in _annual, not _yearly: create-checkout.js builds
+       * 'pollslide_' + plan + '_' + cycle, and cycle is 'annual'. The first version of this
+       * list said _yearly and would have reported all three annual plans as missing —
+       * sending someone to Stripe to fix three prices that were correctly configured.
+       * scripts/qa-docs.js now derives this list from create-checkout.js so it cannot drift. */
       const EXPECT = [
         { key: 'pollslide_pro_monthly',        what: 'Pro — monthly',        expect: 12 },
-        { key: 'pollslide_pro_yearly',         what: 'Pro — yearly',         expect: 120 },
+        { key: 'pollslide_pro_annual',         what: 'Pro — yearly',         expect: 120 },
         { key: 'pollslide_team_small_monthly', what: 'Team Small — monthly', expect: 39 },
-        { key: 'pollslide_team_small_yearly',  what: 'Team Small — yearly',  expect: 384 },
+        { key: 'pollslide_team_small_annual',  what: 'Team Small — yearly',  expect: 384 },
         { key: 'pollslide_team_large_monthly', what: 'Team Large — monthly', expect: 199 },
-        { key: 'pollslide_team_large_yearly',  what: 'Team Large — yearly',  expect: 1980 },
+        { key: 'pollslide_team_large_annual',  what: 'Team Large — yearly',  expect: 1980 },
         { key: 'pollslide_credits_20',         what: '20 Polly credits',     expect: 8 },
         { key: 'pollslide_credits_100',        what: '100 Polly credits',    expect: 30 },
         { key: 'pollslide_credits_200',        what: '200 Polly credits',    expect: 50 },

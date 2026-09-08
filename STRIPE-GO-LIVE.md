@@ -182,7 +182,17 @@ customer.subscription.updated
 customer.subscription.deleted
 invoice.payment_failed
 invoice.payment_succeeded
+charge.refunded
 ```
+
+`charge.refunded` is the one people leave off, and it is the one that costs money. Without
+it a refunded **Polly credit pack** leaves the credits sitting in the account — buy 500,
+spend them, ask for the money back. Subscriptions do not need it: refunding an invoice does
+not end a subscription, and the tier follows `customer.subscription.deleted` instead.
+
+**If you already created the endpoint without it**, open the endpoint in Stripe, click
+**Update details → Select events**, and add `charge.refunded`. The signing secret does not
+change, so nothing needs redeploying.
 
 Then click **Reveal** under Signing secret and put it in Vercel:
 

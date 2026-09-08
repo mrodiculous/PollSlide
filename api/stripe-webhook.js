@@ -330,6 +330,42 @@ module.exports = async function handler(req, res) {
         break;
       }
 
+      /* A refunded credit pack has to take the credits back.
+       * Subscriptions look after themselves: refunding an invoice does not end a
+       * subscription, and the tier here is driven by customer.subscription.deleted /
+       * .updated, so a refund plus a cancel does the right thing on its own.
+       * One-time credit packs had no such path. checkout.session.completed added the
+       * credits and nothing ever reversed them, so a refunded purchase left the balance
+       * exactly where it was — buy 500 credits, spend them, ask for the money back.
+       * The purchase record written by addCredits() is what makes this safe to reverse:
+       * it holds the uid and the amount, and its status is what keeps this idempotent
+       * across Stripe's repeat deliveries. */
+      case 'charge.refunded': {
+        const charge = event.data.object;
+        if (!charge.payment_intent) break;
+        const sessions = await stripe.checkout.sessions.list({ payment_intent: charge.payment_intent, limit: 1 });
+        const session = sessions.data[0];
+        if (!session || session.metadata?.kind !== 'credits') break;   // not a credit pack
+
+        const db = admin.database(getFirebaseApp());
+        const guardRef = db.ref(`admin/credit_purchases/${session.id}`);
+        const rec = (await guardRef.get()).val();
+        if (!rec || rec.status !== 'done') {
+          console.log(`Refund for ${session.id}: nothing granted to reverse (status ${rec && rec.status})`);
+          break;
+        }
+        /* Partial refunds take back the same fraction, rounded UP, so a 50% refund of a
+         * 100-credit pack removes 50 and never leaves someone ahead by rounding. */
+        const share = charge.amount ? (charge.amount_refunded || 0) / charge.amount : 1;
+        const take  = Math.min(rec.credits, Math.ceil(rec.credits * share));
+        // Floored at zero: credits already spent are gone, and a negative balance would
+        // silently swallow the next month's allowance.
+        await db.ref(`users/${rec.uid}/aiCredits`).transaction(n => Math.max(0, (n || 0) - take));
+        await guardRef.update({ status: 'refunded', refundedAt: Date.now(), creditsRemoved: take });
+        console.log(`Refund: removed ${take} credits from ${rec.uid} (session ${session.id})`);
+        break;
+      }
+
       default:
         // Unexpected event type — acknowledge but don't process
         console.log(`Unhandled event type: ${event.type}`);

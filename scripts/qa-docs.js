@@ -128,6 +128,44 @@ for (const m of todo.matchAll(/`([A-Z][A-Z0-9-]+\.md)`/g)) {
      `TODO.md tells the owner to follow \`${m[1]}\`, which does not exist`);
 }
 
+/* ── 3b. The admin price checker asks for the keys checkout actually builds ───
+ * create-checkout.js constructs 'pollslide_' + plan + '_' + cycle, and cycle is 'annual'.
+ * The preflight in stripe-admin.js hardcodes the same ten keys, and its first version said
+ * _yearly — so it would have reported all three annual plans as having no lookup key, and
+ * sent someone into Stripe to "fix" three prices that were already correct. A diagnostic
+ * that lies is worse than no diagnostic, so the two lists are compared here. */
+{
+  const cc = read(path.join(ROOT, 'api', 'create-checkout.js')) || '';
+  const sa = read(path.join(ROOT, 'api', 'stripe-admin.js')) || '';
+  const cycle = (/cycle\s*=\s*billing\s*===\s*'(\w+)'\s*\?\s*'(\w+)'\s*:\s*'(\w+)'/.exec(cc) || []);
+  const cycles = cycle.length ? [cycle[2], cycle[3]] : ['annual', 'monthly'];
+  const plans = (/plan must be "(\w+)", "(\w+)" or "(\w+)"/.exec(cc) || []).slice(1);
+  const packs = (/credits must be one of ([\d, ]+)/.exec(cc) || [])[1];
+  const expected = [];
+  for (const p of (plans.length ? plans : ['pro', 'team_small', 'team_large']))
+    for (const c of cycles) expected.push(`pollslide_${p}_${c}`);
+  for (const n of (packs ? packs.split(',').map(s => s.trim()) : ['20', '100', '200', '500']))
+    expected.push(`pollslide_credits_${n}`);
+
+  const listed = [...sa.matchAll(/key:\s*'(pollslide_[a-z0-9_]+)'/g)].map(m => m[1]);
+  const missing = expected.filter(k => !listed.includes(k));
+  const extra   = listed.filter(k => !expected.includes(k));
+  // NOTE: ok() in THIS file takes the condition FIRST. Written the other way round — the
+  // order the test files use — the message string is the condition, which is always truthy,
+  // and the check silently always passes. That is how it was first written here.
+  ok(missing.length === 0 && extra.length === 0,
+     'the admin price checker must list exactly the lookup keys checkout builds',
+     (missing.length ? 'checkout builds but admin never checks: ' + missing.join(', ') : '') +
+     (extra.length   ? '  admin checks but checkout never builds: ' + extra.join(', ')  : ''));
+
+  // …and the runbook tells the owner to create those same keys, not different ones.
+  const runbook = read(path.join(ROOT, 'STRIPE-GO-LIVE.md')) || '';
+  const undocumented = expected.filter(k => !runbook.includes(k));
+  ok(undocumented.length === 0,
+     'every lookup key checkout builds must appear in the go-live runbook',
+     undocumented.join(', '));
+}
+
 // ── 4. The Office add-in manifest matches reality ────────────────────────────
 const manifest = read(path.join(ROOT, 'powerpoint-manifest.xml'));
 if (manifest) {
