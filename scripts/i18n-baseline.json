@@ -1,0 +1,72 @@
+{
+  "accessibility.html": {
+    "pct": 100,
+    "hit": 70,
+    "total": 70
+  },
+  "download.html": {
+    "pct": 100,
+    "hit": 56,
+    "total": 56
+  },
+  "game-modes.html": {
+    "pct": 100,
+    "hit": 87,
+    "total": 87
+  },
+  "help.html": {
+    "pct": 100,
+    "hit": 686,
+    "total": 686
+  },
+  "index.html": {
+    "pct": 100,
+    "hit": 274,
+    "total": 274
+  },
+  "integrations.html": {
+    "pct": 100,
+    "hit": 42,
+    "total": 42
+  },
+  "pricing.html": {
+    "pct": 100,
+    "hit": 19,
+    "total": 19
+  },
+  "setup.html": {
+    "pct": 100,
+    "hit": 120,
+    "total": 120
+  },
+  "status.html": {
+    "pct": 100,
+    "hit": 14,
+    "total": 14
+  },
+  "study-games.html": {
+    "pct": 100,
+    "hit": 62,
+    "total": 62
+  },
+  "trust-safety.html": {
+    "pct": 100,
+    "hit": 49,
+    "total": 49
+  },
+  "vs-kahoot.html": {
+    "pct": 100,
+    "hit": 33,
+    "total": 33
+  },
+  "vs-mentimeter.html": {
+    "pct": 100,
+    "hit": 34,
+    "total": 34
+  },
+  "vs-slido.html": {
+    "pct": 100,
+    "hit": 33,
+    "total": 33
+  }
+}

@@ -31,7 +31,12 @@
   <Version>1.0.0.0</Version>
   <ProviderName>PollSlide</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="PollSlide — Live Polls, Quizzes &amp; Surveys" />
+  <!-- The AppSource listing name. Rod chose "PollSlide for PowerPoint" on 2026-09-08:
+       it is what the add-in IS, it reads correctly in Microsoft's own "<name> for
+       PowerPoint" listing convention, and at 24 characters it never truncates in the
+       ribbon or the store card the way the old feature-list name did.
+       This must match the Partner Center listing name EXACTLY or certification fails. -->
+  <DisplayName DefaultValue="PollSlide for PowerPoint" />
   <Description DefaultValue="Show live poll, quiz and survey results right inside your PowerPoint slides. Your audience scans a QR code or opens a link to respond from any phone — results update live on the slide. Works on Windows, Mac and the web." />
 
   <!-- AppSource requires EXACT sizes: IconUrl=32x32, HighResolutionIconUrl=64x64 -->

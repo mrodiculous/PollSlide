@@ -1,5 +1,14 @@
 # Publishing the PowerPoint add-in to Microsoft AppSource
 
+<!-- SUBMISSION-STATUS: not-submitted
+     Change to `submitted` the moment you press Review and publish in Partner Center.
+     `scripts/qa-docs.js` reads this line: while it says not-submitted, "coming soon"
+     copy on the site is fine and expected. The moment it says submitted, that copy
+     becomes a hard QA failure — because a reviewer clicking your Support URL and
+     reading "the PowerPoint add-in is coming soon" concludes the product they are
+     reviewing does not exist, and fails the submission. -->
+
+
 Everything needed to get **PollSlide for PowerPoint** listed publicly, in order, with
 the exact values to paste and the traps that cause rejection.
 
@@ -124,7 +133,11 @@ This is what customers read. Write it properly; it is also your search ranking.
 
 | Field | Limit | Use |
 |---|---|---|
-| Name | 50 | `PollSlide — Live Polls, Quizzes & Surveys` |
+| Name | 50 | `PollSlide for PowerPoint` |
+
+> **The name must match `<DisplayName>` in powerpoint-manifest.xml character for character.**
+> Partner Center compares them and fails certification on a mismatch — including a different
+> dash or a trailing space. Both currently read `PollSlide for PowerPoint`.
 | Summary | 100 | `Live audience polls, quizzes and surveys inside your PowerPoint slides.` |
 | Short description | 256 | See below |
 | Description | 3000 | See below |

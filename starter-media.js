@@ -19,15 +19,23 @@
  * Aquarium, Brookfield Zoo, Nature on PBS, BBC Earth. Search terms are written to land
  * there, and the primaries below are nearly all from those channels.
  *
- * NO QUESTION-LEVEL PICTURES. Five were collected and all five were rejected — and two
- * of them (a seal, Jerry the mouse) put an unrelated ANIMAL above a question asking
- * which animal does something, which is worse than no picture at all. The answers carry
- * the visuals; the questions are text.
+ * QUESTION-LEVEL PICTURES ARE OBJECTS, NOT ANIMALS. An earlier pass collected five and
+ * rejected all five, because two of them (a seal, Jerry the mouse) put an unrelated
+ * ANIMAL above a question asking which animal does something — worse than no picture at
+ * all. The note then said the questions stay text, and the five q0–q4 slots sat empty
+ * for months while starters.js still declared a gifTerm for each. They are filled now,
+ * with the CLUE rather than the subject: an alarm clock over "sleeps the most", a
+ * stopwatch over "fastest", a paint palette over "changes colour". Nothing in a question
+ * picture can narrow the choices, which is what made the animal ones unusable.
  *
  * URLs are the canonical `media.giphy.com/media/<id>/200.gif` form: no cid/analytics
  * segment, 200px rather than the 100px the product's normaliser defaults to, and every
  * one has a real `_s` still so reduced-motion viewers get the frozen frame the UI
- * promises them. All 75 (20 primaries + 55 spares) were confirmed to load.
+ * promises them. All 25 primaries were re-confirmed to load on 2026-09-08.
+ *
+ * WEIGHT IS PART OF THE REVIEW. This deck opens on school and conference wifi, so three
+ * primaries that were 1.4–2.3MB were swapped for spares of the same subject and source
+ * at 232–656KB (koala, frog, dolphin). The heavy ones stayed on as spares.
  *
  * `alts` are SPARES, reviewed at the same time. lib/starter-media-check.js promotes one
  * when a primary 404s — a repair must never be a fresh search, or the deck every new
@@ -48,6 +56,46 @@
   const slot = (term, primary, ...alts) => Object.assign({}, primary, { term, alts });
 
   return {
+    /* ── QUESTION-LEVEL pictures ────────────────────────────────────────────────
+     * These five were specified in starters.js (every question carries a gifTerm) and
+     * then never filled, so the demo deck shipped with pictures on all twenty answers
+     * and none on any question — half of what a new account is supposed to see.
+     *
+     * The subject is deliberately the CLUE, not the animal: a stopwatch over "which is
+     * fastest", a paint palette over "which changes colour". An animal here would give
+     * the answer away before the choices are even up.
+     *
+     * Licensed characters are avoided on purpose — this deck ships to every account and
+     * gets projected in public, so no SpongeBob, Simpsons, Disney or PBS. So are the
+     * "trampoline fail" clips the search is full of: they are real people getting hurt.
+     * Every URL below was fetched and checked (200 + non-zero body) on 2026-09-08;
+     * two candidates that answered intermittently were dropped rather than shipped. */
+    q0: slot('alarm clock',
+      G('SHvCPVGfLpyOPA69zq', 'Alarm Clock Animation GIF'),
+      G('IY6iHDJrUIgJW50rSr', 'Alarm Clock Icon GIF by SUCCESSINSIDER'),
+      G('hU9FpBh8Q56CfwXiVc', 'Digital alarm clock going off at 6:30'),
+      G('yrRLB4Ba4ICQfiaGBn', 'Wake Up Clock GIF')),
+    q1: slot('trampoline',
+      G('gLGXoJixC1vItgVfcz', 'Jump Trampoline GIF'),
+      G('d1GQguRA5Tx0PGDEz5', 'Jump Jumping GIF by Jumpsquare'),
+      G('RIN5IRPmU6rVOyHas0', 'Positive_Jump trampoline GIF'),
+      G('8YXRcxfk7u8B65glSD', 'big air trampoline park GIF')),
+    q2: slot('heartbeat',
+      G('JQRfa8kPwx5xgc51jG', 'Animation Heart GIF by Elle'),
+      G('l3YSj6Oirgkb18AkE',  'beating heart love GIF by appikiko'),
+      G('S9E88u47Lxc3uqhsse', 'Heart Loop GIF by xponentialdesign'),
+      G('T1TqR5TT62mVG',      'Heartbeat Throb GIF')),
+    q3: slot('stopwatch',
+      G('wq1I3ILdsvYJub8Rwx', 'Sport Time GIF by TeamColorCodes'),
+      G('ZbTPNi9bQXCtrxz0Hz', 'stopwatch timer GIF by ikonicstopwatch'),
+      G('l6tgUFAg5xzB5LKccX', 'Timer Timing GIF by ikonicstopwatch'),
+      G('pMq2kVIEfTvmeG8AVC', 'stopwatch timer GIF by ikonicstopwatch')),
+    q4: slot('paint palette',
+      G('kc6oPAnQyZNfjIrMaS', 'artist paint painter palette GIF by ZenARTSupplies'),
+      G('W5ZfAcHuuoBdWXHBfK', 'Art Teacher Paint Palette GIF by theartofed'),
+      G('ZbH1o1o3zJwmCgo0Q8', 'art artist painting GIF by loganelizabethdesigns'),
+      G('nRCmNNkJE1R4to80Fa', 'Stop Motion Color GIF by Evan Hilton')),
+
     /* Q1 — which animal sleeps the most?  (answer: Koala, option C) */
     q0o0: slot('sloth zoo wildlife',
       G('KaJZkBnTnBdaYS0Kaz', 'Happy Sloth GIF by San Diego Zoo Wildlife Alliance'),
@@ -59,10 +107,10 @@
       G('Fq41ykxnSRdduPYE8U', 'Lion Cute Animals GIF by Brookfield Zoo'),
       G('S5FX2oPNR5ji1PK5yp', 'Lion Roar GIF by Brookfield Zoo')),
     q0o2: slot('koala zoo wildlife',
+      G('3ohc0W7461KslLarLO', 'koala lol GIF by San Diego Zoo'),
       G('OJezshp284P9C',      'zoo koala GIF by Mitteldeutscher Rundfunk'),
       G('Z4Y5pgXHambPG',      'zoo koala GIF by Mitteldeutscher Rundfunk'),
-      G('iFYuzoHk6XCaQ',      'zoo koala GIF by Mitteldeutscher Rundfunk'),
-      G('3ohc0W7461KslLarLO', 'koala lol GIF by San Diego Zoo')),
+      G('iFYuzoHk6XCaQ',      'zoo koala GIF by Mitteldeutscher Rundfunk')),
     // The VeeFriends spare was dropped: NFT brand art, not a panda.
     q0o3: slot('giant panda zoo bamboo',
       G('GefE7ts85UPyEslWVd', 'Peek A Boo Pandas GIF by San Diego Zoo Wildlife Alliance'),
@@ -76,9 +124,9 @@
       G('3o7qE5866bLg4VKabe', 'Kangaroo Dundee Australia GIF by Nat Geo Wild'),
       G('LwPUCrQYRlZi8',      'red kangaroo GIF by Head Like an Orange')),
     q1o1: slot('frog nature wildlife',
+      G('eocoJJgo4Ba8cYtroU', 'Deep Thoughts Frog GIF by U.S. Fish and Wildlife Service'),
       G('4BBZTNzhPGevd27wqv', 'Pbs Nature Frog GIF by Nature on PBS'),
       G('YNzedACGq3lXZtiRCQ', 'Surprise Frog GIF by BBC America'),
-      G('eocoJJgo4Ba8cYtroU', 'Deep Thoughts Frog GIF by U.S. Fish and Wildlife Service'),
       G('8qnpAYUzPx4dPXa5AZ', 'Pbs Nature Frog GIF by Nature on PBS')),
     q1o2: slot('cat jumping',
       G('TjSPQgowhhJdHgvnwA', 'Cute Cat GIF'),
@@ -100,9 +148,9 @@
       G('Occ7SXRqFk52QCTSbG', 'Giant Pacific Octopus Ocean GIF by Monterey Bay Aquarium'),
       G('80ciXbozWdtKK42iPI', 'Giant Pacific Octopus Ocean GIF by Monterey Bay Aquarium')),
     q2o2: slot('dolphin aquarium ocean',
+      G('l4FGtklbooKD0x0mk',  'bottlenose dolphin GIF by Monterey Bay Aquarium'),
       G('IeQzPldFcpS7R2iy3I', 'Dolphin GIF by Georgia Aquarium'),
       G('eh6mMxwPOveg7WYXjf', 'Dolphin GIF by Georgia Aquarium'),
-      G('l4FGtklbooKD0x0mk',  'bottlenose dolphin GIF by Monterey Bay Aquarium'),
       G('l4FGGSoEHgefTbWP6',  'bottlenose dolphin GIF by Monterey Bay Aquarium')),
     q2o3: slot('seahorse aquarium ocean',
       G('3o7bufkvhaQuq6pYpG', 'pacific seahorse GIF by Monterey Bay Aquarium'),

@@ -43,6 +43,9 @@ const GATES = [
   { name: 'secrets',      script: 'qa-secrets.js',      why: 'no API key in a file the browser can read' },
   { name: 'assets',       script: 'qa-assets.js',       why: 'every ?v= matches its file, so nobody gets a cached old copy' },
   { name: 'parity',       script: 'qa-parity.js',       why: 'capabilities are not stranded in one product', slow: true },
+  { name: 'docs',         script: 'qa-docs.js',         why: 'the runbooks still describe the real system' },
+  { name: 'i18n',         script: 'qa-i18n.js',         why: 'nothing ships English-only by accident' },
+  { name: 'site-assets',  script: 'qa-site-assets.js',  why: 'returning visitors get the new files, not a cached copy' },
 ];
 
 const run = (file, args = []) => spawnSync(process.execPath, [file, ...args], { cwd: ROOT, encoding: 'utf8' });

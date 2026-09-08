@@ -15,8 +15,8 @@
 <script src="/gifs.js?v=ed7add18"></script>
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
-<script src="/starter-media.js?v=0ea2fafb"></script>
-<script src="/ui-lang.js?v=924842f5"></script>
+<script src="/starter-media.js?v=fe372f90"></script>
+<script src="/ui-lang.js?v=f221da1f"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root {
@@ -505,8 +505,8 @@
       <div style="flex:1;height:1px;background:var(--border);"></div>OR<div style="flex:1;height:1px;background:var(--border);"></div>
     </div>
 
-    <input type="email" id="authEmail" placeholder="Email address data-i18n-ph" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:15px;outline:none;margin-bottom:10px;">
-    <input type="password" id="authPass" placeholder="Password data-i18n-ph" style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:15px;outline:none;margin-bottom:14px;">
+    <input type="email" id="authEmail" placeholder="Email address" data-i18n-ph style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:15px;outline:none;margin-bottom:10px;">
+    <input type="password" id="authPass" placeholder="Password" data-i18n-ph style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;color:var(--text);font-size:15px;outline:none;margin-bottom:14px;">
     <label id="ageGateRow" style="display:none;align-items:flex-start;gap:8px;margin:0 0 14px;font-size:12px;color:var(--muted);line-height:1.45;cursor:pointer;text-align:left;">
       <input type="checkbox" id="ageConfirm" style="margin-top:2px;flex-shrink:0;">
       <span>I'm at least 16 years old, and I agree to the <a href="https://pollslide.com/terms" target="_blank" rel="noopener" style="color:var(--accent);">Terms</a> and <a href="https://pollslide.com/privacy" target="_blank" rel="noopener" style="color:var(--accent);">Privacy Policy</a>.</span>
@@ -528,7 +528,7 @@
 <!-- ── TOP BAR ── -->
 <div class="topbar">
   <div class="brand-switch" id="brandSwitcher" style="position:relative;flex-shrink:0;">
-    <button class="logo" onclick="toggleBrandMenu()" title="Switch product data-i18n-title" style="background:none;border:none;cursor:pointer;padding:4px 8px 4px 4px;border-radius:9px;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg><span id="brandName" data-i18n>PollSlide</span><span style="color:var(--muted);font-size:10px;margin-left:3px;">▾</span></button>
+    <button class="logo" onclick="toggleBrandMenu()" title="Switch product" data-i18n-title style="background:none;border:none;cursor:pointer;padding:4px 8px 4px 4px;border-radius:9px;"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg><span id="brandName" data-i18n>PollSlide</span><span style="color:var(--muted);font-size:10px;margin-left:3px;">▾</span></button>
     <div id="brandMenu" style="display:none;position:absolute;top:calc(100% + 6px);left:0;background:var(--surface);border:1px solid var(--border2);border-radius:12px;min-width:248px;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,0.4);padding:6px;"></div>
   </div>
   <div class="active-pres" id="activePres" data-i18n>Select a presentation</div>
@@ -542,30 +542,30 @@
          before — same ids, same handlers — just relocated, so every enable/disable
          and sync function keeps working untouched. -->
     <button class="btn btn-primary" id="presentBtn" onclick="openPresentPicker()" disabled
-            title="Present this deck — choose where it goes data-i18n-title" data-i18n>▶ Present</button>
+            title="Present this deck — choose where it goes" data-i18n-title data-i18n>▶ Present</button>
 
     <div class="more-wrap" id="moreWrap">
-      <button class="btn btn-ghost" id="moreBtn" onclick="toggleMoreMenu()" title="Everything else data-i18n-title">⋯</button>
+      <button class="btn btn-ghost" id="moreBtn" onclick="toggleMoreMenu()" title="Everything else" data-i18n-title>⋯</button>
       <div class="more-menu" id="moreMenu">
         <div class="more-group" data-i18n>While you present</div>
         <button class="btn btn-ghost" id="bigScreenBtn" onclick="openBigScreen()" disabled title="Open the big-screen join + live results view (projector / second screen)" data-i18n>🖥️ Big screen</button>
         <button class="btn btn-ghost" id="teamModeBtn" onclick="toggleTeamMode()" disabled title="Team play (pub-quiz mode): the audience joins as teams and the leaderboard ranks teams. Team score = average of the members' scores, so team size doesn't matter." data-i18n>👥 Teams: Off</button>
-        <button class="btn btn-ghost" id="qaBtn" onclick="openQAPanel()" disabled title="Audience Q&amp;A — questions & upvotes data-i18n-title" data-i18n>💬 Q&amp;A</button>
+        <button class="btn btn-ghost" id="qaBtn" onclick="openQAPanel()" disabled title="Audience Q&amp;A — questions & upvotes" data-i18n-title data-i18n>💬 Q&amp;A</button>
         <div class="more-group" data-i18n>Send it out</div>
-        <button class="btn btn-primary" id="shareBtn" onclick="openShareModal()" style="display:none;" title="Share link / QR for this survey data-i18n-title" data-i18n>🔗 Share</button>
+        <button class="btn btn-primary" id="shareBtn" onclick="openShareModal()" style="display:none;" title="Share link / QR for this survey" data-i18n-title data-i18n>🔗 Share</button>
         <button class="btn btn-ghost" id="studyNowBtn" onclick="studyNow()" style="display:none;" title="Study this set yourself, right now — spaced repetition, streaks and study games" data-i18n>📚 Study now</button>
         <button class="btn btn-ghost" id="makeStudyBtn" onclick="studyThisDeck()" style="display:none;" title="Turn this deck into a StudySlide set of flashcards you can revise with" data-i18n>📚 Study this deck</button>
         <div class="more-group" data-i18n>Results</div>
-        <button class="btn btn-ghost" id="reportBtn" onclick="window.open('/report'+(activePresId?('?pres='+encodeURIComponent(activePresId)):''),'_blank')" disabled title="Open the full report data-i18n-title" data-i18n>📊 Report</button>
+        <button class="btn btn-ghost" id="reportBtn" onclick="window.open('/report'+(activePresId?('?pres='+encodeURIComponent(activePresId)):''),'_blank')" disabled title="Open the full report" data-i18n-title data-i18n>📊 Report</button>
         <button class="btn btn-reset" id="resetBtn" onclick="confirmResetAll()" disabled data-i18n>↺ Reset All Tallies</button>
         <div class="more-sep"></div>
-        <button class="btn btn-ghost" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark data-i18n-title">🌙</button>
+        <button class="btn btn-ghost" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark" data-i18n-title>🌙</button>
       </div>
     </div>
 
     <!-- User chip — shows email, opens a proper dropdown menu -->
     <div id="userChip" style="display:none;position:relative;">
-      <button id="userBtn" onclick="toggleUserMenu()" title="Account data-i18n-title"
+      <button id="userBtn" onclick="toggleUserMenu()" title="Account" data-i18n-title
         style="display:flex;align-items:center;gap:7px;padding:6px 12px;background:var(--surface2);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-family:'DM Sans',sans-serif;font-size:12px;cursor:pointer;max-width:220px;overflow:hidden;">
         <span style="width:24px;height:24px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0;" id="userAvatar">?</span>
         <span id="userEmailDisplay" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
@@ -621,14 +621,14 @@
            never changes height as you go deeper. -->
       <div class="folder-ribbon" id="folderRibbon"></div>
       <div class="deck-toolbar">
-        <input id="deckSearch" type="search" placeholder="Search decks and questions… data-i18n-ph" autocomplete="off"
-               oninput="onDeckSearch(this.value)" title="Searches every folder, not just this one data-i18n-title">
-        <select id="deckSort" onchange="onDeckSort(this.value)" title="Sort order data-i18n-title">
+        <input id="deckSearch" type="search" placeholder="Search decks and questions…" data-i18n-ph autocomplete="off"
+               oninput="onDeckSearch(this.value)" title="Searches every folder, not just this one" data-i18n-title>
+        <select id="deckSort" onchange="onDeckSort(this.value)" title="Sort order" data-i18n-title>
           <option value="recent" data-i18n>Recent</option>
           <option value="created" data-i18n>Newest</option>
           <option value="name">A–Z</option>
         </select>
-        <button class="icon-btn" id="selectModeBtn" onclick="toggleSelectMode()" title="Select several decks data-i18n-title">☑</button>
+        <button class="icon-btn" id="selectModeBtn" onclick="toggleSelectMode()" title="Select several decks" data-i18n-title>☑</button>
       </div>
       <div class="bulk-bar" id="bulkBar" style="display:none;">
         <span id="bulkCount" data-i18n>0 selected</span>
@@ -643,16 +643,16 @@
       <div style="padding:8px;border-top:1px solid var(--border);flex-shrink:0;">
         <button class="btn btn-primary" id="createPresBtn" style="width:100%;justify-content:center;padding:9px 14px;font-size:12px;" onclick="createPresentation()" data-i18n>+ Create New</button>
         <div style="display:flex;gap:6px;margin-top:6px;">
-          <button class="btn btn-ghost" onclick="createFolder()" style="flex:1;justify-content:center;padding:6px 8px;font-size:11px;color:var(--muted);" title="Group decks by class, unit or event data-i18n-title" data-i18n>📁 New folder</button>
-          <button class="btn btn-ghost" id="archivedBtn" onclick="toggleArchivedView()" style="flex:1;justify-content:center;padding:6px 8px;font-size:11px;color:var(--muted);" title="Decks you've put away without deleting data-i18n-title" data-i18n>📦 Archived</button>
+          <button class="btn btn-ghost" onclick="createFolder()" style="flex:1;justify-content:center;padding:6px 8px;font-size:11px;color:var(--muted);" title="Group decks by class, unit or event" data-i18n-title data-i18n>📁 New folder</button>
+          <button class="btn btn-ghost" id="archivedBtn" onclick="toggleArchivedView()" style="flex:1;justify-content:center;padding:6px 8px;font-size:11px;color:var(--muted);" title="Decks you've put away without deleting" data-i18n-title data-i18n>📦 Archived</button>
         </div>
-        <button class="btn btn-ghost" id="inboxBtn" style="display:none;width:100%;justify-content:center;padding:6px 14px;font-size:11px;margin-top:6px;color:var(--accent);border-color:rgba(108,99,255,0.4);" onclick="openInbox()" title="Decks other people have shared with you data-i18n-title" data-i18n>📥 Shared with me</button>
-        <button class="btn btn-ghost" id="trashBtn" style="width:100%;justify-content:center;padding:6px 14px;font-size:11px;margin-top:6px;color:var(--muted);" onclick="openTrash()" title="Restore a deleted presentation data-i18n-title" data-i18n>🗑 Recently deleted</button>
+        <button class="btn btn-ghost" id="inboxBtn" style="display:none;width:100%;justify-content:center;padding:6px 14px;font-size:11px;margin-top:6px;color:var(--accent);border-color:rgba(108,99,255,0.4);" onclick="openInbox()" title="Decks other people have shared with you" data-i18n-title data-i18n>📥 Shared with me</button>
+        <button class="btn btn-ghost" id="trashBtn" style="width:100%;justify-content:center;padding:6px 14px;font-size:11px;margin-top:6px;color:var(--muted);" onclick="openTrash()" title="Restore a deleted presentation" data-i18n-title data-i18n>🗑 Recently deleted</button>
       </div>
     </div>
 
     <!-- ── VERTICAL RESIZE: presentations ↔ questions ── -->
-    <div class="resize-handle-y" id="resizeVertical" title="Drag to resize data-i18n-title"></div>
+    <div class="resize-handle-y" id="resizeVertical" title="Drag to resize" data-i18n-title></div>
 
     <!-- QUESTIONS panel -->
     <div class="q-panel">
@@ -671,7 +671,7 @@
   </div>
 
   <!-- ── HORIZONTAL RESIZE: sidebar ↔ center ── -->
-  <div class="resize-handle-x" id="resizeLeft" title="Drag to resize data-i18n-title"></div>
+  <div class="resize-handle-x" id="resizeLeft" title="Drag to resize" data-i18n-title></div>
 
   <!-- ── CENTER ── -->
   <div class="center-panel">
@@ -684,7 +684,11 @@
       <div class="setup-icon">🎯</div>
       <div>
         <h2 style="font-family:'Syne',sans-serif;font-size:21px;font-weight:800;margin-bottom:8px;" data-i18n>Welcome to PollSlide</h2>
-        <p style="color:var(--muted);font-size:14px;line-height:1.7;margin-bottom:20px;">Each presentation has its own questions and session code.<br>Start from scratch, or open one of these and present it right away.</p>
+        <!-- This block is what shows while the library is still loading. It used to end
+             "…or open one of these and present it right away", pointing at starter cards
+             that only exist once showSetup() has run — so on a slow load it promised
+             something that was not on screen. -->
+        <p style="color:var(--muted);font-size:14px;line-height:1.7;margin-bottom:20px;">Each presentation has its own questions and session code.</p>
         <button class="btn btn-primary" style="font-size:14px;padding:11px 28px;justify-content:center;" onclick="createPresentation()" data-i18n>+ Create Your First Presentation</button>
 
       </div>
@@ -693,7 +697,7 @@
   </div>
 
   <!-- ── HORIZONTAL RESIZE: center ↔ right ── -->
-  <div class="resize-handle-x" id="resizeRight" title="Drag to resize data-i18n-title"></div>
+  <div class="resize-handle-x" id="resizeRight" title="Drag to resize" data-i18n-title></div>
 
   <!-- ── RIGHT ── -->
   <div class="right-panel" id="rightPanel">
@@ -702,8 +706,8 @@
       <div style="display:flex;align-items:center;gap:8px;">
         <span id="respCounter" style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent);font-size:12px;">—</span>
         <button onclick="toggleLiveDetail()" id="liveDetailBtn" title="Live results are showing — click to hide them until you reveal" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">👁</button>
-        <button onclick="toggleSfx()" id="sfxBtn" title="Sound effects on/off data-i18n-title" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">🔊</button>
-        <button onclick="toggleMaximize()" id="maxBtn" title="Maximize results (great for projecting) data-i18n-title" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">⛶</button>
+        <button onclick="toggleSfx()" id="sfxBtn" title="Sound effects on/off" data-i18n-title style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">🔊</button>
+        <button onclick="toggleMaximize()" id="maxBtn" title="Maximize results (great for projecting)" data-i18n-title style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">⛶</button>
       </div>
     </div>
     <div id="revealBar" style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border);min-height:20px;"></div>
@@ -746,7 +750,7 @@
       <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('pollyPdf').click()" style="flex-shrink:0;" data-i18n>📄 Upload PDF</button>
       <span id="pollyMatInfo" style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
     </div>
-    <textarea id="pollyNotes" placeholder="…or paste lecture notes / an article here data-i18n-ph" style="width:100%;min-height:64px;margin-bottom:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 12px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea>
+    <textarea id="pollyNotes" placeholder="…or paste lecture notes / an article here" data-i18n-ph style="width:100%;min-height:64px;margin-bottom:12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 12px;resize:vertical;font-family:inherit;box-sizing:border-box;"></textarea>
     <div style="display:flex;gap:10px;margin-bottom:12px;">
       <div style="flex:1;">
         <label style="display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:5px;" data-i18n>How many</label>
@@ -823,13 +827,13 @@
         <h2 style="margin:0 0 2px;" data-i18n>💬 Audience Q&amp;A</h2>
         <p style="margin:0;font-size:12px;color:var(--muted);" id="qaPanelSub" data-i18n>Questions from your audience, ranked by upvotes.</p>
       </div>
-      <button class="btn btn-primary" onclick="openQAShare()" style="flex-shrink:0;" title="Share the Q&amp;A link / QR data-i18n-title" data-i18n>🔗 Share Q&amp;A</button>
+      <button class="btn btn-primary" onclick="openQAShare()" style="flex-shrink:0;" title="Share the Q&amp;A link / QR" data-i18n-title data-i18n>🔗 Share Q&amp;A</button>
     </div>
     <div id="qaPanelBody" style="max-height:62vh;overflow-y:auto;padding:6px 0;">
       <div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;" data-i18n>Loading…</div>
     </div>
     <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;">
-      <button class="btn btn-reset" onclick="clearQA()" title="Delete all questions for this event data-i18n-title" data-i18n>↺ Clear all questions</button>
+      <button class="btn btn-reset" onclick="clearQA()" title="Delete all questions for this event" data-i18n-title data-i18n>↺ Clear all questions</button>
       <button class="btn btn-ghost" onclick="closeQAPanel()" data-i18n>Close</button>
     </div>
   </div>
@@ -878,7 +882,7 @@
   <div class="modal" style="max-width:380px;">
     <h2 data-i18n>Rename Presentation</h2>
     <p data-i18n>Enter a new name below.</p>
-    <input type="text" id="renameInput" maxlength="60" placeholder="Presentation name... data-i18n-ph" style="margin-bottom:0;">
+    <input type="text" id="renameInput" maxlength="60" placeholder="Presentation name..." data-i18n-ph style="margin-bottom:0;">
     <div class="modal-btns">
       <button class="btn btn-ghost" onclick="document.getElementById('renamePresModal').classList.add('hidden')" data-i18n>Cancel</button>
       <button class="btn btn-primary" onclick="doRenamePres()" data-i18n>Save</button>
@@ -930,7 +934,7 @@
     <button data-action="back-list-1" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:0;margin-bottom:10px;text-align:left;" data-i18n>← Back</button>
     <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">From <span data-slot="user-email" style="color:var(--text);"></span></div>
     <label style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);" data-i18n>Subject</label>
-    <input data-slot="subj" type="text" maxlength="120" placeholder="Brief summary data-i18n-ph" style="width:100%;margin:5px 0 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 11px;">
+    <input data-slot="subj" type="text" maxlength="120" placeholder="Brief summary" data-i18n-ph style="width:100%;margin:5px 0 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 11px;">
     <label style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);" data-i18n>Category</label>
     <select data-slot="cat" style="width:100%;margin:5px 0 12px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 11px;">
       <option value="general" data-i18n>General question</option>
@@ -939,7 +943,7 @@
       <option value="feature" data-i18n>Feature request</option>
     </select>
     <label style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);" data-i18n>Message</label>
-    <textarea data-slot="msg" rows="5" placeholder="Describe it (at least 10 characters)… data-i18n-ph" style="width:100%;margin:5px 0 6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 11px;resize:vertical;font-family:inherit;"></textarea>
+    <textarea data-slot="msg" rows="5" placeholder="Describe it (at least 10 characters)…" data-i18n-ph style="width:100%;margin:5px 0 6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 11px;resize:vertical;font-family:inherit;"></textarea>
     <div data-slot="err" style="color:var(--accent2);font-size:12px;min-height:15px;margin-bottom:8px;"></div>
     <div style="display:flex;gap:8px;">
       <button data-action="cancel-new" class="btn btn-ghost" style="flex:1;justify-content:center;" data-i18n>Cancel</button>
@@ -981,7 +985,7 @@
     <h2 style="margin-bottom:4px;" data-i18n>Email this survey</h2>
     <p style="margin-bottom:14px;">Opens your own mail app with everything filled in — it sends <strong style="color:var(--text);">from your address</strong>, so replies come back to you.</p>
     <label>Recipients <span style="color:var(--muted);font-weight:400;">(comma or new line — added as BCC so they can't see each other)</span></label>
-    <textarea id="emailRecipients" rows="3" placeholder="alice@example.com, bob@example.com data-i18n-ph" style="margin-bottom:12px;"></textarea>
+    <textarea id="emailRecipients" rows="3" placeholder="alice@example.com, bob@example.com" style="margin-bottom:12px;"></textarea>
     <label data-i18n>Subject</label>
     <input type="text" id="emailSubject" style="margin-bottom:12px;">
     <label data-i18n>Message</label>
@@ -2675,6 +2679,12 @@ async function loadPresentations() {
     const inProduct = Object.keys(presentations).filter(id => presType(presentations[id]) === activeProduct);
     const ids = inProduct.length ? inProduct : Object.keys(presentations);
     if (ids.length > 0) { activeProduct = presType(presentations[ids[0]]); selectPresentation(ids[0]); }
+    /* An empty library never repainted the centre pane, so a brand-new account kept the
+       static markup below #centerPanel — which says "open one of these and present it
+       right away" above nothing at all. selectPresentation() is what normally calls
+       showSetup(), and with no deck to select it was never reached, so the demo deck
+       existed in starters.js and was simply never rendered for the one person it is for. */
+    else showSetup();
     renderPresList();
   }
 }
@@ -3746,15 +3756,15 @@ function starterRowHtml() {
   const show = PSStarters.STARTERS.slice(0, 1);
   if (!show.length) return '';
   return `<div style="margin-top:22px;padding-top:18px;border-top:1px solid var(--border);">
-    <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">
-      Or open one that's ready to go
-    </div>
+    <!-- Tagged: this row is chrome, not deck content, so it follows the language picker
+         like every other control. It is also the first thing a new account reads. -->
+    <div data-i18n style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:10px;">Or open one that's ready to go</div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;">
-      ${show.map(s => `<button class="starter-card" onclick="createFromStarter('${escAttr(s.id)}')" title="${escAttr(s.blurb)}">
+      ${show.map(s => `<button class="starter-card" onclick="createFromStarter('${escAttr(s.id)}')" title="${escAttr(s.blurb)}" data-i18n-title>
         <span class="sc-icon">${s.icon}</span>
-        <span class="sc-name">${escapeHtml(s.name)}</span>
-        <span class="sc-blurb">${escapeHtml(s.blurb)}</span>
-        <span class="sc-meta">${s.questions.length} questions · ${escapeHtml(s.takes)}</span>
+        <span class="sc-name" data-i18n>${escapeHtml(s.name)}</span>
+        <span class="sc-blurb" data-i18n>${escapeHtml(s.blurb)}</span>
+        <span class="sc-meta">${s.questions.length} <span data-i18n>questions</span> · <span data-i18n>${escapeHtml(s.takes)}</span></span>
       </button>`).join('')}
     </div>
   </div>`;
@@ -3768,12 +3778,20 @@ function starterRowHtml() {
    would have silently never reached anyone. Falls back to the file: a deck must never
    fail to open because a config read did. */
 async function starterMediaMap() {
+  const baked = (typeof PSStarterMedia === 'object' && PSStarterMedia) || {};
   try {
     const snap = await db.ref('app_config/starterMedia').once('value');
     const live = snap.val();
-    if (live && typeof live === 'object' && Object.keys(live).length) return live;
+    /* Merged, not either/or. Returning `live` on its own meant that once the watchdog had
+       written a single repair, any slot ADDED to starter-media.js afterwards could never
+       reach a new account — the stored map was permanently the shape it had on the day of
+       that first repair. The file says which slots exist; Firebase overrides the repaired
+       ones. */
+    if (live && typeof live === 'object' && Object.keys(live).length) {
+      return Object.assign({}, baked, live);
+    }
   } catch (e) {}
-  return (typeof PSStarterMedia === 'object' && PSStarterMedia) || {};
+  return baked;
 }
 
 async function createFromStarter(id) {

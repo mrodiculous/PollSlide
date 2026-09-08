@@ -100,6 +100,19 @@ Last updated: 2026-09-01 (sixteenth pass)
 
 ---
 
+## QA gates added 2026-09-01 — after three misses the owner caught, not us
+
+| Gate | Catches |
+|---|---|
+| `qa-docs.js` | A runbook that no longer describes the system. Cross-checks **every price in STRIPE-GO-LIVE.md against pricing.html** (including the annual = monthly × 12 trap), every lookup key and webhook event against `api/`, **every `STRIPE_*` env var the code reads against the runbook** — which is exactly how `STRIPE_AUTOMATIC_TAX` and `STRIPE_COLLECT_CONSENT` stayed undocumented and therefore off — plus files TODO promises, and the add-in manifest's icons and support URL. Self-tested against all four real misses. |
+| `qa-i18n.js` | New English copy shipping untranslated. Enforces language **parity** (a missing key falls back to English and reads as a bug) and **no coverage regression** per page against `scripts/i18n-baseline.json`. Legal pages excluded by decision. `--update` records a new floor. Self-tested both ways. |
+
+Both are wired into `node scripts/qa.js` — 11 gates now.
+
+`qa-docs` also has a **⏳ pending** channel for things that are correct today but must
+change at a known moment (the add-in's "coming soon" copy vs. the AppSource submission).
+Those report without failing, because a gate that cries wolf daily is one people skip.
+
 ## Before every push
 
 ```

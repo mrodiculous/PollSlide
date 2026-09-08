@@ -310,8 +310,14 @@ const CHECKS = [
       const baked = (() => { try { return require('../starter-media') || {}; } catch (e) { return {}; } })();
       let live = {};
       try { live = (await ctx.db.ref('app_config/starterMedia').get()).val() || {}; } catch (e) {}
-      // Repairs are stored in Firebase; the file is the shipped default.
-      const media = Object.keys(live).length ? live : baked;
+      /* Repairs are stored in Firebase; the file is the shipped default. MERGED, not
+         either/or: the file defines WHICH slots exist and Firebase only overrides the
+         individual ones that have been repaired. Preferring `live` wholesale meant a
+         slot added to the file could never reach anyone once a single repair had been
+         written — the five question-level pictures added on 2026-09-08 would have been
+         reported as "5 slots have no picture at all" on every run, and the auto-fix,
+         which walks this same map, would have kept writing the old 20 back. */
+      const media = Object.assign({}, baked, live);
       const alive = {};
       for (const url of urlsToCheck(media)) {
         try {

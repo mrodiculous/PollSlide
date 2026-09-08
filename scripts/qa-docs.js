@@ -31,6 +31,9 @@ const read = (p) => { try { return fs.readFileSync(p, 'utf8'); } catch (e) { ret
 
 let fail = 0, checks = 0;
 const problems = [];
+/* Things that are correct today but must change at a known future moment. Reported,
+   never fatal — a gate that cries wolf daily is a gate everyone learns to skip. */
+const pending = [];
 const ok = (cond, msg, detail) => {
   checks++;
   if (!cond) { fail++; problems.push(detail ? `${msg}\n      ${detail}` : msg); }
@@ -143,22 +146,56 @@ if (manifest) {
      'icon-300.png is missing — AppSource requires a 300×300 store logo');
 
   /* A support URL that says the product is "coming soon" reads, to a reviewer, as
-     "the thing you are reviewing does not exist". */
+     "the thing you are reviewing does not exist" — and fails the submission.
+
+     But it is also TRUE until the day you submit, so failing the build on it every day
+     until then would just train everyone to ignore this gate. The check is therefore
+     gated on the submission status recorded in APPSOURCE-SUBMISSION.md: informational
+     while `not-submitted`, hard failure once it says `submitted`. */
+  const submission = read(path.join(ROOT, 'APPSOURCE-SUBMISSION.md')) || '';
+  const statusLine = /SUBMISSION-STATUS:\s*(\S+)/.exec(submission);
+  const submitted = statusLine && statusLine[1] === 'submitted';
+
   const support = attr('SupportUrl') || '';
   const supportFile = path.join(SITE, (support.split('#')[0] || '').replace(/^https?:\/\/[^/]+\//, '') || 'x');
   const supportHtml = read(supportFile) || read(supportFile + '.html') || '';
   if (supportHtml) {
-    const section = support.includes('#') ? supportHtml : supportHtml;
-    ok(!/the PowerPoint add-in is coming soon/i.test(section),
-       `the manifest's SupportUrl (${support}) lands on a page saying the add-in is "coming soon"`);
+    const saysComingSoon = /add-in is coming soon|add-in.{0,40}coming soon/i.test(supportHtml);
+    if (submitted) {
+      ok(!saysComingSoon,
+         `SUBMITTED, but the SupportUrl (${support}) still says the add-in is "coming soon"`,
+         'a reviewer reads that as "this product does not exist" — see step 10 of APPSOURCE-SUBMISSION.md');
+    } else if (saysComingSoon) {
+      pending.push(`the SupportUrl (${support}) says "coming soon" — correct for now, but it must` +
+                   '\n      change before you submit. Set SUBMISSION-STATUS: submitted and this becomes a hard check.');
+    }
   }
   ok(/<Version>\d+\.\d+\.\d+\.\d+<\/Version>/.test(manifest),
      'manifest Version must be four numbers, e.g. 1.0.0.0');
+
+  /* Partner Center compares the listing name against <DisplayName> and fails
+     certification when they differ — by a word, a dash, or a trailing space. They live in
+     two files that are edited months apart, which is exactly how they drift. */
+  const display = attr('DisplayName');
+  const doc = read(path.join(ROOT, 'APPSOURCE-SUBMISSION.md')) || '';
+  const listed = (/\|\s*Name\s*\|\s*50\s*\|\s*`([^`]+)`/.exec(doc) || [])[1];
+  if (display && listed) {
+    ok(display === listed,
+       'the AppSource listing name and the manifest DisplayName must be identical' +
+       `\n      manifest: ${JSON.stringify(display)}` +
+       `\n      doc:      ${JSON.stringify(listed)}` +
+       '\n      Microsoft fails certification on any difference between them.');
+    ok(display.length <= 50, `the listing name is ${display.length} chars; AppSource caps it at 50`);
+  }
 }
 
 // ── report ───────────────────────────────────────────────────────────────────
 if (!fail) console.log(`  ✓ ${checks} checks — prices, keys, events, env vars, docs and manifest all agree`);
 else problems.forEach(p => console.log('  ✗ ' + p));
+if (pending.length) {
+  console.log('');
+  pending.forEach(p => console.log('  ⏳ ' + p));
+}
 console.log('─'.repeat(64));
 
 if (fail) {

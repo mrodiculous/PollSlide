@@ -1,0 +1,201 @@
+#!/usr/bin/env node
+/* PollSlide QA — new copy does not silently ship English-only.
+ * ---------------------------------------------------------------------------
+ * WHY THIS EXISTS
+ * Every language dictionary in this project has been built by someone adding strings
+ * and someone else discovering, later, that a page never translated. Three separate
+ * instances, all found by hand:
+ *
+ *   • The presenter's game modes had NEVER been translated — Survival, Wager and every
+ *     blurb sat in English while the dialog around them changed language.
+ *   • Every control rendered from a JS template literal was untagged, so ▶ Present,
+ *     📊 Tally and the whole present-mode toolbar ignored the language picker.
+ *   • Three comparison pages — the ones paid search lands on — were 0% translated.
+ *
+ * None of these were decisions. They were omissions that nothing was watching for, and
+ * they are invisible in English, which is the language everyone develops in.
+ *
+ * WHAT IT ENFORCES
+ *   1. PARITY — every language carries every key. A missing key silently falls back to
+ *      English, which looks like a translation bug rather than a missing entry.
+ *   2. NO REGRESSION — page coverage is recorded in scripts/i18n-baseline.json. Adding
+ *      English copy without translating it lowers a page's coverage and fails here.
+ *      Improving coverage updates the baseline with --update.
+ *
+ * WHAT IT DELIBERATELY DOES NOT ENFORCE
+ *   100% coverage. Legal pages stay English on purpose — the English version governs,
+ *   and a machine-translated indemnity clause creates liability rather than removing it.
+ *
+ *   node scripts/qa-i18n.js            check
+ *   node scripts/qa-i18n.js --update   record current coverage as the new floor
+ * --------------------------------------------------------------------------- */
+const fs = require('fs');
+const path = require('path');
+
+const ROOT = path.resolve(__dirname, '..');
+const SITE = path.resolve(ROOT, '..', 'pollslide-website');
+const BASELINE = path.join(__dirname, 'i18n-baseline.json');
+const UPDATE = process.argv.includes('--update');
+
+/* English governs these, by decision. Not a coverage failure. */
+const LEGAL = new Set(['terms.html', 'privacy.html', 'dpa.html', 'cookies.html',
+                       'subprocessors.html', 'vpat.html']);
+
+const read = (p) => { try { return fs.readFileSync(p, 'utf8'); } catch (e) { return null; } };
+let fail = 0;
+const problems = [];
+const bad = (msg, detail) => { fail++; problems.push(detail ? `${msg}\n      ${detail}` : msg); };
+
+console.log('\nNothing ships English-only by accident\n' + '─'.repeat(64));
+
+// ── 1. Parity: every language carries every key ───────────────────────────────
+function parity(label, dict) {
+  const langs = Object.keys(dict || {});
+  if (!langs.length) { console.log(`  – ${label}: not loaded, skipped`); return; }
+  const union = new Set();
+  langs.forEach(l => Object.keys(dict[l]).forEach(k => union.add(k)));
+  let gaps = 0;
+  for (const l of langs) {
+    const missing = [...union].filter(k => dict[l][k] === undefined);
+    if (missing.length) {
+      gaps += missing.length;
+      bad(`${label}: ${l} is missing ${missing.length} key(s) other languages have`,
+          missing.slice(0, 3).map(k => '· ' + k.slice(0, 56)).join('\n      '));
+    }
+  }
+  if (!gaps) console.log(`  ✓ ${label}: ${langs.length} languages, ${union.size} keys, no gaps`);
+}
+
+const g = {};
+global.window = g;
+try { require(path.join(ROOT, 'ui-lang.js')); } catch (e) {}
+parity('presenter (ui-lang.js)', g.PS_UI);
+
+const gw = {};
+global.window = gw;
+for (const f of ['translations.js', 'help-translations.js', 'help-teachers-blocks.js']) {
+  try { require(path.join(SITE, f)); } catch (e) {}
+}
+parity('site (translations.js)', gw.PS_I18N);
+parity('site curated blocks', gw.PS_I18N_KEYS);
+
+// ── 1b. Glossary: a product noun keeps its meaning ────────────────────────────
+/* Parity and coverage both pass when a word is translated into the WRONG THING, because
+ * both only ask whether an entry exists. Four of the five languages rendered "deck" as a
+ * pack of playing cards — es baraja, fr jeu, pt baralho, it mazzo — so the app's search
+ * box invited a Spanish teacher to "search packs of playing cards and questions". It was
+ * in both dictionaries, in the shipped app, and every gate was green.
+ *
+ * So: for each product noun, the words that would be a different object. Listed per
+ * language because a word can be innocent elsewhere — fr "jeu" is correct in "jeu
+ * télévisé" (game show) and "jeux de révision" (revision sets), which is why the check
+ * looks only at strings whose ENGLISH KEY contains the term, and allows stated exceptions. */
+const GLOSSARY = [
+  { term: /\bdecks?\b/i, what: 'deck (a slide deck, not a pack of cards)',
+    wrong: { es: /\bbarajas?\b/i, fr: /\bjeux?\b/i, pt: /\bbaralhos?\b/i, it: /\bmazz[oi]\b/i },
+    allow: /jeux?\s+(télévisés?|de\s+(révision|culture))/i },
+];
+
+function glossary(label, dict) {
+  if (!dict || !Object.keys(dict).length) return;
+  let bad = 0;
+  for (const rule of GLOSSARY) {
+    for (const lang of Object.keys(rule.wrong)) {
+      if (!dict[lang]) continue;
+      const hits = Object.entries(dict[lang]).filter(([k, v]) =>
+        typeof v === 'string' && rule.term.test(k) &&
+        rule.wrong[lang].test(rule.allow ? v.replace(new RegExp(rule.allow.source, 'gi'), '') : v));
+      if (hits.length) {
+        bad += hits.length;
+        bad_glossary(`${label}: ${lang} translates ${rule.what} into a different object`,
+          hits.slice(0, 2).map(([k, v]) => `· ${v.slice(0, 70)}`).join('\n      '));
+      }
+    }
+  }
+  if (!bad) console.log(`  ✓ ${label}: product nouns still mean what they mean`);
+}
+const bad_glossary = (m, d) => bad(m, d);
+glossary('presenter (ui-lang.js)', g.PS_UI);
+glossary('site (translations.js)', gw.PS_I18N);
+
+// ── 2. Coverage per page, against a recorded floor ────────────────────────────
+const dict = (gw.PS_I18N && gw.PS_I18N.es) || {};
+const dec = (s) => s.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#39;/g, "'")
+                    .replace(/&quot;/g, '"').trim();
+/* Scripts and styles are code, not copy — translating a JS template literal corrupts
+   the page. Curated data-i18n-html blocks carry their own dictionary. */
+const clean = (h) => h
+  .replace(/<script[\s\S]*?<\/script>/gi, '')
+  .replace(/<style[\s\S]*?<\/style>/gi, '')
+  .replace(/<!--[\s\S]*?-->/g, '')
+  .replace(/<([a-z0-9]+)\b[^>]*data-i18n-html="[^"]*"[^>]*>[\s\S]*?<\/\1>/g, '');
+
+/* EVERY text node, not just the first run after an opening tag.
+   The earlier version matched `<p ...>text<` — which sees the text that starts a tag and
+   is blind to everything after an inline child. A paragraph like
+       <p>Click <b>Present</b> and the room answers.</p>
+   reported only "Click", so " and the room answers." was never counted and the page
+   scored 100% while 58 English nodes were visibly on screen. i18n.js translates text
+   NODES at runtime, so the audit has to look at exactly the same units. */
+const textNodes = (html) => [...clean(html).matchAll(/>([^<]+)</g)].map(m => dec(m[1]));
+
+const coverage = {};
+let sitePages = 0;
+if (fs.existsSync(SITE)) {
+  for (const f of fs.readdirSync(SITE).filter(x => x.endsWith('.html')).sort()) {
+    if (LEGAL.has(f)) continue;
+    const html = read(path.join(SITE, f));
+    if (!html || !/i18n\.js/.test(html)) continue;
+    const strings = textNodes(html)
+      /* No upper length cap that matters: a 180-char ceiling silently excluded every
+         long paragraph, which is exactly where the untranslated prose was hiding. */
+      .filter(x => x.length >= 12 && x.length <= 600 && /[A-Za-z]{4}/.test(x));
+    const uniq = [...new Set(strings)];
+    if (!uniq.length) continue;
+    sitePages++;
+    const hit = uniq.filter(x => dict[x] !== undefined).length;
+    coverage[f] = { pct: Math.round(hit / uniq.length * 100), hit, total: uniq.length };
+  }
+}
+
+const prior = (() => { try { return JSON.parse(read(BASELINE)) || {}; } catch (e) { return {}; } })();
+
+if (UPDATE) {
+  fs.writeFileSync(BASELINE, JSON.stringify(coverage, null, 2) + '\n');
+  const tot = Object.values(coverage).reduce((a, c) => a + c.total, 0);
+  const got = Object.values(coverage).reduce((a, c) => a + c.hit, 0);
+  console.log(`\n  Recorded ${sitePages} pages as the new floor — ${got}/${tot} (${Math.round(got / tot * 100)}%).`);
+  console.log('  Coverage may now only go up.\n');
+  process.exit(0);
+}
+
+for (const [f, cur] of Object.entries(coverage)) {
+  const was = prior[f];
+  if (!was) continue;                       // new page: recorded on the next --update
+  if (cur.pct < was.pct) {
+    bad(`${f}: translation coverage FELL from ${was.pct}% to ${cur.pct}%`,
+        `${cur.total - cur.hit} string(s) now untranslated. English copy was added without ` +
+        'translating it — every non-English visitor sees that text in English.');
+  }
+}
+
+const tot = Object.values(coverage).reduce((a, c) => a + c.total, 0);
+const got = Object.values(coverage).reduce((a, c) => a + c.hit, 0);
+const worst = Object.entries(coverage).sort((a, b) => a[1].pct - b[1].pct).slice(0, 3);
+if (tot) {
+  console.log(`  ✓ site copy: ${got}/${tot} strings translated (${Math.round(got / tot * 100)}%), ` +
+              `${sitePages} pages, no regressions`);
+  console.log(`    still lowest: ${worst.map(([f, c]) => `${f} ${c.pct}%`).join(', ')}`);
+  console.log(`    (legal pages excluded on purpose — the English version governs)`);
+}
+
+console.log('─'.repeat(64));
+if (fail) {
+  problems.forEach(p => console.log('  ✗ ' + p));
+  console.log(`\n${fail} problem(s). A missing translation is invisible in English —\n` +
+              'which is the language it will be reviewed in.\n' +
+              'Translate the new copy, or run --update if the drop is intentional.\n');
+  process.exit(1);
+}
+console.log('\nEvery language carries every key, and no page went backwards.\n');
+process.exit(0);

@@ -50,7 +50,12 @@ ok('nothing is English in all five languages (except a brand name and a file for
 function taggedStrings(file) {
   const t = fs.readFileSync(path.join(ROOT, file), 'utf8');
   const body = t.slice(t.indexOf('<body'));
-  const el = [...body.matchAll(/data-i18n(?:-title|-ph)?>([^<]+)</g)].map(m => m[1]);
+  /* Bare data-i18n only. On an element marked data-i18n-title the translated thing is the
+     TITLE (line below), not the text — those are icon buttons whose text is a single glyph
+     like ⋯ or 🌙. Including the -title/-ph variants here demanded a dictionary entry for
+     the glyph itself, which is not a word in any language. It only stayed quiet because
+     those attributes were malformed and matched nothing; fixing the markup exposed it. */
+  const el = [...body.matchAll(/data-i18n>([^<]+)</g)].map(m => m[1]);
   const ti = [...body.matchAll(/title="([^"]+)"\s+data-i18n-title/g)].map(m => m[1]);
   const ph = [...body.matchAll(/placeholder="([^"]+)"\s+data-i18n-ph/g)].map(m => m[1]);
   const dec = s => s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")

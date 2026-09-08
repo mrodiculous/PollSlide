@@ -152,8 +152,6 @@ read `$120`, `$384` and `$1,980` per **year**.
 > These amounts are duplicated by necessity — PollSlide reads prices from Stripe by
 > lookup key, but the marketing page is static HTML — so they can drift apart silently.
 
-**Done when:** ten prices exist, each showing its lookup key.
-
 ---
 
 ## Step 4 — Swap in the live secret key
@@ -195,6 +193,41 @@ STRIPE_WEBHOOK_SECRET = whsec_…
 **This secret is different in live mode.** Getting it wrong is the single most common
 go-live failure, and it fails silently: Stripe charges the card, PollSlide rejects the
 signature, and the plan never changes.
+
+### ⚠️ A signing secret cannot be copied from a sandbox
+
+The endpoint URL and the event list copy across fine. **The secret does not.** Stripe
+*mints* a signing secret when you create an endpoint — it is not a setting you choose,
+and the live endpoint signs with its own new one. Pasting a sandbox `whsec_…` into the
+live environment variable means every live event is rejected.
+
+What that looks like from the outside: the card charges, the customer is billed, and
+**nothing else happens.** No upgrade, no email, no row in the Account timeline. Nobody
+sees an error — not you, not them. You find out when they complain.
+
+### Verify it in 30 seconds, without spending anything
+
+`api/stripe-webhook.js` rejects a bad signature with **400 before any other logic runs**,
+and returns **200** once the signature passes — even for an event type it does not handle.
+So the status code is a pure test of the secret:
+
+1. https://dashboard.stripe.com/webhooks — in the **live** account (check
+   https://dashboard.stripe.com/apikeys shows `sk_live_`)
+2. Open your endpoint → **Send test webhook** → any event type
+3. Read the response:
+
+| Response | Meaning |
+|---|---|
+| **200** | The secret matches. Webhooks work |
+| **400** | Signature rejected — the wrong secret for this environment |
+| **500** | `STRIPE_SECRET_KEY` or `STRIPE_WEBHOOK_SECRET` is not set at all |
+
+If it is 400: reveal the signing secret **on that live endpoint**, replace
+`STRIPE_WEBHOOK_SECRET` in Vercel, and redeploy (step 7 — an env change does not reach a
+deployment that already exists).
+
+Do this before announcing. It is the one failure that takes real money and gives
+nothing back.
 
 ---
 
@@ -361,7 +394,9 @@ they are logged properly.
 - [ ] The four credit packs are **one-time**, not recurring
 - [ ] Stripe's amounts match https://pollslide.com/pricing exactly
 - [ ] `STRIPE_SECRET_KEY` swapped to `sk_live_…`
-- [ ] Live webhook endpoint created, `STRIPE_WEBHOOK_SECRET` swapped
+- [ ] Live webhook endpoint created, `STRIPE_WEBHOOK_SECRET` taken from **that live
+      endpoint** — not copied from a sandbox, which cannot work
+- [ ] **Send test webhook** on the live endpoint returned **200**, not 400
 - [ ] Decided on tax: `STRIPE_AUTOMATIC_TAX` set, or consciously left off with an accountant
 - [ ] Terms of Service URL set in Stripe, `STRIPE_COLLECT_CONSENT` set
 - [ ] Redeployed after **all** variable changes
