@@ -1899,7 +1899,16 @@ function openPlanPicker() {
         : 'Upgrade to ' + p.name;
       const ctaOnclick_billing = isCurrent && isPaidUser ? "openBillingPortal()" : null;
       // Only FREE users ever hit checkout (they have no subscription to duplicate).
-      const ctaOnclick = ctaOnclick_billing || (isCurrent ? '' : (isDowngradeToFree || isPaidSwitch) ? "openBillingPortal()" : "pickerCheckout('" + p.key + "', event)");
+      /* A paid SWITCH goes to checkout, not straight to the billing portal.
+         `isPaidUser` comes from the tier in our own database, which is true for a
+         COMPLIMENTARY plan as well — and a comped account has no Stripe customer at all.
+         Sending it to the portal produced a dead end: the portal answered "no subscription,
+         upgrade first", which is exactly what the person was trying to do, and the picker had
+         already closed itself on the way out. Only the server knows whether Stripe holds a
+         live subscription, so ask it: create-checkout returns `alreadySubscribed` when there
+         is one, and pickerCheckout already forwards that case to the portal. Comped users
+         get a real checkout; genuine subscribers still get the portal. */
+      const ctaOnclick = ctaOnclick_billing || (isCurrent ? '' : isDowngradeToFree ? "openBillingPortal()" : "pickerCheckout('" + p.key + "', event)");
 
       card.innerHTML =
         (p.popular ? '<div style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:'+D.accent+';color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:0 0 8px 8px;">★ Most popular</div>' : '') +
@@ -8773,7 +8782,10 @@ function acceptPolicyUpdate(pol){
 })();
 // ─── BILLING PORTAL (for paid users to manage subscription) ──────────────────
 async function openBillingPortal() {
-  document.getElementById('planPickerModal')?.remove();
+  /* The picker is NOT closed up front any more. It used to be removed on the first line, so
+     when the portal could not open — which is every complimentary account, because a comped
+     plan has no Stripe customer behind it — the window vanished and took the explanation
+     with it. It now closes only on success, when the browser is leaving the page anyway. */
   toast('Opening billing portal…', 'info');
   try {
     const r = await fetch('/api/billing-portal', {
@@ -8783,14 +8795,23 @@ async function openBillingPortal() {
     });
     const data = await r.json();
     if (data.url) {
+      document.getElementById('planPickerModal')?.remove();
       window.location.href = data.url;
     } else if (data.hint) {
-      toast('No subscription found. Try upgrading first.', 'danger');
+      /* Say what is actually true. "Upgrade first" was the old message, and it was told to
+         people in the middle of trying to upgrade — they are on a plan we granted, so there
+         is no Stripe subscription to manage or cancel. */
+      const msg = 'This plan was granted directly, so there is no Stripe subscription to manage.';
+      const detail = 'To move to a paid plan, pick one above and check out normally. To have the ' +
+                     'complimentary plan changed or removed, email help@pollslide.com.';
+      if (!showCheckoutError(msg, detail)) toast(msg, 'warn');
     } else {
-      toast('Could not open billing portal. Email help@pollslide.com', 'danger');
+      const msg = 'Could not open the billing portal.';
+      if (!showCheckoutError(msg, 'Email help@pollslide.com and we will sort it out.')) toast(msg + ' Email help@pollslide.com', 'danger');
     }
   } catch(e) {
-    toast('Billing portal API not deployed yet — commit api/billing-portal.js first.', 'danger');
+    const msg = 'Could not reach the billing portal.';
+    if (!showCheckoutError(msg, String(e && e.message || e))) toast(msg, 'danger');
   }
 }
 

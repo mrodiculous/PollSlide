@@ -219,25 +219,37 @@ module.exports = async function handler(req, res) {
           fix: 'Stripe → Products → the price → Edit → Advanced → Lookup key: ' + key }});
       }
       const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com';
-      const params = {
-        payment_method_types: ['card'],
-        line_items: [{ price: list.data[0].id, quantity: 1 }],
-        mode: isSub ? 'subscription' : 'payment',
-        success_url: APP_URL + '/presenter?dryrun=1',
-        cancel_url:  APP_URL + '/presenter?dryrun=1',
-        allow_promotion_codes: true,
-        billing_address_collection: 'auto',
-        customer_email: 'dry-run@pollslide.com',
-      };
-      if (out.consent)      params.consent_collection = { terms_of_service: 'required' };
-      if (out.automaticTax) { params.automatic_tax = { enabled: true };
-                              params.tax_id_collection = { enabled: true };
-                              params.billing_address_collection = 'required'; }
+      /* A THROWAWAY CUSTOMER, not customer_email. This matters: several of Stripe's rules
+       * only apply when a session is attached to an existing customer — the one that broke
+       * live checkout ("Tax ID collection requires updating business name on the customer")
+       * cannot happen without one. The first version of this dry run passed cleanly while
+       * every real purchase failed, which is worse than having no check at all. The customer
+       * is deleted in the finally block, so nothing is left behind. */
+      let temp = null;
       try {
+        temp = await stripe.customers.create({
+          email: 'dry-run+' + Date.now() + '@pollslide.com',
+          metadata: { pollslide_dry_run: '1' },
+        });
+        const params = {
+          customer: temp.id,
+          payment_method_types: ['card'],
+          line_items: [{ price: list.data[0].id, quantity: 1 }],
+          mode: isSub ? 'subscription' : 'payment',
+          success_url: APP_URL + '/presenter?dryrun=1',
+          cancel_url:  APP_URL + '/presenter?dryrun=1',
+          allow_promotion_codes: true,
+          billing_address_collection: 'auto',
+        };
+        if (out.consent)      params.consent_collection = { terms_of_service: 'required' };
+        if (out.automaticTax) { params.automatic_tax = { enabled: true };
+                                params.customer_update = { address: 'auto', name: 'auto' };
+                                params.tax_id_collection = { enabled: true };
+                                params.billing_address_collection = 'required'; }
         const s = await stripe.checkout.sessions.create(params);
         try { await stripe.checkout.sessions.expire(s.id); } catch (e) {}
         return res.status(200).json({ ok: true, dryRun: { ...out, passed: true,
-          note: 'A real Checkout Session was created with your live settings, then expired. Checkout works.' }});
+          note: 'A real Checkout Session was created against a real customer with your live settings, then expired. Checkout works.' }});
       } catch (e) {
         const m = String(e && e.message || e);
         let fix = null;
@@ -245,12 +257,19 @@ module.exports = async function handler(req, res) {
           fix = 'STRIPE_COLLECT_CONSENT=1 is set but this account has no Terms of Service URL. ' +
                 'Set it at Settings → Checkout and Payment Links → Terms of service, or remove ' +
                 'STRIPE_COLLECT_CONSENT from Vercel and redeploy.';
+        } else if (/customer_update|business name on the customer|tax ID collection/i.test(m)) {
+          fix = 'This is a bug in api/create-checkout.js, not a Stripe setting: tax_id_collection ' +
+                'needs customer_update to allow BOTH address and name. Fixed 2026-09-08 — if you ' +
+                'are still seeing it, the deploy has not landed yet.';
         } else if (/automatic_tax|tax is not active|origin address|Stripe Tax/i.test(m)) {
           fix = 'STRIPE_AUTOMATIC_TAX=1 is set but Stripe Tax is not active (or has no origin ' +
                 'address). Activate it at Settings → Tax, or remove STRIPE_AUTOMATIC_TAX from ' +
                 'Vercel and redeploy.';
         }
         return res.status(200).json({ ok: true, dryRun: { ...out, passed: false, error: m, fix } });
+      } finally {
+        // Never leave the throwaway behind, whether the session succeeded or threw.
+        if (temp) { try { await stripe.customers.del(temp.id); } catch (e) {} }
       }
     }
 

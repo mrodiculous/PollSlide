@@ -148,7 +148,14 @@ module.exports = async function handler(req, res) {
     }
     if (process.env.STRIPE_AUTOMATIC_TAX === '1') {
       params.automatic_tax = { enabled: true };
-      params.customer_update = { address: 'auto' };
+      /* BOTH address and name must be 'auto'. tax_id_collection writes a business name back
+       * to the customer, and Stripe refuses the session unless it has permission to do so:
+       *   "Tax ID collection requires updating business name on the customer. To enable tax
+       *    ID collection for an existing customer, please set customer_update[name] to auto."
+       * Only `address` was set here, so every checkout failed for anyone Stripe already had a
+       * customer record for — which, because the code creates one before this point, is
+       * everyone on their second attempt. Every plan, every credit pack, the same error. */
+      params.customer_update = { address: 'auto', name: 'auto' };
       params.tax_id_collection = { enabled: true };
       params.billing_address_collection = 'required';
     }
@@ -171,6 +178,10 @@ module.exports = async function handler(req, res) {
             'Set it at Dashboard → Settings → Checkout and Payment Links → Terms of service, ' +
             'or unset STRIPE_COLLECT_CONSENT in Vercel and redeploy. Until one of those, every ' +
             'checkout on every plan fails here.';
+    } else if (/customer_update|business name on the customer|tax ID collection/i.test(m)) {
+      fix = 'tax_id_collection needs customer_update to permit BOTH address and name. If you are ' +
+            'seeing this, the running deploy predates the 2026-09-08 fix — redeploy. As an ' +
+            'immediate unblock you can also remove STRIPE_AUTOMATIC_TAX in Vercel and redeploy.';
     } else if (/automatic_tax|tax is not active|origin address|Stripe Tax/i.test(m)) {
       fix = 'STRIPE_AUTOMATIC_TAX=1 is set, but Stripe Tax is not active on this account (or has ' +
             'no origin address). Activate it at Dashboard → Settings → Tax, or unset ' +
