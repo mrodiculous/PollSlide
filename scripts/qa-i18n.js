@@ -71,13 +71,78 @@ global.window = g;
 try { require(path.join(ROOT, 'ui-lang.js')); } catch (e) {}
 parity('presenter (ui-lang.js)', g.PS_UI);
 
+/* EVERY dictionary in the site repo, discovered rather than listed. Three were hard-coded
+   here; there are eight. Portuguese was converted to European, all three gates went green,
+   and the browser still showed Brazilian text on help.html — because that page reads four
+   dictionaries and this check knew about three of them. Globbing means a new dictionary
+   file is covered the day it lands, instead of the day someone notices. */
 const gw = {};
 global.window = gw;
-for (const f of ['translations.js', 'help-translations.js', 'help-teachers-blocks.js']) {
-  try { require(path.join(SITE, f)); } catch (e) {}
+/* Discovered by LOADING, not by filename. A name pattern missed
+   help-translations-teachers.js (it does not end in "translations.js") and swept in
+   legal-i18n.js, which is the applier script rather than a dictionary. What makes a file a
+   dictionary is that requiring it produces a language map — so that is the test. */
+/* Load order matters and is not alphabetical. translations.js opens with a hard
+   `window.PS_I18N = {…}`; every other dictionary opens with `window.PS_I18N =
+   window.PS_I18N || {}` and merges. The page loads the base first, so this has to as well —
+   loading alphabetically put translations.js last, where its assignment wiped the other
+   seven and dropped measured coverage from 100% to 89% with nothing actually broken. */
+const isBase = (f) => {
+  try { return /window\.PS_\w+\s*=\s*\{/.test(fs.readFileSync(path.join(SITE, f), 'utf8').slice(0, 4000)); }
+  catch (e) { return false; }
+};
+const DICTS = [];
+if (fs.existsSync(SITE)) {
+  const js = fs.readdirSync(SITE).filter(x => x.endsWith('.js')).sort();
+  for (const f of [...js.filter(isBase), ...js.filter(f => !isBase(f))]) {
+    const before = ['PS_I18N', 'PS_I18N_KEYS', 'PS_LEGAL'].map(n => Object.keys(gw[n] || {}).length);
+    try { require(path.join(SITE, f)); } catch (e) { continue; }
+    const after = ['PS_I18N', 'PS_I18N_KEYS', 'PS_LEGAL'].map(n => Object.keys(gw[n] || {}).length);
+    if (after.some((n, i) => n > before[i]) ||
+        ['PS_I18N', 'PS_I18N_KEYS', 'PS_LEGAL'].some(n => gw[n] && gw[n].es && Object.keys(gw[n].es).length)) {
+      if (/translation|i18n|blocks/.test(f) && f !== 'i18n.js') DICTS.push(f);
+    }
+  }
 }
+console.log(`  · ${DICTS.length} dictionary files loaded: ${DICTS.join(', ')}`);
 parity('site (translations.js)', gw.PS_I18N);
 parity('site curated blocks', gw.PS_I18N_KEYS);
+parity('site legal bodies', gw.PS_LEGAL);
+
+/* One variant per language. A dictionary that is half Brazilian and half European reads as
+   broken to both audiences, and nothing above can see it: every key is present and every
+   key is translated. es/de/fr/it have no comparable split; pt does, and it was ~50/50. */
+const VARIANT = {
+  pt: { name: 'Portuguese', keep: 'European',
+        wrong: /(^|[^A-Za-zÀ-ÖØ-öø-ÿ])(você|vocês|telas?|arquivos?|compartilh[a-zç]+|aplicativos?|enquetes?|usuários?|equipes?|gerenci[a-z]+|celulares?|conosco|cadastro)($|[^A-Za-zÀ-ÖØ-öø-ÿ])/i },
+};
+for (const [lang, rule] of Object.entries(VARIANT)) {
+  const hits = [];
+  for (const dict of [gw.PS_I18N, gw.PS_I18N_KEYS, gw.PS_LEGAL, g.PS_UI]) {
+    if (!dict || !dict[lang]) continue;
+    for (const v of Object.values(dict[lang])) if (typeof v === 'string' && rule.wrong.test(v)) hits.push(v);
+  }
+  /* i18n.js carries a TENTH dictionary inline — a `nav.*`/`hero.*`/`price.*` block that is a
+     local const, never attached to window, so requiring the file exposes nothing. It is real
+     copy on the homepage all the same, and it is where the last Brazilian string was hiding
+     after eight dictionaries came back clean. Scanned as source text, since it cannot be
+     loaded: read only that language's block, so the other four don't produce false hits. */
+  const inline = read(path.join(SITE, 'i18n.js')) || '';
+  const a = inline.indexOf(`\n    ${lang}: {`);
+  if (a > -1) {
+    const block = inline.slice(a, inline.indexOf('\n    },', a));
+    for (const m of block.matchAll(/'((?:[^'\\]|\\.)*)'/g)) {
+      if (/^[a-z]+\.[a-z0-9]+$/i.test(m[1])) continue;          // that one is a key
+      if (rule.wrong.test(m[1])) hits.push(m[1]);
+    }
+  }
+  if (hits.length) {
+    bad(`${rule.name} mixes variants — ${hits.length} string(s) are not ${rule.keep}`,
+        hits.slice(0, 2).map(v => '· ' + v.slice(0, 66)).join('\n      '));
+  } else {
+    console.log(`  ✓ ${rule.name}: one variant throughout (${rule.keep})`);
+  }
+}
 
 // ── 1b. Glossary: a product noun keeps its meaning ────────────────────────────
 /* Parity and coverage both pass when a word is translated into the WRONG THING, because

@@ -970,12 +970,43 @@ async function renderBilling(){
         <div class="stats">${stat('$'+(d.mrr||0).toFixed(2),'MRR (est.)')}${stat(d.counts.active,'Active subs')}${stat(d.counts.problem,'Payment problems')}${stat(d.counts.cancelling,'Cancelling')}</div>
         <p style="font-size:11.5px;color:var(--muted);margin-top:10px;">Read-only view. Refunds, cancellations and plan edits are done in the Stripe Dashboard on purpose — it has the confirmations and audit trail that moving money needs.</p>
       </div></div>
+    <div class="card"><div class="card-hd"><h2>Can customers actually check out?</h2>
+      <button class="btn btn-sm btn-ghost" onclick="loadStripePrices()">Check all 10 plans</button></div>
+      <div class="card-bd" id="stripePrices"><span class="muted" style="font-size:12.5px;">Checkout finds a plan by its <b>lookup key</b>. A price with no lookup key returns 404, and the Plans &amp; Upgrade button then looks like it simply does nothing. This asks Stripe for all ten keys and checks each amount against the pricing page.</span></div></div>
     <div class="card"><div class="card-hd"><h2>Active plans</h2></div><div class="card-bd">${planRows}</div></div>
     <div class="card"><div class="card-hd"><h2>⚠️ Needs attention</h2></div><div class="card-bd">${probRows}</div></div>
     <div class="card"><div class="card-hd"><h2>Cancelling at period end</h2></div><div class="card-bd">${cancRows}</div></div>
     <div class="card"><div class="card-hd"><h2>Recent Stripe events</h2>
       <button class="btn btn-sm btn-ghost" onclick="loadStripeEvents()">Load events</button></div>
       <div class="card-bd" id="stripeEvents"><span class="muted" style="font-size:12.5px;">Shows Stripe's raw event stream and whether OUR webhook claimed each one — repeated deliveries of a single event id are the signature of a replay.</span></div></div>`;
+}
+/* The preflight the product was missing. Every failure mode of checkout that is a
+   CONFIGURATION problem — no price with that lookup key, or a price that exists but charges
+   the wrong amount — shows up here before a customer runs into it. */
+async function loadStripePrices(){
+  const box=document.getElementById('stripePrices'); box.innerHTML='Asking Stripe…';
+  const d=await stripeAdmin({action:'prices'});
+  if(d.ok===false||!d.prices){ box.innerHTML=`<span style="color:var(--accent2);">${esc(d.error||'Could not load')}</span>`; return; }
+  const bad=d.missing||d.wrongAmount;
+  const rows=d.prices.map(p=>{
+    const ok=p.found&&p.amountMatches;
+    const tag=!p.found
+      ? '<span style="color:#ff6584;font-size:10px;font-weight:700;">NO LOOKUP KEY</span>'
+      : !p.amountMatches
+        ? `<span style="color:#f7b731;font-size:10px;font-weight:700;">CHARGES $${p.amount} — page says $${p.expect}</span>`
+        : '<span style="color:#43e97b;font-size:10px;">✓ ready</span>';
+    const detail=p.found
+      ? `${p.currency} ${p.amount} · ${esc(p.interval)} · <code style="font-size:10px;">${esc(p.key)}</code>`
+      : `<span style="color:var(--muted);">${esc(p.fix||'')}</span>`;
+    return `<div class="dp-row" style="align-items:flex-start;">
+      <span style="min-width:0;"><b style="font-size:12px;">${esc(p.what)}</b> ${tag}
+        <span style="display:block;font-size:10.5px;color:var(--muted);margin-top:2px;">${detail}</span></span>
+      ${p.dashboardUrl?`<a href="${p.dashboardUrl}" target="_blank" style="color:var(--accent);font-size:11px;flex-shrink:0;">↗</a>`:''}</div>`;
+  }).join('');
+  box.innerHTML=`<div style="margin-bottom:10px;padding:9px 12px;border-radius:8px;font-size:12.5px;`+
+    (bad?`background:rgba(255,101,132,.12);border:1px solid rgba(255,101,132,.4);color:#ffb3c4;`
+        :`background:rgba(67,233,123,.12);border:1px solid rgba(67,233,123,.4);color:#43e97b;`)+
+    `">${esc(d.verdict||'')}</div>${rows}`;
 }
 async function loadStripeEvents(){
   const box=document.getElementById('stripeEvents'); box.innerHTML='Loading…';

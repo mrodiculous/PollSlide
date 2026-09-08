@@ -150,6 +150,54 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true, configured: true, mode: LIVE ? 'live' : 'test', dashboard: DASH, events: rows, claimed });
     }
 
+    /* ── PRICES — can checkout actually find every plan? ──────────────────────
+     * api/create-checkout.js resolves a price by LOOKUP KEY, and returns 404 when the key
+     * is not on any price. Nothing in the product could answer "which of the ten keys are
+     * missing" — so a plan that had never been given its lookup key looked, from the
+     * Plans & Upgrade panel, exactly like a button that did nothing.
+     * This lists every key checkout will ask Stripe for, whether Stripe has it, and what it
+     * costs, so a broken plan is visible before a customer finds it. Read-only. */
+    if (action === 'prices') {
+      const EXPECT = [
+        { key: 'pollslide_pro_monthly',        what: 'Pro — monthly',        expect: 12 },
+        { key: 'pollslide_pro_yearly',         what: 'Pro — yearly',         expect: 120 },
+        { key: 'pollslide_team_small_monthly', what: 'Team Small — monthly', expect: 39 },
+        { key: 'pollslide_team_small_yearly',  what: 'Team Small — yearly',  expect: 384 },
+        { key: 'pollslide_team_large_monthly', what: 'Team Large — monthly', expect: 199 },
+        { key: 'pollslide_team_large_yearly',  what: 'Team Large — yearly',  expect: 1980 },
+        { key: 'pollslide_credits_20',         what: '20 Polly credits',     expect: 8 },
+        { key: 'pollslide_credits_100',        what: '100 Polly credits',    expect: 30 },
+        { key: 'pollslide_credits_200',        what: '200 Polly credits',    expect: 50 },
+        { key: 'pollslide_credits_500',        what: '500 Polly credits',    expect: 100 },
+      ];
+      const rows = await Promise.all(EXPECT.map(async e => {
+        try {
+          const list = await stripe.prices.list({ lookup_keys: [e.key], limit: 1, active: true });
+          const p = list.data[0];
+          if (!p) {
+            return { ...e, found: false,
+              fix: 'Stripe Dashboard → Products → open the price → Edit → Advanced → Lookup key: ' + e.key };
+          }
+          const amount = p.unit_amount == null ? null : p.unit_amount / 100;
+          return { ...e, found: true, priceId: p.id, amount,
+            currency: (p.currency || 'usd').toUpperCase(),
+            interval: p.recurring ? p.recurring.interval : 'one-time',
+            // The classic annual mistake: the per-MONTH figure entered as the yearly price.
+            amountMatches: amount === e.expect,
+            dashboardUrl: `${DASH}/prices/${p.id}` };
+        } catch (err) { return { ...e, found: false, error: String(err && err.message || err) }; }
+      }));
+      const missing = rows.filter(r => !r.found);
+      const wrongAmount = rows.filter(r => r.found && !r.amountMatches);
+      return res.status(200).json({
+        ok: true, configured: true, mode: LIVE ? 'live' : 'test', dashboard: DASH, prices: rows,
+        missing: missing.length, wrongAmount: wrongAmount.length,
+        verdict: missing.length ? `${missing.length} plan(s) have no price with that lookup key — checkout for those returns 404 and the button appears to do nothing.`
+               : wrongAmount.length ? `${wrongAmount.length} price(s) exist but charge a different amount than the pricing page shows.`
+               : 'All ten lookup keys resolve, and every amount matches the pricing page.',
+      });
+    }
+
     return res.status(400).json({ error: 'Unknown action: ' + action });
   } catch (e) {
     console.error('stripe-admin error:', e && e.message);

@@ -16,7 +16,7 @@
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=f221da1f"></script>
+<script src="/ui-lang.js?v=2e412f21"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root {
@@ -400,7 +400,12 @@
   .inline-edit:focus { border-bottom-color:var(--accent); background:rgba(108,99,255,0.06); border-radius:4px 4px 0 0; }
 
   /* ── TOAST ── */
-  .toast { position:fixed; bottom:20px; right:20px; background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius-sm); padding:10px 16px; font-size:13px; font-weight:500; z-index:9999; animation:slideUp 0.25s ease; }
+  /* Above EVERY modal. Five overlays in this file sit at z-index 200000, and the toast sat
+     at 9999 — so any message raised while a modal was open was painted behind it, under an
+     82%-black backdrop. That is what made checkout look like it did nothing: the button
+     said "Redirecting…", the request failed, and the toast naming the exact Stripe problem
+     rendered underneath the plan picker where nobody could read it. */
+  .toast { position:fixed; bottom:20px; right:20px; background:var(--surface2); border:1px solid var(--border2); border-radius:var(--radius-sm); padding:10px 16px; font-size:13px; font-weight:500; z-index:300000; animation:slideUp 0.25s ease; }
   .toast.success { border-color:var(--accent3); color:var(--accent3); }
   .toast.info    { border-color:var(--accent);  color:var(--accent); }
   .toast.warn    { border-color:var(--accent4); color:var(--accent4); }
@@ -1204,11 +1209,38 @@ async function buyCredits(n, ev) {
     const data = await r.json().catch(() => null);
     if (data && data.url) { window.location.href = data.url; return; }
     if (btn) { btn.innerHTML = orig; btn.disabled = false; }
-    toast('Credit checkout error: ' + ((data && data.error) || 'API not deployed yet'), 'danger');
+    /* Credit packs are bought from inside the same overlay as the plans, so the same rule
+       applies: the reason has to appear IN the panel. A toast behind an 82%-black backdrop
+       is indistinguishable from the button doing nothing at all. */
+    const why = (data && data.error) || 'API not deployed yet';
+    if (typeof showCheckoutError === 'function') showCheckoutError(why, data && data.fix);
+    if (data && data.fix) console.warn('Credit checkout config error:', why, '\nFix:', data.fix);
+    toast('Credit checkout error: ' + why, 'danger');
   } catch (e) {
     if (btn) { btn.innerHTML = orig; btn.disabled = false; }
+    if (typeof showCheckoutError === 'function') showCheckoutError('Could not reach the checkout endpoint.', String(e && e.message || e));
     toast('Could not connect to checkout.', 'danger');
   }
+}
+
+/* Shared by both checkout paths (plans and credit packs). Writes into the plan-picker box
+   when it is open, so the message survives longer than a toast and sits next to the button
+   that was pressed. Returns false when there is no panel to write into. */
+function showCheckoutError(headline, detail) {
+  const box = document.querySelector('[data-pp-box]');
+  if (!box) return false;
+  let bar = box.querySelector('#ppError');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'ppError';
+    bar.style.cssText = 'margin:12px 0 0;padding:11px 13px;border-radius:9px;font-size:12.5px;' +
+      'line-height:1.55;background:rgba(255,101,132,.12);border:1px solid rgba(255,101,132,.45);color:#ffb3c4;';
+    box.appendChild(bar);
+  }
+  bar.innerHTML = '<b>' + escapeHtml(String(headline)) + '</b>' +
+    (detail ? '<br><span style="opacity:.85">' + escapeHtml(String(detail)) + '</span>' : '');
+  bar.scrollIntoView({ block: 'nearest' });
+  return true;
 }
 // Refresh any on-screen credit balance (picker balance + optional near-Polly badge). Safe if absent.
 function refreshCreditBadge() {
@@ -1902,6 +1934,12 @@ function openPlanPicker() {
     const origText = btn ? btn.textContent : '';
     if (btn) { btn.textContent = 'Redirecting…'; btn.disabled = true; }
     const restore = () => { if (btn) { btn.textContent = origText; btn.disabled = false; } };
+    /* A checkout failure is a configuration problem someone has to go and fix in Stripe, so
+       it cannot live in a toast that clears itself after 3.5 seconds. It goes in the picker,
+       next to the button that was pressed, and stays until the next attempt. */
+    const showErr = (headline, detail) => showCheckoutError(headline, detail);
+    const clearErr = () => { const b = document.getElementById('ppError'); if (b) b.remove(); };
+    clearErr();
     try {
       const r = await fetch('/api/create-checkout', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -1921,17 +1959,22 @@ function openPlanPicker() {
       restore();
       if (!data) {
         // Genuinely no JSON body → the endpoint isn't deployed / crashed.
-        toast(r.status === 404 ? 'Checkout endpoint not found — is api/create-checkout.js deployed?' : 'Checkout server error (' + r.status + ').', 'danger');
+        const m = r.status === 404 ? 'Checkout endpoint not found — is api/create-checkout.js deployed?'
+                                   : 'Checkout server error (' + r.status + ').';
+        showErr(m); toast(m, 'danger');
       } else if (data.fix) {
-        // Actionable Stripe-config error (e.g. a lookup key not set on the price).
-        // Lead with the concise cause; log the full fix so it's not lost in 3.5s.
+        // Actionable Stripe-config error — almost always a price with no lookup key on it.
+        // The fix is a dashboard change, so it is shown in full rather than summarised.
         console.warn('Checkout config error:', data.error, '\nFix:', data.fix);
-        toast('This plan isn\'t set up in Stripe yet — ' + (data.error || '') + ' (see console for the fix).', 'danger');
+        showErr(data.error || 'This plan is not set up in Stripe yet.', data.fix);
+        toast('This plan isn\'t set up in Stripe yet — details are in the panel.', 'danger');
       } else {
+        showErr('Checkout error', data.error || 'Unknown error');
         toast('Checkout error: ' + (data.error || 'Unknown error'), 'danger');
       }
     } catch(e) {
       restore();
+      showErr('Could not reach the checkout endpoint.', String(e && e.message || e));
       toast('Could not connect to checkout. Check your connection.', 'danger');
     }
   };
