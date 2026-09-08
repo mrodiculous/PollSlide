@@ -159,6 +159,26 @@ module.exports = async function handler(req, res) {
 
   } catch (err) {
     console.error('Stripe error:', err.message);
-    return res.status(500).json({ error: err.message });
+    /* Name the cause instead of forwarding Stripe's raw sentence. The two optional blocks
+     * above are the ones that break EVERY plan and every credit pack at once, because they
+     * are applied to every session — so "nothing works" points here far more often than at
+     * any single price. Both are switched on by an env var and both need a Dashboard
+     * setting made FIRST; setting the var without the setting is the failure. */
+    const m = String(err && err.message || err);
+    let fix = null;
+    if (/terms.of.service|consent_collection/i.test(m)) {
+      fix = 'STRIPE_COLLECT_CONSENT=1 is set, but this Stripe account has no Terms of Service URL. ' +
+            'Set it at Dashboard → Settings → Checkout and Payment Links → Terms of service, ' +
+            'or unset STRIPE_COLLECT_CONSENT in Vercel and redeploy. Until one of those, every ' +
+            'checkout on every plan fails here.';
+    } else if (/automatic_tax|tax is not active|origin address|Stripe Tax/i.test(m)) {
+      fix = 'STRIPE_AUTOMATIC_TAX=1 is set, but Stripe Tax is not active on this account (or has ' +
+            'no origin address). Activate it at Dashboard → Settings → Tax, or unset ' +
+            'STRIPE_AUTOMATIC_TAX in Vercel and redeploy. Until one of those, every checkout fails here.';
+    } else if (/No such price|resource_missing/i.test(m)) {
+      fix = 'The price resolved from lookup key "' + lookupKey + '" is not usable — most often it ' +
+            'belongs to a different Stripe environment than STRIPE_SECRET_KEY, or it has been archived.';
+    }
+    return res.status(500).json(fix ? { error: m, fix } : { error: m });
   }
 };

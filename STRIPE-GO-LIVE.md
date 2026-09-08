@@ -302,6 +302,27 @@ STRIPE_COLLECT_CONSENT = 1
 This is the same evidence trail as **Admin → Compliance**: who accepted what, and when.
 Recommended before the first real customer, not after.
 
+### 6c — If you set either variable first, ALL checkout stops
+
+Read this before you set 6a or 6b, because the order is not a nicety.
+
+Both variables add a block to **every** Checkout Session — every plan, both billing cycles,
+and all four credit packs. If the variable is on and the Dashboard setting behind it is not
+yet made, Stripe refuses to create the session and **every purchase in the product fails
+identically**. It does not look like a Stripe error. It looks like the Plans & Upgrade
+button doing nothing: the button says "Redirecting…", then you are back on the same screen.
+
+So set the Dashboard side first, always. If you have already set the variable and checkout
+has stopped, you have two ways out and either is fine:
+
+- make the Dashboard setting (Settings → Tax, or Settings → Checkout → Terms of service), or
+- remove the variable in Vercel and **redeploy** — the value is read at request time from
+  the deployed environment, so removing it without a redeploy changes nothing.
+
+**To find out which, without guessing:** open **Admin → Billing → "Try a real checkout"**.
+It builds a session with your live settings, tells you the exact Stripe error and which of
+the two blocks caused it, then expires the session. Nothing is charged.
+
 **Done when:** both variables are set (or you have consciously decided to leave one off),
 and a test checkout still opens.
 

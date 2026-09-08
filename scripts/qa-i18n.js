@@ -115,10 +115,28 @@ parity('site legal bodies', gw.PS_LEGAL);
 const VARIANT = {
   pt: { name: 'Portuguese', keep: 'European',
         wrong: /(^|[^A-Za-zÀ-ÖØ-öø-ÿ])(você|vocês|telas?|arquivos?|compartilh[a-zç]+|aplicativos?|enquetes?|usuários?|equipes?|gerenci[a-z]+|celulares?|conosco|cadastro)($|[^A-Za-zÀ-ÖØ-öø-ÿ])/i },
+  /* Form of address. Both of these were chosen deliberately and both drifted back the first
+     time, because the conversion was run against the dictionaries that happened to be loaded
+     rather than all of them — so German still said "Präsentieren Sie es auf Ihre Weise" on
+     the homepage after the German pass was called finished.
+     German has exactly ONE shape that cannot be anything else: verb-first inversion with a
+     capitalised Sie — "Präsentieren Sie", "Klicken Sie", "Wählen Sie". Everything else is
+     ambiguous, because "Sie können" is equally "you can" (formal) and "they can", and
+     "Ihre Version" is equally "your" and "their". Matching those flagged four sentences that
+     are correct German about a THIRD PARTY, and a gate that cries wolf gets ignored. */
+  de: { name: 'German', keep: 'informal du', skipLegal: true,
+        wrong: /\b[A-ZÄÖÜ][a-zäöüß]+en\s+Sie\b/ },
+  fr: { name: 'French', keep: 'tu', skipLegal: true,
+        wrong: /(^|[^A-Za-zÀ-ÖØ-öø-ÿ])(vous|votre|vos)($|[^A-Za-zÀ-ÖØ-öø-ÿ])/i },
 };
 for (const [lang, rule] of Object.entries(VARIANT)) {
   const hits = [];
-  for (const dict of [gw.PS_I18N, gw.PS_I18N_KEYS, gw.PS_LEGAL, g.PS_UI]) {
+  /* Legal bodies are excluded for German and French on purpose: a contract keeps the formal
+     address even in a product that says du and tu everywhere else. Portuguese has no such
+     exemption — European vs Brazilian is one variant throughout, contracts included. */
+  const dicts = rule.skipLegal ? [gw.PS_I18N, gw.PS_I18N_KEYS, g.PS_UI]
+                               : [gw.PS_I18N, gw.PS_I18N_KEYS, gw.PS_LEGAL, g.PS_UI];
+  for (const dict of dicts) {
     if (!dict || !dict[lang]) continue;
     for (const v of Object.values(dict[lang])) if (typeof v === 'string' && rule.wrong.test(v)) hits.push(v);
   }

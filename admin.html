@@ -971,7 +971,8 @@ async function renderBilling(){
         <p style="font-size:11.5px;color:var(--muted);margin-top:10px;">Read-only view. Refunds, cancellations and plan edits are done in the Stripe Dashboard on purpose — it has the confirmations and audit trail that moving money needs.</p>
       </div></div>
     <div class="card"><div class="card-hd"><h2>Can customers actually check out?</h2>
-      <button class="btn btn-sm btn-ghost" onclick="loadStripePrices()">Check all 10 plans</button></div>
+      <button class="btn btn-sm btn-ghost" onclick="loadStripePrices()">Check all 10 plans</button>
+      <button class="btn btn-sm btn-ghost" onclick="stripeDryRun()">Try a real checkout</button></div>
       <div class="card-bd" id="stripePrices"><span class="muted" style="font-size:12.5px;">Checkout finds a plan by its <b>lookup key</b>. A price with no lookup key returns 404, and the Plans &amp; Upgrade button then looks like it simply does nothing. This asks Stripe for all ten keys and checks each amount against the pricing page.</span></div></div>
     <div class="card"><div class="card-hd"><h2>Active plans</h2></div><div class="card-bd">${planRows}</div></div>
     <div class="card"><div class="card-hd"><h2>⚠️ Needs attention</h2></div><div class="card-bd">${probRows}</div></div>
@@ -1007,6 +1008,25 @@ async function loadStripePrices(){
     (bad?`background:rgba(255,101,132,.12);border:1px solid rgba(255,101,132,.4);color:#ffb3c4;`
         :`background:rgba(67,233,123,.12);border:1px solid rgba(67,233,123,.4);color:#43e97b;`)+
     `">${esc(d.verdict||'')}</div>${rows}`;
+}
+/* Finding a price and being able to CHARGE for it are two different questions. This asks the
+   second one by creating a real Checkout Session with the live settings and expiring it
+   straight away — nothing is charged, and it is the only check that exercises the consent
+   and tax blocks, which break all ten purchases at once when their env var is on before the
+   matching Stripe setting exists. */
+async function stripeDryRun(){
+  const box=document.getElementById('stripePrices'); box.innerHTML='Creating a test checkout session…';
+  const d=await stripeAdmin({action:'checkout-dryrun'});
+  const r=d&&d.dryRun;
+  if(!r){ box.innerHTML=`<span style="color:var(--accent2);">${esc((d&&d.error)||'Could not run')}</span>`; return; }
+  const flags=`<div style="font-size:11px;color:var(--muted);margin-top:8px;">Session built with `+
+    `consent_collection <b>${r.consent?'on':'off'}</b> · automatic_tax <b>${r.automaticTax?'on':'off'}</b> · price <code>${esc(r.lookupKey)}</code></div>`;
+  box.innerHTML = r.passed
+    ? `<div style="padding:10px 12px;border-radius:8px;font-size:12.5px;background:rgba(67,233,123,.12);border:1px solid rgba(67,233,123,.4);color:#43e97b;">
+         ✓ ${esc(r.note||'Checkout works.')}</div>${flags}`
+    : `<div style="padding:10px 12px;border-radius:8px;font-size:12.5px;background:rgba(255,101,132,.12);border:1px solid rgba(255,101,132,.4);color:#ffb3c4;">
+         <b>Checkout could not be created.</b><br>${esc(r.error||'')}
+         ${r.fix?`<br><br><b>Fix:</b> ${esc(r.fix)}`:''}</div>${flags}`;
 }
 async function loadStripeEvents(){
   const box=document.getElementById('stripeEvents'); box.innerHTML='Loading…';

@@ -198,6 +198,62 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    /* ── CHECKOUT DRY RUN — the only test that proves checkout works ───────────
+     * The price check above proves Stripe can FIND a plan. It does not prove a session can
+     * be CREATED, and that is a separate failure with a separate cause: the consent and tax
+     * blocks in create-checkout.js are added to every session, so switching either env var
+     * on before its Dashboard setting exists breaks all ten purchases at once — which reads,
+     * from the Plans & Upgrade panel, as "the button does nothing".
+     * So this builds the same params create-checkout builds, creates a real session, and
+     * expires it immediately. Nothing is charged and no customer sees it; a Checkout Session
+     * is just a URL until someone pays. It reports the exact Stripe error when it fails. */
+    if (action === 'checkout-dryrun') {
+      const key = (req.body && req.body.lookupKey) || 'pollslide_pro_monthly';
+      const isSub = !/credits/.test(key);
+      const out = { lookupKey: key, consent: process.env.STRIPE_COLLECT_CONSENT === '1',
+                    automaticTax: process.env.STRIPE_AUTOMATIC_TAX === '1' };
+      const list = await stripe.prices.list({ lookup_keys: [key], limit: 1 });
+      if (!list.data.length) {
+        return res.status(200).json({ ok: true, dryRun: { ...out, passed: false,
+          error: 'No price carries the lookup key "' + key + '".',
+          fix: 'Stripe → Products → the price → Edit → Advanced → Lookup key: ' + key }});
+      }
+      const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com';
+      const params = {
+        payment_method_types: ['card'],
+        line_items: [{ price: list.data[0].id, quantity: 1 }],
+        mode: isSub ? 'subscription' : 'payment',
+        success_url: APP_URL + '/presenter?dryrun=1',
+        cancel_url:  APP_URL + '/presenter?dryrun=1',
+        allow_promotion_codes: true,
+        billing_address_collection: 'auto',
+        customer_email: 'dry-run@pollslide.com',
+      };
+      if (out.consent)      params.consent_collection = { terms_of_service: 'required' };
+      if (out.automaticTax) { params.automatic_tax = { enabled: true };
+                              params.tax_id_collection = { enabled: true };
+                              params.billing_address_collection = 'required'; }
+      try {
+        const s = await stripe.checkout.sessions.create(params);
+        try { await stripe.checkout.sessions.expire(s.id); } catch (e) {}
+        return res.status(200).json({ ok: true, dryRun: { ...out, passed: true,
+          note: 'A real Checkout Session was created with your live settings, then expired. Checkout works.' }});
+      } catch (e) {
+        const m = String(e && e.message || e);
+        let fix = null;
+        if (/terms.of.service|consent_collection/i.test(m)) {
+          fix = 'STRIPE_COLLECT_CONSENT=1 is set but this account has no Terms of Service URL. ' +
+                'Set it at Settings → Checkout and Payment Links → Terms of service, or remove ' +
+                'STRIPE_COLLECT_CONSENT from Vercel and redeploy.';
+        } else if (/automatic_tax|tax is not active|origin address|Stripe Tax/i.test(m)) {
+          fix = 'STRIPE_AUTOMATIC_TAX=1 is set but Stripe Tax is not active (or has no origin ' +
+                'address). Activate it at Settings → Tax, or remove STRIPE_AUTOMATIC_TAX from ' +
+                'Vercel and redeploy.';
+        }
+        return res.status(200).json({ ok: true, dryRun: { ...out, passed: false, error: m, fix } });
+      }
+    }
+
     return res.status(400).json({ error: 'Unknown action: ' + action });
   } catch (e) {
     console.error('stripe-admin error:', e && e.message);
