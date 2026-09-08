@@ -22,6 +22,7 @@
 const Stripe = require('stripe');
 const admin = require('firebase-admin');
 const { setUserTier, claimStripeEvent } = require('../lib/tier');
+const { creditsToReverse } = require('../lib/credit-refund');
 
 // Initialize Firebase Admin SDK (server-side — uses service account, not client SDK)
 function getFirebaseApp() {
@@ -350,19 +351,23 @@ module.exports = async function handler(req, res) {
         const db = admin.database(getFirebaseApp());
         const guardRef = db.ref(`admin/credit_purchases/${session.id}`);
         const rec = (await guardRef.get()).val();
-        if (!rec || rec.status !== 'done') {
-          console.log(`Refund for ${session.id}: nothing granted to reverse (status ${rec && rec.status})`);
+        if (!rec || !rec.credits) {
+          console.log(`Refund for ${session.id}: nothing granted to reverse`);
           break;
         }
-        /* Partial refunds take back the same fraction, rounded UP, so a 50% refund of a
-         * 100-credit pack removes 50 and never leaves someone ahead by rounding. */
-        const share = charge.amount ? (charge.amount_refunded || 0) / charge.amount : 1;
-        const take  = Math.min(rec.credits, Math.ceil(rec.credits * share));
+
+        // The arithmetic lives in lib/credit-refund.js so the partial/duplicate cases can
+        // be tested without refunding real money to reach them.
+        const plan = creditsToReverse(rec, charge);
+        if (plan.take <= 0) {
+          console.log(`Refund for ${session.id}: ${plan.reason} — nothing to do`);
+          break;
+        }
         // Floored at zero: credits already spent are gone, and a negative balance would
         // silently swallow the next month's allowance.
-        await db.ref(`users/${rec.uid}/aiCredits`).transaction(n => Math.max(0, (n || 0) - take));
-        await guardRef.update({ status: 'refunded', refundedAt: Date.now(), creditsRemoved: take });
-        console.log(`Refund: removed ${take} credits from ${rec.uid} (session ${session.id})`);
+        await db.ref(`users/${rec.uid}/aiCredits`).transaction(n => Math.max(0, (n || 0) - plan.take));
+        await guardRef.update({ status: plan.status, refundedAt: Date.now(), creditsRemoved: plan.owed });
+        console.log(`Refund: removed ${plan.take} credits from ${rec.uid} (${plan.owed}/${rec.credits} total, session ${session.id})`);
         break;
       }
 
