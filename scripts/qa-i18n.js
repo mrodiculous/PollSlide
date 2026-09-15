@@ -31,6 +31,7 @@
  * --------------------------------------------------------------------------- */
 const fs = require('fs');
 const path = require('path');
+const vm = require('vm');
 
 const ROOT = path.resolve(__dirname, '..');
 const SITE = path.resolve(ROOT, '..', 'pollslide-website');
@@ -257,6 +258,112 @@ const textNodes = (html) => [...clean(html).matchAll(/>([^<]+)</g)].map(m => dec
   }
 })();
 
+/* ── 1c. JS-rendered copy — the hole clean() leaves on purpose ──────────────────
+ * clean() throws every <script> block away before textNodes() runs, because scripts
+ * are code, not copy — correct for the 99% of a <script> block that IS code. But a
+ * handful of pages build a card/FAQ list from a plain data array and interpolate it
+ * into innerHTML at runtime (buildPlans()/buildFAQ() in pricing.html; the `faqs`
+ * array + .forEach in download.html/setup.html). That English text is real,
+ * rendered, user-facing copy — i18n.js's runtime MutationObserver translates it
+ * exactly like any other injected DOM — but it lives inside the part of the file
+ * this auditor deliberately never looks at, so it can drift to 100% untranslated
+ * and nothing here would ever say so. Found 2026-09-15: pricing.html's Enterprise
+ * card went in through this exact hole, and turned out not to be the only page
+ * behind it — download.html and setup.html's entire FAQ sections (24 strings) had
+ * silently shipped English-only, undetected, since before this check existed.
+ *
+ * Fix: rather than parsing arbitrary JS (out of scope for a regex/text auditor),
+ * evaluate the SPECIFIC named arrays known to hold rendered copy — the same
+ * brace-counting + vm.runInContext technique scripts/tests/tier-consistency.test.js
+ * already uses to pull `const TIERS = {...}` out of presenter.html. A new page with
+ * this pattern costs one line below, the same as adding a page to LEGAL above. */
+function extractArrayLiteral(html, declaration) {
+  const start = html.indexOf(declaration);
+  if (start === -1) return null;
+  const open = html.indexOf('[', start);
+  let depth = 0, i = open;
+  for (; i < html.length; i++) {
+    if (html[i] === '[') depth++;
+    else if (html[i] === ']') { depth--; if (depth === 0) { i++; break; } }
+  }
+  const literal = html.slice(open, i);
+  const ctx = { Infinity: Infinity };
+  vm.createContext(ctx);
+  try { return vm.runInContext('(' + literal + ')', ctx); } catch (e) { return null; }
+}
+// Walk the extracted structure and collect string values that read as prose, not
+// plumbing. Excludes href/mailto targets (never translated — they're addresses,
+// not copy) via the URL check; everything else is left to the SAME length/letter
+// filter textNodes() below already applies to real HTML, so a CSS class name like
+// 'cta-outline' is excluded the same way a stray short HTML attribute would be.
+function collectCopyStrings(node, out) {
+  if (typeof node === 'string') {
+    if (/^(https?:|mailto:)/i.test(node)) return;
+    /* A string with an inline tag (<b>, <a>, ...) is NOT one runtime text node — i18n.js's
+       TreeWalker only ever sees the plain-text RUNS between tags, exactly like textNodes()
+       above does for real HTML. A whole-string dictionary key silently never matches, because
+       nothing ever looks it up: the walker looks up each fragment on its own. Found 2026-09-15:
+       setup.html's "Does PowerPoint work too?" answer wraps an <a> around "Integrations"
+       mid-sentence — the link text has its own entry and translated fine, which made the page
+       LOOK covered, while the sentence around it, keyed as one whole string, could never match
+       and stayed English. Split the same way textNodes() reads real HTML, so this checks the
+       same units i18n.js actually translates. */
+    if (/<[a-z][^>]*>/i.test(node)) {
+      // i18n.js's walkAndTranslate() looks up node.nodeValue.trim(), not the raw text —
+      // a fragment's leading/trailing whitespace (from sitting next to the tag that was
+      // just split off) is never part of the dictionary key. Trim here too, or a correct
+      // runtime key reads as "missing" and a key WITH the whitespace reads as "covered"
+      // while never actually matching anything at runtime (found the hard way: this exact
+      // mismatch shipped once already, in the first pass of this same fix).
+      node.split(/<[^>]+>/).forEach(part => { const t = part.trim(); if (t) out.push(t); });
+    } else {
+      out.push(node);
+    }
+  } else if (Array.isArray(node)) {
+    node.forEach(v => collectCopyStrings(v, out));
+  } else if (node && typeof node === 'object') {
+    for (const v of Object.values(node)) collectCopyStrings(v, out);
+  }
+}
+// file → every `declaration` whose array holds rendered copy.
+const JS_RENDERED_ARRAYS = {
+  'pricing.html':  ['var PLANS=[', 'var FAQS=['],
+  'download.html': ['const faqs = ['],
+  'setup.html':    ['const faqs = ['],
+};
+function jsRenderedStrings(f, html) {
+  const decls = JS_RENDERED_ARRAYS[f];
+  if (!decls) return [];
+  const out = [];
+  for (const decl of decls) collectCopyStrings(extractArrayLiteral(html, decl), out);
+  return out;
+}
+
+// Self-check: a nested array-of-objects yields its prose strings, a mailto/http
+// value is dropped (it's an address, not copy), and the whole thing survives being
+// embedded inside a real <script> tag exactly as it appears in a page.
+(function selfCheckJsRendered() {
+  const sample = '<script>\nconst faqs = [\n  { q: \'Does it work offline?\', a: \'No, an internet connection is required.\', url: \'https://example.com/x\' },\n  { q: \'See also\', a: \'Read the <a href="/help">Help</a> page for more.\' },\n];\n</script>';
+  const out = [];
+  collectCopyStrings(extractArrayLiteral(sample, 'const faqs = ['), out);
+  const bad = [];
+  if (!out.includes('Does it work offline?')) bad.push('did not extract the question string');
+  if (!out.includes('No, an internet connection is required.')) bad.push('did not extract the answer string');
+  if (out.some(x => x.startsWith('http'))) bad.push('a URL value leaked through as if it were copy');
+  // A string with an embedded tag must split into its plain-text fragments — the runtime
+  // walker never sees it as one node, so testing it as one node is testing the wrong thing.
+  // Each fragment must also come out TRIMMED, matching node.nodeValue.trim() at runtime.
+  if (!out.includes('Read the')) bad.push('did not split off the fragment BEFORE the embedded <a>, trimmed');
+  if (!out.includes('page for more.')) bad.push('did not split off the fragment AFTER the embedded <a>, trimmed');
+  if (out.some(x => x !== x.trim())) bad.push('a fragment kept leading/trailing whitespace instead of being trimmed');
+  if (out.some(x => x.includes('<a '))) bad.push('an embedded-HTML string was kept whole instead of split into fragments');
+  if (bad.length) {
+    console.error('\n  qa-i18n.js internal self-check failed — the JS-array extractor is broken:');
+    bad.forEach(b => console.error('    ✗ ' + b));
+    process.exit(2);
+  }
+})();
+
 const coverage = {};
 let sitePages = 0;
 if (fs.existsSync(SITE)) {
@@ -264,7 +371,7 @@ if (fs.existsSync(SITE)) {
     if (LEGAL.has(f)) continue;
     const html = read(path.join(SITE, f));
     if (!html || !/i18n\.js/.test(html)) continue;
-    const strings = textNodes(html)
+    const strings = textNodes(html).concat(jsRenderedStrings(f, html))
       /* No upper length cap that matters: a 180-char ceiling silently excluded every
          long paragraph, which is exactly where the untranslated prose was hiding. */
       .filter(x => x.length >= 12 && x.length <= 600 && /[A-Za-z]{4}/.test(x));

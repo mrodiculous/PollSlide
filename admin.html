@@ -368,9 +368,10 @@ const TIER_CONFIG = {
   pro:        { name:'Pro',        maxPres:-1, maxPart:-1,  aiMonthly:20,  price:12  },
   team_small: { name:'Team Small', maxPres:-1, maxPart:-1,  aiMonthly:100, price:39  },
   team_large: { name:'Team Large', maxPres:-1, maxPart:-1,  aiMonthly:300, price:199 },
-  // No `price` — priced by hand per deal (see api/enterprise-lead.js). Never reached
-  // through Stripe, so the watchdog's tier-drift check exempts it explicitly rather
-  // than trying to compare it to a subscription that will never exist.
+  // No `price` — priced by hand per deal, contacted via a plain mailto link (see
+  // presenter.html's openEnterpriseContact). Never reached through Stripe, so the
+  // watchdog's tier-drift check exempts it explicitly rather than trying to compare
+  // it to a subscription that will never exist.
   enterprise: { name:'Enterprise', maxPres:-1, maxPart:-1,  aiMonthly:-1,  price:null },
 };
 

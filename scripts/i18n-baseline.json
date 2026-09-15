@@ -1,13 +1,13 @@
 {
   "accessibility.html": {
     "pct": 100,
-    "hit": 70,
-    "total": 70
+    "hit": 10,
+    "total": 10
   },
   "download.html": {
     "pct": 100,
-    "hit": 56,
-    "total": 56
+    "hit": 114,
+    "total": 114
   },
   "game-modes.html": {
     "pct": 100,
@@ -16,8 +16,8 @@
   },
   "help.html": {
     "pct": 100,
-    "hit": 686,
-    "total": 686
+    "hit": 720,
+    "total": 720
   },
   "index.html": {
     "pct": 100,
@@ -26,18 +26,18 @@
   },
   "integrations.html": {
     "pct": 100,
-    "hit": 42,
-    "total": 42
+    "hit": 53,
+    "total": 53
   },
   "pricing.html": {
     "pct": 100,
-    "hit": 19,
-    "total": 19
+    "hit": 82,
+    "total": 82
   },
   "setup.html": {
     "pct": 100,
-    "hit": 120,
-    "total": 120
+    "hit": 147,
+    "total": 147
   },
   "status.html": {
     "pct": 100,
@@ -51,8 +51,8 @@
   },
   "trust-safety.html": {
     "pct": 100,
-    "hit": 49,
-    "total": 49
+    "hit": 45,
+    "total": 45
   },
   "vs-kahoot.html": {
     "pct": 100,
