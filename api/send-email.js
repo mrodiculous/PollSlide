@@ -40,9 +40,9 @@ const BRAND_AMBER = '#f7b731';
 // All templates use inline CSS for maximum email client compatibility.
 // Tested with: Gmail, Outlook, Apple Mail, Yahoo, Samsung Email.
 
-function baseLayout(title, body, ctaUrl, ctaText) {
+function baseLayout(title, body, ctaUrl, ctaText, lang) {
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${lang || 'en'}">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${title}</title></head>
 <body style="margin:0;padding:0;background:#f4f4fc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#15152a;line-height:1.6;">
@@ -84,7 +84,62 @@ function baseLayout(title, body, ctaUrl, ctaText) {
 // Escape user-influenced values before interpolating into HTML.
 const esc = s => String(s || '').replace(/[<>&"]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
 
+/* A subject line is a mail HEADER, not HTML: escaping it would show "&amp;" in the inbox,
+   and a line break in it is the one character that could do damage. So: one line, capped. */
+const oneLine = s => String(s || '').replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 150);
+
+/* The chrome of the ticket-reply email, in the language the user was using PollSlide in
+   when they wrote in (tickets record UI_LANG as `lang`; the admin can override it for
+   older tickets that have none). ONLY the chrome: the reply itself goes out exactly as the
+   admin wrote it — a machine-translated support answer is a promise nobody reviewed.
+   Register follows ui-lang.js, the anchor: du, tu, tú, tu, European Portuguese. */
+const TICKET_REPLY_CHROME = {
+  en: { subject: s => `PollSlide Support replied: ${s}`, heading: "We've replied to your request",
+        request: 'Your request', button: 'Reply in PollSlide',
+        note: 'You can answer right in PollSlide — the button below opens this conversation. Replying to this email reaches us too.' },
+  es: { subject: s => `El soporte de PollSlide ha respondido: ${s}`, heading: 'Hemos respondido a tu solicitud',
+        request: 'Tu solicitud', button: 'Responder en PollSlide',
+        note: 'Puedes contestar directamente en PollSlide: el botón de abajo abre esta conversación. Si respondes a este correo, también nos llega.' },
+  de: { subject: s => `Der PollSlide-Support hat geantwortet: ${s}`, heading: 'Wir haben auf deine Anfrage geantwortet',
+        request: 'Deine Anfrage', button: 'In PollSlide antworten',
+        note: 'Du kannst direkt in PollSlide antworten – der Button unten öffnet diese Unterhaltung. Eine Antwort auf diese E-Mail erreicht uns auch.' },
+  fr: { subject: s => `L’assistance PollSlide t’a répondu : ${s}`, heading: 'Nous avons répondu à ta demande',
+        request: 'Ta demande', button: 'Répondre dans PollSlide',
+        note: 'Tu peux répondre directement dans PollSlide : le bouton ci-dessous ouvre cette conversation. Une réponse à cet e-mail nous parvient aussi.' },
+  pt: { subject: s => `O apoio PollSlide respondeu: ${s}`, heading: 'Respondemos ao seu pedido',
+        request: 'O seu pedido', button: 'Responder no PollSlide',
+        note: 'Pode responder diretamente no PollSlide: o botão abaixo abre esta conversa. Se responder a este e-mail, a mensagem também nos chega.' },
+  it: { subject: s => `Il supporto PollSlide ha risposto: ${s}`, heading: 'Abbiamo risposto alla tua richiesta',
+        request: 'La tua richiesta', button: 'Rispondi in PollSlide',
+        note: 'Puoi rispondere direttamente in PollSlide: il pulsante qui sotto apre questa conversazione. Anche una risposta a questa email ci arriva.' },
+};
+
 const TEMPLATES = {
+  /* Sent by admin.html replyTicket when the owner answers a support ticket. Until
+     2026-09-15 a reply went only to the in-app inbox, so a user who filed a ticket and
+     closed the tab was never told it had been answered.
+     Admin-only (NOT in USER_TYPES): its body is free text, so a user able to trigger it
+     could send anything from our domain. reply_to is help@pollslide.com so hitting Reply
+     in a mail app still reaches support rather than a no-reply dead end. */
+  ticket_reply: (data) => {
+    const lang = TICKET_REPLY_CHROME[data.lang] ? data.lang : 'en';
+    const c = TICKET_REPLY_CHROME[lang];
+    const subj = oneLine(data.subject) || c.request;
+    const reply = esc(data.reply).replace(/\r\n|\r|\n/g, '<br>');   // <br>, not pre-wrap: Outlook ignores white-space
+    const url = 'https://app.pollslide.com/presenter?support=' + encodeURIComponent(String(data.ticketId || ''));
+    return {
+      subject: c.subject(subj),
+      replyTo: 'help@pollslide.com',
+      html: baseLayout(esc(c.heading), `
+        <h1 style="font-size:22px;font-weight:800;margin:0 0 14px;color:#15152a;">${esc(c.heading)}</h1>
+        <p style="font-size:12px;color:#9090b8;margin:0 0 2px;text-transform:uppercase;letter-spacing:.05em;">${esc(c.request)}</p>
+        <p style="font-size:15px;font-weight:700;color:#15152a;margin:0 0 16px;">${esc(subj)}</p>
+        <div style="background:#f4f4fc;border-radius:10px;padding:14px 16px;font-size:15px;color:#15152a;line-height:1.6;border-left:3px solid ${BRAND_COLOR};margin:0 0 16px;">${reply}</div>
+        <p style="font-size:13px;color:#5a5a78;margin:0;">${esc(c.note)}</p>
+      `, url, esc(c.button), lang),
+    };
+  },
+
   // Sent by api/team.js when an owner/admin invites someone to a workspace.
   team_invite: (data) => ({
     subject: `${esc(data.invitedBy) || 'A teammate'} invited you to ${esc(data.wsName) || 'their team'} on PollSlide`,
@@ -289,7 +344,7 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: `Unknown email type "${type}".`, available_types: Object.keys(TEMPLATES) });
   }
 
-  const { subject, html } = templateFn(data || {});
+  const { subject, html, replyTo } = templateFn(data || {});
 
   try {
     const response = await fetch('https://api.resend.com/emails', {
@@ -298,12 +353,12 @@ module.exports = async function handler(req, res) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${RESEND_API_KEY}`,
       },
-      body: JSON.stringify({
+      body: JSON.stringify(Object.assign({
         from: FROM_EMAIL,
         to: [to],
         subject,
         html,
-      }),
+      }, replyTo ? { reply_to: replyTo } : {})),
     });
 
     const result = await response.json();
@@ -319,3 +374,9 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'Internal error sending email' });
   }
 };
+
+// For scripts/tests/tickets.test.js — the template and the authorization list are
+// asserted directly, not by reading this file as text.
+module.exports.TEMPLATES = TEMPLATES;
+module.exports.USER_TYPES = USER_TYPES;
+module.exports.TICKET_REPLY_CHROME = TICKET_REPLY_CHROME;

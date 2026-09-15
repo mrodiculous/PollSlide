@@ -34,9 +34,27 @@
       "tickets": {
         ".indexOn": [
           "status",
-          "createdAt"
+          "createdAt",
+          "lastUserReplyAt"
         ],
-        ".write": "auth != null"
+        ".write": "auth != null && auth.token.email == 'help@pollslide.com'",
+        "$ticketId": {
+          ".write": "auth != null && !data.exists() && $ticketId.matches(/^ticket_[0-9]+$/) && newData.child('uid').val() === auth.uid && newData.child('status').val() === 'open' && (newData.child('email').val() === auth.token.email || newData.child('email').val() === '') && !newData.child('replies').exists() && !newData.child('replied').exists() && !newData.child('awaiting').exists()",
+          "status": {
+            ".write": "auth != null && data.parent().child('uid').val() === auth.uid && newData.val() === 'open'"
+          },
+          "awaiting": {
+            ".write": "auth != null && data.parent().child('uid').val() === auth.uid && newData.val() === 'admin'"
+          },
+          "lastUserReplyAt": {
+            ".write": "auth != null && data.parent().child('uid').val() === auth.uid && newData.isNumber() && newData.val() <= now + 300000"
+          },
+          "replies": {
+            "$replyId": {
+              ".write": "auth != null && !data.exists() && data.parent().parent().child('uid').val() === auth.uid && newData.child('from').val() === 'user' && newData.child('text').isString() && newData.child('text').val().length > 0 && newData.child('text').val().length <= 5000 && !newData.child('by').exists() && !newData.child('emailedAt').exists() && !newData.child('emailError').exists()"
+            }
+          }
+        }
       },
       "deletion_requests": {
         "$uid": {

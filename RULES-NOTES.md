@@ -54,3 +54,40 @@ submission — see the comment in `answer.html`'s submit path.
 Deliberate. Both are legacy or server-only nodes; all real access goes through
 `users/$uid/presentations` and the Admin SDK. Leaving them explicitly denied is
 clearer than deleting them, which would look like an oversight.
+
+## `admin/tickets` — who may write a support ticket (2026-09-15)
+
+**Was** `".write": "auth != null"`: any signed-in account could rewrite any ticket —
+forge a reply `from: 'admin'`, mark someone else's ticket resolved, change the email a
+reply would be sent to — and Admin → Tickets rendered ticket text raw into `innerHTML`,
+inside the one session with write access to the whole database. The panel now escapes
+everything (see `tickets.js`); the rules now close the write side too.
+
+**Now:**
+
+| Who | May write |
+|---|---|
+| `help@pollslide.com` | everything under `admin/tickets` (granted at `tickets`, so it cascades) |
+| the user who filed it | **create** `admin/tickets/$ticketId` once — only if `$ticketId` is `ticket_<digits>`, `uid` is their own, `email` is their token's email (or empty), `status` is `open`, and it carries no `replies`, `replied` or `awaiting` |
+| the user who filed it | **append** `replies/$replyId` — a new key only, `from: 'user'`, non-empty `text` ≤ 5000 chars, no `by` / `emailedAt` / `emailError` |
+| the user who filed it | set `status` to `'open'` (a follow-up re-opens), `awaiting` to `'admin'`, `lastUserReplyAt` to a number |
+| anyone else | nothing |
+
+Everything else on a ticket — the original message, `uid`, `email`, `replied`, `status:
+'resolved'`, any admin reply — is the admin's alone. Deeper `.write` rules can only *add*
+permissions, so the admin grant sits at `tickets` and the user grants sit on the specific
+children; there is deliberately no `.validate` here, because `.validate` applies to the
+admin too and would block the fields only the admin writes.
+
+The user's own copy under `users/$uid/tickets` is unchanged (owner-writable, as the whole
+`users/$uid` subtree is). Forging an "admin" reply there fools only yourself: the admin
+panel reads `admin/tickets`.
+
+`lastUserReplyAt` is in `.indexOn` because `api/watchdog.js` queries on it to page the
+owner about follow-ups.
+
+Evaluated — not grepped — by `scripts/tests/tickets.test.js`, which simulates the cascade
+against these exact rule strings: ~35 allow/deny cases, and they fail against the old rule.
+**Publish by hand** (Firebase Console → Realtime Database → Rules) — until then the live
+database still has the old open rule, and a user follow-up works but so does everything
+above.

@@ -16,7 +16,8 @@
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=2e412f21"></script>
+<script src="/ui-lang.js?v=678cec8b"></script>
+<script src="/tickets.js?v=edb362ec"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root {
@@ -957,11 +958,21 @@
   </div>
 
   <!-- THREAD view -->
-  <div data-view="thread" style="flex:1;flex-direction:column;min-height:0;overflow-y:auto;padding:14px 16px;">
-    <button data-action="back-list-2" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:0;margin-bottom:10px;text-align:left;" data-i18n>← Back to requests</button>
-    <strong data-slot="thread-subj" style="font-size:14px;display:block;"></strong>
-    <span data-slot="thread-status" style="font-size:11px;color:var(--muted);"></span>
-    <div data-slot="thread-items" style="margin-top:12px;"></div>
+  <!-- The messages scroll; the reply box stays put underneath them. A user could read an
+       answer here and had no way to say "that didn't work" except opening a new ticket. -->
+  <div data-view="thread" style="flex:1;flex-direction:column;min-height:0;">
+    <div style="padding:14px 16px 0;flex-shrink:0;">
+      <button data-action="back-list-2" style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;padding:0;margin-bottom:10px;text-align:left;" data-i18n>← Back to requests</button>
+      <strong data-slot="thread-subj" style="font-size:14px;display:block;"></strong>
+      <span data-slot="thread-status" style="font-size:11px;color:var(--muted);"></span>
+    </div>
+    <div data-slot="thread-items" style="flex:1;min-height:0;overflow-y:auto;padding:12px 16px;"></div>
+    <div style="padding:10px 12px;border-top:1px solid var(--border);flex-shrink:0;">
+      <div data-slot="reply-hint" style="display:none;font-size:11px;color:var(--muted);margin-bottom:6px;" data-i18n>Replying reopens this request.</div>
+      <textarea data-slot="reply-msg" rows="2" maxlength="5000" placeholder="Reply to this request…" data-i18n-ph style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;resize:vertical;font-family:inherit;"></textarea>
+      <div data-slot="reply-err" style="display:none;color:var(--accent2);font-size:12px;margin-top:4px;line-height:1.4;"></div>
+      <button data-action="send-reply" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:6px;" data-i18n>Send reply</button>
+    </div>
   </div>
 </div>
 
@@ -1272,6 +1283,16 @@ const _isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
     } else if (upgrade === 'cancelled') {
       window.history.replaceState({}, '', window.location.pathname);
     }
+    /* ?support=<ticketId> — the "Reply in PollSlide" button in a ticket-reply email. Held
+       in sessionStorage like ?upgrade= above, because the thread lives under the user's
+       own uid and can only be opened once auth resolves (after a sign-in, if need be). */
+    const support = params.get('support');
+    if (support) {
+      sessionStorage.setItem('ps_open_support', support);
+      const rest = new URLSearchParams(window.location.search);
+      rest.delete('support');
+      window.history.replaceState({}, '', window.location.pathname + (rest.toString() ? '?' + rest.toString() : ''));
+    }
   } catch(e) {}
 })();
 
@@ -1320,6 +1341,14 @@ auth.onAuthStateChanged(user => {
           toast('⚡ ' + boughtCredits + ' Polly credits added — they never expire!', 'success');
           refreshCreditBadge();
         }, 1800);
+      }
+    } catch(e) {}
+    // Arrived from a ticket-reply email: open Support Chat on that conversation.
+    try {
+      const supportId = sessionStorage.getItem('ps_open_support');
+      if (supportId) {
+        sessionStorage.removeItem('ps_open_support');
+        if (PSTickets.validTicketId(supportId)) setTimeout(function() { openSupportThread(supportId); }, 900);
       }
     } catch(e) {}
     // Load the user's plan tier, then reconcile team membership (accept any pending
@@ -1446,6 +1475,7 @@ function showUpgradePrompt(headline, subtext) {
 
 let _chatView = 'list';
 let _chatTicketId = null;
+let _chatThreadTicket = null;   // the ticket the thread view last rendered (subject for the mailto fallback)
 
 function openSupportChat() {
   var old = document.getElementById('supportChatModal');
@@ -1476,12 +1506,25 @@ function openSupportChat() {
   panel.querySelector('[data-action="back-list-2"]').onclick = function(){ _chatView='list'; renderChatPanel(); };
   panel.querySelector('[data-action="cancel-new"]').onclick = function(){ _chatView='list'; renderChatPanel(); };
   panel.querySelector('[data-action="submit"]').onclick = submitChatTicket;
+  panel.querySelector('[data-action="send-reply"]').onclick = sendChatFollowUp;
+  panel.querySelector('[data-slot="reply-msg"]').addEventListener('keydown', function(e){
+    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); sendChatFollowUp(); }
+  });
 
   overlay.appendChild(panel);
   document.body.appendChild(overlay);
   renderChatPanel();
 }
 function openSupportTicket(){ openSupportChat(); } // legacy alias
+// Straight to one conversation — the target of the "Reply in PollSlide" button in a
+// ticket-reply email (?support=<ticketId>). An id that is not theirs finds no ticket under
+// users/<uid>/tickets and loadChatThread falls back to the list.
+function openSupportThread(ticketId) {
+  if (!PSTickets.validTicketId(ticketId)) { openSupportChat(); return; }
+  openSupportChat();
+  _chatTicketId = ticketId; _chatView = 'thread';
+  renderChatPanel();
+}
 
 function renderChatPanel() {
   var panel = document.getElementById('chatPanel');
@@ -1563,7 +1606,9 @@ async function submitChatTicket() {
   if (btn){btn.textContent='Submitting…';btn.disabled=true;}
   if (errEl) errEl.style.display='none';
   var ticketId='ticket_'+Date.now();
-  var data={uid:userId||'',email:currentUser?.email||'',subject:subj,message:msg,category:cat,status:'open',createdAt:Date.now(),replies:{}};
+  /* lang: the interface language they wrote in, so the reply email's wrapper can be in
+     it too. The support ticket that prompted this was written in French. */
+  var data={uid:userId||'',email:currentUser?.email||'',subject:subj,message:msg,category:cat,status:'open',createdAt:Date.now(),lang:UI_LANG,replies:{}};
   // Save to the user's OWN node first \u2014 that's the write they're guaranteed to own.
   // The admin mirror is best-effort so locked-down rules can't break submission.
   var saved=false;
@@ -1599,17 +1644,22 @@ async function loadChatThread() {
       statusEl.style.background = resolved?'rgba(67,233,123,.14)':'rgba(255,101,132,.12)';
       statusEl.style.color = resolved?'var(--accent3)':'var(--accent2)';
     }
+    _chatThreadTicket = t;
+    var youLbl = escapeHtml(tr('You')), supportLbl = escapeHtml(tr('PollSlide Support'));
     var bub = function(txt,ts,mine) {
       return '<div style="display:flex;flex-direction:column;align-items:'+(mine?'flex-end':'flex-start')+';margin-bottom:10px;">' +
-        '<div style="background:'+(mine?'var(--accent)':'var(--surface2)')+';color:'+(mine?'#fff':'var(--text)')+';padding:8px 11px;border-radius:'+(mine?'12px 12px 3px 12px':'12px 12px 12px 3px')+';font-size:12.5px;max-width:88%;line-height:1.5;'+(mine?'':'border:1px solid var(--border2);')+'">' + escapeHtml(txt) + '</div>' +
-        '<div style="font-size:10px;color:var(--muted);margin-top:3px;">'+(ts?timeAgo(ts):'')+(mine?' · You':' · PollSlide Support')+'</div></div>';
+        '<div style="background:'+(mine?'var(--accent)':'var(--surface2)')+';color:'+(mine?'#fff':'var(--text)')+';padding:8px 11px;border-radius:'+(mine?'12px 12px 3px 12px':'12px 12px 12px 3px')+';font-size:12.5px;max-width:88%;line-height:1.5;white-space:pre-wrap;word-break:break-word;'+(mine?'':'border:1px solid var(--border2);')+'">' + escapeHtml(txt) + '</div>' +
+        '<div style="font-size:10px;color:var(--muted);margin-top:3px;">'+(ts?timeAgo(ts):'')+' · '+(mine?youLbl:supportLbl)+'</div></div>';
     };
-    var html = bub(t.message, t.createdAt, true);
-    var replies = Object.values(t.replies||{}).sort(function(a,b){return (a.at||0)-(b.at||0);});
-    replies.forEach(function(r){ html+=bub(r.text,r.at,false); });
+    // Their own follow-ups sit on their side of the thread, in order with our answers.
+    var html = PSTickets.thread(t).map(function(e){ return bub(e.text, e.at, e.from==='user'); }).join('');
     if(resolved) html+='<div style="text-align:center;font-size:10px;color:var(--accent3);padding:6px;">✓ Resolved</div>';
     threadEl.innerHTML = html;
     threadEl.scrollTop = threadEl.scrollHeight;
+    var hintEl = panel.querySelector('[data-slot="reply-hint"]');
+    if (hintEl) hintEl.style.display = resolved ? 'block' : 'none';
+    var replyErr = panel.querySelector('[data-slot="reply-err"]');
+    if (replyErr) replyErr.style.display = 'none';
     db.ref('users/'+userId+'/inbox').once('value').then(function(is){
       if(!is.exists()) return;
       var upd={};
@@ -1617,6 +1667,40 @@ async function loadChatThread() {
       if(Object.keys(upd).length) db.ref('/').update(upd).catch(function(){});
     });
   } catch(e){ _chatView='list'; renderChatPanel(); }
+}
+
+/* A user answering back inside the same ticket. Written to their own copy FIRST — the write
+   they are guaranteed to own — then mirrored to admin/tickets, which the rules only accept
+   for a ticket that is theirs, as from:'user', re-opening it (see database-rules.json).
+   If the mirror is refused, the admin will never see this reply, so saying "sent" would be
+   a lie: hand off to their mail client instead, the same never-a-dead-end as submission. */
+async function sendChatFollowUp() {
+  var panel = document.getElementById('chatPanel');
+  var msgEl = panel && panel.querySelector('[data-slot="reply-msg"]');
+  var errEl = panel && panel.querySelector('[data-slot="reply-err"]');
+  var btn   = panel && panel.querySelector('[data-action="send-reply"]');
+  if (!msgEl || !_chatTicketId || !userId) return;
+  var showErr = function(m){ if(errEl){ errEl.textContent = m; errEl.style.display = 'block'; } };
+  var text = (msgEl.value || '').trim();
+  if (!text) { showErr(tr('Write a reply first.')); return; }
+  if (errEl) errEl.style.display = 'none';
+  var ticketId = _chatTicketId;
+  var w;
+  try { w = PSTickets.followUpWrites(userId, ticketId, text, Date.now()); }
+  catch (e) { showErr(tr('Could not send your reply. Check your connection and try again.')); return; }
+  if (btn) { btn.disabled = true; btn.textContent = tr('Sending…'); }
+  var restoreBtn = function(){ if (btn) { btn.disabled = false; btn.textContent = tr('Send reply'); } };
+  try { await db.ref('/').update(w.user); }
+  catch (e) { restoreBtn(); showErr(tr('Could not send your reply. Check your connection and try again.')); return; }
+  var mirrored = true;
+  try { await db.ref('/').update(w.admin); } catch (e) { mirrored = false; }
+  msgEl.value = '';
+  restoreBtn();
+  if (_chatTicketId === ticketId && _chatView === 'thread') await loadChatThread();
+  if (mirrored) { toast(tr('Reply sent — support will see it.'), 'success'); return; }
+  var subj = (_chatThreadTicket && _chatThreadTicket.subject) || '';
+  showErr(tr('Your reply is saved here, but it did not reach support. Opening your email app so you can send it to help@pollslide.com…'));
+  window.location.href = 'mailto:help@pollslide.com?subject=' + encodeURIComponent('Re: ' + subj + ' [' + ticketId + ']') + '&body=' + encodeURIComponent(text);
 }
 
 
@@ -2230,17 +2314,41 @@ function showPairingCodeModal(code) {
   overlay.style.cssText = 'position:fixed;inset:0;z-index:100001;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;padding:20px;';
   overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
 
+  /* WHERE THE CODE GOES, at the one moment the user is holding it. The old line — "Enter
+     this code in the PollSlide Companion app on your Mac" — produced a French support ticket
+     that said, in effect, "I have the code and I cannot find where to type it". The window
+     it goes into is called "Connect to PollSlide" — and per applicationDidFinishLaunching in
+     PollSlideCompanionApp.swift, it does NOT open on its own, on first launch or ever; an
+     earlier version of this modal claimed it did, which would have recreated exactly the
+     ticket it was written to prevent. The only way to it is the menu-bar item
+     "Show / Hide Poll Window" (verified against Rod's own screenshots of the shipped app,
+     2026-09-15). There is NO "Connect Account" menu item — every label below is checked
+     against the shipped app (v1.3.4 build 10). The Mac app is English-only, so those labels
+     stay English, in quotes, inside every translation: that is literally what is on screen. */
+  const t = (s) => escapeHtml(tr(s));
+  const step = (n, html) =>
+    `<li style="display:flex;gap:9px;align-items:flex-start;margin-bottom:8px;">
+       <span style="flex-shrink:0;width:19px;height:19px;border-radius:50%;background:var(--accent);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:1px;">${n}</span>
+       <span>${html}</span></li>`;
   overlay.innerHTML = `
-    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:30px;max-width:380px;width:100%;text-align:center;">
-      <div style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;margin-bottom:8px;">Connect Mac App</div>
-      <p style="color:var(--muted);font-size:13px;margin-bottom:20px;">Enter this code in the PollSlide Companion app on your Mac.</p>
-      <div style="display:flex;align-items:center;gap:10px;justify-content:center;margin-bottom:8px;">
-        <div id="pairCodeText" style="font-family:Syne,sans-serif;font-size:34px;font-weight:800;letter-spacing:0.15em;color:var(--accent);background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:14px 22px;">${code}</div>
-        <button onclick="copyPairCode('${code}')" id="copyPairBtn" title="Copy code" style="background:var(--accent);border:none;border-radius:10px;width:48px;height:48px;cursor:pointer;color:#fff;font-size:18px;">📋</button>
+    <div style="background:var(--surface);border:1px solid var(--border2);border-radius:16px;padding:24px 20px 20px;max-width:400px;width:100%;box-sizing:border-box;text-align:center;max-height:calc(100vh - 40px);overflow-y:auto;overflow-x:hidden;">
+      <div style="font-family:Syne,sans-serif;font-size:18px;font-weight:800;margin-bottom:14px;">${t('Connect Mac App')}</div>
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;justify-content:center;margin-bottom:6px;">
+        <div id="pairCodeText" style="font-family:Syne,sans-serif;font-size:clamp(22px,7vw,34px);font-weight:800;letter-spacing:0.15em;color:var(--accent);background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:12px 16px;">${code}</div>
+        <button onclick="copyPairCode('${code}')" id="copyPairBtn" title="${t('Copy code')}" style="flex-shrink:0;background:var(--accent);border:none;border-radius:10px;width:48px;height:48px;cursor:pointer;color:#fff;font-size:18px;">📋</button>
       </div>
-      <p id="pairCopiedMsg" style="color:var(--accent3);font-size:12px;height:16px;margin-bottom:16px;">✓ Copied to clipboard</p>
-      <p style="color:var(--muted);font-size:12px;margin-bottom:18px;">Expires in 10 minutes · single use</p>
-      <button onclick="document.getElementById('pairCodeModal').remove()" style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-family:Syne,sans-serif;font-weight:700;font-size:14px;cursor:pointer;">Done</button>
+      <p id="pairCopiedMsg" style="color:var(--accent3);font-size:12px;min-height:16px;margin-bottom:4px;">${t('✓ Copied to clipboard')}</p>
+      <p style="color:var(--muted);font-size:12px;margin-bottom:16px;">${t('Expires in 10 minutes · single use')}</p>
+      <div style="text-align:left;background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:13px 14px 6px;margin-bottom:12px;font-size:12.5px;line-height:1.5;color:var(--text);">
+        <div style="font-weight:700;margin-bottom:9px;">${t('On your Mac:')}</div>
+        <ol style="list-style:none;margin:0;padding:0;">
+          ${step(1, t('Open PollSlide Companion if it isn\'t already running.') +
+             `<div style="color:var(--muted);font-size:11.5px;margin-top:3px;">${t('Nothing opens by itself: in the menu bar (top right of your screen), click the bar-chart icon, then "Show / Hide Poll Window" — that opens the "Connect to PollSlide" window.')}</div>`)}
+          ${step(2, t('Type this code into the "Enter code" field and click "Connect".'))}
+        </ol>
+      </div>
+      <a href="https://pollslide.com/download" target="_blank" rel="noopener" style="display:block;font-size:12px;color:var(--accent);margin-bottom:16px;text-decoration:none;">${t('Don\'t have the app yet? Download PollSlide Companion →')}</a>
+      <button onclick="document.getElementById('pairCodeModal').remove()" style="width:100%;padding:11px;border-radius:10px;border:1px solid var(--border2);background:var(--surface2);color:var(--text);font-family:Syne,sans-serif;font-weight:700;font-size:14px;cursor:pointer;">${t('Done')}</button>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -2250,10 +2358,10 @@ async function copyPairCode(code) {
   try {
     await navigator.clipboard.writeText(code);
     const msg = document.getElementById('pairCopiedMsg');
-    if (msg) { msg.textContent = '✓ Copied to clipboard'; msg.style.opacity = '1'; }
+    if (msg) { msg.textContent = tr('✓ Copied to clipboard'); msg.style.opacity = '1'; }
   } catch(e) {
     const msg = document.getElementById('pairCopiedMsg');
-    if (msg) { msg.textContent = 'Press Cmd+C to copy'; }
+    if (msg) { msg.textContent = tr('Press Cmd+C to copy'); }
   }
 }
 

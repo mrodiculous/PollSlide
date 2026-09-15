@@ -23,6 +23,7 @@ const {
 const { setUserTier } = require('../lib/tier');
 const { tierForSubscription } = require('../lib/stripe-tier');
 const { verifyToken, tokenFrom, ADMIN_EMAILS } = require('../lib/quota');
+const { followUpsSince } = require('../lib/tickets');
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com';
 const ALERT_TO = process.env.OPS_ALERT_EMAIL || 'help@pollslide.com';
@@ -429,6 +430,29 @@ async function notifyNewTickets(db, sinceMs) {
   return fresh.length;
 }
 
+/* A user answering back inside an existing ticket is the same event as a new ticket —
+ * somebody is waiting on us — and before 2026-09-15 it could not happen at all, so nothing
+ * here looked for it. Same discipline as above: one email per follow-up, on the run after
+ * it lands (lastUserReplyAt is newer than the last run), never again for the same one.
+ * The filtering — skip tickets the new-ticket email already covers, skip ones the admin
+ * already answered before this run — is lib/tickets.js followUpsSince, where it is tested. */
+async function notifyFollowUps(db, sinceMs) {
+  const snap = await db.ref('admin/tickets').orderByChild('lastUserReplyAt').startAt(sinceMs + 1).get();
+  const tickets = {};
+  snap.forEach(s => { tickets[s.key] = s.val(); });
+  const fresh = followUpsSince(tickets, sinceMs);
+  if (!fresh.length) return 0;
+  const list = fresh.map(f =>
+    `<li><b>${esc(f.subject || 'Support request')}</b> — ${esc(f.email || 'unknown sender')}<br>
+     <span style="color:#666;">${esc(String(f.text || '').slice(0, 220))}</span></li>`).join('');
+  await sendAlert(
+    `💬 ${fresh.length} support ticket follow-up${fresh.length > 1 ? 's' : ''} waiting on you`,
+    'A user replied to their ticket',
+    `<ul>${list}</ul><p>Answer from <a href="${APP_URL}/admin.html">Admin → Support tickets</a>.</p>`
+  );
+  return fresh.length;
+}
+
 /* ── Runner ─────────────────────────────────────────────────────────────────── */
 async function runAll(db, trigger) {
   const now = Date.now();
@@ -505,6 +529,8 @@ async function runAll(db, trigger) {
 
   let newTickets = 0;
   try { newTickets = await notifyNewTickets(db, state.lastRunAt || (now - 3600000)); } catch (e) {}
+  let followUps = 0;
+  try { followUps = await notifyFollowUps(db, state.lastRunAt || (now - 3600000)); } catch (e) {}
 
   await db.ref('admin/watchdog/state').set({
     lastRunAt: now, trigger,
@@ -522,7 +548,7 @@ async function runAll(db, trigger) {
     }
   } catch (e) { /* trimming is housekeeping, never fatal */ }
 
-  return { ranAt: now, trigger, newTickets, checks: out };
+  return { ranAt: now, trigger, newTickets, followUps, checks: out };
 }
 
 module.exports = async (req, res) => {

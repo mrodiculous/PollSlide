@@ -206,12 +206,27 @@ const dict = (gw.PS_I18N && gw.PS_I18N.es) || {};
 const dec = (s) => s.replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#39;/g, "'")
                     .replace(/&quot;/g, '"').trim();
 /* Scripts and styles are code, not copy — translating a JS template literal corrupts
-   the page. Curated data-i18n-html blocks carry their own dictionary. */
+   the page. Curated data-i18n-html blocks carry their own dictionary.
+   data-i18n-skip is the third case, added 2026-09-15: the runtime walker
+   (isCuratedOrSkipped in i18n.js) treats it as "leave this text exactly as written" — the
+   Mac Companion's own on-screen labels ("Connect to PollSlide", "Enter code", the SVG
+   mockups of its menu), which are correct to stay English because that is literally what
+   is drawn on the user's screen. This regex-based auditor didn't know the attribute
+   existed, so 42 deliberately-skipped strings across download/help/integrations/setup.html
+   read as a "coverage regression" the moment they were added — the exact failure mode this
+   file's own header already lists twice, just for a third element attribute. */
 const clean = (h) => h
   .replace(/<script[\s\S]*?<\/script>/gi, '')
   .replace(/<style[\s\S]*?<\/style>/gi, '')
   .replace(/<!--[\s\S]*?-->/g, '')
-  .replace(/<([a-z0-9]+)\b[^>]*data-i18n-html="[^"]*"[^>]*>[\s\S]*?<\/\1>/g, '');
+  .replace(/<([a-z0-9]+)\b[^>]*data-i18n-html="[^"]*"[^>]*>[\s\S]*?<\/\1>/g, '')
+  /* Replaced with an empty comment, not deleted outright: deleting
+     "<strong data-i18n-skip>X</strong>" outright joins the plain-text sibling BEFORE it to
+     the one AFTER it into one fused run (their only separator was the `>`/`<` this element
+     carried), so "…click the ", then "…That opens the " merged into one string that matches
+     no dictionary key and read as a giant new gap. The empty comment keeps a `>` on one side
+     and a `<` on the other, so each sibling is still cut where i18n.js actually cuts it. */
+  .replace(/<([a-z0-9]+)\b[^>]*\bdata-i18n-skip\b[^>]*>[\s\S]*?<\/\1>/gi, '<!---->');
 
 /* EVERY text node, not just the first run after an opening tag.
    The earlier version matched `<p ...>text<` — which sees the text that starts a tag and
@@ -221,6 +236,26 @@ const clean = (h) => h
    scored 100% while 58 English nodes were visibly on screen. i18n.js translates text
    NODES at runtime, so the audit has to look at exactly the same units. */
 const textNodes = (html) => [...clean(html).matchAll(/>([^<]+)</g)].map(m => dec(m[1]));
+
+/* Self-check, run every time this file runs: a skip element between two real text siblings
+   must not fuse them into one string, and its own (English, deliberately untranslated)
+   content must not appear as a fragment. This is exactly the shape that broke on
+   2026-09-15 — asserted here so the fix can't quietly regress the next time this function
+   is touched, the way the two fixes before it (see the header) were only caught by hand. */
+(function selfCheckSkip() {
+  const sample = '<p>click the <b>bar-chart icon</b>, then <b data-i18n-skip>"Show / Hide Poll Window"</b>. That opens it.</p>';
+  const got = textNodes(sample);
+  const bad = [];
+  // dec() trims each node, same as the real extraction — expect the trimmed form here too.
+  if (!got.includes(', then')) bad.push('sibling BEFORE the skip element was not kept as its own node: ' + JSON.stringify(got));
+  if (!got.includes('. That opens it.')) bad.push('sibling AFTER the skip element was fused with what precedes it: ' + JSON.stringify(got));
+  if (got.some(x => x.includes('Show / Hide Poll Window'))) bad.push('skipped text leaked into a reported node');
+  if (bad.length) {
+    console.error('\n  qa-i18n.js internal self-check failed — the extractor itself is broken:');
+    bad.forEach(b => console.error('    ✗ ' + b));
+    process.exit(2);
+  }
+})();
 
 const coverage = {};
 let sitePages = 0;

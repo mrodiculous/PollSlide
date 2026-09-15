@@ -6,6 +6,7 @@
 <title>PollSlide Admin — PollSlide Technologies LLC</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="/errors.js?v=25c25f5f"></script>
+<script src="/tickets.js?v=edb362ec"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
@@ -1215,12 +1216,25 @@ async function addNote(uid){
 }
 
 // ─── TICKETS ──────────────────────────────────────────────────────────────────
+/* What a conversation IS — its order, who spoke last, whether a reply was emailed — is
+   PSTickets in /tickets.js, shared with the Support Chat and the watchdog. This panel used
+   to have its own idea, and its idea was "the first message": openTicket never rendered
+   t.replies, so every answer was written without seeing what had already been said. It
+   also put the ticket's own text straight into innerHTML, in the one session with write
+   access to the whole database — anything a user typed is escaped below, and ticket ids
+   travel in data- attributes, never inside an onclick string. */
+const TICKET_LANGS={en:'English',es:'Español',de:'Deutsch',fr:'Français',pt:'Português',it:'Italiano'};
+let _openTicketId=null;
+// The ticket's own email is checked by the rules against the signed-in account that filed it;
+// the users index is the fallback for tickets older than that rule.
+function ticketEmailTo(t){return (t&&t.email)||((allUsers[t&&t.uid]||{}).email)||'';}
+
 function watchOpenTickets(){
   // Read all tickets and filter client-side to avoid indexOn requirements
   db.ref('admin/tickets').on('value', snap => {
     openTicketCount = 0;
     if (snap.exists()) {
-      Object.values(snap.val()).forEach(t => { if (t.status === 'open' || !t.status) openTicketCount++; });
+      Object.values(snap.val()).forEach(t => { if (PSTickets.isOpen(t)) openTicketCount++; });
     }
     const badge = document.getElementById('ticketBadge');
     if (badge) {
@@ -1235,65 +1249,160 @@ async function renderTickets(){
   try{
     // Simple get — filter and sort client-side to avoid Firebase index requirements
     const snap=await db.ref('admin/tickets').get();
-    const tickets=snap.exists()?Object.entries(snap.val()).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0)):[];
-    const open=tickets.filter(([,t])=>t.status==='open');
-    const done=tickets.filter(([,t])=>t.status!=='open');
+    const T=PSTickets;
+    const tickets=snap.exists()?Object.entries(snap.val()).filter(([,t])=>t&&typeof t==='object'):[];
+    // Waiting on us first, then whatever moved most recently — a follow-up on an old
+    // ticket must not sit at the bottom under its original createdAt.
+    const byActivity=(a,b)=>T.lastActivity(b[1])-T.lastActivity(a[1]);
+    const open=tickets.filter(([,t])=>T.isOpen(t)).sort((a,b)=>(T.needsResponse(b[1])-T.needsResponse(a[1]))||byActivity(a,b));
+    const done=tickets.filter(([,t])=>!T.isOpen(t)).sort(byActivity);
+    const waiting=open.filter(([,t])=>T.needsResponse(t)).length;
+    const row=([id,t])=>{
+      const resolved=!T.isOpen(t), needs=T.needsResponse(t), c=T.replyCounts(t), last=T.lastActivity(t);
+      const from=(allUsers[t.uid]||{}).email||t.email||'Unknown';
+      return `<div data-ticket-id="${esc(id)}" style="padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;${needs?'box-shadow:inset 3px 0 0 var(--accent2);':''}">
+        <div style="display:flex;justify-content:space-between;gap:8px;"><span style="font-weight:500;font-size:13px;${resolved?'color:var(--muted);':''}">${esc(t.subject||'(no subject)')}</span>
+          <span style="display:flex;gap:5px;flex-shrink:0;">${needs?'<span class="pill pill-danger" title="The user spoke last">needs reply</span>':''}<span class="pill ${resolved?'pill-resolved':'pill-open'}">${resolved?'resolved':'open'}</span></span></div>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(from)} · 💬 ${c.total} repl${c.total===1?'y':'ies'}${c.user?` (${c.user} from user)`:''} · ${last?timeAgo(last):'—'}</div>
+      </div>`;
+    };
     document.getElementById('content').innerHTML=`
     <div class="card">
-      <div class="card-hd"><h2>Open (${open.length})</h2></div>
-      ${open.length?open.map(([id,t])=>`<div style="padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="openTicket('${id}')">
-        <div style="display:flex;justify-content:space-between;"><span style="font-weight:500;font-size:13px;">${t.subject||'(no subject)'}</span><span class="pill pill-open">open</span></div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px;">${(allUsers[t.uid]||{}).email||t.email||'Unknown'} · ${t.createdAt?timeAgo(t.createdAt):'—'}</div>
-      </div>`).join(''):'<div class="empty">No open tickets 🎉</div>'}
+      <div class="card-hd"><h2>Open (${open.length})${waiting?` · <span style="color:var(--accent2);">${waiting} waiting on you</span>`:''}</h2></div>
+      ${open.length?open.map(row).join(''):'<div class="empty">No open tickets 🎉</div>'}
     </div>
     <div class="card">
       <div class="card-hd"><h2>Resolved (${done.length})</h2></div>
-      ${done.length?done.slice(0,20).map(([id,t])=>`<div style="padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;" onclick="openTicket('${id}')">
-        <div style="display:flex;justify-content:space-between;"><span style="font-weight:500;font-size:13px;color:var(--muted);">${t.subject||'(no subject)'}</span><span class="pill pill-resolved">resolved</span></div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px;">${(allUsers[t.uid]||{}).email||'—'}</div>
-      </div>`).join(''):'<div class="empty">None resolved yet.</div>'}
+      ${done.length?done.slice(0,20).map(row).join(''):'<div class="empty">None resolved yet.</div>'}
     </div>`;
+    document.querySelectorAll('#content [data-ticket-id]').forEach(el=>el.addEventListener('click',()=>openTicket(el.dataset.ticketId)));
   }catch(e){document.getElementById('content').innerHTML='<div class="empty" style="color:var(--accent2);">Could not load tickets.</div>';}
 }
 function openTicket(id){
-  db.ref(`admin/tickets/${id}`).get().then(snap=>{
-    if(!snap.exists())return;const t=snap.val();
+  _openTicketId=id;
+  return db.ref(`admin/tickets/${id}`).get().then(snap=>{
+    if(!snap.exists()||_openTicketId!==id)return;   // a later click wins
+    const t=snap.val(), T=PSTickets;
     const userEmail=(allUsers[t.uid]||{}).email||t.email||t.uid||'Unknown';
+    const sendTo=ticketEmailTo(t), lang=T.emailLang(t), resolved=!T.isOpen(t), needs=T.needsResponse(t), c=T.replyCounts(t);
     document.getElementById('dpTitle').textContent=t.subject||'Ticket';
     document.getElementById('dpBody').innerHTML=`
     <div class="dp-sec"><h3>Details</h3>
-      <div class="dp-row"><span class="lbl">From</span><span>${userEmail}</span></div>
-      <div class="dp-row"><span class="lbl">Status</span><span class="pill ${t.status==='resolved'?'pill-resolved':'pill-open'}">${t.status||'open'}</span></div>
+      <div class="dp-row"><span class="lbl">From</span><span>${esc(userEmail)}</span></div>
+      <div class="dp-row"><span class="lbl">Status</span><span>${needs?'<span class="pill pill-danger">needs reply</span> ':''}<span class="pill ${resolved?'pill-resolved':'pill-open'}">${resolved?'resolved':'open'}</span></span></div>
+      <div class="dp-row"><span class="lbl">Category</span><span>${esc(t.category||'general')}</span></div>
+      <div class="dp-row"><span class="lbl">Language</span><span>${t.lang?esc(TICKET_LANGS[t.lang]||t.lang):'<span style="color:var(--muted);">not recorded</span>'}</span></div>
       <div class="dp-row"><span class="lbl">Submitted</span><span>${t.createdAt?new Date(t.createdAt).toLocaleString():'—'}</span></div>
     </div>
-    <div class="dp-sec"><h3>Message</h3><div style="background:var(--surface2);border-radius:8px;padding:10px;font-size:13px;line-height:1.6;">${t.message||'(empty)'}</div></div>
+    <div class="dp-sec"><h3>Conversation · ${c.total} repl${c.total===1?'y':'ies'}</h3>
+      <div id="ticketThread" style="display:flex;flex-direction:column;gap:8px;">${T.threadHtml(t)}</div>
+    </div>
     <div class="dp-sec"><h3>Reply</h3>
-      <textarea id="ticketReply" placeholder="Reply sent as in-app notification…"></textarea>
+      <textarea id="ticketReply" placeholder="Shown in their Support Chat and emailed to them…"></textarea>
+      <div style="display:flex;gap:7px;align-items:center;margin-top:7px;font-size:11px;color:var(--muted);">
+        <span style="flex-shrink:0;">Email language</span>
+        <select id="ticketReplyLang" style="flex:1;">${Object.entries(TICKET_LANGS).map(([k,n])=>`<option value="${k}"${k===lang?' selected':''}>${n}</option>`).join('')}</select>
+      </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5;">${sendTo
+        ?`Email goes to <b style="color:var(--text);">${esc(sendTo)}</b>${t.lang?'':' · this ticket has no recorded language — check the one above'}. Only the wrapper is translated; your text goes as written.`
+        :'<span style="color:var(--accent2);">This ticket has no email address — the reply will only appear in their Support Chat.</span>'}</div>
       <div style="display:flex;gap:7px;margin-top:7px;">
-        <button class="btn btn-sm btn-purple" style="flex:1;" onclick="replyTicket('${id}','${t.uid||''}')">Send reply</button>
-        <button class="btn btn-sm btn-green" onclick="resolveTicket('${id}')">✓ Resolve</button>
+        <button class="btn btn-sm btn-purple" id="ticketReplyBtn" style="flex:1;" onclick="replyTicket()">Send reply</button>
+        ${resolved?'<button class="btn btn-sm btn-ghost" onclick="reopenTicket()">↺ Reopen</button>':'<button class="btn btn-sm btn-green" onclick="resolveTicket()">✓ Resolve</button>'}
       </div>
     </div>`;
+    document.querySelectorAll('#ticketThread [data-retry-reply]').forEach(b=>b.addEventListener('click',()=>retryTicketEmail(id,b.dataset.retryReply)));
     document.getElementById('detailPanel').classList.add('open');
   });
 }
-async function replyTicket(ticketId,uid){
-  const text=document.getElementById('ticketReply')?.value?.trim();if(!text){toast('Write a reply first.','danger');return;}
-  const msgId='msg_'+Date.now();
-  const replyTs = Date.now();
-  // 1. Log in admin messages
-  await db.ref(`admin/messages/${msgId}`).set({uid,text,type:'info',sentAt:replyTs,sentBy:currentAdminEmail,ticketId});
-  // 2. Write to user inbox (shows as notification)
-  if(uid) await db.ref(`users/${uid}/inbox/${msgId}`).set({text,type:'info',sentAt:replyTs,read:false,ticketId});
-  // 3. Write reply to both admin ticket AND user ticket (so Support Chat thread shows it)
-  const replyData = {text, at:replyTs, from:'admin', by:currentAdminEmail};
-  await db.ref(`admin/tickets/${ticketId}/replies/${replyTs}`).set(replyData);
-  if(uid) await db.ref(`users/${uid}/tickets/${ticketId}/replies/${replyTs}`).set(replyData);
-  // 4. Mark ticket as replied
-  await db.ref(`admin/tickets/${ticketId}/replied`).set(true);
-  document.getElementById('ticketReply').value='';toast('Reply sent.','success');
+/* Emails one admin reply and RECORDS the outcome on that reply — emailedAt, or emailError —
+   so the thread shows what actually happened after the toast has gone. The panel said
+   "Reply sent." for years while no email existed at all; the one thing this must never do
+   again is report a delivery it cannot vouch for. */
+async function sendTicketReplyEmail(ticketId,t,text,lang,replyKey){
+  const to=ticketEmailTo(t);
+  let out;
+  if(!to) out={ok:false,error:'this ticket has no email address'};
+  else{
+    try{
+      if(!auth.currentUser) throw new Error('not signed in');
+      // The endpoint checks this token's email is in ADMIN_EMAILS; ticket_reply is server/admin-only.
+      const tok=await auth.currentUser.getIdToken();
+      const r=await fetch('/api/send-email',{method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},
+        body:JSON.stringify({type:'ticket_reply',to,data:{subject:t.subject||'',reply:text,ticketId,lang}})});
+      const d=await r.json().catch(()=>({}));
+      out=r.ok?{ok:true}:{ok:false,error:(d.error||('HTTP '+r.status))+(d.detail&&d.detail.message?' — '+d.detail.message:'')};
+    }catch(e){ out={ok:false,error:e.message||'network error'}; }
+  }
+  const rec=out.ok?{emailedAt:Date.now(),emailTo:to,emailLang:lang,emailError:null}
+                  :{emailError:String(out.error).slice(0,300),emailLang:lang};
+  try{ await db.ref(`admin/tickets/${ticketId}/replies/${replyKey}`).update(rec); }
+  catch(e){ out.error=(out.error?out.error+'; ':'')+'and the outcome could not be recorded: '+e.message; }
+  return out;
 }
-async function resolveTicket(id){await db.ref(`admin/tickets/${id}/status`).set('resolved');closeDetail();toast('Resolved.','success');}
+async function replyTicket(ticketId){
+  ticketId=ticketId||_openTicketId; if(!ticketId)return;
+  const text=document.getElementById('ticketReply')?.value?.trim();if(!text){toast('Write a reply first.','danger');return;}
+  const lang=document.getElementById('ticketReplyLang')?.value||'en';
+  const btn=document.getElementById('ticketReplyBtn'); if(btn){btn.disabled=true;btn.textContent='Sending…';}
+  let t, replyTs;
+  try{
+    // Re-read rather than trusting what the panel rendered: uid and email come from the stored ticket.
+    t=(await db.ref(`admin/tickets/${ticketId}`).get()).val();
+    if(!t) throw new Error('ticket not found');
+    const uid=t.uid||'';
+    replyTs=Date.now(); const msgId='msg_'+replyTs;
+    // 1. Log in admin messages
+    await db.ref(`admin/messages/${msgId}`).set({uid,text,type:'info',sentAt:replyTs,sentBy:currentAdminEmail,ticketId});
+    // 2. Write to user inbox (shows as notification)
+    if(uid) await db.ref(`users/${uid}/inbox/${msgId}`).set({text,type:'info',sentAt:replyTs,read:false,ticketId});
+    // 3. Write reply to both admin ticket AND user ticket (so Support Chat thread shows it)
+    const replyData = {text, at:replyTs, from:'admin', by:currentAdminEmail};
+    await db.ref(`admin/tickets/${ticketId}/replies/${replyTs}`).set(replyData);
+    if(uid) await db.ref(`users/${uid}/tickets/${ticketId}/replies/${replyTs}`).set(replyData);
+    // 4. Mark ticket as replied — and no longer waiting on us
+    await db.ref(`admin/tickets/${ticketId}`).update({replied:true,awaiting:'user',lastAdminReplyAt:replyTs});
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent='Send reply';}
+    toast('Reply NOT sent: '+e.message,'danger'); return;
+  }
+  // 5. Email them. The reply is already saved, so a failed email is reported, never rolled back.
+  const out=await sendTicketReplyEmail(ticketId,t,text,lang,replyTs);
+  const ta=document.getElementById('ticketReply'); if(ta&&_openTicketId===ticketId) ta.value='';
+  if(out.ok) toast('Reply sent · user emailed','success');
+  else toast('Reply saved, but the email failed: '+out.error,'danger');
+  // Re-render so the thread shows exactly what went out, and whether the email did.
+  if(_openTicketId===ticketId) openTicket(ticketId);
+}
+async function retryTicketEmail(ticketId,replyKey){
+  const t=(await db.ref(`admin/tickets/${ticketId}`).get()).val();
+  const r=t&&t.replies&&t.replies[replyKey];
+  if(!r||r.from==='user'){toast('That reply no longer exists.','danger');return;}
+  const lang=document.getElementById('ticketReplyLang')?.value||r.emailLang||PSTickets.emailLang(t);
+  const out=await sendTicketReplyEmail(ticketId,t,r.text||'',lang,replyKey);
+  toast(out.ok?'Email sent':'The email failed again: '+out.error,out.ok?'success':'danger');
+  if(_openTicketId===ticketId) openTicket(ticketId);
+}
+/* Status is mirrored onto the user's copy: their Support Chat reads that copy, and without
+   the mirror a resolved ticket stayed "Open" on their side forever. */
+async function setTicketStatus(id,status){
+  const t=(await db.ref(`admin/tickets/${id}`).get()).val()||{};
+  await db.ref(`admin/tickets/${id}/status`).set(status);
+  // Only onto a copy that exists: a set on a deleted account's path would recreate a stub user.
+  if(t.uid){ try{ if((await db.ref(`users/${t.uid}/tickets/${id}/createdAt`).get()).exists())
+    await db.ref(`users/${t.uid}/tickets/${id}/status`).set(status); }catch(e){} }
+}
+async function resolveTicket(id){
+  id=id||_openTicketId; if(!id)return;
+  try{await setTicketStatus(id,'resolved');closeDetail();toast('Resolved.','success');}
+  catch(e){toast('Could not resolve: '+e.message,'danger');}
+}
+async function reopenTicket(id){
+  id=id||_openTicketId; if(!id)return;
+  try{await setTicketStatus(id,'open');toast('Reopened.','success');openTicket(id);}
+  catch(e){toast('Could not reopen: '+e.message,'danger');}
+}
 
 // ─── COMMUNICATION ────────────────────────────────────────────────────────────
 function renderComms(){
@@ -2691,7 +2800,7 @@ async function runAutopilot(){
     const d=await r.json();
     if(!r.ok) throw new Error(d.error||('HTTP '+r.status));
     const healed=d.checks.filter(c=>c.selfHealed).length, broke=d.checks.filter(c=>c.status==='open').length;
-    alert(`Auto-pilot finished.\n\n${d.checks.length} checks run\n${healed} fixed automatically\n${broke} need you\n${d.newTickets||0} new support ticket(s) notified`);
+    alert(`Auto-pilot finished.\n\n${d.checks.length} checks run\n${healed} fixed automatically\n${broke} need you\n${d.newTickets||0} new support ticket(s) notified\n${d.followUps||0} ticket follow-up(s) notified`);
     loadAutopilot();
   }catch(e){ alert('Could not run Auto-pilot: '+e.message); }
   finally{ b.disabled=false; b.textContent=old; }

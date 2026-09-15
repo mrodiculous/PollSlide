@@ -393,7 +393,11 @@ function showWaiting(msg) {
 
 // ── Boot ──
 function boot() {
-  if (!userId) { showWaiting('No account linked. Re-pair the Mac app.'); return; }
+  /* Names the real way back, not just "re-pair". Checked against the shipped app
+     (v1.3.4 build 10): the menu item is "Disconnect Account (Re-pair)" and it returns to the
+     "Connect to PollSlide" window. There is no "Connect Account" item. English on purpose —
+     this page runs inside the Mac app, whose labels are English. */
+  if (!userId) { showWaiting('No account linked. Click the bar-chart icon in the menu bar (top right) → “Disconnect Account (Re-pair)”, then type a new code from app.pollslide.com/presenter (your email, top right → Connect Mac App) into the “Connect to PollSlide” window.'); return; }
   if (targetSession && targetQIndex !== null) {
     // QR-driven mode: show exactly the question the scanned QR points to
     showTargetedQuestion(targetSession, targetQIndex);
