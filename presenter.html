@@ -16,7 +16,7 @@
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=678cec8b"></script>
+<script src="/ui-lang.js?v=02d1bd21"></script>
 <script src="/tickets.js?v=edb362ec"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -1160,6 +1160,11 @@ const TIERS = {
   pro:        { name: 'Pro',        maxPresentations: Infinity, maxParticipants: Infinity, maxMembers: 1,  aiMonthly: 20  },
   team_small: { name: 'Team Small', maxPresentations: Infinity, maxParticipants: Infinity, maxMembers: 5,  aiMonthly: 100 },
   team_large: { name: 'Team Large', maxPresentations: Infinity, maxParticipants: Infinity, maxMembers: 25, aiMonthly: 300 },
+  // Admin-assigned only (admin.html "Change plan" → Enterprise) once a deal closes via
+  // the Contact-us lead in the picker below — never reached through checkout, so there
+  // is no price here to drift against. Limits are deliberately generous defaults; the
+  // real ceiling, if any, is whatever was actually negotiated.
+  enterprise: { name: 'Enterprise', maxPresentations: Infinity, maxParticipants: Infinity, maxMembers: Infinity, aiMonthly: -1 },
 };
 // Map legacy tier keys to current ones (old 'team' = 5-seat; old 'white' = largest).
 function normalizeTier(t) {
@@ -1900,6 +1905,10 @@ function openPlanPicker() {
       features:['Everything in Pro','Up to 5 members','Shared question & deck library','Team admin panel & roles','Centralised billing','Polly AI (100/month)','Priority support'] },
     { key:'team_large', name:'Team Large', mo:199, yr:165, color:'var(--accent4)',
       features:['Everything in Team Small','Up to 25 members','Org-wide usage analytics','Bulk member management','SSO (coming soon)','Dedicated onboarding','Polly AI (300/month)'] },
+    // No mo/yr at all: this card never reaches pickerCheckout(), so unlike every other
+    // key it carries no Stripe price to keep in sync with pricing.html or STRIPE-GO-LIVE.md.
+    { key:'enterprise', name:'Enterprise', mo:null, yr:null, color:'var(--accent2)',
+      features:['Everything in Team Large','Unlimited members','Custom contract & invoicing','SSO / SCIM on request','Dedicated success contact','Priced to the size of your org'] },
   ];
 
   const overlay = document.createElement('div');
@@ -1917,7 +1926,7 @@ function openPlanPicker() {
       accent3:'#43e97b', accent4:'#f7b731', accent2:'#ff6584'
     };
     const box = document.createElement('div');
-    box.style.cssText = 'background:'+D.box+';border:1px solid '+D.border2+';border-radius:20px;padding:0;max-width:920px;width:100%;overflow:hidden;';
+    box.style.cssText = 'background:'+D.box+';border:1px solid '+D.border2+';border-radius:20px;padding:0;max-width:1120px;width:100%;overflow:hidden;';
 
     // Header
     box.innerHTML = `
@@ -1934,7 +1943,7 @@ function openPlanPicker() {
           <button onclick="document.getElementById('planPickerModal').remove()" style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);font-size:16px;">✕</button>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0;padding:0;" id="ppCards"></div>
+      <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:0;padding:0;overflow-x:auto;" id="ppCards"></div>
       <div style="padding:16px 26px;border-top:1px solid rgba(255,255,255,0.08);">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px;">
           <div style="font-family:Syne,sans-serif;font-weight:800;font-size:15px;color:#f4f4fc;">⚡ Polly credit top-ups</div>
@@ -1963,25 +1972,37 @@ function openPlanPicker() {
       const feats = p.features.map(f => '<div style="font-size:12px;display:flex;gap:7px;margin-bottom:6px;color:'+D.text+'"><span style="color:'+D.accent3+';flex-shrink:0;">✓</span><span>' + f + '</span></div>').join('');
       const miss = (p.missing||[]).map(f => '<div style="font-size:12px;display:flex;gap:7px;margin-bottom:6px;color:'+D.muted+'"><span style="flex-shrink:0;">—</span><span>' + f + '</span></div>').join('');
 
+      // Enterprise has no Stripe price behind it at all — it can never go through
+      // checkout OR the billing portal, so it needs its own branch ahead of the
+      // upgrade/downgrade/switch logic below rather than slotting into it.
+      const isEnterprise = p.key === 'enterprise';
       const ctaStyle = isCurrent
         ? 'background:'+D.surface2+';border:1px solid '+D.border2+';color:'+D.muted+';cursor:default;'
+        : isEnterprise
+        ? 'background:transparent;border:1.5px solid '+D.accent2+';color:'+D.accent2+';cursor:pointer;'
         : p.key === 'white'
         ? 'background:transparent;border:1.5px solid '+D.accent4+';color:'+D.accent4+';cursor:pointer;'
         : 'background:' + (p.popular ? D.accent : 'transparent') + ';border:1.5px solid ' + (p.popular ? D.accent : D.border2) + ';color:' + (p.popular ? '#fff' : D.text) + ';cursor:pointer;';
-      const isPaidUser = currentTier === 'pro' || currentTier === 'team_small' || currentTier === 'team_large';
+      const isPaidUser = currentTier === 'pro' || currentTier === 'team_small' || currentTier === 'team_large' || currentTier === 'enterprise';
       // The Free card, for a paying user, is a DOWNGRADE → cancel via the billing
       // portal (you can't "checkout" for $0). Stripe drops them to Free at period end.
       const isDowngradeToFree = p.key === 'free' && isPaidUser;
       // A paying user moving to a DIFFERENT paid plan is a SWITCH — it MUST go through
       // the billing portal (Stripe changes the one subscription with proration). Running
       // a fresh checkout would create a SECOND active subscription = double billing.
-      const isPaidSwitch = isPaidUser && !isCurrent && p.key !== 'free';
+      // Excludes Enterprise: there is no subscription for the portal to switch.
+      const isPaidSwitch = isPaidUser && !isCurrent && p.key !== 'free' && !isEnterprise;
       const ctaText = isCurrent
-        ? (isPaidUser ? 'Manage billing' : 'Current plan')
+        ? (isEnterprise ? 'Your plan' : isPaidUser ? 'Manage billing' : 'Current plan')
+        : isEnterprise ? 'Contact us'
         : isDowngradeToFree ? 'Downgrade (cancel plan)'
         : isPaidSwitch ? 'Switch to ' + p.name
         : 'Upgrade to ' + p.name;
-      const ctaOnclick_billing = isCurrent && isPaidUser ? "openBillingPortal()" : null;
+      // An enterprise account's OWN card, viewed by itself, must not offer "Manage
+      // billing" — most enterprise deals are invoiced by hand and have no Stripe
+      // subscription for the portal to open, which would dead-end exactly like the
+      // comped-account case openBillingPortal() already had to be fixed for once.
+      const ctaOnclick_billing = isCurrent && isPaidUser && !isEnterprise ? "openBillingPortal()" : null;
       // Only FREE users ever hit checkout (they have no subscription to duplicate).
       /* A paid SWITCH goes to checkout, not straight to the billing portal.
          `isPaidUser` comes from the tier in our own database, which is true for a
@@ -1992,7 +2013,7 @@ function openPlanPicker() {
          live subscription, so ask it: create-checkout returns `alreadySubscribed` when there
          is one, and pickerCheckout already forwards that case to the portal. Comped users
          get a real checkout; genuine subscribers still get the portal. */
-      const ctaOnclick = ctaOnclick_billing || (isCurrent ? '' : isDowngradeToFree ? "openBillingPortal()" : "pickerCheckout('" + p.key + "', event)");
+      const ctaOnclick = ctaOnclick_billing || (isCurrent ? '' : isEnterprise ? "openEnterpriseContact()" : isDowngradeToFree ? "openBillingPortal()" : "pickerCheckout('" + p.key + "', event)");
 
       card.innerHTML =
         (p.popular ? '<div style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:'+D.accent+';color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:0 0 8px 8px;">★ Most popular</div>' : '') +
@@ -2073,6 +2094,83 @@ function openPlanPicker() {
   };
 
   render();
+}
+
+/* ── ENTERPRISE — "Contact us", not checkout ──────────────────────────────────
+   Enterprise has no Stripe price: it's negotiated by size, so this modal collects the
+   who/how-big/what and hands it to /api/enterprise-lead, which emails Rod and records
+   the lead in admin/enterprise_leads for admin.html. Deliberately its own small modal
+   rather than folded into the plan picker's DOM, since the picker gets torn down and
+   rebuilt on every render() (billing-period toggle, etc.) and this one must survive
+   the user typing into it. */
+function openEnterpriseContact() {
+  document.getElementById('enterpriseModal')?.remove();
+  const t = (s) => escapeHtml(tr(s));
+  const overlay = document.createElement('div');
+  overlay.id = 'enterpriseModal';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:200001;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto;backdrop-filter:blur(8px);';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  const fieldStyle = 'width:100%;margin-bottom:9px;padding:10px 12px;border-radius:9px;background:#1a1a2c;border:1px solid rgba(255,255,255,.15);color:#f4f4fc;font-family:inherit;font-size:13px;box-sizing:border-box;';
+  overlay.innerHTML = `
+    <div style="background:#0d0d18;border:1px solid rgba(255,255,255,.15);border-radius:20px;padding:26px;max-width:420px;width:100%;color:#f4f4fc;">
+      <div style="font-family:Syne,sans-serif;font-weight:800;font-size:19px;margin-bottom:6px;">${t('Talk to us about Enterprise')}</div>
+      <div style="font-size:13px;color:#9090b8;margin-bottom:18px;">${t("Tell us the size of your organisation and what you need — we'll follow up with pricing.")}</div>
+      <div id="entLeadForm">
+        <input id="entName" placeholder="${t('Your name')}" style="${fieldStyle}">
+        <input id="entEmail" type="email" placeholder="${t('Work email')}" value="${escapeHtml(currentUser && currentUser.email || '')}" style="${fieldStyle}">
+        <select id="entSize" style="${fieldStyle}">
+          <option value="">${t('Organisation size…')}</option>
+          <option value="1-50">${t('1–50 people')}</option>
+          <option value="51-200">${t('51–200 people')}</option>
+          <option value="201-1000">${t('201–1,000 people')}</option>
+          <option value="1000+">${t('1,000+ people')}</option>
+        </select>
+        <textarea id="entMsg" rows="3" placeholder="${t('What are you looking to do? (optional)')}" style="${fieldStyle}resize:vertical;"></textarea>
+        <div id="entErr" style="display:none;color:#ff6584;font-size:12px;margin-bottom:8px;line-height:1.4;"></div>
+        <button id="entSubmitBtn" onclick="submitEnterpriseLead()" style="width:100%;padding:11px;border-radius:10px;border:none;background:#6c63ff;color:#fff;font-family:Syne,sans-serif;font-weight:700;font-size:14px;cursor:pointer;">${t('Send')}</button>
+      </div>
+      <div style="margin-top:12px;text-align:center;">
+        <button onclick="document.getElementById('enterpriseModal').remove()" style="background:none;border:none;color:#9090b8;font-size:12px;cursor:pointer;">${t('Cancel')}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+
+async function submitEnterpriseLead() {
+  const name = (document.getElementById('entName')?.value || '').trim();
+  const email = (document.getElementById('entEmail')?.value || '').trim();
+  const size = document.getElementById('entSize')?.value || '';
+  const message = (document.getElementById('entMsg')?.value || '').trim();
+  const errEl = document.getElementById('entErr');
+  const showErr = (m) => { if (errEl) { errEl.textContent = m; errEl.style.display = 'block'; } };
+  if (errEl) errEl.style.display = 'none';
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showErr(tr('Enter a valid email address.')); return; }
+  if (!size) { showErr(tr('Choose your organisation size.')); return; }
+  const btn = document.getElementById('entSubmitBtn');
+  if (btn) { btn.disabled = true; btn.textContent = tr('Sending…'); }
+  try {
+    const headers = { 'Content-Type': 'application/json' };
+    // Best-effort: an expired/missing token still lets the lead through as anonymous
+    // rather than blocking a signed-in user's request on a token refresh race.
+    try { if (currentUser) headers['Authorization'] = 'Bearer ' + (await currentUser.getIdToken()); } catch (e) {}
+    const r = await fetch('/api/enterprise-lead', {
+      method: 'POST', headers,
+      body: JSON.stringify({ name, email, size, message }),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+    const form = document.getElementById('entLeadForm');
+    if (form) form.innerHTML =
+      '<div style="text-align:center;padding:10px 0;">' +
+        '<div style="font-size:32px;margin-bottom:10px;">✅</div>' +
+        '<div style="font-weight:700;margin-bottom:6px;">' + escapeHtml(tr("Thanks — we'll be in touch.")) + '</div>' +
+        '<div style="font-size:12.5px;color:#9090b8;">' + escapeHtml(tr('Usually within one business day. You can also email')) +
+          ' <a href="mailto:help@pollslide.com" style="color:#6c63ff;">help@pollslide.com</a> ' + escapeHtml(tr('directly.')) + '</div>' +
+      '</div>';
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = tr('Send'); }
+    showErr(tr('Could not send: ') + e.message);
+  }
 }
 
 let _selectedPlan = null;
@@ -2320,9 +2418,13 @@ function showPairingCodeModal(code) {
      it goes into is called "Connect to PollSlide" — and per applicationDidFinishLaunching in
      PollSlideCompanionApp.swift, it does NOT open on its own, on first launch or ever; an
      earlier version of this modal claimed it did, which would have recreated exactly the
-     ticket it was written to prevent. The only way to it is the menu-bar item
-     "Show / Hide Poll Window" (verified against Rod's own screenshots of the shipped app,
-     2026-09-15). There is NO "Connect Account" menu item — every label below is checked
+     ticket it was written to prevent. The reliable way to it is the menu-bar item
+     "Disconnect Account (Re-pair)" — it forces the pairing screen unconditionally
+     (unpair, then rebuild the window), where "Show / Hide Poll Window" only shows
+     whatever the floating window already contains, which is not always this screen
+     (Rod corrected this by hand, 2026-09-15, after "Show / Hide Poll Window" shipped
+     first and turned out not to be reliable in practice). There is NO "Connect Account"
+     menu item — every label below is checked
      against the shipped app (v1.3.4 build 10). The Mac app is English-only, so those labels
      stay English, in quotes, inside every translation: that is literally what is on screen. */
   const t = (s) => escapeHtml(tr(s));
@@ -2343,7 +2445,7 @@ function showPairingCodeModal(code) {
         <div style="font-weight:700;margin-bottom:9px;">${t('On your Mac:')}</div>
         <ol style="list-style:none;margin:0;padding:0;">
           ${step(1, t('Open PollSlide Companion if it isn\'t already running.') +
-             `<div style="color:var(--muted);font-size:11.5px;margin-top:3px;">${t('Nothing opens by itself: in the menu bar (top right of your screen), click the bar-chart icon, then "Show / Hide Poll Window" — that opens the "Connect to PollSlide" window.')}</div>`)}
+             `<div style="color:var(--muted);font-size:11.5px;margin-top:3px;">${t('Nothing opens by itself: in the menu bar (top right of your screen), click the bar-chart icon, then "Disconnect Account (Re-pair)" — that opens the "Connect to PollSlide" window.')}</div>`)}
           ${step(2, t('Type this code into the "Enter code" field and click "Connect".'))}
         </ol>
       </div>

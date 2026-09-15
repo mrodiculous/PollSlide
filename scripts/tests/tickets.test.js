@@ -375,8 +375,11 @@ console.log('\npresenter.html — follow-ups, ?support=, and where the Mac code 
   const modal = fnBody(src, 'showPairingCodeModal');
   const trKeys = [...modal.matchAll(/\bt\('((?:[^'\\]|\\.)*)'\)/g)].map(m => m[1].replace(/\\'/g, "'"));
   const fuKeys = [...fu.matchAll(/\btr\('((?:[^'\\]|\\.)*)'\)/g)].map(m => m[1].replace(/\\'/g, "'"));
+  // "Disconnect Account (Re-pair)" replaced "Show / Hide Poll Window" a second time,
+  // 2026-09-15 — see the comment above showPairingCodeModal. It forces the pairing
+  // screen unconditionally; the other only shows whatever the window already contains.
   ok('the modal says where the code goes on the Mac', trKeys.some(k => k.includes('"Connect to PollSlide"')) &&
-     trKeys.some(k => k.includes('"Show / Hide Poll Window"')) && trKeys.some(k => k.includes('"Enter code"') && k.includes('"Connect"')));
+     trKeys.some(k => k.includes('"Disconnect Account (Re-pair)"')) && trKeys.some(k => k.includes('"Enter code"') && k.includes('"Connect"')));
   // Phrasing-independent: checks the two concepts are both named, not their word order —
   // the order changed on 2026-09-15 when "opens on its own" (untrue; see PollSlideCompanionApp.swift)
   // was corrected to say nothing shows the window but the menu-bar item.

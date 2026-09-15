@@ -36,7 +36,9 @@ console.log('IDEMPOTENCY — the actual fix for the silent flip');
 
 console.log('\nSAFETY');
 { const db=mkDb({users:{u1:{tier:'pro'}}});
-  const r=await setUserTier(db,'u1','enterprise',{source:'x'});
+  // 'enterprise' used to be the example unknown tier here, but it's now a real
+  // admin-assigned tier (see lib/tier.js) — use a string that stays bogus.
+  const r=await setUserTier(db,'u1','platinum',{source:'x'});
   ok('unknown tier refused, account untouched', r.changed===false && db.store.users.u1.tier==='pro', r); }
 { const db=mkDb({});
   const r=await setUserTier(db,'','free',{source:'x'});

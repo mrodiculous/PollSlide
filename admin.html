@@ -89,6 +89,7 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
 .pill-free{background:rgba(144,144,184,.15);color:var(--muted);}
 .pill-pro{background:rgba(108,99,255,.18);color:var(--accent);}
 .pill-team{background:rgba(67,233,123,.14);color:var(--accent3);}
+.pill-enterprise{background:rgba(255,101,132,.16);color:var(--accent2);}
 .pill-white{background:rgba(247,183,49,.15);color:var(--accent4);}
 .pill-open{background:rgba(255,101,132,.15);color:var(--accent2);}
 .pill-resolved{background:rgba(67,233,123,.14);color:var(--accent3);}
@@ -367,6 +368,10 @@ const TIER_CONFIG = {
   pro:        { name:'Pro',        maxPres:-1, maxPart:-1,  aiMonthly:20,  price:12  },
   team_small: { name:'Team Small', maxPres:-1, maxPart:-1,  aiMonthly:100, price:39  },
   team_large: { name:'Team Large', maxPres:-1, maxPart:-1,  aiMonthly:300, price:199 },
+  // No `price` — priced by hand per deal (see api/enterprise-lead.js). Never reached
+  // through Stripe, so the watchdog's tier-drift check exempts it explicitly rather
+  // than trying to compare it to a subscription that will never exist.
+  enterprise: { name:'Enterprise', maxPres:-1, maxPart:-1,  aiMonthly:-1,  price:null },
 };
 
 let allUsers={}, currentAdminUid='', currentAdminEmail='', currentPage='dashboard', openTicketCount=0;
@@ -568,7 +573,7 @@ function openDetail(uid){
 function renderDetailBody(uid){
   const u=allUsers[uid];if(!u)return;
   const pres=u.presentations||{},presCount=Object.keys(pres).length;
-  const tc=u.tier==='pro'?'pill-pro':(u.tier==='team_small'||u.tier==='team_large')?'pill-team':'pill-free';
+  const tc=u.tier==='enterprise'?'pill-enterprise':u.tier==='pro'?'pill-pro':(u.tier==='team_small'||u.tier==='team_large')?'pill-team':'pill-free';
   const tier=TIER_CONFIG[u.tier||'free']||TIER_CONFIG.free;
   const comp=u.comp||null;
   const aiUsed=u.aiUsedThisMonth||0;
@@ -591,6 +596,7 @@ function renderDetailBody(uid){
       <button class="btn btn-xs btn-ghost" style="border-color:var(--accent);color:var(--accent)" onclick="setTier('${uid}','pro')">Pro</button>
       <button class="btn btn-xs btn-ghost" style="border-color:var(--accent3);color:var(--accent3)" onclick="setTier('${uid}','team_small')">Team S</button>
       <button class="btn btn-xs btn-ghost" style="border-color:var(--accent4);color:var(--accent4)" onclick="setTier('${uid}','team_large')">Team L</button>
+      <button class="btn btn-xs btn-ghost" style="border-color:var(--accent2);color:var(--accent2)" onclick="setTier('${uid}','enterprise')" title="Only after the deal is actually signed — this grants unlimited everything with no Stripe subscription behind it.">Enterprise</button>
     </div>
   </div>
   <div class="dp-sec">
@@ -820,7 +826,7 @@ async function setTier(uid,tier){
     // send the upgrade/downgrade notice ourselves (best-effort).
     let emailed=false;
     if(email && tier!==prev){
-      const rank={free:0,pro:1,team_small:2,team_large:3};
+      const rank={free:0,pro:1,team_small:2,team_large:3,enterprise:4};
       const isDown=(rank[tier]??0)<(rank[prev]??0);
       const nice=(TIER_CONFIG[tier]||{}).name||tier, niceOld=(TIER_CONFIG[prev]||{}).name||prev;
       // The endpoint verifies our token's email is in ADMIN_EMAILS before
