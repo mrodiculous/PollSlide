@@ -41,9 +41,25 @@ const hashOf = (file) => {
 let stale = 0, checked = 0, missing = 0, rewritten = 0;
 const problems = [];
 
+/* Recurse into subdirectories (e.g. blog/) — a flat readdirSync silently skips any page
+ * that isn't directly in SITE. Found 2026-09-16 when blog/index.html shipped with a
+ * literal, never-rewritten "?v=REPLACE_ME" that this script's flat scan couldn't see to
+ * fix. Skips dotfiles/node_modules-style directories out of caution, though this repo
+ * has none at the page level. */
+function walkHtmlFiles(dir, base = '') {
+  let out = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) continue;
+    const rel = base ? `${base}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) out = out.concat(walkHtmlFiles(path.join(dir, entry.name), rel));
+    else if (entry.name.endsWith('.html')) out.push(rel);
+  }
+  return out;
+}
+
 console.log('\nSite asset versions match their files\n' + '─'.repeat(62));
 
-for (const page of fs.readdirSync(SITE).filter(f => f.endsWith('.html')).sort()) {
+for (const page of walkHtmlFiles(SITE).sort()) {
   const p = path.join(SITE, page);
   let html;
   try { html = fs.readFileSync(p, 'utf8'); } catch (e) { continue; }

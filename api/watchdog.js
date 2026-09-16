@@ -141,8 +141,8 @@ const CHECKS = [
           if (mUid !== (ws && ws.ownerUid)) exempt.add(mUid);   // owner still bills normally
         }
       }
-      // Enterprise is priced by hand, contacted via a plain mailto link — never a
-      // self-serve Stripe price, so tierForSubscription can never legitimately answer "enterprise"
+      // Enterprise is priced by hand (see api/enterprise-lead.js) — never a self-serve
+      // Stripe price, so tierForSubscription can never legitimately answer "enterprise"
       // and would either guess wrong or (in strict mode) say null, either of which reads
       // as drift against an account that isn't actually wrong.
       for (const [uid, u] of Object.entries(idx)) if (u && u.tier === 'enterprise') exempt.add(uid);

@@ -322,7 +322,14 @@ function collectCopyStrings(node, out) {
   } else if (Array.isArray(node)) {
     node.forEach(v => collectCopyStrings(v, out));
   } else if (node && typeof node === 'object') {
-    for (const v of Object.values(node)) collectCopyStrings(v, out);
+    // Plumbing fields, not copy — a JS handler string like 'openEnterpriseContact()'
+    // is exactly as English-shaped as a real sentence (letters, no URL scheme), so
+    // the length/letter filter alone can't tell them apart. Found 2026-09-15: this key
+    // list is the same reason JS_RENDERED_ARRAYS below is a per-file, per-array
+    // allowlist rather than "scan every <script>" — an explicit list beats a clever
+    // heuristic that will eventually mistake plumbing for prose again.
+    const NON_COPY_KEYS = new Set(['url', 'onclick', 'ctaClass', 'class', 'key', 'id']);
+    for (const [k, v] of Object.entries(node)) { if (!NON_COPY_KEYS.has(k)) collectCopyStrings(v, out); }
   }
 }
 // file → every `declaration` whose array holds rendered copy.
@@ -343,13 +350,16 @@ function jsRenderedStrings(f, html) {
 // value is dropped (it's an address, not copy), and the whole thing survives being
 // embedded inside a real <script> tag exactly as it appears in a page.
 (function selfCheckJsRendered() {
-  const sample = '<script>\nconst faqs = [\n  { q: \'Does it work offline?\', a: \'No, an internet connection is required.\', url: \'https://example.com/x\' },\n  { q: \'See also\', a: \'Read the <a href="/help">Help</a> page for more.\' },\n];\n</script>';
+  const sample = '<script>\nconst faqs = [\n  { q: \'Does it work offline?\', a: \'No, an internet connection is required.\', url: \'https://example.com/x\', onclick: \'openThing()\' },\n  { q: \'See also\', a: \'Read the <a href="/help">Help</a> page for more.\' },\n];\n</script>';
   const out = [];
   collectCopyStrings(extractArrayLiteral(sample, 'const faqs = ['), out);
   const bad = [];
   if (!out.includes('Does it work offline?')) bad.push('did not extract the question string');
   if (!out.includes('No, an internet connection is required.')) bad.push('did not extract the answer string');
   if (out.some(x => x.startsWith('http'))) bad.push('a URL value leaked through as if it were copy');
+  // A `url`/`onclick` field is plumbing, not prose — it's exactly as English-shaped as a
+  // real sentence, so only an explicit key skip (not the length/letter filter) catches it.
+  if (out.includes('openThing()')) bad.push('an onclick handler string leaked through as if it were copy');
   // A string with an embedded tag must split into its plain-text fragments — the runtime
   // walker never sees it as one node, so testing it as one node is testing the wrong thing.
   // Each fragment must also come out TRIMMED, matching node.nodeValue.trim() at runtime.
@@ -364,10 +374,27 @@ function jsRenderedStrings(f, html) {
   }
 })();
 
+/* Recurse into subdirectories (e.g. blog/) — a flat readdirSync silently skips any page
+ * that isn't directly in SITE. Found 2026-09-16: three files under blog/ (including two
+ * genuine blog posts) were invisible to this ENTIRE coverage check — not under-reported,
+ * not flagged as low-coverage, just never read at all, so a regression there could never
+ * have been caught. Same root cause, same fix, as qa-site-assets.js's identical gap found
+ * the same day. */
+function walkHtmlFiles(dir, base = '') {
+  let out = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) continue;
+    const rel = base ? `${base}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) out = out.concat(walkHtmlFiles(path.join(dir, entry.name), rel));
+    else if (entry.name.endsWith('.html')) out.push(rel);
+  }
+  return out;
+}
+
 const coverage = {};
 let sitePages = 0;
 if (fs.existsSync(SITE)) {
-  for (const f of fs.readdirSync(SITE).filter(x => x.endsWith('.html')).sort()) {
+  for (const f of walkHtmlFiles(SITE).sort()) {
     if (LEGAL.has(f)) continue;
     const html = read(path.join(SITE, f));
     if (!html || !/i18n\.js/.test(html)) continue;

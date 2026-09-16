@@ -274,6 +274,9 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
     <div class="nav-item" onclick="showPage('seo')" id="nav-seo">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>SEO &amp; marketing<span id="seoBadge" class="pill pill-danger" style="margin-left:auto;display:none;"></span>
     </div>
+    <div class="nav-item" onclick="showPage('leads')" id="nav-leads">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 6 12 13 2 6"/><rect x="2" y="4" width="20" height="16" rx="2"/></svg>Enterprise leads<span id="leadsBadge" class="pill pill-danger" style="margin-left:auto;display:none;"></span>
+    </div>
 
     <div class="nav-section">Ops</div>
     <div class="nav-item" onclick="showPage('health')" id="nav-health">
@@ -368,10 +371,9 @@ const TIER_CONFIG = {
   pro:        { name:'Pro',        maxPres:-1, maxPart:-1,  aiMonthly:20,  price:12  },
   team_small: { name:'Team Small', maxPres:-1, maxPart:-1,  aiMonthly:100, price:39  },
   team_large: { name:'Team Large', maxPres:-1, maxPart:-1,  aiMonthly:300, price:199 },
-  // No `price` — priced by hand per deal, contacted via a plain mailto link (see
-  // presenter.html's openEnterpriseContact). Never reached through Stripe, so the
-  // watchdog's tier-drift check exempts it explicitly rather than trying to compare
-  // it to a subscription that will never exist.
+  // No `price` — priced by hand per deal (see api/enterprise-lead.js). Never reached
+  // through Stripe, so the watchdog's tier-drift check exempts it explicitly rather
+  // than trying to compare it to a subscription that will never exist.
   enterprise: { name:'Enterprise', maxPres:-1, maxPart:-1,  aiMonthly:-1,  price:null },
 };
 
@@ -385,8 +387,8 @@ auth.onAuthStateChanged(async user=>{
     document.getElementById('app').classList.remove('hidden');
     document.getElementById('adminEmailDisplay').textContent=user.email;
     await loadAllUsers(); watchOpenTickets(); showPage('dashboard');
-    refreshErrorBadge(); refreshAutopilotBadge();
-    setInterval(()=>{ refreshErrorBadge(); refreshAutopilotBadge(); }, 120000);
+    refreshErrorBadge(); refreshAutopilotBadge(); refreshLeadsBadge();
+    setInterval(()=>{ refreshErrorBadge(); refreshAutopilotBadge(); refreshLeadsBadge(); }, 120000);
   }else if(user){auth.signOut();document.getElementById('authErr').textContent='Not authorised.';}
 });
 
@@ -463,7 +465,7 @@ function showPage(page){
   closeDetail();renderPage();
 }
 function renderPage(){
-  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture,runbook:renderRunbook,billing:renderBilling,errors:renderErrors,autopilot:renderAutopilot,sharing:renderSharing,seo:renderSEO,compliance:renderCompliance};
+  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture,runbook:renderRunbook,billing:renderBilling,errors:renderErrors,autopilot:renderAutopilot,sharing:renderSharing,seo:renderSEO,leads:renderEnterpriseLeads,compliance:renderCompliance};
   const fn=map[currentPage];
   if(!fn) return;
   /* A page that fails must SAY so. Two of these renderers are async, so a throw inside
@@ -2540,6 +2542,63 @@ async function loadSEOLog(){
       <span style="flex:1;">${v.errors?`<span style="color:var(--accent2);">${v.errors} broken</span> · `:''}${v.warnings} worth fixing · ${v.pages} pages</span>
       <span style="color:var(--muted);">${esc(v.by||'')}</span></div>`).join('');
   }catch(e){ el.textContent='Could not load history.'; }
+}
+
+/* ─── ENTERPRISE LEADS ──────────────────────────────────────────────────────────
+   Reads admin/enterprise_leads (written by api/enterprise-lead.js — both the
+   pricing-page and in-app "Contact us" forms POST there, no admin/rules change
+   needed to read it: the `admin` node's blanket .read already covers every child,
+   and the `$adminOther` write rule already covers writing a lead's `status`).
+   This is the ONE thing that never had a viewer — the endpoint has existed since
+   the tier launched, but nothing in admin ever showed what it collected. */
+const LEAD_STATUSES = ['new','contacted','closed'];
+const LEAD_STATUS_PILL = { new:'pill-danger', contacted:'pill-warn', closed:'pill-free' };
+function renderEnterpriseLeads(){
+  document.getElementById('content').innerHTML=`
+  <div class="card"><div class="card-hd"><h2>Enterprise leads</h2>
+    <button class="btn btn-sm btn-ghost" onclick="renderEnterpriseLeads()">↻ Refresh</button></div>
+    <div id="leadsBody" style="padding:14px 18px;color:var(--muted);font-size:13px;">Loading…</div></div>`;
+  loadEnterpriseLeads();
+}
+async function loadEnterpriseLeads(){
+  const el=document.getElementById('leadsBody'); if(!el) return;
+  try{
+    const snap=await db.ref('admin/enterprise_leads').orderByChild('createdAt').limitToLast(200).get();
+    if(!snap.exists()){ el.innerHTML='<div class="empty">No Enterprise inquiries yet.</div>'; refreshLeadsBadge(0); return; }
+    const rows=[]; snap.forEach(c=>rows.push({id:c.key,...c.val()}));
+    rows.reverse();   // newest first
+    refreshLeadsBadge(rows.filter(r=>(r.status||'new')==='new').length);
+    el.innerHTML=`<table><thead><tr><th>When</th><th>Name</th><th>Email</th><th>Size</th><th>Message</th><th>From</th><th>Status</th></tr></thead><tbody>${
+      rows.map(r=>{
+        const status=r.status||'new';
+        const next=LEAD_STATUSES[(LEAD_STATUSES.indexOf(status)+1)%LEAD_STATUSES.length];
+        return `<tr>
+          <td style="font-size:11px;color:var(--muted);white-space:nowrap;">${timeAgo(r.createdAt)}</td>
+          <td>${esc(r.name||'—')}</td>
+          <td><a href="mailto:${esc(r.email||'')}" style="color:var(--accent);">${esc(r.email||'—')}</a></td>
+          <td style="font-size:12px;">${esc(r.size||'—')}</td>
+          <td style="font-size:12px;max-width:260px;">${esc(r.message||'')}</td>
+          <td style="font-size:11px;color:var(--muted);">${r.origin?esc(r.origin.replace(/^https?:\/\//,'')):(r.accountEmail?esc(r.accountEmail):'app')}</td>
+          <td><span class="pill ${LEAD_STATUS_PILL[status]||'pill-free'}" style="cursor:pointer;" title="Click to mark ${esc(next)}" onclick="setLeadStatus('${r.id}','${next}')">${esc(status)}</span></td>
+        </tr>`;
+      }).join('')
+    }</tbody></table>`;
+  }catch(e){ el.textContent='Could not load leads: '+e.message; }
+}
+async function setLeadStatus(id,status){
+  await db.ref(`admin/enterprise_leads/${id}/status`).set(status);
+  loadEnterpriseLeads();
+}
+async function refreshLeadsBadge(knownCount){
+  const b=document.getElementById('leadsBadge'); if(!b) return;
+  let n=knownCount;
+  if(n===undefined){
+    try{
+      const snap=await db.ref('admin/enterprise_leads').orderByChild('status').equalTo('new').get();
+      n=snap.exists()?Object.keys(snap.val()).length:0;
+    }catch(e){ return; }
+  }
+  b.style.display=n?'':'none'; b.textContent=n||'';
 }
 
 function renderSecurity(){

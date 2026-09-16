@@ -4,20 +4,50 @@
     "hit": 10,
     "total": 10
   },
+  "blog/icebreaker-questions-for-team-meetings.html": {
+    "pct": 5,
+    "hit": 4,
+    "total": 76
+  },
+  "blog/index.html": {
+    "pct": 17,
+    "hit": 2,
+    "total": 12
+  },
+  "blog/run-better-meetings-with-live-polls.html": {
+    "pct": 8,
+    "hit": 5,
+    "total": 59
+  },
   "download.html": {
     "pct": 100,
     "hit": 114,
     "total": 114
   },
+  "free-templates.html": {
+    "pct": 4,
+    "hit": 3,
+    "total": 80
+  },
   "game-modes.html": {
     "pct": 100,
-    "hit": 87,
-    "total": 87
+    "hit": 88,
+    "total": 88
+  },
+  "glossary.html": {
+    "pct": 4,
+    "hit": 3,
+    "total": 69
   },
   "help.html": {
     "pct": 100,
     "hit": 720,
     "total": 720
+  },
+  "how-to-run-a-pub-quiz.html": {
+    "pct": 5,
+    "hit": 4,
+    "total": 80
   },
   "index.html": {
     "pct": 100,
@@ -26,8 +56,23 @@
   },
   "integrations.html": {
     "pct": 100,
-    "hit": 53,
-    "total": 53
+    "hit": 55,
+    "total": 55
+  },
+  "pollslide-for-google-slides.html": {
+    "pct": 9,
+    "hit": 5,
+    "total": 57
+  },
+  "pollslide-for-keynote.html": {
+    "pct": 9,
+    "hit": 6,
+    "total": 64
+  },
+  "pollslide-for-powerpoint.html": {
+    "pct": 13,
+    "hit": 11,
+    "total": 84
   },
   "pricing.html": {
     "pct": 100,
@@ -54,19 +99,34 @@
     "hit": 45,
     "total": 45
   },
+  "vs-ahaslides.html": {
+    "pct": 45,
+    "hit": 22,
+    "total": 49
+  },
   "vs-kahoot.html": {
     "pct": 100,
-    "hit": 33,
-    "total": 33
+    "hit": 36,
+    "total": 36
   },
   "vs-mentimeter.html": {
     "pct": 100,
-    "hit": 34,
-    "total": 34
+    "hit": 37,
+    "total": 37
+  },
+  "vs-poll-everywhere.html": {
+    "pct": 30,
+    "hit": 16,
+    "total": 54
   },
   "vs-slido.html": {
     "pct": 100,
-    "hit": 33,
-    "total": 33
+    "hit": 36,
+    "total": 36
+  },
+  "vs-wooclap.html": {
+    "pct": 30,
+    "hit": 16,
+    "total": 54
   }
 }
