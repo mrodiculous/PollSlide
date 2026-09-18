@@ -68,6 +68,28 @@
   .field input:focus { border-color:var(--accent); }
   .err { color:var(--accent2); font-size:11px; margin-top:6px; min-height:16px; }
 
+  /* ── First-run experience ─────────────────────────────────────
+     AppSource certification rejected the 2026-09-17 submission twice over this
+     pane: policy 1100.1.5 requires the first run to show what the add-in DOES
+     before asking for credentials, and 1100.5.7.3 requires a visible way to
+     acquire an account or reach the provider. Until this block existed the pane
+     opened on a bare email/password form and nothing else. Keep the value
+     copy, the "no account?" line and the contact line above the fold. */
+  .fre { padding:16px 16px 0; }
+  .fre h2 { font-family:'Syne',sans-serif; font-weight:800; font-size:16px; line-height:1.3; margin-bottom:7px; }
+  .fre-lede { color:var(--muted); font-size:12px; line-height:1.55; margin-bottom:12px; }
+  .fre-list { list-style:none; margin-bottom:15px; }
+  .fre-list li { display:flex; gap:7px; font-size:11.5px; line-height:1.45; margin-bottom:6px; }
+  .fre-list .tick { color:var(--accent3); font-weight:700; flex-shrink:0; }
+  .fre-rule { height:1px; background:var(--border); margin:0 16px 14px; }
+  /* The sign-in heading is deliberately quieter than the value headline above it:
+     signing in is a step, not the point of the pane. */
+  .auth-body h2.auth-step { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin-bottom:8px; }
+  .auth-foot { padding:0 16px 18px; font-size:11px; color:var(--muted); line-height:1.6; }
+  .auth-foot a { color:var(--accent); }
+  .auth-foot strong { color:var(--text); }
+  .auth-foot .acct { display:block; margin-bottom:9px; }
+
   /* ── Main (pres list + q list) ───────────────────────────── */
   #mainScreen { display:flex; flex-direction:column; height:100vh; }
   .pane-body { flex:1; overflow-y:auto; padding:10px; }
@@ -169,14 +191,32 @@
       PollSlide
     </div>
   </div>
+  <!-- Value first, credentials second — see the .fre CSS comment before editing. -->
+  <div class="fre">
+    <h2>Live audience results, right on your slides</h2>
+    <p class="fre-lede">PollSlide turns a PowerPoint deck into a two-way conversation. Your audience scans the QR code on your slide and answers from their phones — results appear live, without you ever leaving your presentation.</p>
+    <ul class="fre-list">
+      <li><span class="tick">✓</span><span>Drop a poll, quiz or survey QR code straight onto a slide</span></li>
+      <li><span class="tick">✓</span><span>Watch answers arrive live while you present</span></li>
+      <li><span class="tick">✓</span><span>Finds the right poll on each slide automatically as you advance</span></li>
+    </ul>
+  </div>
+  <div class="fre-rule"></div>
+
   <div class="auth-body">
-    <h2>Sign in</h2>
-    <p>Use the same account as app.pollslide.com</p>
+    <h2 class="auth-step">Sign in to start</h2>
     <div class="field"><label>Email</label><input type="email" id="ppEmail" placeholder="you@example.com" autocomplete="email"></div>
     <div class="field"><label>Password</label><input type="password" id="ppPass" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')ppSignIn()"></div>
     <button class="btn btn-primary btn-full" onclick="ppSignIn()">Sign in</button>
     <div class="err" id="ppErr"></div>
-    <p style="margin-top:12px;font-size:11px;color:var(--muted);">No account? <a href="https://app.pollslide.com/presenter" target="_blank" style="color:var(--accent);">Sign up free →</a></p>
+  </div>
+
+  <!-- How to get an account + how to reach us. Required on first run by AppSource
+       policy 1100.5.7.3 — do not move this below a fold or behind a click. -->
+  <div class="auth-foot">
+    <span class="acct"><strong>No account yet?</strong> <a href="https://app.pollslide.com/presenter" target="_blank" rel="noopener">Create one free →</a><br>
+    Anyone can sign up individually in about a minute. There is no enterprise purchase, license key or administrator approval needed.</span>
+    Questions? Email <a href="mailto:help@pollslide.com">help@pollslide.com</a> or read the <a href="https://pollslide.com/pollslide-for-powerpoint" target="_blank" rel="noopener">PowerPoint setup guide</a>.
   </div>
 </div>
 

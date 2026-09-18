@@ -37,15 +37,22 @@
        ribbon or the store card the way the old feature-list name did.
        This must match the Partner Center listing name EXACTLY or certification fails. -->
   <DisplayName DefaultValue="PollSlide for PowerPoint" />
-  <Description DefaultValue="Show live poll, quiz and survey results right inside your PowerPoint slides. Your audience scans a QR code or opens a link to respond from any phone — results update live on the slide. Works on Windows, Mac and the web." />
+  <!-- Certification 2026-09-17 flagged policy 1100.5.7.3: if an add-in is enterprise-only,
+       the description must say so. PollSlide is the opposite — any individual can self-serve
+       a free account — so the description now states that outright, which is what the
+       reviewer asked for. Max length for this field is 250 characters. -->
+  <Description DefaultValue="Show live poll, quiz and survey results inside your PowerPoint slides on Windows, Mac and the web. Your audience answers by QR code from any phone. Free individual accounts — no enterprise purchase, license key or admin setup required." />
 
   <!-- AppSource requires EXACT sizes: IconUrl=32x32, HighResolutionIconUrl=64x64 -->
   <IconUrl DefaultValue="https://pollslide.com/icon-32.png" />
   <HighResolutionIconUrl DefaultValue="https://pollslide.com/icon-64.png" />
-  <!-- Points at the add-in's OWN section, not the general setup page. A validator clicks
-       this; /setup is the Mac-companion guide and its FAQ says the add-in is "coming
-       soon", which reads as "the thing you are reviewing does not exist". -->
-  <SupportUrl DefaultValue="https://pollslide.com/integrations#powerpoint" />
+  <!-- Points at the add-in's own setup/support page. A validator clicks this, so it must
+       not land anywhere that calls the thing under review unreleased: /setup is the
+       Mac-companion guide, and /integrations still carries a "Coming soon" status pill
+       for this add-in (true until AppSource approves it, but it reads to a reviewer as
+       "the product you are reviewing does not exist"). /pollslide-for-powerpoint makes
+       no availability claim and now carries the support contact. -->
+  <SupportUrl DefaultValue="https://pollslide.com/pollslide-for-powerpoint" />
 
   <!-- Domains the add-in is allowed to navigate to -->
   <AppDomains>
@@ -112,7 +119,8 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="Taskpane.Url" DefaultValue="https://app.pollslide.com/powerpoint" />
-        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://pollslide.com/setup" />
+        <!-- Was /setup — that is the Mac-companion guide, not this add-in. -->
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://pollslide.com/pollslide-for-powerpoint" />
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GetStarted.Title" DefaultValue="PollSlide is ready" />

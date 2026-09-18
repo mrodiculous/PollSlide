@@ -130,6 +130,18 @@ const VARIANT = {
   fr: { name: 'French', keep: 'tu', skipLegal: true,
         wrong: /(^|[^A-Za-zÀ-ÖØ-öø-ÿ])(vous|votre|vos)($|[^A-Za-zÀ-ÖØ-öø-ÿ])/i },
 };
+/* "vous"/"vocês" is not always a formality slip — it is also plain grammatical plural,
+   required when the English source addresses two people at once ("when one of you...",
+   "you'll both see..."). French and Portuguese have no natural informal-plural "you" to
+   fall back to, so the correct translation of a two-person sentence trips this regex on
+   sight even though it is the RIGHT word. Found 2026-09-16 fixing real grammar bugs in
+   these two exact strings (was "l'un de toi" / "um de sis" — nonsense, not a register
+   choice) — the fix is correct; the false positive belongs here, not in the dictionary. */
+const PLURAL_REFERENT = new Set([
+  "Quand l'un de vous ouvre une question, elle est marquée dans la liste de l'autre pour que vous ne vous écrasiez pas mutuellement. Travaillez sur des questions différentes et vous verrez tous deux les modifications apparaître.",
+  'Quando um de vocês abre uma pergunta, ela fica marcada na lista do outro para não se sobreporem. Trabalhem em perguntas diferentes e verão as alterações a aparecer.',
+]);
+
 for (const [lang, rule] of Object.entries(VARIANT)) {
   const hits = [];
   /* Legal bodies are excluded for German and French on purpose: a contract keeps the formal
@@ -139,7 +151,7 @@ for (const [lang, rule] of Object.entries(VARIANT)) {
                                : [gw.PS_I18N, gw.PS_I18N_KEYS, gw.PS_LEGAL, g.PS_UI];
   for (const dict of dicts) {
     if (!dict || !dict[lang]) continue;
-    for (const v of Object.values(dict[lang])) if (typeof v === 'string' && rule.wrong.test(v)) hits.push(v);
+    for (const v of Object.values(dict[lang])) if (typeof v === 'string' && rule.wrong.test(v) && !PLURAL_REFERENT.has(v)) hits.push(v);
   }
   /* i18n.js carries a TENTH dictionary inline — a `nav.*`/`hero.*`/`price.*` block that is a
      local const, never attached to window, so requiring the file exposes nothing. It is real
