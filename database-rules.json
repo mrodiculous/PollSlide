@@ -80,7 +80,12 @@
       "$sessionCode": {
         ".read": true,
         "responses": {
-          ".write": true
+          ".write": true,
+          "$qid": {
+            "$pid": {
+              ".validate": "(!newData.child('answer').exists() || (newData.child('answer').isString() && newData.child('answer').val().length <= 4000)) && (!newData.child('name').exists() || (newData.child('name').isString() && newData.child('name').val().length <= 60)) && (!newData.child('elapsed').exists() || newData.child('elapsed').isNumber())"
+            }
+          }
         },
         "attempts": {
           ".write": true
@@ -95,7 +100,10 @@
           ".write": "auth != null"
         },
         "qa": {
-          ".write": true
+          ".write": true,
+          "$id": {
+            ".validate": "(!newData.child('text').exists() || (newData.child('text').isString() && newData.child('text').val().length <= 300)) && (!newData.child('name').exists() || (newData.child('name').isString() && newData.child('name').val().length <= 60)) && (!newData.child('votes').exists() || newData.child('votes').isNumber())"
+          }
         },
         "study": {
           ".write": true

@@ -58,9 +58,6 @@ module.exports = async function handler(req, res) {
   if (who.email_verified === false) return res.status(403).json({ error: 'Verify your email address first' });
   const { plan, billing, credits } = req.body || {};
 
-  // Validate the always-required fields
-
-
   // Decide what's being bought: a one-time CREDIT PACK or a subscription PLAN.
   const CREDIT_PACKS = { 20: true, 100: true, 200: true, 500: true };
   const isCredits = credits !== undefined && credits !== null && String(credits) !== '';
