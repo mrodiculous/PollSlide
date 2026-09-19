@@ -22,11 +22,13 @@
 //   NEXT_PUBLIC_APP_URL   = https://app.pollslide.com
 //   (No price ID variables needed — lookup keys are in Stripe itself)
 
+const { verifyToken, tokenFrom } = require('../lib/quota');
+
 module.exports = async function handler(req, res) {
   // Security: only allow requests from your app domain
   res.setHeader('Access-Control-Allow-Origin', process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
@@ -41,12 +43,23 @@ module.exports = async function handler(req, res) {
   const stripe  = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2026-05-27.dahlia' });
   const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com';
 
-  const { email, uid, plan, billing, credits } = req.body || {};
+  /* SECURITY — 2026-09-19. email and uid used to come straight from the POST body, so a
+     caller could open a checkout against somebody else's Firebase uid or Stripe customer.
+     Both now come from a verified ID token; anything in the body is ignored. Sibling fix
+     to api/billing-portal.js, which had the same body-trust bug in a worse place. */
+  const tok = tokenFrom(req);
+  if (!tok) return res.status(401).json({ error: 'Sign in required' });
+  let who;
+  try { who = await verifyToken(tok); }
+  catch (e) { return res.status(401).json({ error: 'Invalid auth token' }); }
+  const email = who.email;
+  const uid   = who.uid;
+  if (!email) return res.status(403).json({ error: 'Account has no email address' });
+  if (who.email_verified === false) return res.status(403).json({ error: 'Verify your email address first' });
+  const { plan, billing, credits } = req.body || {};
 
   // Validate the always-required fields
-  if (!email || !uid) {
-    return res.status(400).json({ error: 'Missing required fields: email, uid' });
-  }
+
 
   // Decide what's being bought: a one-time CREDIT PACK or a subscription PLAN.
   const CREDIT_PACKS = { 20: true, 100: true, 200: true, 500: true };

@@ -1219,8 +1219,9 @@ async function buyCredits(n, ev) {
   if (btn) { btn.innerHTML = 'Redirecting…'; btn.disabled = true; }
   try {
     const r = await fetch('/api/create-checkout', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: currentUser.email, uid: currentUser.uid, credits: n })
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (await currentUser.getIdToken()) },
+      body: JSON.stringify({ credits: n })
     });
     const data = await r.json().catch(() => null);
     if (data && data.url) { window.location.href = data.url; return; }
@@ -2056,8 +2057,9 @@ function openPlanPicker() {
     clearErr();
     try {
       const r = await fetch('/api/create-checkout', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ email:currentUser.email, uid:currentUser.uid, plan, billing:pickerBilling })
+        method:'POST',
+        headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + (await currentUser.getIdToken())},
+        body: JSON.stringify({ plan, billing:pickerBilling })
       });
       // Parse defensively: a missing/crashed function returns non-JSON.
       const text = await r.text();
@@ -8998,10 +9000,13 @@ async function openBillingPortal() {
      with it. It now closes only on success, when the browser is leaving the page anyway. */
   toast('Opening billing portal…', 'info');
   try {
+    /* The server takes the identity from this token and ignores any email in the body —
+       it used to trust a body-supplied address, which let anyone open anyone's portal. */
+    const idToken = await currentUser.getIdToken();
     const r = await fetch('/api/billing-portal', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: currentUser?.email })
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + idToken },
+      body: JSON.stringify({})
     });
     const data = await r.json();
     if (data.url) {

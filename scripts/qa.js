@@ -41,6 +41,7 @@ const GATES = [
   { name: 'escaping',     script: 'qa-escaping.js',     why: 'nothing user-typed reaches innerHTML raw' },
   { name: 'rules',        script: 'qa-rules.js',        why: 'database-rules.json will paste, and covers every write' },
   { name: 'secrets',      script: 'qa-secrets.js',      why: 'no API key in a file the browser can read' },
+  { name: 'endpoint-auth',script: 'qa-endpoint-auth.js',why: 'no endpoint trusts a caller-supplied identity' },
   { name: 'assets',       script: 'qa-assets.js',       why: 'every ?v= matches its file, so nobody gets a cached old copy' },
   { name: 'parity',       script: 'qa-parity.js',       why: 'capabilities are not stranded in one product', slow: true },
   { name: 'docs',         script: 'qa-docs.js',         why: 'the runbooks still describe the real system' },

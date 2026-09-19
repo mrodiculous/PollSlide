@@ -1595,6 +1595,10 @@ function renderLegal(){
     <div id="compliancePanel" style="padding:14px;"><div class="loader">Loading…</div></div>
   </div>
   <div class="card" style="margin-bottom:14px;">
+    <div class="card-hd"><h2>Compliance digest</h2><span style="font-size:11px;color:var(--muted);">Where we stand right now: watcher freshness, open law/vendor changes, last self-audit. Monthly cron + on demand</span></div>
+    <div id="digestPanel" style="padding:14px;"><div class="loader">Loading…</div></div>
+  </div>
+  <div class="card" style="margin-bottom:14px;">
     <div class="card-hd"><h2>Legal quick actions</h2><span style="font-size:11px;color:var(--muted);">One-click fulfilment of legal promises from Terms of Service & Privacy Policy</span></div>
     <div class="qa-grid">
       ${LEGAL_ACTIONS.map((a,i)=>`<div class="qa-btn" onclick="legalActions[${i}].action()"><div class="qa-btn-icon">${a.icon}</div><div class="qa-btn-title">${a.title}</div><div class="qa-btn-desc">${a.desc}</div></div>`).join('')}
@@ -1606,6 +1610,7 @@ function renderLegal(){
   </div>`;
   loadPolicyPanel();
   loadCompliancePanel();
+  loadDigestPanel();
   loadLegalLog();
 }
 
@@ -1619,8 +1624,11 @@ async function loadCompliancePanel(){
   let rep=null,watch={};
   try{ const s=await db.ref('admin/compliance/last').get(); rep=s.exists()?s.val():null; }catch(e){}
   try{ const s=await db.ref('admin/legal_watch').get(); watch=s.exists()?s.val():{}; }catch(e){}
-  const regs=Object.values(watch||{}).filter(w=>w&&w.kind==='regulation');
-  const watchHtml=Object.keys(watch).length?`<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;">⚖️ Legal watcher covers ${Object.keys(watch).length} sources${regs.length?` incl. ${regs.length} laws/regulations: ${regs.map(w=>w.label).join(' · ')}`:''}</div>`:'';
+  // Was listing every regulation label inline. At 35 regulations that is a wall of text
+  // nobody reads, so it counts by kind and leaves the detail to the digest below.
+  const kinds={};for(const w of Object.values(watch||{})){if(!w)continue;kinds[w.kind||'vendor']=(kinds[w.kind||'vendor']||0)+1;}
+  const kindLabel={ours:'our pages',vendor:'vendor policies',regulation:'laws/regulators',tracker:'new-law tracker'};
+  const watchHtml=Object.keys(watch).length?`<div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;">⚖️ Legal watcher covers ${Object.keys(watch).length} sources — ${Object.entries(kinds).map(([k,n])=>`${n} ${kindLabel[k]||k}`).join(' · ')}</div>`:'';
   let body;
   if(!rep){
     body=`<div class="empty">No sweep has run yet — run the first one now (takes ~10 seconds).</div>`;
@@ -1652,6 +1660,63 @@ async function runComplianceSweep(){
     toast('Compliance sweep complete.','success');
   }catch(e){ toast('Sweep failed: '+e.message,'danger'); }
   loadCompliancePanel();
+}
+
+// ─── COMPLIANCE DIGEST ────────────────────────────────────────────────────────
+// Reads admin/compliance/digest (written by /api/compliance-digest, monthly cron).
+// It answers "where do we stand", consolidating the watcher, open alerts and the
+// self-audit. It reports MOVEMENT and staleness — it cannot say we are compliant,
+// and the panel says so out loud so a screenshot of it cannot imply otherwise.
+async function loadDigestPanel(){
+  const el=document.getElementById('digestPanel');if(!el)return;
+  let d=null;
+  try{ const s=await db.ref('admin/compliance/digest').get(); d=s.exists()?s.val():null; }catch(e){}
+  let body;
+  if(!d){
+    body=`<div class="empty">No digest yet — run one now to see where things stand.</div>`;
+  }else{
+    const cov=d.coverage||{};const bk=cov.byKind||{};
+    const kindLabel={ours:'our pages',vendor:'vendor policies',regulation:'laws/regulators',tracker:'tracker'};
+    const att=(d.attention||[]);
+    const attHtml=att.length
+      ? `<div style="background:rgba(247,183,49,.1);border:1px solid rgba(247,183,49,.3);border-radius:9px;padding:10px 12px;margin-bottom:10px;">
+           <div style="font-size:12px;font-weight:700;color:var(--accent4);margin-bottom:5px;">Needs a look</div>
+           ${att.map(a=>`<div style="font-size:11.5px;color:var(--text);line-height:1.55;">• ${a}</div>`).join('')}
+         </div>`
+      : `<div style="background:rgba(67,233,123,.1);border:1px solid rgba(67,233,123,.3);border-radius:9px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:var(--accent3);font-weight:600;">Nothing outstanding as of the last run.</div>`;
+    const grp=(title,arr,icon)=>(arr&&arr.length)?`
+      <div style="margin-top:10px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:5px;">${icon} ${title} (${arr.length})</div>
+        ${arr.map(c=>`<div style="font-size:11.5px;padding:3px 0;"><a href="${c.url}" target="_blank" rel="noopener" style="color:var(--accent);">${c.label}</a></div>`).join('')}
+      </div>`:'';
+    const open=d.open||{};
+    const stale=(d.staleSources||[]);
+    body=`${attHtml}
+      <div style="font-size:12px;color:var(--muted);margin-bottom:4px;">Last digest ${timeAgo(d.ranAt)} by ${d.by||'?'} — watching <b>${cov.total||0}</b> sources (${Object.entries(bk).map(([k,v])=>`${v.total} ${kindLabel[k]||k}`).join(' · ')})</div>
+      ${d.lastWatcherCheck?`<div style="font-size:11.5px;color:var(--muted);">Watcher last checked ${timeAgo(d.lastWatcherCheck)}</div>`:''}
+      ${grp('Law / regulator changes',open.law,'⚖️')}
+      ${grp('Our own pages changed',open.ours,'📄')}
+      ${grp('Vendor policy changes',open.vendor,'🏢')}
+      ${grp('New-law trackers moved (informational)',open.tracker,'📡')}
+      ${stale.length?`<div style="margin-top:10px;"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent2);margin-bottom:5px;">⏱ Stale — not checked in 21+ days (${stale.length})</div>${stale.map(s2=>`<div style="font-size:11.5px;color:var(--muted);padding:2px 0;">${s2.label}</div>`).join('')}</div>`:''}`;
+  }
+  el.innerHTML=`${body}
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <button class="btn btn-primary btn-sm" id="digestRunBtn" onclick="runComplianceDigest()">▶ Run digest now</button>
+      <button class="btn btn-ghost btn-sm" onclick="runComplianceDigest(true)">✉ Run &amp; email it</button>
+    </div>
+    <div style="font-size:10.5px;color:var(--muted);margin-top:9px;line-height:1.5;">Monitoring output only: it detects changes to published pages and whether our own pages still carry required sections. It is <b>not</b> legal advice and <b>not</b> evidence of compliance — never send it to a buyer as such.</div>`;
+}
+async function runComplianceDigest(email){
+  const btn=document.getElementById('digestRunBtn');
+  if(btn){btn.disabled=true;btn.textContent='Running…';}
+  try{
+    const t=await auth.currentUser.getIdToken();
+    const r=await fetch('/api/compliance-digest'+(email?'?email=1':''),{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t}});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    toast(email?'Digest run and emailed.':'Digest updated.','success');
+  }catch(e){ toast('Digest failed: '+e.message,'danger'); }
+  loadDigestPanel();
 }
 
 // ─── POLICY UPDATES & RE-CONSENT ──────────────────────────────────────────────
