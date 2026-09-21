@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  PollSlide LIVE for PowerPoint — CONTENT add-in.
+  ===========================================================================
+  THIS IS A DIFFERENT PRODUCT FROM THE TASK PANE ADD-IN. Do not merge them.
+
+    powerpoint.html (root)  = TaskPaneApp — the sidebar. Authoring: browse decks,
+                              pick a question, insert a QR onto the slide.
+    this one                = ContentApp  — embedded INSIDE the slide. Display:
+                              live results that render during the slide show.
+
+  Microsoft's own docs are explicit that these cannot be combined: the task-pane
+  runtime "cannot be combined with a content add-in", and in the XML manifest
+  xsi:type is either TaskPaneApp or ContentApp. Two add-ins, two AppSource offers,
+  two Ids. Hence the separate GUID below — reusing the task pane's would make the
+  store treat this as an update to that product and replace it.
+
+  WHY THIS PRODUCT EXISTS: a task pane belongs to the PowerPoint EDITING window.
+  Start a slide show and the pane is gone. A content add-in is part of the slide,
+  so it keeps rendering while you present — which is the actual selling point:
+  results updating on the slide in front of the room.
+
+  SIDELOAD (testing):
+    Web:  office.com → PowerPoint → Insert → Add-ins → Upload My Add-in → this file
+          Then: Insert → Add-ins → My Add-ins → pick PollSlide LIVE to place it
+          ON a slide (a content add-in is inserted onto the slide, not opened
+          as a pane).
+-->
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xsi:type="ContentApp">
+
+  <!-- Its own Id, permanently. Never reuse the task pane's
+       (7b3f9a14-2c5e-4d8a-9f1b-6a2e4c0d8e10). Bump <Version>, never <Id>. -->
+  <Id>6a2cf181-7fbf-4d5e-8dfc-690b55082599</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>PollSlide</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+
+  <DisplayName DefaultValue="PollSlide LIVE — results on your slide" />
+  <Description DefaultValue="Drop live poll, quiz and survey results directly onto a PowerPoint slide. Results animate on the slide while you present. Your audience answers by QR code from any phone. Free individual accounts — no enterprise purchase or admin setup required." />
+
+  <!-- AppSource requires EXACT sizes: IconUrl=32x32, HighResolutionIconUrl=64x64 -->
+  <IconUrl DefaultValue="https://pollslide.com/icon-32.png" />
+  <HighResolutionIconUrl DefaultValue="https://pollslide.com/icon-64.png" />
+  <SupportUrl DefaultValue="https://pollslide.com/pollslide-for-powerpoint" />
+
+  <AppDomains>
+    <AppDomain>https://app.pollslide.com</AppDomain>
+    <AppDomain>https://pollslide.com</AppDomain>
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Presentation" />
+  </Hosts>
+
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://app.pollslide.com/powerpoint-content" />
+    <!-- Content add-ins require these. Office accepts 32–1000; the presenter can
+         resize the object on the slide afterwards like any shape, so this is only
+         the size it lands at. Wide-and-short suits a results bar chart. -->
+    <RequestedWidth>600</RequestedWidth>
+    <RequestedHeight>400</RequestedHeight>
+  </DefaultSettings>
+
+  <!-- ReadWriteDocument so the add-in can read the slide's notes marker written by
+       the task pane, and persist its own question binding via document settings. -->
+  <Permissions>ReadWriteDocument</Permissions>
+</OfficeApp>

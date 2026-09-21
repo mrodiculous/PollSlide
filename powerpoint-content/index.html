@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PollSlide LIVE — results on your slide</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="/errors.js"></script>
+<script src="/qid.js"></script>
+<script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js" type="text/javascript"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<style>
+  :root{
+    --bg:#ffffff; --ink:#12121f; --muted:#6b6b85;
+    --accent:#6c63ff; --accent2:#ff6584; --ok:#1fa971; --line:rgba(0,0,0,.10);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    font-family:'DM Sans',system-ui,sans-serif; background:var(--bg); color:var(--ink);
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+    /* Sits ON a slide, which is usually light. Deliberately NOT the dark task-pane
+       palette — dark-on-white here would fight most decks. */
+  }
+  .wrap{height:100%;display:flex;flex-direction:column;padding:3.5% 4%}
+  .hidden{display:none!important}
+
+  /* Everything scales off cqw/cqh so one layout survives the presenter dragging the
+     object from a narrow right-hand bar to full slide width. */
+  .q{font-family:'Syne',sans-serif;font-weight:800;line-height:1.2;
+     font-size:clamp(13px,4.4cqw,34px);margin-bottom:.5em;flex-shrink:0}
+  .meta{display:flex;align-items:center;gap:.6em;font-size:clamp(9px,2.1cqw,15px);
+        color:var(--muted);margin-bottom:.7em;flex-shrink:0}
+  .dot{width:.55em;height:.55em;border-radius:100px;background:var(--ok);flex-shrink:0}
+  .rows{flex:1;display:flex;flex-direction:column;justify-content:center;gap:.5em;min-height:0}
+  .row{display:flex;flex-direction:column;gap:.22em}
+  .rowtop{display:flex;justify-content:space-between;gap:.6em;
+          font-size:clamp(10px,2.5cqw,19px);font-weight:600}
+  .rowtop .n{color:var(--muted);font-weight:500;flex-shrink:0}
+  .bar{height:clamp(7px,1.9cqh,20px);background:rgba(0,0,0,.07);border-radius:100px;overflow:hidden}
+  .fill{height:100%;border-radius:100px;background:linear-gradient(90deg,var(--accent),#a78bfa);
+        width:0;transition:width .45s cubic-bezier(.22,1,.36,1)}
+  .row.correct .fill{background:linear-gradient(90deg,var(--ok),#5fe0a6)}
+  .row.dim{opacity:.32}
+  .tag{font-size:.8em;font-weight:700;color:var(--ok)}
+  .foot{display:flex;align-items:center;justify-content:space-between;gap:.6em;
+        font-size:clamp(8px,1.9cqw,13px);color:var(--muted);flex-shrink:0;padding-top:.5em}
+  .brand{display:flex;align-items:center;gap:.4em;font-weight:600}
+
+  /* Bind / empty states — edit mode only, never shown while presenting */
+  .pad{height:100%;display:flex;flex-direction:column;justify-content:center;
+       gap:.7em;text-align:center;padding:4%}
+  .pad h2{font-family:'Syne',sans-serif;font-weight:800;font-size:clamp(14px,4cqw,26px)}
+  .pad p{font-size:clamp(10px,2.3cqw,15px);color:var(--muted);line-height:1.5}
+  .btn{font-family:'Syne',sans-serif;font-weight:700;border:none;border-radius:9px;
+       padding:.7em 1.1em;font-size:clamp(10px,2.3cqw,15px);cursor:pointer;
+       background:var(--accent);color:#fff}
+  .btn.ghost{background:rgba(0,0,0,.05);color:var(--ink)}
+  .list{overflow-y:auto;text-align:left;display:flex;flex-direction:column;gap:.4em;max-height:62%}
+  .item{border:1px solid var(--line);border-radius:10px;padding:.6em .7em;cursor:pointer;
+        font-size:clamp(10px,2.2cqw,15px)}
+  .item:hover{border-color:var(--accent);background:rgba(108,99,255,.05)}
+  .item .sub{color:var(--muted);font-size:.85em;margin-top:.15em}
+  .field{display:flex;flex-direction:column;gap:.3em;text-align:left}
+  .field input{border:1px solid var(--line);border-radius:9px;padding:.6em .7em;
+               font-size:clamp(10px,2.2cqw,15px);font-family:inherit}
+  .err{color:var(--accent2);font-size:clamp(9px,2cqw,13px);min-height:1.2em}
+  /* A new answer should be felt from the back of the room, not just tallied.
+     Same restraint as the rest: one short cue, then still. */
+  @keyframes psPop{0%{transform:scale(1)}38%{transform:scale(1.13)}100%{transform:scale(1)}}
+  @keyframes psGlow{0%{box-shadow:0 0 0 0 rgba(31,169,113,.45)}100%{box-shadow:0 0 0 .8em rgba(31,169,113,0)}}
+  .count.pop{display:inline-block;animation:psPop .5s cubic-bezier(.22,1,.36,1)}
+  .row.correct .bar{animation:psGlow .9s ease-out}
+  .row{transition:opacity .45s ease,filter .45s ease}
+  #psConfetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:9999}
+  @media (prefers-reduced-motion: reduce){
+    .fill{transition:none}
+    .count.pop,.row.correct .bar{animation:none}
+    .row{transition:none}
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="root"><div class="pad"><p>Loading…</p></div></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════════════
+   PollSlide LIVE — PowerPoint CONTENT add-in.
+
+   Lives INSIDE a slide and keeps rendering during the slide show, which a task
+   pane cannot do: a pane belongs to the editing window and disappears the moment
+   the show starts.
+
+   TWO MODES, decided by Office's active view:
+     edit  → let the presenter bind this instance to a question
+     read  → show live results, and nothing else. No sign-in, no chrome.
+
+   WHY READ MODE NEEDS NO AUTH: database-rules.json grants `.read: true` on
+   sessions/<code>, so results are public. Putting a login on a slide in front of
+   a room would be absurd, and now we don't have to.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+const FB_CONFIG = {
+  apiKey: "AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME",
+  authDomain: "echonest-live-survey.firebaseapp.com",
+  databaseURL: "https://echonest-live-survey-default-rtdb.firebaseio.com",
+  projectId: "echonest-live-survey",
+  storageBucket: "echonest-live-survey.firebasestorage.app",
+  messagingSenderId: "285529140046",
+  appId: "1:285529140046:web:983c1ee8000a2ca8f80c1f"
+};
+const LETTERS = ['A','B','C','D','E','F','G','H'];
+
+let db, auth, bound = null, listener = null, presentations = {};
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s==null?'':s).replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ── Binding: which question does THIS embedded instance show? ───────────────
+   Office document settings are documented as per-instance for content add-ins
+   ("available only to the instance of the content or task pane add-in that
+   created it"), which is exactly what we need — slide 3 and slide 7 each keep
+   their own question.
+
+   BUT settings.get is reported to return null in PowerPoint on the WEB while in
+   presentation mode (OfficeDev/office-js#3406, closed "not planned"). Losing the
+   binding at exactly the moment you present would make this product pointless,
+   so the binding is resolved through a chain and cached the moment we see it:
+
+     1. document settings            — the real store
+     2. localStorage, partition-keyed — survives the web read-mode null
+     3. the slide's notes marker      — written by the task pane's Insert QR
+                                        (<!-- pollslide:CODE/idx -->)
+
+   Anything we successfully resolve is written back to layers 1 and 2, so a single
+   visit in edit mode arms presentation mode even if settings go dark there. */
+const LS_KEY = () => 'psliveBind_' + (Office?.context?.partitionKey || 'default');
+
+function cacheBinding(b){
+  try { localStorage.setItem(LS_KEY(), JSON.stringify(b)); } catch(e){}
+  try {
+    Office.context.document.settings.set('psliveBinding', b);
+    Office.context.document.settings.saveAsync();
+  } catch(e){}
+}
+
+function readSettingsBinding(){
+  try {
+    const v = Office.context.document.settings.get('psliveBinding');
+    if (v && v.code && v.qid) return v;
+  } catch(e){}
+  return null;
+}
+function readCachedBinding(){
+  try {
+    const v = JSON.parse(localStorage.getItem(LS_KEY())||'null');
+    if (v && v.code && v.qid) return v;
+  } catch(e){}
+  return null;
+}
+function readNotesBinding(){
+  return new Promise(resolve => {
+    try {
+      PowerPoint.run(async ctx => {
+        const slides = ctx.presentation.getSelectedSlides();
+        slides.load('items'); await ctx.sync();
+        if (!slides.items.length) return resolve(null);
+        const body = slides.items[0].getNotesPage().body;
+        body.load('text'); await ctx.sync();
+        const m = (body.text||'').match(/<!--\s*pollslide:([^/\s>]+)\/(\d+)\s*-->/i);
+        resolve(m ? { code:m[1], qIdx:parseInt(m[2],10), qid:null, fromNotes:true } : null);
+      }).catch(()=>resolve(null));
+    } catch(e){ resolve(null); }
+  });
+}
+
+async function resolveBinding(){
+  const s = readSettingsBinding();  if (s) { cacheBinding(s); return s; }
+  const c = readCachedBinding();    if (c) { cacheBinding(c); return c; }
+  const n = await readNotesBinding();
+  if (n && n.code && n.qIdx != null) {
+    /* The notes marker carries an index, not a bucket id. Resolve it to the real
+       bucket the same way every other surface does, so a reordered deck still
+       lands on the right answers. */
+    try {
+      const snap = await db.ref('quiz_builder/'+n.code+'/questions/'+n.qIdx).get();
+      const q = snap.exists() ? snap.val() : null;
+      if (q) {
+        const b = { code:n.code, qIdx:n.qIdx, qid:PSQid.bucket(q,n.qIdx,n.code), text:q.text||'', q };
+        cacheBinding(b); return b;
+      }
+    } catch(e){}
+  }
+  return null;
+}
+
+/* ── Confetti ────────────────────────────────────────────────────────────────
+   Ported from presenter.html so the slide and the presenter's own screen
+   celebrate identically. Canvas is sized to the EMBEDDED OBJECT, not the window:
+   this add-in is a box on a slide, and a fixed full-window canvas would be
+   clipped to that box anyway. Honours prefers-reduced-motion, like everywhere. */
+let _cvs, _ctx, _raf;
+function fireConfetti(){
+  if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if (!_cvs){
+    _cvs = document.createElement('canvas');
+    _cvs.id = 'psConfetti';
+    document.body.appendChild(_cvs);
+    _ctx = _cvs.getContext('2d');
+  }
+  const W = _cvs.width = _cvs.clientWidth || window.innerWidth;
+  const H = _cvs.height = _cvs.clientHeight || window.innerHeight;
+  const colors = ['#6c63ff','#ff6584','#43e97b','#f7b731','#4facfe','#a78bfa'];
+  const parts = [];
+  /* Scaled to the box: a narrow right-hand bar gets a proportionate handful,
+     a full-width object gets the full burst. */
+  const count = Math.max(40, Math.min(150, Math.floor(W/5)));
+  for (let i=0;i<count;i++) parts.push({
+    x: Math.random()*W, y: -15 - Math.random()*H*0.3,
+    vx: (Math.random()-0.5)*5, vy: 2.4 + Math.random()*4,
+    sz: 4 + Math.random()*6, rot: Math.random()*Math.PI*2,
+    vr: (Math.random()-0.5)*0.3, color: colors[(Math.random()*colors.length)|0], life: 1
+  });
+  const start = performance.now(), dur = 2400;
+  cancelAnimationFrame(_raf);
+  const tick = (now) => {
+    const el = now - start;
+    _ctx.clearRect(0,0,W,H);
+    let alive = false;
+    for (const p of parts){
+      p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.rot += p.vr;
+      if (el > dur-650) p.life = Math.max(0,(dur-el)/650);
+      if (p.y < H+25 && p.life > 0) alive = true;
+      _ctx.save(); _ctx.globalAlpha = p.life;
+      _ctx.translate(p.x,p.y); _ctx.rotate(p.rot);
+      _ctx.fillStyle = p.color;
+      _ctx.fillRect(-p.sz/2,-p.sz/2,p.sz,p.sz*0.6);
+      _ctx.restore();
+    }
+    if (el < dur && alive) _raf = requestAnimationFrame(tick);
+    else _ctx.clearRect(0,0,W,H);
+  };
+  _raf = requestAnimationFrame(tick);
+}
+
+/* ── Live results ───────────────────────────────────────────────────────────── */
+let _lastTotal = 0, _celebrated = false;
+function renderResults(q, responses, revealed){
+  const total = responses.length;
+  const grew = total > _lastTotal;   // only pop on a genuine new answer, not a re-render
+  _lastTotal = total;
+  const opts  = Array.isArray(q?.options) ? q.options : [];
+  const counts = opts.map(()=>0);
+  for (const r of responses){
+    let a = r && r.answer;
+    try { a = JSON.parse(a); } catch(e){}
+    if (Array.isArray(a)) a.forEach(i => { const n=Number(i); if(counts[n]!=null) counts[n]++; });
+    else { const n = Number(a); if (counts[n]!=null) counts[n]++; }
+  }
+  const correct = (q && q.correctAnswer!=null) ? Number(q.correctAnswer) : null;
+  const rows = opts.map((o,i)=>{
+    const pct = total ? Math.round(counts[i]/total*100) : 0;
+    const isC = revealed && correct===i;
+    const dim = revealed && correct!=null && correct!==i;
+    return `<div class="row ${isC?'correct':''} ${dim?'dim':''}">
+      <div class="rowtop">
+        <span>${LETTERS[i]}. ${esc(o)}${isC?' <span class="tag">✓</span>':''}</span>
+        <span class="n">${counts[i]} · ${pct}%</span>
+      </div>
+      <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+
+  $('root').innerHTML = `
+    <div class="q">${esc(q?.text||'')}</div>
+    <div class="meta"><span class="dot"></span><span class="count ${grew?'pop':''}">${total}</span>&nbsp;response${total===1?'':'s'}${revealed?' · answer revealed':''}</div>
+    <div class="rows">${rows || '<p style="color:var(--muted)">Waiting for answers…</p>'}</div>
+    <div class="foot"><span class="brand">PollSlide</span><span>Scan the QR to answer</span></div>`;
+  /* Bars grow from zero after an innerHTML swap, otherwise they would simply
+     appear at their final width and the motion would be lost. */
+  requestAnimationFrame(()=>{
+    document.querySelectorAll('.fill').forEach(el=>{
+      const w = el.dataset.w || el.style.width;
+      el.dataset.w = w; el.style.width = '0%';
+      requestAnimationFrame(()=>{ el.style.width = w; });
+    });
+  });
+  // Once per question, at the moment the answer lands.
+  if (revealed && !_celebrated && total > 0){ _celebrated = true; fireConfetti(); }
+  if (!revealed) _celebrated = false;
+}
+
+async function goLive(b){
+  if (listener) { listener(); listener = null; }
+  let q = b.q;
+  if (!q) {
+    try {
+      const s = await db.ref('quiz_builder/'+b.code+'/questions/'+b.qIdx).get();
+      q = s.exists()? s.val() : null;
+    } catch(e){}
+  }
+  if (!q) { $('root').innerHTML = `<div class="pad"><h2>Question not found</h2><p>Open this slide in editing view and pick the question again.</p></div>`; return; }
+
+  const qid = b.qid || PSQid.bucket(q, b.qIdx, b.code);
+  let revealed = false;
+  try {
+    const st = await db.ref('sessions/'+b.code+'/qstate/'+qid+'/phase').get();
+    revealed = st.exists() && st.val()==='reveal';
+  } catch(e){}
+
+  const ref = db.ref('sessions/'+b.code+'/responses/'+qid);
+  const fn = ref.on('value', snap => {
+    const all = snap.exists() ? Object.values(snap.val()) : [];
+    renderResults(q, all, revealed);
+  });
+  listener = () => ref.off('value', fn);
+
+  /* Follow the reveal so the slide shows the right answer at the same moment the
+     presenter's own screen does. */
+  try {
+    db.ref('sessions/'+b.code+'/qstate/'+qid+'/phase').on('value', s => {
+      revealed = s.exists() && s.val()==='reveal';
+      ref.get().then(sn => renderResults(q, sn.exists()?Object.values(sn.val()):[], revealed)).catch(()=>{});
+    });
+  } catch(e){}
+}
+
+/* ── Edit mode: bind this instance ───────────────────────────────────────────── */
+function showSignIn(msg){
+  $('root').innerHTML = `<div class="pad">
+    <h2>Put live results on this slide</h2>
+    <p>Sign in with your PollSlide account to choose which question this slide shows.</p>
+    <div class="field"><input id="em" type="email" placeholder="you@example.com" autocomplete="email"></div>
+    <div class="field"><input id="pw" type="password" placeholder="••••••••" autocomplete="current-password"></div>
+    <div class="err" id="er">${esc(msg||'')}</div>
+    <button class="btn" id="si">Sign in</button>
+    <p>No account? Create one free at app.pollslide.com — no enterprise purchase or admin setup needed.</p>
+  </div>`;
+  $('si').onclick = async () => {
+    $('er').textContent='';
+    try { await auth.signInWithEmailAndPassword($('em').value.trim(), $('pw').value); }
+    catch(e){ $('er').textContent = 'Could not sign in. Check your details.'; }
+  };
+}
+
+async function showPicker(){
+  $('root').innerHTML = `<div class="pad"><p>Loading your presentations…</p></div>`;
+  let list = {};
+  try {
+    const s = await db.ref('quiz_builder').orderByChild('owner').equalTo(auth.currentUser.uid).get();
+    list = s.exists()? s.val() : {};
+  } catch(e){}
+  presentations = list;
+  const items = Object.entries(list).map(([code,p])=>{
+    const qs = Array.isArray(p.questions)? p.questions : Object.values(p.questions||{});
+    return `<div class="item" data-code="${esc(code)}"><div>${esc(p.title||'Untitled')}</div>
+      <div class="sub">${qs.length} question${qs.length===1?'':'s'} · ${esc(code)}</div></div>`;
+  }).join('');
+  $('root').innerHTML = `<div class="pad"><h2>Which presentation?</h2>
+    <div class="list">${items || '<p>No presentations found on this account.</p>'}</div></div>`;
+  document.querySelectorAll('.item').forEach(el =>
+    el.onclick = () => showQuestions(el.dataset.code));
+}
+
+function showQuestions(code){
+  const p = presentations[code] || {};
+  const qs = Array.isArray(p.questions)? p.questions : Object.values(p.questions||{});
+  const items = qs.map((q,i)=>`<div class="item" data-i="${i}">
+      <div>Q${i+1}. ${esc(q.text||'Untitled')}</div>
+      <div class="sub">${esc((q.type||'').replace(/_/g,' '))}</div></div>`).join('');
+  $('root').innerHTML = `<div class="pad"><h2>Which question?</h2>
+    <div class="list">${items||'<p>This presentation has no questions.</p>'}</div>
+    <button class="btn ghost" id="bk">← Presentations</button></div>`;
+  $('bk').onclick = showPicker;
+  document.querySelectorAll('.item').forEach(el => el.onclick = () => {
+    const i = Number(el.dataset.i), q = qs[i];
+    const b = { code, qIdx:i, qid:PSQid.bucket(q,i,code), text:q.text||'', q };
+    bound = b; cacheBinding(b);
+    goLive(b);
+  });
+}
+
+/* ── Boot ────────────────────────────────────────────────────────────────────
+   On the web, Slide Show is treated as a NEW SESSION and ActiveViewChanged never
+   fires — so the view must be fetched on load, not just listened for. */
+function getView(){
+  return new Promise(resolve => {
+    try {
+      Office.context.document.getActiveViewAsync(r =>
+        resolve(r.status === Office.AsyncResultStatus.Succeeded ? r.value : 'edit'));
+    } catch(e){ resolve('edit'); }
+  });
+}
+
+Office.onReady(async () => {
+  try { firebase.initializeApp(FB_CONFIG); } catch(e){}
+  db = firebase.database(); auth = firebase.auth();
+
+  const view = await getView();
+  bound = await resolveBinding();
+
+  if (view === 'read') {
+    // Presenting. Show results or say plainly why we can't — never a sign-in box.
+    if (bound) goLive(bound);
+    else $('root').innerHTML = `<div class="pad"><h2>Not linked to a question</h2>
+      <p>Leave the slide show, click this box, and choose a question.</p></div>`;
+    return;
+  }
+
+  if (bound) { goLive(bound); return; }
+  auth.onAuthStateChanged(u => { if (u) showPicker(); else showSignIn(); });
+
+  try {
+    Office.context.document.addHandlerAsync(Office.EventType.ActiveViewChanged, async () => {
+      const v = await getView();
+      if (v === 'read' && bound) goLive(bound);
+    });
+  } catch(e){}
+});
+</script>
+</body>
+</html>
