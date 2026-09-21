@@ -28,7 +28,7 @@
            xsi:type="TaskPaneApp">
 
   <Id>7b3f9a14-2c5e-4d8a-9f1b-6a2e4c0d8e10</Id>
-  <Version>1.0.0.0</Version>
+  <Version>1.0.1.0</Version>
   <ProviderName>PollSlide</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
   <!-- The AppSource listing name. Rod chose "PollSlide for PowerPoint" on 2026-09-08:
