@@ -473,26 +473,75 @@ async function goLive(idx, fromAuto) {
   renderRevealBar();
   renderQRPane(idx, code);
 
-  /* The cutoff for "responses that belong to THIS round" is the moment the presenter
-     LAUNCHED the question — presenter.html writes it to qstate/<qId>/launchedAt and
-     filters on exactly this value. Read it; never invent one.
+  /* The round's start time, persisted per question exactly as presenter.html does
+     (same ql_liveStart_<code>_<idx> key), so re-opening a question — or the auto-detect
+     re-firing on the same slide — does not discard responses already gathered.
 
-     This pane used to set liveStartedAt = Date.now() when the FIRST response arrived,
-     which is necessarily AFTER that response was submitted — so the moment anything
-     re-rendered (the reveal countdown firing, or a second answer landing) the first
-     answer failed its own cutoff and vanished. A presenter answering their own QR to
-     test saw the count go 1 → 0 and concluded responses were not arriving at all.
+     This pane used to set liveStartedAt = Date.now() when the FIRST response ARRIVED,
+     which is necessarily later than that response's own submittedAt. The answer that
+     started the round therefore failed the round's own cutoff, and vanished on the next
+     re-render. */
+  const startKey = `ql_liveStart_${code}_${idx}`;
+  let savedStart = parseInt(localStorage.getItem(startKey) || '0', 10);
+  if (!savedStart) { savedStart = Date.now(); try { localStorage.setItem(startKey, String(savedStart)); } catch (e) {} }
+  liveStartedAt = savedStart;
 
-     No qstate means the question was never launched from the presenter — someone just
-     scanned the QR on the slide. There is no round to be outside of, so there is no
-     cutoff: show everything. */
-  try {
-    const snap = await db.ref(`sessions/${code}/qstate/${qId}/launchedAt`).get();
-    const at = snap.exists() ? Number(snap.val()) : 0;
-    if (at > 0) liveStartedAt = at;
-  } catch (e) { /* unreadable → no cutoff, which shows more rather than less */ }
-
+  await publishLive(idx, qId, q, code, savedStart);
   attachListener(idx, qId, q, code);
+}
+
+/* Tell the session which question is live — the thing this pane never did.
+ *
+ * WHY THIS IS THE BUG, not a nicety. answer.html watches sessions/<code>/currentQuestion
+ * and does two things with it: it follows qIndex (jumping the phone to whatever question
+ * the presenter is on), and it takes currentQuestion.id as the authoritative response
+ * bucket. Because this pane only ever READ session state, currentQuestion held whatever
+ * presenter.html last wrote — possibly days ago, possibly a different question.
+ *
+ * So scanning the QR for question 3 loaded question 3, then the stale watcher fired and
+ * yanked the phone to the old question — which the tester HAD already answered, hence
+ * "You've already answered this question" on a question they had not. And any answer that
+ * did get through was written to the stale bucket, while this pane listened on the right
+ * one: every question showing zero responses.
+ *
+ * Mirrors presenter.html's publishLive payload field-for-field. gameMode is read from
+ * meta because that is where answer.html reads it from; overlay.html renders from this
+ * node too, which is why the display fields are included rather than a minimal payload. */
+async function publishLive(idx, qId, q, code, launchedAt) {
+  let gameMode = 'classic';
+  try {
+    const gm = await db.ref(`sessions/${code}/meta/gameMode`).get();
+    if (gm.exists() && gm.val()) gameMode = String(gm.val());
+  } catch (e) {}
+  const payload = {
+    id: qId, qIndex: idx, index: idx + 1, total: questions.length,
+    text: q.text, type: q.type,
+    options: q.options || null,
+    correctAnswer: q.correctAnswer !== undefined ? q.correctAnswer : null,
+    ratingMax: q.ratingMax || null, ratingLabels: q.ratingLabels || null,
+    image: q.image || null, videoOpts: q.videoOpts || null,
+    revealDelay: q.revealDelay !== undefined ? q.revealDelay : 30,
+    displayMode: q.displayMode || 'bars',
+    postReveal: q.postReveal || null,
+    phase: 'live', status: 'active', launchedAt, gameMode
+  };
+  /* This write is the difference between the audience seeing this question and the
+     audience being sent to a stale one, so it must NOT fail quietly. currentQuestion
+     and qstate both require auth — a pane whose token has lapsed would otherwise go on
+     looking perfectly healthy while every phone followed the wrong question and every
+     answer landed in the wrong bucket. That silent version of this bug took a full
+     debugging session to find; say it out loud instead. */
+  try {
+    await db.ref(`sessions/${code}/currentQuestion`).set(payload);
+    await db.ref(`sessions/${code}/qstate/${qId}`).set({
+      phase: 'live', postReveal: q.postReveal || null, postRevealAt: null, launchedAt
+    });
+    return true;
+  } catch (e) {
+    toast('Could not tell your audience this question is live — try signing out and back in.', 'danger');
+    console.error('publishLive failed', e);
+    return false;
+  }
 }
 
 function hideLivePanel(force) {

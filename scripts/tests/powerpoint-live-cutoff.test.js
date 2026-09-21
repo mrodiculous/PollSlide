@@ -66,9 +66,35 @@ const twoRounds = [{ submittedAt: 500 }, { submittedAt: 12000 }];
 ok('an answer from before launch is still excluded', twoRounds.filter(r => r.submittedAt >= 10000).length === 1);
 ok('an answer from after launch is kept', twoRounds.filter(r => r.submittedAt >= 10000)[0].submittedAt === 12000);
 
+console.log('\nThe pane publishes which question is live (the stale-currentQuestion bug)');
+/* answer.html watches sessions/<code>/currentQuestion: it follows qIndex and takes
+   currentQuestion.id as the response bucket. This pane only ever READ session state, so
+   currentQuestion held whatever presenter.html last wrote — a different question, possibly
+   from days earlier. Scanning question 3's QR therefore loaded question 3 and was then
+   yanked to the stale one, which the tester HAD answered ("You've already answered this
+   question" on a question they hadn't), while answers landed in the stale bucket and every
+   question showed zero responses. */
+{
+  const src2 = fs.readFileSync(path.resolve(__dirname, '..', '..', 'powerpoint.html'), 'utf8');
+  ok('the pane defines publishLive', /async function publishLive\(/.test(src2));
+  ok('goLive publishes before listening', /await publishLive\([^)]*\);\s*\n\s*attachListener\(/.test(src2));
+  ok('it writes currentQuestion', /sessions\/\$\{code\}\/currentQuestion/.test(src2));
+  ok('it writes qstate for the live question', /sessions\/\$\{code\}\/qstate\/\$\{qId\}/.test(src2));
+  ok('the published id IS the bucket the listener uses', /id: qId,/.test(src2));
+  ok('it publishes qIndex so the phone follows this question', /qIndex: idx,/.test(src2));
+  ok('status is active, matching presenter.html and overlay.html', /status: 'active'/.test(src2));
+  /* A pane with a lapsed token would otherwise look healthy while every phone followed
+     the wrong question — the silent version of this bug cost a whole session to find. */
+  ok('a failed publish is surfaced, not swallowed', /publishLive failed|Could not tell your audience/.test(src2));
+  ok('the round start is persisted per question, like presenter.html', /ql_liveStart_\$\{code\}_\$\{idx\}/.test(src2));
+}
+
 console.log('\nThe source still says what it should');
 const src = fs.readFileSync(path.resolve(__dirname, '..', '..', 'powerpoint.html'), 'utf8');
-ok('goLive reads the authoritative launchedAt from qstate', /qstate\/\$\{qId\}\/launchedAt/.test(src));
+/* Superseded: the first fix had the pane READ qstate/<qId>/launchedAt. That was still
+   wrong for this product — nobody was writing it, because this pane is the presenter
+   surface here. It now OWNS the round start: persists it per question and publishes it. */
+ok('goLive derives the cutoff from the persisted round start', /liveStartedAt = savedStart/.test(src));
 /* Strip comments first: the fix is explained in a comment that quotes the old broken
    line, and matching that would fail forever while the code is correct. */
 const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
