@@ -101,5 +101,22 @@ const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 ok('the listener no longer invents a cutoff', !/liveStartedAt\s*=\s*Date\.now\(\)/.test(code));
 ok('goLive is async (it awaits that read)', /async function goLive/.test(src));
 
+console.log('\nThe content add-in reads decks from the same place the task pane does');
+/* The first build queried quiz_builder by an "owner" field. That is not how this
+   database is shaped, so the picker silently returned nothing and just said "No
+   presentations found on this account" — which reads like an empty account rather
+   than a wrong query. Decks live at users/<uid>/presentations, the title field is
+   `name` (not `title`), and the session code is a FIELD on the record (sessionCode),
+   not the key. Pin all of that to the task pane, which has always had it right. */
+{
+  const content = fs.readFileSync(path.resolve(__dirname, '..', '..', 'powerpoint-content', 'index.html'), 'utf8');
+  const pane    = fs.readFileSync(path.resolve(__dirname, '..', '..', 'powerpoint.html'), 'utf8');
+  ok('task pane reads users/<uid>/presentations', /users\/\$\{userId\}\/presentations/.test(pane));
+  ok('content add-in reads the same path', /users\/'\s*\+\s*auth\.currentUser\.uid\s*\+\s*'\/presentations/.test(content));
+  ok('content add-in no longer queries quiz_builder by owner', !/orderByChild\(\s*'owner'\s*\)/.test(content));
+  ok('content add-in uses p.sessionCode, not the record key', /p\.sessionCode/.test(content));
+  ok('content add-in uses p.name for the title', /p\.name/.test(content));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

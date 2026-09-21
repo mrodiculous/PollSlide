@@ -346,28 +346,42 @@ function showSignIn(msg){
   };
 }
 
+/* Decks live at users/<uid>/presentations — the same read powerpoint.html does.
+   The first version of this queried quiz_builder by an "owner" field, which is not
+   how this database is shaped: it returned nothing and the picker just said "No
+   presentations found". The session code is a FIELD on the record (p.sessionCode),
+   not the key, and the title field is `name`, not `title`. */
 async function showPicker(){
   $('root').innerHTML = `<div class="pad"><p>Loading your presentations…</p></div>`;
   let list = {};
   try {
-    const s = await db.ref('quiz_builder').orderByChild('owner').equalTo(auth.currentUser.uid).get();
+    const s = await db.ref('users/'+auth.currentUser.uid+'/presentations').get();
     list = s.exists()? s.val() : {};
   } catch(e){}
   presentations = list;
-  const items = Object.entries(list).map(([code,p])=>{
+  const pres = Object.entries(list)
+    .map(([id,p]) => ({ ...p, id }))
+    .sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+  const items = pres.map(p=>{
     const qs = Array.isArray(p.questions)? p.questions : Object.values(p.questions||{});
-    return `<div class="item" data-code="${esc(code)}"><div>${esc(p.title||'Untitled')}</div>
-      <div class="sub">${qs.length} question${qs.length===1?'':'s'} · ${esc(code)}</div></div>`;
+    return `<div class="item" data-id="${esc(p.id)}"><div>${esc(p.name||'Untitled')}</div>
+      <div class="sub">${qs.length} question${qs.length===1?'':'s'} · ${esc(p.sessionCode||'—')}</div></div>`;
   }).join('');
   $('root').innerHTML = `<div class="pad"><h2>Which presentation?</h2>
-    <div class="list">${items || '<p>No presentations found on this account.</p>'}</div></div>`;
+    <div class="list">${items || '<p>No presentations on this account yet. Create one at app.pollslide.com/presenter, then click this box again.</p>'}</div></div>`;
   document.querySelectorAll('.item').forEach(el =>
-    el.onclick = () => showQuestions(el.dataset.code));
+    el.onclick = () => showQuestions(el.dataset.id));
 }
 
-function showQuestions(code){
-  const p = presentations[code] || {};
+function showQuestions(id){
+  const p = presentations[id] || {};
+  const code = p.sessionCode;
   const qs = Array.isArray(p.questions)? p.questions : Object.values(p.questions||{});
+  if (!code){
+    $('root').innerHTML = `<div class="pad"><h2>That presentation has no session code</h2>
+      <p>Open it once in PollSlide, then come back.</p></div>`;
+    return;
+  }
   const items = qs.map((q,i)=>`<div class="item" data-i="${i}">
       <div>Q${i+1}. ${esc(q.text||'Untitled')}</div>
       <div class="sub">${esc((q.type||'').replace(/_/g,' '))}</div></div>`).join('');
