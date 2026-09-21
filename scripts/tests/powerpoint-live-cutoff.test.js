@@ -152,8 +152,30 @@ console.log('\nA newly inserted content object asks; it never inherits');
   ok('boot passes the view through', /resolveBinding\(view\)/.test(c));
   ok('a guessed binding is not written back as if it were chosen',
      /deliberately not re-cached/.test(c));
-  ok('a bound object can be re-pointed while editing', /function addRebind\(\)/.test(c) && /Change question/.test(c));
-  ok('the rebind control is gated on editing', /if \(editing\) addRebind\(\)/.test(c));
+  /* addRebind grew into addControls when the size and image toggles landed; the
+     behaviour these assert is unchanged, only the function name moved. */
+  ok('a bound object can be re-pointed while editing', /function addControls\(/.test(c) && /Change question/.test(c));
+  ok('the rebind control is gated on editing', /if \(editing\) addControls/.test(c));
+}
+
+console.log('\nOption art and the presenter\'s size control');
+{
+  const c = fs.readFileSync(path.resolve(__dirname, '..', '..', 'powerpoint-content', 'index.html'), 'utf8');
+  /* `img` is the URL; `imgGif` is Giphy METADATA ({alt,id,source}). Using imgGif as a
+     src would put a broken image on every slide, so the accessor is pinned. */
+  ok('media src comes from o.img', /const u = o && typeof o === 'object' \? o\.img : null/.test(c));
+  ok('imgGif is used only for alt text', /o\.imgGif && o\.imgGif\.alt/.test(c));
+  ok('videos get their own branch', /isVideoUrl/.test(c) && /<video src=/.test(c));
+  /* Verified 2026-09-21: a dead Giphy link must collapse the frame, not leave a torn
+     icon in front of a room. Proven when this machine could not reach giphy at all —
+     all four frames hid themselves. */
+  ok('a failed image hides its frame', /onerror="this\.parentElement\.style\.display='none'"/.test(c));
+  /* cqw/cqh silently fall back to the viewport with no container context. */
+  ok('a container context exists for cq units', /container-type:\s*size/.test(c));
+  ok('every text size is multiplied by --scale', (c.match(/\* var\(--scale\)/g)||[]).length >= 5);
+  ok('scale is clamped to a sane range', /Math\.min\(1\.8, Math\.max\(0\.6/.test(c));
+  ok('prefs persist with the per-instance binding', /bound\.scale = SCALE; bound\.media = SHOW_MEDIA/.test(c));
+  ok('controls are edit-only', /if \(editing\) addControls/.test(c));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

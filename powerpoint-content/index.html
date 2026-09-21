@@ -25,31 +25,45 @@
        palette — dark-on-white here would fight most decks. */
   }
   .wrap{height:100%;display:flex;flex-direction:column;padding:3.5% 4%}
+  /* cqw/cqh need a container to resolve against; without this they silently fall back
+     to the viewport, which only worked by accident because this page IS the iframe. */
+  html,body{container-type:size;container-name:slidebox}
+  /* One knob the presenter controls, multiplying every clamp() below. The object can be
+     resized on the slide, but "make the text bigger in the same box" is a different wish
+     and there was no way to express it. */
+  :root{--scale:1}
   .hidden{display:none!important}
 
   /* Everything scales off cqw/cqh so one layout survives the presenter dragging the
      object from a narrow right-hand bar to full slide width. */
   .q{font-family:'Syne',sans-serif;font-weight:800;line-height:1.2;
-     font-size:clamp(13px,4.4cqw,34px);margin-bottom:.5em;flex-shrink:0}
-  .meta{display:flex;align-items:center;gap:.6em;font-size:clamp(9px,2.1cqw,15px);
+     font-size:calc((clamp(13px,4.4cqw,34px)) * var(--scale));margin-bottom:.5em;flex-shrink:0}
+  .meta{display:flex;align-items:center;gap:.6em;font-size:calc((clamp(9px,2.1cqw,15px)) * var(--scale));
         color:var(--muted);margin-bottom:.7em;flex-shrink:0}
   .dot{width:.55em;height:.55em;border-radius:100px;background:var(--ok);flex-shrink:0}
   .rows{flex:1;display:flex;flex-direction:column;justify-content:center;gap:.5em;min-height:0}
   .row{display:flex;flex-direction:column;gap:.22em}
   .rowtop{display:flex;justify-content:space-between;gap:.6em;
-          font-size:clamp(10px,2.5cqw,19px);font-weight:600}
+          font-size:calc((clamp(10px,2.5cqw,19px)) * var(--scale));font-weight:600}
   .rowtop .n{color:var(--muted);font-weight:500;flex-shrink:0}
-  .bar{height:clamp(7px,1.9cqh,20px);background:rgba(0,0,0,.07);border-radius:100px;overflow:hidden}
+  .bar{height:calc(clamp(7px,1.9cqh,20px) * var(--scale));background:rgba(0,0,0,.07);border-radius:100px;overflow:hidden}
   .fill{height:100%;border-radius:100px;background:linear-gradient(90deg,var(--accent),#a78bfa);
         width:0;transition:width .45s cubic-bezier(.22,1,.36,1)}
   .row.correct .fill{background:linear-gradient(90deg,var(--ok),#5fe0a6)}
   .row.dim{opacity:.32}
   .tag{font-size:.8em;font-weight:700;color:var(--ok)}
   .free{border:1px solid var(--line);border-radius:9px;padding:.5em .65em;
-        font-size:clamp(10px,2.4cqw,18px);line-height:1.35}
+        font-size:calc((clamp(10px,2.4cqw,18px)) * var(--scale));line-height:1.35}
   .free .who{color:var(--muted);font-size:.82em;margin-left:.5em}
+  .optmedia{margin-bottom:.3em;border-radius:.4em;overflow:hidden;line-height:0}
+  .optmedia img,.optmedia video{width:100%;max-height:calc(clamp(38px,11cqh,110px) * var(--scale));
+        object-fit:cover;display:block;background:#000}
+  .ctl{position:absolute;top:.5em;right:.5em;z-index:5;display:flex;gap:.3em}
+  .ctl button{font-family:'Syne',sans-serif;font-weight:700;border:1px solid var(--line);
+        background:rgba(255,255,255,.92);border-radius:7px;cursor:pointer;color:var(--ink);
+        padding:.3em .55em;font-size:clamp(9px,1.9cqw,12px)}
   .foot{display:flex;align-items:center;justify-content:space-between;gap:.6em;
-        font-size:clamp(8px,1.9cqw,13px);color:var(--muted);flex-shrink:0;padding-top:.5em}
+        font-size:calc((clamp(8px,1.9cqw,13px)) * var(--scale));color:var(--muted);flex-shrink:0;padding-top:.5em}
   .brand{display:flex;align-items:center;gap:.4em;font-weight:600}
 
   /* Bind / empty states — edit mode only, never shown while presenting */
@@ -117,6 +131,23 @@ const FB_CONFIG = {
 const LETTERS = ['A','B','C','D','E','F','G','H'];
 
 let db, auth, bound = null, listener = null, presentations = {};
+/* Display prefs live WITH the binding in per-instance settings, so two objects on two
+   slides can be sized differently and both survive reopening the deck. */
+let SCALE = 1, SHOW_MEDIA = true;
+
+function applyPrefs(){
+  document.documentElement.style.setProperty('--scale', String(SCALE));
+}
+function savePrefs(){
+  if (!bound) return;
+  bound.scale = SCALE; bound.media = SHOW_MEDIA;
+  cacheBinding(bound);
+}
+function loadPrefs(b){
+  SCALE = (b && typeof b.scale === 'number') ? b.scale : 1;
+  SHOW_MEDIA = (b && typeof b.media === 'boolean') ? b.media : true;
+  applyPrefs();
+}
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s==null?'':s).replace(/[&<>"']/g, c =>
@@ -273,6 +304,23 @@ let _lastTotal = 0, _celebrated = false;
      • r.answer is a JSON string holding an index or an array of indices
      • a question with no options (open text, word cloud, rating) has no bars at all
        and must fall back to listing what people actually wrote */
+const isVideoUrl = (u) => {
+  if (!u) return false;
+  const x = String(u).split('?')[0].toLowerCase();
+  return x.endsWith('.mp4')||x.endsWith('.webm')||x.endsWith('.mov')||x.endsWith('.m4v')||x.includes('/video/');
+};
+/* Option art is a URL on `img`; `imgGif` is Giphy METADATA (alt/id/source), not a URL —
+   rendering imgGif as a src would give a broken image on every slide. Video branch and
+   the onerror hide are lifted from presenter.html so a dead Giphy link collapses the
+   frame instead of leaving a torn icon in front of the room. */
+const optMedia = (o) => {
+  const u = o && typeof o === 'object' ? o.img : null;
+  if (!u || !SHOW_MEDIA) return '';
+  const alt = esc((o.imgGif && o.imgGif.alt) || '');
+  return `<div class="optmedia">${isVideoUrl(u)
+    ? `<video src="${esc(u)}" autoplay loop muted playsinline></video>`
+    : `<img src="${esc(u)}" alt="${alt}" onerror="this.parentElement.style.display='none'">`}</div>`;
+};
 const optLabel = (o) => (o && typeof o === 'object') ? (o.text || o.label || '') : String(o == null ? '' : o);
 
 function safeAnswer(a){
@@ -319,6 +367,7 @@ function renderResults(q, responses, revealed){
     const isC  = revealed && correct.includes(i);
     const dim  = revealed && hasC && !correct.includes(i);
     return `<div class="row ${isC?'correct':''} ${dim?'dim':''}">
+      ${optMedia(o)}
       <div class="rowtop">
         <span>${LETTERS[i]}. ${esc(optLabel(o))}${isC?' <span class="tag">✓</span>':''}</span>
         <span class="n">${counts[i]} · ${pct}%</span>
@@ -342,6 +391,7 @@ function renderResults(q, responses, revealed){
 
 async function goLive(b, editing){
   if (listener) { listener(); listener = null; }
+  loadPrefs(b);
   let q = b.q;
   if (!q) {
     try {
@@ -362,7 +412,7 @@ async function goLive(b, editing){
   const fn = ref.on('value', snap => {
     const all = snap.exists() ? Object.values(snap.val()) : [];
     renderResults(q, all, revealed);
-    if (editing) addRebind();
+    if (editing) addControls(() => renderResults(q, all, revealed));
   });
   listener = () => ref.off('value', fn);
 
@@ -371,7 +421,7 @@ async function goLive(b, editing){
   try {
     db.ref('sessions/'+b.code+'/qstate/'+qid+'/phase').on('value', s => {
       revealed = s.exists() && s.val()==='reveal';
-      ref.get().then(sn => { renderResults(q, sn.exists()?Object.values(sn.val()):[], revealed); if (editing) addRebind(); }).catch(()=>{});
+      ref.get().then(sn => { renderResults(q, sn.exists()?Object.values(sn.val()):[], revealed); if (editing) addControls(); }).catch(()=>{});
     });
   } catch(e){}
 }
@@ -379,13 +429,30 @@ async function goLive(b, editing){
 /* Shown only while editing. Without it, a bound object could only be re-pointed by
    deleting it and inserting a new one — and it must never appear during a show, where
    there is nothing to click it with and it would just be clutter on the slide. */
-function addRebind(){
-  if (document.getElementById('rebind')) return;
+/* Editing only. A show has nobody to click these and they would just be clutter on
+   the slide, so they are never rendered in read view. */
+function addControls(redraw){
+  if (document.getElementById('psCtl')) return;
   const bar = document.createElement('div');
-  bar.style.cssText = 'position:absolute;top:.5em;right:.5em;z-index:5';
-  bar.innerHTML = `<button class="btn ghost" id="rebind" style="padding:.35em .6em;font-size:clamp(9px,1.9cqw,12px)">Change question</button>`;
+  bar.className = 'ctl'; bar.id = 'psCtl';
+  bar.innerHTML =
+    `<button id="cSm" title="Smaller text">A&minus;</button>` +
+    `<button id="cLg" title="Bigger text">A+</button>` +
+    `<button id="cMed" title="Show or hide option images">${SHOW_MEDIA?'🖼':'🚫'}</button>` +
+    `<button id="cRe">Change question</button>`;
   document.body.appendChild(bar);
-  document.getElementById('rebind').onclick = () => {
+  const bump = (d) => {
+    SCALE = Math.min(1.8, Math.max(0.6, Math.round((SCALE + d) * 20) / 20));
+    applyPrefs(); savePrefs();
+  };
+  document.getElementById('cSm').onclick = () => bump(-0.1);
+  document.getElementById('cLg').onclick = () => bump(+0.1);
+  document.getElementById('cMed').onclick = () => {
+    SHOW_MEDIA = !SHOW_MEDIA; savePrefs();
+    document.getElementById('cMed').textContent = SHOW_MEDIA ? '🖼' : '🚫';
+    if (typeof redraw === 'function') redraw();
+  };
+  document.getElementById('cRe').onclick = () => {
     bar.remove();
     if (listener) { listener(); listener = null; }
     if (auth.currentUser) showPicker(); else showSignIn();
