@@ -45,6 +45,9 @@
   .row.correct .fill{background:linear-gradient(90deg,var(--ok),#5fe0a6)}
   .row.dim{opacity:.32}
   .tag{font-size:.8em;font-weight:700;color:var(--ok)}
+  .free{border:1px solid var(--line);border-radius:9px;padding:.5em .65em;
+        font-size:clamp(10px,2.4cqw,18px);line-height:1.35}
+  .free .who{color:var(--muted);font-size:.82em;margin-left:.5em}
   .foot{display:flex;align-items:center;justify-content:space-between;gap:.6em;
         font-size:clamp(8px,1.9cqw,13px);color:var(--muted);flex-shrink:0;padding-top:.5em}
   .brand{display:flex;align-items:center;gap:.4em;font-weight:600}
@@ -248,39 +251,71 @@ function fireConfetti(){
 
 /* ── Live results ───────────────────────────────────────────────────────────── */
 let _lastTotal = 0, _celebrated = false;
+
+/* Answer/option shapes are NOT what they look like, and getting them wrong renders
+   "[object Object]" on a slide in front of a room. Mirrored from powerpoint.html:
+     • q.options[i] is an OBJECT — the label is .text, not the item itself
+     • q.correctAnswer may be a single index OR an array (multi-select), and may be
+       absent/empty, which must read as "no correct answer" rather than index 0
+     • r.answer is a JSON string holding an index or an array of indices
+     • a question with no options (open text, word cloud, rating) has no bars at all
+       and must fall back to listing what people actually wrote */
+const optLabel = (o) => (o && typeof o === 'object') ? (o.text || o.label || '') : String(o == null ? '' : o);
+
+function safeAnswer(a){
+  try { const v = JSON.parse(a); return Array.isArray(v) ? v.join(', ') : String(v); }
+  catch(e){ return String(a == null ? '' : a); }
+}
+
 function renderResults(q, responses, revealed){
   const total = responses.length;
-  const grew = total > _lastTotal;   // only pop on a genuine new answer, not a re-render
-  _lastTotal = total;
-  const opts  = Array.isArray(q?.options) ? q.options : [];
-  const counts = opts.map(()=>0);
-  for (const r of responses){
-    let a = r && r.answer;
-    try { a = JSON.parse(a); } catch(e){}
-    if (Array.isArray(a)) a.forEach(i => { const n=Number(i); if(counts[n]!=null) counts[n]++; });
-    else { const n = Number(a); if (counts[n]!=null) counts[n]++; }
+  const grew  = total > _lastTotal;
+  _lastTotal  = total;
+
+  const head = `<div class="q">${esc(q?.text||'')}</div>
+    <div class="meta"><span class="dot"></span><span class="count ${grew?'pop':''}">${total}</span>&nbsp;response${total===1?'':'s'}${revealed?' · answer revealed':''}</div>`;
+  const foot = `<div class="foot"><span class="brand">PollSlide</span><span>Scan the QR to answer</span></div>`;
+
+  const isChoice = q && q.options && (q.type === 'multiple_choice' || q.type === 'multiple_choice_multi');
+
+  if (!isChoice){
+    /* Open text, word cloud, rating — show the answers themselves. */
+    const rows = responses.slice(-12).map(r =>
+      `<div class="free">${esc(safeAnswer(r.answer))}${r.name?`<span class="who">— ${esc(r.name)}</span>`:''}</div>`).join('');
+    $('root').innerHTML = head +
+      `<div class="rows">${rows || '<p style="color:var(--muted)">Waiting for answers…</p>'}</div>` + foot;
+    return;
   }
-  const correct = (q && q.correctAnswer!=null) ? Number(q.correctAnswer) : null;
+
+  const opts = q.options || [];
+  const _ca  = q.correctAnswer;
+  const hasC = _ca !== undefined && _ca !== null && _ca !== '' && !(Array.isArray(_ca) && _ca.length === 0);
+  const correct = hasC ? (Array.isArray(_ca) ? _ca : [_ca]).map(Number) : [];
+
+  const counts = opts.map(() => 0);
+  responses.forEach(r => {
+    try {
+      const a = JSON.parse(r.answer);
+      (Array.isArray(a) ? a : [a]).forEach(v => { const n = Number(v); if (counts[n] != null) counts[n]++; });
+    } catch(e){}
+  });
+
+  const denom = total || 1;
   const rows = opts.map((o,i)=>{
-    const pct = total ? Math.round(counts[i]/total*100) : 0;
-    const isC = revealed && correct===i;
-    const dim = revealed && correct!=null && correct!==i;
+    const pct  = Math.round(counts[i]/denom*100);
+    const isC  = revealed && correct.includes(i);
+    const dim  = revealed && hasC && !correct.includes(i);
     return `<div class="row ${isC?'correct':''} ${dim?'dim':''}">
       <div class="rowtop">
-        <span>${LETTERS[i]}. ${esc(o)}${isC?' <span class="tag">✓</span>':''}</span>
+        <span>${LETTERS[i]}. ${esc(optLabel(o))}${isC?' <span class="tag">✓</span>':''}</span>
         <span class="n">${counts[i]} · ${pct}%</span>
       </div>
       <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
     </div>`;
   }).join('');
 
-  $('root').innerHTML = `
-    <div class="q">${esc(q?.text||'')}</div>
-    <div class="meta"><span class="dot"></span><span class="count ${grew?'pop':''}">${total}</span>&nbsp;response${total===1?'':'s'}${revealed?' · answer revealed':''}</div>
-    <div class="rows">${rows || '<p style="color:var(--muted)">Waiting for answers…</p>'}</div>
-    <div class="foot"><span class="brand">PollSlide</span><span>Scan the QR to answer</span></div>`;
-  /* Bars grow from zero after an innerHTML swap, otherwise they would simply
-     appear at their final width and the motion would be lost. */
+  $('root').innerHTML = head + `<div class="rows">${rows}</div>` + foot;
+
   requestAnimationFrame(()=>{
     document.querySelectorAll('.fill').forEach(el=>{
       const w = el.dataset.w || el.style.width;
@@ -288,7 +323,6 @@ function renderResults(q, responses, revealed){
       requestAnimationFrame(()=>{ el.style.width = w; });
     });
   });
-  // Once per question, at the moment the answer lands.
   if (revealed && !_celebrated && total > 0){ _celebrated = true; fireConfetti(); }
   if (!revealed) _celebrated = false;
 }

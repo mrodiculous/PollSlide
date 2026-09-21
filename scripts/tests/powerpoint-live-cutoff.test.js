@@ -118,5 +118,23 @@ console.log('\nThe content add-in reads decks from the same place the task pane 
   ok('content add-in uses p.name for the title', /p\.name/.test(content));
 }
 
+console.log('\nThe content add-in reads the real question/answer shapes');
+/* Second shape bug in this file's history, so it is pinned. Verified against the live
+   Reviewer Demo question on 2026-09-21:
+     options[i] = { text, img, imgGif }   → the label is .text, NOT the item
+     correctAnswer = [2]                  → an ARRAY for multiple_choice_multi
+     r.answer = "[2]"                     → a JSON string holding index/indices
+   Rendering the option object directly printed "[object Object]" on a slide, and
+   Number([2]) is NaN so nothing was ever marked correct. */
+{
+  const c = fs.readFileSync(path.resolve(__dirname, '..', '..', 'powerpoint-content', 'index.html'), 'utf8');
+  ok('option labels go through a .text accessor', /optLabel/.test(c) && /o\.text/.test(c));
+  ok('the raw option object is never interpolated', !/\$\{esc\(o\)\}/.test(c));
+  ok('correctAnswer handles an array', /Array\.isArray\(_ca\)\s*\?\s*_ca\s*:\s*\[_ca\]/.test(c));
+  ok('an absent/empty correctAnswer is not treated as index 0', /_ca\.length === 0/.test(c));
+  ok('answers are JSON-parsed and may be arrays', /JSON\.parse\(r\.answer\)/.test(c) && /Array\.isArray\(a\)\s*\?\s*a\s*:\s*\[a\]/.test(c));
+  ok('questions with no options fall back to listing answers', /isChoice/.test(c) && /safeAnswer/.test(c));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
