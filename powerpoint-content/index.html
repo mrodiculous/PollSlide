@@ -180,21 +180,34 @@ function readNotesBinding(){
   });
 }
 
-async function resolveBinding(){
-  const s = readSettingsBinding();  if (s) { cacheBinding(s); return s; }
-  const c = readCachedBinding();    if (c) { cacheBinding(c); return c; }
+/* WHICH binding applies depends on the mode, and conflating the two made a freshly
+   inserted object silently adopt the previous one's question instead of asking.
+
+   Only document settings are PER-INSTANCE. The localStorage cache is keyed by
+   partitionKey, and the notes marker belongs to the SLIDE — both are shared, so
+   treating them as "this instance is already bound" meant every new object inherited
+   whatever was bound last. They are fallbacks for a specific failure, not evidence of
+   a binding.
+
+   edit  → settings only. No settings means this object is new: ask.
+   read  → settings, then the shared fallbacks, because settings.get is reported to
+           return null in PowerPoint on the web while presenting (office-js#3406) and
+           showing the right question beats showing nothing when nobody can click. */
+async function resolveBinding(view){
+  const s = readSettingsBinding();
+  if (s) { cacheBinding(s); return s; }
+  if (view !== 'read') return null;          // editing: never guess, show the picker
+
+  const c = readCachedBinding();
+  if (c) return c;                           // deliberately not re-cached: it is a guess
   const n = await readNotesBinding();
   if (n && n.code && n.qIdx != null) {
-    /* The notes marker carries an index, not a bucket id. Resolve it to the real
-       bucket the same way every other surface does, so a reordered deck still
-       lands on the right answers. */
+    /* The notes marker carries an index, not a bucket id. Resolve it the way every
+       other surface does, so a reordered deck still lands on the right answers. */
     try {
       const snap = await db.ref('quiz_builder/'+n.code+'/questions/'+n.qIdx).get();
       const q = snap.exists() ? snap.val() : null;
-      if (q) {
-        const b = { code:n.code, qIdx:n.qIdx, qid:PSQid.bucket(q,n.qIdx,n.code), text:q.text||'', q };
-        cacheBinding(b); return b;
-      }
+      if (q) return { code:n.code, qIdx:n.qIdx, qid:PSQid.bucket(q,n.qIdx,n.code), text:q.text||'', q };
     } catch(e){}
   }
   return null;
@@ -327,7 +340,7 @@ function renderResults(q, responses, revealed){
   if (!revealed) _celebrated = false;
 }
 
-async function goLive(b){
+async function goLive(b, editing){
   if (listener) { listener(); listener = null; }
   let q = b.q;
   if (!q) {
@@ -349,6 +362,7 @@ async function goLive(b){
   const fn = ref.on('value', snap => {
     const all = snap.exists() ? Object.values(snap.val()) : [];
     renderResults(q, all, revealed);
+    if (editing) addRebind();
   });
   listener = () => ref.off('value', fn);
 
@@ -357,9 +371,25 @@ async function goLive(b){
   try {
     db.ref('sessions/'+b.code+'/qstate/'+qid+'/phase').on('value', s => {
       revealed = s.exists() && s.val()==='reveal';
-      ref.get().then(sn => renderResults(q, sn.exists()?Object.values(sn.val()):[], revealed)).catch(()=>{});
+      ref.get().then(sn => { renderResults(q, sn.exists()?Object.values(sn.val()):[], revealed); if (editing) addRebind(); }).catch(()=>{});
     });
   } catch(e){}
+}
+
+/* Shown only while editing. Without it, a bound object could only be re-pointed by
+   deleting it and inserting a new one — and it must never appear during a show, where
+   there is nothing to click it with and it would just be clutter on the slide. */
+function addRebind(){
+  if (document.getElementById('rebind')) return;
+  const bar = document.createElement('div');
+  bar.style.cssText = 'position:absolute;top:.5em;right:.5em;z-index:5';
+  bar.innerHTML = `<button class="btn ghost" id="rebind" style="padding:.35em .6em;font-size:clamp(9px,1.9cqw,12px)">Change question</button>`;
+  document.body.appendChild(bar);
+  document.getElementById('rebind').onclick = () => {
+    bar.remove();
+    if (listener) { listener(); listener = null; }
+    if (auth.currentUser) showPicker(); else showSignIn();
+  };
 }
 
 /* ── Edit mode: bind this instance ───────────────────────────────────────────── */
@@ -427,7 +457,7 @@ function showQuestions(id){
     const i = Number(el.dataset.i), q = qs[i];
     const b = { code, qIdx:i, qid:PSQid.bucket(q,i,code), text:q.text||'', q };
     bound = b; cacheBinding(b);
-    goLive(b);
+    goLive(b, true);
   });
 }
 
@@ -448,7 +478,7 @@ Office.onReady(async () => {
   db = firebase.database(); auth = firebase.auth();
 
   const view = await getView();
-  bound = await resolveBinding();
+  bound = await resolveBinding(view);
 
   if (view === 'read') {
     // Presenting. Show results or say plainly why we can't — never a sign-in box.
@@ -458,7 +488,7 @@ Office.onReady(async () => {
     return;
   }
 
-  if (bound) { goLive(bound); return; }
+  if (bound) { goLive(bound, true); return; }   // true = editing, offer a way to change it
   auth.onAuthStateChanged(u => { if (u) showPicker(); else showSignIn(); });
 
   try {

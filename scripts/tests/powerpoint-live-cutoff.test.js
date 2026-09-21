@@ -136,5 +136,25 @@ console.log('\nThe content add-in reads the real question/answer shapes');
   ok('questions with no options fall back to listing answers', /isChoice/.test(c) && /safeAnswer/.test(c));
 }
 
+console.log('\nA newly inserted content object asks; it never inherits');
+/* Reported 2026-09-21: inserting a fresh object auto-loaded a question instead of
+   offering the picker. Only document settings are PER-INSTANCE — the localStorage
+   cache is keyed by partitionKey and the notes marker belongs to the SLIDE, so
+   treating either as "already bound" made every new object adopt the last binding.
+   They are fallbacks for the web presentation-mode null (office-js#3406), and only
+   in read view, where nobody can pick anyway. */
+{
+  const c = fs.readFileSync(path.resolve(__dirname, '..', '..', 'powerpoint-content', 'index.html'), 'utf8');
+  ok('resolveBinding is view-aware', /function resolveBinding\(view\)/.test(c));
+  ok('edit view returns early, before the shared fallbacks', /if \(view !== 'read'\) return null;/.test(c));
+  ok('the notes/localStorage fallbacks sit AFTER that guard',
+     c.indexOf("if (view !== 'read') return null;") < c.indexOf('readCachedBinding()', c.indexOf("if (view !== 'read') return null;")));
+  ok('boot passes the view through', /resolveBinding\(view\)/.test(c));
+  ok('a guessed binding is not written back as if it were chosen',
+     /deliberately not re-cached/.test(c));
+  ok('a bound object can be re-pointed while editing', /function addRebind\(\)/.test(c) && /Change question/.test(c));
+  ok('the rebind control is gated on editing', /if \(editing\) addRebind\(\)/.test(c));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
