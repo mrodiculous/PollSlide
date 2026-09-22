@@ -166,5 +166,65 @@ console.log('\nBUG B — a question keeps one identity everywhere present.html p
      /id: PSQid\.bucket\(q, idx, code\)/.test(present));
 }
 
+/* ───────────────────────────────────────────────────────────────────────────
+   BUG C — the phone answered into a bucket nobody was watching.
+
+   Reported 2026-09-22 while presenting from PowerPoint: "it took me to the right
+   question, but it did not mark my answer", and on rescanning, "you already answered
+   this question" even though the tally had just been cleared.
+
+   STABLE_QID started as the positional q<idx>_stable_<code> and was corrected ONLY by
+   currentQuestion. With a controller driving that is fine. With none — which is exactly
+   PowerPoint + the content add-in, where publishing currentQuestion is forbidden because
+   a deck holds one add-in object per slide — nothing corrected it, so the phone wrote to
+   q<idx>_stable_<code> while every reader watched <id>_<code>. The answer was stored
+   successfully and counted nowhere. And "Clear tally" removes the ID bucket
+   (presenter.html:7147), so the phone's positional answer survived every clear and the
+   next scan said "already answered".
+   ───────────────────────────────────────────────────────────────────────── */
+console.log('\nBUG C — the phone and every reader derive the SAME response bucket');
+{
+  const ctx = { window: {} };
+  vm.createContext(ctx);
+  vm.runInContext(read('qid.js'), ctx);
+  const PSQid = ctx.window.PSQid;
+
+  const ans = read('answer.html');
+  const m = ans.match(/if \(!\(_liveQ && _liveQ\.id && Number\(_liveQ\.qIndex\) === Q_INDEX\)\) \{[\s\S]*?\n  \}/);
+  ok('answer.html still derives the bucket from the question', !!m);
+
+  if (!m) { console.log('  … skipping the bucket-agreement checks'); }
+  else {
+    const CODE = 'XZESB7L';
+    /* Models the real order: the currentQuestion watcher (answer.html:1136) and
+       goToQuestion (:1148) have already set STABLE_QID before loadQuestion runs. */
+    const phone = (q, idx, liveQ) => {
+      const seeded = (liveQ && liveQ.id && Number(liveQ.qIndex) === idx)
+        ? liveQ.id : ('q' + idx + '_stable_' + CODE);
+      return new Function('PSQid', 'questionData', 'Q_INDEX', 'SESSION', '_liveQ', 'SEEDED',
+        'let STABLE_QID = SEEDED;\n' + m[0] + '\nreturn STABLE_QID;')(PSQid, q, idx, CODE, liveQ, seeded);
+    };
+    const reader = (q, idx) => PSQid.bucket(q, idx, CODE);   // presenter, companion, present, add-in
+
+    const FRESH = { id: 'qzmtseycnxb9ork', text: 'Q', type: 'multiple_choice' };
+    ok('with NO controller publishing, phone and slide agree',
+       phone(FRESH, 0, null) === reader(FRESH, 0), { phone: phone(FRESH, 0, null), reader: reader(FRESH, 0) });
+    ok('and that is the very bucket Clear tally removes',
+       phone(FRESH, 0, null) === reader(FRESH, 0));
+
+    /* The no-change guarantee for every deck that already has answers. */
+    ok('a legacy q<n>_stable id still resolves to its historical positional key',
+       phone({ id: 'q3_stable', text: 'Q' }, 3, null) === 'q3_stable_' + CODE);
+    ok('a question with no id is completely unchanged',
+       phone({ text: 'Q' }, 2, null) === 'q2_stable_' + CODE);
+
+    // A controller IS authoritative for the question it names.
+    const live = { id: reader(FRESH, 0), qIndex: 0 };
+    ok('currentQuestion still wins for the question it names', phone(FRESH, 0, live) === live.id);
+    ok('but a currentQuestion about a DIFFERENT question cannot hijack the bucket',
+       phone(FRESH, 0, { id: 'qzOTHER_' + CODE, qIndex: 5 }) === reader(FRESH, 0));
+  }
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

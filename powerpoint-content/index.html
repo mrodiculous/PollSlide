@@ -187,6 +187,17 @@ let _tick = null, _launchedAt = 0, _revealSecs = 0, _answerAt = 0, _prTimer = nu
    the phase listener. Both exist to stop a re-entry of goLive from trampling a run
    that is already under way — see the notes at each use. */
 let _announced = null, _phaseOff = null;
+/* The presenter's "hide results until reveal" choice. It is published on
+   currentQuestion ONLY (presenter.html:5928) — qstate never carries it — so the
+   guarded currentQuestion watcher below is the only way this slide can honour it.
+   Without it the companion hid the distribution and the slide on the wall did not,
+   which shows the room the answer early. */
+let _hideResults = false;
+/* The qid _hideResults was learned for, so returning to a slide does not forget it.
+   Staleness is handled by only ever learning it from a CHANGE (see the watcher), not by
+   any freshness test on launchedAt: presenter.html deliberately keeps launchedAt STABLE
+   across a session, so "recent timestamp" does not mean "someone is driving". */
+let _hideFor = null;
 
 function applyPrefs(){
   document.documentElement.style.setProperty('--scale', String(SCALE));
@@ -591,6 +602,23 @@ function renderResults(q, responses, revealed, post){
     + `</div>`;
   const foot = `<div class="foot"><span class="brand">PollSlide</span><span>Scan the QR to answer</span></div>`;
 
+  /* Hide-until-reveal: the presenter chose to keep the distribution hidden while people
+     answer. Show the count, never the split — then fall through to the full results once
+     they reveal. Mirrors companion.html so both surfaces hide the same thing. */
+  /* Only a CHOICE question has anything to hide. presenter.html:6316, companion.html:587
+     and live.html:723 all mark non-quiz questions revealed on arrival, so this branch can
+     never fire for them there — but this slide starts every type unrevealed, so without
+     the type test a word cloud, free-text or rating slide went blank on the wall while
+     every other surface showed it. Worse, the presenter never publishes a reveal for
+     non-quiz, so nothing would ever have un-hidden it. */
+  const _hideable = q && (q.type === 'multiple_choice' || q.type === 'multiple_choice_multi');
+  if (_hideResults && _hideable && !revealed && !post){
+    $('root').innerHTML = head
+      + `<div class="rows"><p style="text-align:center;color:var(--muted);padding:.6em 0">`
+      + `\uD83D\uDE48 Results hidden until reveal</p></div>` + foot;
+    return;
+  }
+
   if (post){
     $('root').innerHTML = head + `<div class="rows">${postRevealHTML(q, responses)}</div>` + foot;
     return;
@@ -676,6 +704,11 @@ async function goLive(b, editing){
   let revealed = false, post = false;
   _answerAt = 0;
   _launchedAt = Date.now();
+  /* Module-scope, so it must be cleared when the QUESTION changes — otherwise the next
+     question inherits the last one's setting. But goLive also re-enters on every
+     ActiveViewChanged, and clearing it there would forget the presenter's choice and flash
+     the distribution onto the wall until the next publish, so the same question keeps it. */
+  if (_hideFor !== qid) { _hideResults = false; _hideFor = null; }
   /* -1 means "presenter reveals manually" — no clock to show. */
   _revealSecs = (q && q.revealDelay !== undefined) ? Number(q.revealDelay) : 30;
 
@@ -772,8 +805,52 @@ async function goLive(b, editing){
     /* This listener used to be attached and never detached. Every re-entry of goLive left
        the previous closure alive, still holding the dead run's question and results: it
        repainted over the live one, re-armed its timer, and could re-fire the reveal write
-       and cancel the current run's post-reveal by overwriting the shared _prTimer. */
-    _phaseOff = () => phRef.off('value', phFn);
+       and cancel the current run's post-reveal by overwriting the shared _prTimer.
+       The handle is assigned HERE, before the second watcher is built, so that if
+       attaching that one throws, this one is still detachable instead of leaking. */
+    const offPh = () => phRef.off('value', phFn);
+    _phaseOff = offPh;
+
+    /* Follow the controller too — presenter.html, the task pane, whatever is driving.
+       qstate stays primary because it is per-question; currentQuestion is applied only
+       when it is actually about this question, so the presenter moving to another
+       question can never bleed into this slide. Same guard companion.html uses in
+       QR-targeted mode (companion.html:461).
+
+       id wins when it is there. Matching on index as an OR — the way companion.html
+       does it — means a published id that DISAGREES with ours still matches because the
+       positions line up, and after a reorder those are different questions. Index is
+       only consulted when the controller published no id at all. */
+    const isThisQ = cq => !!cq && (cq.id ? cq.id === qid
+                                         : (cq.qIndex != null && cq.qIndex === b.qIdx));
+    const cqRef = db.ref('sessions/'+b.code+'/currentQuestion');
+    /* `.on('value')` fires straight away with whatever is STORED, and nothing ever clears
+       currentQuestion — last session's final question is still sitting in it, usually
+       revealed. Honouring that opened the slide with the answer already showing and the
+       Reveal button gone. So the first emission changes nothing: only a CHANGE, which is
+       a controller actually doing something, is followed. */
+    let _cqEcho = true;
+    const cqFn = cqRef.on('value', s2 => {
+      const cq = s2.exists() ? s2.val() : null;
+      if (!isThisQ(cq)) return;                 // a different question — not ours to follow
+      /* The stored snapshot is skipped for EVERYTHING, hideResults included. An earlier
+         version exempted it, reasoning that hiding fails safe — but nothing clears
+         currentQuestion, so a morning session that hid results and never revealed left the
+         wall showing "results hidden" all afternoon with no controller alive to undo it.
+         Learning only from a change means: a controller that is driving publishes on every
+         launch and every toggle, so we hide; no controller means no preference to honour,
+         which is exactly what this slide did before it followed anything. */
+      if (_cqEcho){ _cqEcho = false; return; }
+      if (cq.hideResults !== undefined){
+        const h = !!cq.hideResults;
+        if (h !== _hideResults){ _hideResults = h; _hideFor = qid; paint(); }
+      }
+      const ph = cq.phase || 'live';
+      if (ph === 'post_reveal' && !post){ revealed = true; post = true; clearTimeout(_prTimer); paint(); return; }
+      if ((ph === 'revealed' || ph === 'reveal') && !revealed){ revealed = true; paint(); armPostReveal(); }
+    });
+    const offCq = () => cqRef.off('value', cqFn);
+    _phaseOff = () => { offPh(); offCq(); };   // widen now that both are attached
   } catch(e){}
 
   paint();
@@ -788,6 +865,13 @@ async function goLive(b, editing){
      forever when presenting from PowerPoint alone. */
   if (!editing && _announced !== qid) {
     _announced = qid;
+    /* Unconditional on purpose. A version of this skipped the stamp when currentQuestion
+       said this question was already revealed — but currentQuestion is never cleared, so
+       "already revealed" was usually last session's leftover, and skipping left that
+       leftover in qstate with nothing to clear it. The slide opened revealed, and so did
+       the companion in QR-targeted mode, permanently. Clearing stale state is the whole
+       job of this write; a controller that is genuinely mid-reveal re-asserts it through
+       the watcher above the moment it does anything. */
     db.ref('sessions/'+b.code+'/qstate/'+qid)
       .update({ phase:'live', launchedAt: _launchedAt }).catch(()=>{});
   }

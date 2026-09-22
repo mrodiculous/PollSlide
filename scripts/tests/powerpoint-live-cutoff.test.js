@@ -247,8 +247,14 @@ console.log('\nRevealing, and telling phones which question is live');
 
      The old behaviour passed its own tests and still destroyed live answers. What is
      guarded here is therefore the ABSENCE of it. Do not "restore" these. */
-  ok('the add-in never references currentQuestion in a database path',
-     !/ref\([^)]*currentQuestion/.test(c));
+  /* The guarantee is "never WRITE currentQuestion", not "never mention it" — READING it
+     is how this slide follows whoever is driving, and N read-only followers cannot
+     contend. So every currentQuestion ref is checked for what FOLLOWS it. */
+  const cqRefs = [...c.matchAll(/db\.ref\([^)]*currentQuestion[^)]*\)/g)];
+  ok('there is at least one currentQuestion ref to check', cqRefs.length > 0);
+  ok('and not one of them is a write',
+     cqRefs.every(m => !/^\s*\.(set|update|remove|push)\(/
+       .test(c.slice(m.index + m[0].length, m.index + m[0].length + 40))));
   ok('no claim / reclaim machinery survives',
      !/publishWhenVisible|_stopClaim|isOnScreen|meRef/.test(c));
 
@@ -264,8 +270,16 @@ console.log('\nRevealing, and telling phones which question is live');
 
   ok('the launch write announces this question only',
      /\.update\(\{ phase:'live', launchedAt: _launchedAt \}\)/.test(c));
-  ok('edit view writes nothing to the session at all',
-     /if \(!editing && _announced !== qid\) \{[\s\S]{0,160}?qstate\/'\+qid/.test(c));
+  /* Structural, not a character budget: this assertion has broken twice purely because
+     the guarded block grew. What matters is that the ONLY qstate write in goLive's tail
+     lives inside the !editing guard, not how many characters precede it. */
+  {
+    const guard = c.indexOf("if (!editing && _announced !== qid) {");
+    const write = c.indexOf("qstate/'+qid", guard);
+    const nextFn = c.indexOf('\n/* WHY THIS OBJECT NEVER WRITES', guard);
+    ok('edit view writes nothing to the session at all',
+       guard > -1 && write > guard && (nextFn === -1 || write < nextFn));
+  }
 
   /* The reclaim loop is what turned a wrong guess into a repeating one. A timer that
      writes is the shape of that bug, so the tick is checked for database access. */
@@ -385,15 +399,171 @@ console.log('\nThe slide speaks the same phase vocabulary as the rest of the pro
 
   /* An undetached listener kept the dead run's closure alive: it repainted over the live
      run, re-armed its tick, and clobbered the shared _prTimer. */
-  ok('the phase listener is detachable', /_phaseOff = \(\) => phRef\.off\('value', phFn\)/.test(c));
+  ok('the phase listener is detachable', /const offPh = \(\) => phRef\.off\('value', phFn\)/.test(c));
   ok('and is detached with the rest of the run', /if \(_phaseOff\)\{ _phaseOff\(\); _phaseOff = null; \}/.test(c));
 
   /* goLive re-enters on every ActiveViewChanged. Re-stamping phase:'live' dragged the
      companion back to "answering" after the presenter had already revealed. */
   ok('a question is announced once per page-load', /if \(!editing && _announced !== qid\) \{/.test(c));
   ok('the guard is actually set', /_announced = qid;/.test(c));
-  ok('first sight still announces, so a stale reveal cannot deadlock the slide',
-     /clears a stale 'revealed' left/.test(c));
+  /* This used to assert that a COMMENT existed. The comment survived a change that made
+     the behaviour it described conditional, so the assertion stayed green over exactly the
+     regression it was written to catch. Assert the code instead. */
+  {
+    const guard = c.indexOf("if (!editing && _announced !== qid) {");
+    const body  = c.slice(guard, c.indexOf('\n}', guard));
+    ok('first sight announces unconditionally, so a stale reveal cannot deadlock the slide',
+       guard > -1 && /\.update\(\{ phase:'live', launchedAt: _launchedAt \}\)/.test(body)
+                  && !/\bif\s*\(/.test(body.slice(body.indexOf('{') + 1)));
+  }
+}
+
+console.log('\nThe slide follows whoever is driving, about its own question only');
+{
+  const root = path.resolve(__dirname, '..', '..');
+  const c    = fs.readFileSync(path.join(root, 'powerpoint-content', 'index.html'), 'utf8');
+  const pres = fs.readFileSync(path.join(root, 'presenter.html'), 'utf8');
+
+  /* A deck holds one of these objects PER SLIDE, so it must never publish session-wide
+     state — that is what cycled the phones. Reading is a different matter: N read-only
+     followers cannot contend. qstate stays primary because it is per-question;
+     currentQuestion is a guarded fallback, applied only when it is about THIS question,
+     exactly as companion.html does in QR-targeted mode. */
+  ok('it watches currentQuestion', /cqRef = db\.ref\('sessions\/'\+b\.code\+'\/currentQuestion'\)/.test(c));
+  /* id is authoritative; index is consulted ONLY when the controller published no id.
+     An OR here (which is what companion.html does) lets a DISAGREEING id still match on
+     position, and after a reorder those are different questions. */
+  ok('guarded by id, falling back to index only when no id was published',
+     /cq\.id \? cq\.id === qid\s*\n?\s*: \(cq\.qIndex != null && cq\.qIndex === b\.qIdx\)/.test(c));
+  ok('a foreign question is dropped before anything is applied', /if \(!isThisQ\(cq\)\) return;/.test(c));
+
+  /* Extract the real follower and prove it writes nothing — the whole reason reading is
+     safe where publishing was not. */
+  const cq = c.match(/const cqFn = cqRef\.on\('value', s2 => \{[\s\S]*?\n    \}\);/);
+  ok('the follower is present', !!cq);
+  ok('and it performs no database write', !!cq && !/\.(set|update|remove|push)\(/.test(cq[0]));
+
+  /* hideResults rides on currentQuestion ONLY — presenter.html publishes it there and
+     never on qstate, so without this watcher the companion hid the distribution while
+     the slide on the wall showed the room the answer early. */
+  ok('presenter still publishes hideResults on the live question', /hideResults: !showLiveDetail/.test(pres));
+  ok('presenter still does NOT put it on qstate',
+     !/qstate\/\$\{qId\}`\)\.set\(\{[^}]*hideResults/.test(pres));
+  /* REGRESSION GUARD — only a CHOICE question has anything to hide. presenter.html:6316,
+     companion.html:587 and live.html:723 all mark non-quiz questions revealed on arrival,
+     so the hide branch can never fire for them there. This slide starts every type
+     unrevealed, so without the type test a word cloud / free-text / rating slide went
+     blank on the wall while every other surface showed it — and since the presenter never
+     publishes a reveal for non-quiz, nothing would ever have un-hidden it. */
+  ok('the slide honours it', /_hideResults && _hideable && !revealed && !post/.test(c));
+  ok('and only for a question that HAS something to hide',
+     /const _hideable = q && \(q\.type === 'multiple_choice' \|\| q\.type === 'multiple_choice_multi'\)/.test(c));
+  ok('and clears it per run, so it cannot leak to the next question',
+     /_hideResults = false;/.test(c));
+
+  /* REGRESSION GUARD — a version of this skipped the live stamp when currentQuestion said
+     the question was already revealed. currentQuestion is never cleared, so that was
+     usually LAST session's leftover, and skipping left it in qstate with nothing to clear
+     it: the slide opened revealed, and so did the companion in QR-targeted mode, with no
+     way back. The stamp must stay unconditional. */
+  ok('the live stamp is unconditional', !/if \(!advanced\)/.test(c) && !/let advanced = false/.test(c));
+
+  ok('both watchers are detached together', /_phaseOff = \(\) => \{ offPh\(\); offCq\(\); \}/.test(c));
+}
+
+console.log('\nAnd it runs: the real follower, against a real controller');
+{
+  const root = path.resolve(__dirname, '..', '..');
+  const c = fs.readFileSync(path.join(root, 'powerpoint-content', 'index.html'), 'utf8');
+
+  /* Executes the follower's ACTUAL source rather than a restatement of it, so a drift in
+     the shipped file fails here instead of passing against a stale paraphrase. */
+  const m  = c.match(/const cqFn = cqRef\.on\('value', (s2 => \{[\s\S]*?\n    \})\);/);
+  const g  = c.match(/const isThisQ = cq => [\s\S]*?\);\n/);
+  ok('the follower and its guard are present', !!(m && g));
+
+  /* REGRESSION GUARD — an earlier attempt gated the follower on launchedAt being recent.
+     That was both insufficient (a morning session re-read in the afternoon still passed)
+     and harmful: presenter.html deliberately keeps launchedAt STABLE across a session, so
+     an all-day talk republishes the morning timestamp and the slide would have followed
+     nothing at all. Skipping the first emission handles staleness at ANY age. */
+  ok('staleness is handled by the echo skip, not by a freshness window',
+     !/CONTROLLER_FRESH_MS|controllerLive/.test(c));
+
+  if (!(m && g)) { console.log('  … skipping the runtime follow checks'); }
+  else {
+    const harness = (qid, qIdx) => new Function('QID', 'QIDX',
+      'let revealed=false, post=false, _prTimer=null, _hideResults=false;\n' +
+      'let _cqEcho = true;\n' +
+      'let paints=0, arms=0;\n' +
+      'const qid=QID, b={qIdx:QIDX};\n' +
+      'const paint=()=>paints++; const armPostReveal=()=>arms++;\n' +
+      g[0] + '\n' +
+      'const cb = ' + m[1] + ';\n' +
+      'return { fire: v => cb({ exists:()=>v!==null, val:()=>v }),\n' +
+      '         state: ()=>({revealed,post,paints,arms,hide:_hideResults}) };')(qid, qIdx);
+
+    const QID = 'qzabc_CODE', QIDX = 2;
+    const NOW = () => Date.now(), WEEK = () => Date.now() - 7 * 864e5;
+
+    let h = harness(QID, QIDX);
+    h.fire({ id: 'qzOTHER_CODE', qIndex: 5, phase: 'revealed', launchedAt: NOW() });
+    ok('another slide\'s question being revealed is ignored', !h.state().revealed);
+
+    /* REGRESSION GUARD, and the important one. `.on('value')` fires immediately with what
+       is STORED, and nothing ever clears currentQuestion — last session's final question
+       sits there, usually revealed. Honouring that first emission opened the slide with
+       the answer showing and the Reveal button already gone. Only a CHANGE may reveal.
+       Note this holds regardless of age: a stored reveal from ten minutes ago is still
+       not something this slide did. */
+    h = harness(QID, QIDX);
+    h.fire({ id: QID, qIndex: QIDX, phase: 'revealed', launchedAt: NOW() });
+    ok('a reveal already stored when the slide attaches does NOT reveal it', !h.state().revealed);
+    ok('and the Reveal button is therefore never removed', h.state().paints === 0);
+
+    // ...but once a controller actually moves, the slide follows.
+    h.fire({ id: QID, qIndex: QIDX, phase: 'revealed', launchedAt: NOW() });
+    ok('a controller revealing it while the slide is up DOES reveal it', h.state().revealed);
+    ok('and arms post-reveal', h.state().arms === 1);
+    h.fire({ id: QID, qIndex: QIDX, phase: 'post_reveal', launchedAt: NOW() });
+    ok('a presenter post-reveal is followed', h.state().post);
+
+    /* Age is irrelevant now: what is STORED never applies, whatever its timestamp. */
+    h = harness(QID, QIDX);
+    h.fire({ id: QID, qIndex: QIDX, phase: 'revealed', launchedAt: WEEK() });
+    ok('a week-old stored reveal does not reveal', !h.state().revealed);
+    h = harness(QID, QIDX);
+    h.fire({ id: QID, qIndex: QIDX, phase: 'revealed' });
+    ok('nor does one with no launchedAt at all', !h.state().revealed);
+
+    /* REGRESSION GUARD — id is authoritative. Matching on position as an OR (the way
+       companion.html does) follows a different question after a reorder. */
+    h = harness(QID, QIDX);
+    h.fire({ id: 'qzSOMEONEELSE_CODE', qIndex: QIDX, phase: 'live', launchedAt: NOW() });
+    h.fire({ id: 'qzSOMEONEELSE_CODE', qIndex: QIDX, phase: 'revealed', launchedAt: NOW() });
+    ok('a matching index with a disagreeing id is not followed', !h.state().revealed);
+    h = harness(QID, QIDX);
+    h.fire({ qIndex: QIDX, phase: 'live', launchedAt: NOW() });
+    h.fire({ qIndex: QIDX, phase: 'revealed', launchedAt: NOW() });
+    ok('but with no id published, position is enough', h.state().revealed);
+
+    /* hideResults is echo-skipped too. An earlier version exempted it, reasoning that
+       hiding fails safe — but nothing clears currentQuestion, so a morning session that
+       hid results and never revealed left the wall reading "results hidden" all afternoon
+       with no controller alive to undo it. A controller that is driving republishes on
+       every launch and every toggle, so a real one always reaches us as a change. */
+    h = harness(QID, QIDX);
+    h.fire({ id: QID, qIndex: QIDX, phase: 'live', hideResults: true, launchedAt: NOW() });
+    ok('a STORED hide preference is not adopted', h.state().hide === false);
+    h.fire({ id: QID, qIndex: QIDX, phase: 'live', hideResults: true, launchedAt: NOW() });
+    ok('but a controller setting it while the slide is up IS honoured', h.state().hide === true);
+    h.fire({ id: QID, qIndex: QIDX, phase: 'live', hideResults: false, launchedAt: NOW() });
+    ok('and can be turned back off', h.state().hide === false);
+    h = harness(QID, QIDX);
+    h.fire({ id: 'qzOTHER_CODE', qIndex: 9, phase: 'live', launchedAt: NOW() });
+    h.fire({ id: 'qzOTHER_CODE', qIndex: 9, phase: 'live', hideResults: true, launchedAt: NOW() });
+    ok('another question\'s hide setting does not leak in', h.state().hide === false);
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -1329,6 +1329,31 @@ async function loadQuestion() {
 
   questionData = qSnap.val();
 
+  /* Derive the response bucket from the QUESTION, the way every other surface does.
+     ------------------------------------------------------------------------------
+     STABLE_QID starts as the positional q<idx>_stable_<code> and used to be corrected
+     ONLY by currentQuestion. That is fine while a controller is publishing — but when
+     one is not, nothing ever corrected it, and the phone answered into a bucket no
+     reader was watching:
+
+       presenting from PowerPoint with the content add-in (nothing publishes
+       currentQuestion, by design — one add-in object per slide must never write
+       session-wide state) → phone wrote q0_stable_CODE, the slide watched
+       qzabc_CODE → the answer was stored successfully and counted nowhere.
+
+     It also made "Clear tally" look broken: resetQuestionTally (presenter.html:7147)
+     removes PSQid.bucket(...) — the ID bucket — so the phone's positional answer
+     survived the clear and the next scan said "You already answered this question".
+
+     PSQid.bucket is the same pure function presenter.html, companion.html, present.html
+     and the add-in all use, so this makes every surface agree. For a question with no
+     id, or a legacy q<n>_stable id at index n, it returns exactly the string used
+     before — so nothing moves for existing decks. currentQuestion still wins when a
+     controller is driving THIS question, since that is the authoritative live pointer. */
+  if (!(_liveQ && _liveQ.id && Number(_liveQ.qIndex) === Q_INDEX)) {
+    try { STABLE_QID = PSQid.bucket(questionData, Q_INDEX, SESSION); } catch (e) {}
+  }
+
   // Check if this participant already answered this question
   // Response is stored at: sessions/SESSION/responses/STABLE_QID/participantId
   const myRespSnap = await db.ref(`sessions/${SESSION}/responses/${STABLE_QID}/${participantId}`).get();
