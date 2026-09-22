@@ -865,7 +865,13 @@ function navDrop(ev,i){ ev.preventDefault(); ev.currentTarget.style.outline=''; 
 function navDragEnd(){ _navDrag=-1; document.querySelectorAll('#nav .nav-item').forEach(n=>n.style.outline=''); }
 function moveSlide(d){ const j=currentIdx+d; if(j<0||j>=deck.slides.length)return; pushUndo('Move slide'); [deck.slides[currentIdx],deck.slides[j]]=[deck.slides[j],deck.slides[currentIdx]]; currentIdx=j; renderNav(); renderCanvas(); schedulePublish(); }
 function deleteSlide(){ if(currentIdx<0)return; pushUndo('Delete slide '+(currentIdx+1)); deck.slides.splice(currentIdx,1); if(currentIdx>=deck.slides.length)currentIdx=deck.slides.length-1; renderNav(); renderCanvas(); schedulePublish(); }
-function duplicateSlide(){ if(currentIdx<0)return; pushUndo('Duplicate slide'); const c=JSON.parse(JSON.stringify(deck.slides[currentIdx])); c.id=nid(); if(c.question)delete c.question.imported; deck.slides.splice(currentIdx+1,0,c); currentIdx++; renderNav(); renderCanvas(); schedulePublish(); }
+/* A copy gets its OWN question identity. `delete imported` turns the copy into a
+   deck-native question, but it used to keep the original's question.id — so both
+   slides derived the same response bucket and shared one tally, and a copy of an
+   IMPORTED question inherited an id from another deck's index space, which can
+   collide with an unrelated question here. New copy, new id, no answers yet: safe. */
+function _freshQid(c){ if(c&&c.question&&c.question.id){ c.question.id = (typeof PSQid!=='undefined'&&PSQid.fresh) ? PSQid.fresh() : ('qz'+Date.now().toString(36)+Math.random().toString(36).slice(2,7)); } }
+function duplicateSlide(){ if(currentIdx<0)return; pushUndo('Duplicate slide'); const c=JSON.parse(JSON.stringify(deck.slides[currentIdx])); c.id=nid(); if(c.question)delete c.question.imported; _freshQid(c); deck.slides.splice(currentIdx+1,0,c); currentIdx++; renderNav(); renderCanvas(); schedulePublish(); }
 
 /* ─── Edit canvas ─────────────────────────────────────────────────────────────*/
 function renderCanvas(){
@@ -1716,8 +1722,20 @@ async function publishDeck(){
   // land at sessions/CODE/qa) — they're live surfaces but not quiz_builder entries.
   deck.slides.forEach(s=>{ if(s.kind==='qa'){ s.question=s.question||{}; s.question.sessionCode=code; } });
   const questions = live.map((s,i)=>{ s.question=s.question||{}; s.question.sessionCode=code; s.question.qIndex=i;
-    if(s.kind==='study') return { type:'flashcard', front:plain(s.question.front||''), back:plain(s.question.back||''), text:plain(s.question.front||'') };
-    return { text:plain(s.question.text||''), type:s.question.type||'multiple_choice', options:(s.question.options||[]).map(o=>({text:plain(o.text||'')})), correctAnswer:(s.question.correctAnswer!=null?s.question.correctAnswer:null),
+    /* Carry the question's id through. publishPresentSlide below publishes
+       PSQid.bucket(q, idx, code) from the slide's own question, which HAS the id — but
+       what landed in quiz_builder did not, so companion.html (QR-targeted mode) and the
+       PowerPoint content add-in derived the positional q<idx>_stable bucket and watched
+       a bucket the phones never wrote to. The projector showed answers; the companion
+       showed none.
+       Only a FRESH id travels. A legacy 'q<n>_stable' id encodes a position in ANOTHER
+       deck's array, so re-emitting it here could hand this question a different
+       question's bucket — and it is redundant anyway, since an absent id already
+       derives the identical positional key (qid.js). Absent stays absent: `live` is a
+       filtered subset, so an index-derived id minted here would not line up either. */
+    const _qid = (s.question.id && !(typeof PSQid!=='undefined' && PSQid.isLegacy && PSQid.isLegacy(s.question.id))) ? { id: s.question.id } : {};
+    if(s.kind==='study') return { ..._qid, type:'flashcard', front:plain(s.question.front||''), back:plain(s.question.back||''), text:plain(s.question.front||'') };
+    return { ..._qid, text:plain(s.question.text||''), type:s.question.type||'multiple_choice', options:(s.question.options||[]).map(o=>({text:plain(o.text||'')})), correctAnswer:(s.question.correctAnswer!=null?s.question.correctAnswer:null),
              noTranslate: !!s.question.noTranslate }; });
   try{
     if(questions.length){
@@ -1965,7 +1983,7 @@ function doPaste(){
   if(_clipEls&&deck.slides[currentIdx]){ pushUndo('Paste elements'); const s0=deck.slides[currentIdx]; const els=ensureEls(s0);
     selSet.clear(); _clipEls.forEach(ce=>{ const c=JSON.parse(JSON.stringify(ce)); c.x=Math.min(94,(c.x||0)+3); c.y=Math.min(94,(c.y||0)+3); delete c.locked; els.push(c); selSet.add(els.length-1); });
     selEl=els.length-1; renderCanvas(); scheduleSave(); }
-  else if(_clipSlide){ pushUndo('Paste slide'); const c=JSON.parse(_clipSlide); c.id=nid(); if(c.question)delete c.question.imported;
+  else if(_clipSlide){ pushUndo('Paste slide'); const c=JSON.parse(_clipSlide); c.id=nid(); if(c.question)delete c.question.imported; _freshQid(c);
     deck.slides.splice(currentIdx+1,0,c); currentIdx++; renderNav(); renderCanvas(); scheduleSave(); schedulePublish(); }
   else toast('Nothing copied yet.'); }
 function doDuplicateSel(){ const ids=selIndices(); const s0=deck.slides[currentIdx];

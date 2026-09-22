@@ -5902,8 +5902,25 @@ async function launchQuestion(idx, opts) {
 
   // Stable per-question launch time. Reusing it means navigating BACK to an
   // already-shown question still displays the responses gathered earlier rather
-  // than hiding them behind a fresh cutoff. (In-memory; resets on page reload.)
-  _qLaunchedAt[qId] = _qLaunchedAt[qId] || Date.now();
+  // than hiding them behind a fresh cutoff.
+  //
+  // It is mirrored into sessionStorage, which is exactly the lifetime wanted here:
+  // it survives a RELOAD of this tab but is empty in a new one. Refreshing mid-talk
+  // used to wipe _qLaunchedAt, so the cutoff restarted at "now" and every answer
+  // already given was filtered out by listenResponses — the tally read 0 with the
+  // answers still in the database. A new presentation still starts clean, because
+  // presenting is not resuming.
+  //
+  // Keyed by qId, NOT by index, so reordering questions keeps each cutoff with its
+  // own question. (ql_liveStart_<code>_<idx> — the key showLiveOrEdit uses — is
+  // per-index and is not remapped by moveQ/deleteQ, so it must not be used here.)
+  const runKey = 'ql_runStart_' + qId;
+  if (!_qLaunchedAt[qId]) {
+    let prior = 0;
+    try { prior = parseInt(sessionStorage.getItem(runKey) || '0', 10); } catch(e){}
+    _qLaunchedAt[qId] = prior || Date.now();
+    try { sessionStorage.setItem(runKey, _qLaunchedAt[qId]); } catch(e){}
+  }
   const launchedAt = _qLaunchedAt[qId];
   liveStartedAt = launchedAt; // set synchronously so callers right after launch read the right cutoff
 
@@ -7134,8 +7151,14 @@ async function resetQuestionTally(qIdx) {
     if (respListeners[qIdx]) { respListeners[qIdx](); delete respListeners[qIdx]; }
     // Step 2: Delete responses from Firebase (clears tally) — question STAYS live
     await db.ref(`sessions/${code}/responses/${stableQId}`).remove();
-    // Step 3: Reset this question's session start so the cleared state is clean
+    // Step 3: Reset this question's session start so the cleared state is clean.
+    // All three stores, or the reset only half-happens: _qLaunchedAt kept the
+    // pre-reset value, so the next launchQuestion re-published the OLD launchedAt to
+    // currentQuestion and qstate — and companion.html/live.html adopt that as their
+    // own cutoff, bringing the answers you just cleared back onto the Mac companion.
     localStorage.setItem(`ql_liveStart_${code}_${qIdx}`, Date.now());
+    delete _qLaunchedAt[stableQId];
+    try { sessionStorage.removeItem('ql_runStart_' + stableQId); } catch(e){}
     // Step 4: Clear UI and re-show the live view (still answerable)
     clearRightPanel();
     toast(`Q${qIdx+1} cleared. Participants can answer again.`, 'success');
