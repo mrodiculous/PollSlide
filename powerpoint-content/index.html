@@ -67,6 +67,30 @@
         gap:.25em .6em;line-height:1.15;padding:.3em 0}
   .cw{font-family:'Syne',sans-serif;font-weight:800;display:inline-block;
         font-size:calc(1em * var(--scale))}
+  .pr-kicker{font-family:'Syne',sans-serif;font-weight:800;letter-spacing:.07em;color:#8b84ff;
+        font-size:calc(clamp(9px,2cqw,14px) * var(--scale));margin-bottom:.5em}
+  .pr-row{display:flex;align-items:center;gap:.5em;padding:.32em 0;border-bottom:1px solid var(--line);
+        font-size:calc(clamp(10px,2.3cqw,17px) * var(--scale))}
+  .pr-rank{width:1.6em;text-align:center;flex-shrink:0}
+  .pr-who{flex:1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pr-time{color:var(--muted);font-size:.8em}
+  .pr-fast{color:#f7b731;flex-shrink:0}
+  .pr-card{background:rgba(108,99,255,.10);border:1px solid rgba(108,99,255,.32);
+        border-radius:.7em;padding:.9em 1em}
+  .pr-body{line-height:1.55;font-size:calc(clamp(10px,2.4cqw,18px) * var(--scale))}
+  .pr-score{text-align:center}
+  .pr-pct{font-family:'Syne',sans-serif;font-weight:900;line-height:1;
+        font-size:calc(clamp(30px,11cqw,84px) * var(--scale))}
+  .pr-sub{color:var(--muted);font-size:calc(clamp(9px,2cqw,14px) * var(--scale))}
+  .pr-emoji{font-size:calc(clamp(16px,4cqw,30px) * var(--scale));margin-top:.35em}
+  .pr-label{font-family:'Syne',sans-serif;font-weight:800;
+        font-size:calc(clamp(11px,2.7cqw,20px) * var(--scale))}
+  .pr-podium{display:flex;align-items:flex-end;gap:.5em;justify-content:center;height:58%}
+  .pr-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:.15em;height:100%;justify-content:flex-end}
+  .pr-medal{font-size:calc(clamp(13px,3.2cqw,26px) * var(--scale))}
+  .pr-name{font-weight:700;text-align:center;max-width:100%;overflow:hidden;text-overflow:ellipsis;
+        white-space:nowrap;font-size:calc(clamp(9px,2cqw,15px) * var(--scale))}
+  .pr-bar{width:100%;border-radius:.3em .3em 0 0;transition:height .6s cubic-bezier(.22,1,.36,1)}
   .avg{font-family:'Syne',sans-serif;font-weight:800;margin-bottom:.4em;
         font-size:calc(clamp(12px,3cqw,22px) * var(--scale))}
   /* Was a full-width banner above each row, which pushed the answers off a short box
@@ -158,7 +182,7 @@ let db, auth, bound = null, listener = null, presentations = {};
 /* Display prefs live WITH the binding in per-instance settings, so two objects on two
    slides can be sized differently and both survive reopening the deck. */
 let SCALE = 1, SHOW_MEDIA = true, DARK = false;
-let _tick = null, _launchedAt = 0, _revealSecs = 0, _answerAt = 0;
+let _tick = null, _launchedAt = 0, _revealSecs = 0, _answerAt = 0, _prTimer = null, _stopClaim = null;
 
 function applyPrefs(){
   document.documentElement.style.setProperty('--scale', String(SCALE));
@@ -445,7 +469,100 @@ function ratingHTML(q, responses){
   return `<div class="avg">Average ${avg}</div>${rows}`;
 }
 
-function renderResults(q, responses, revealed){
+/* Post-reveal — the screen after the answer: leaderboard, podium, scorecard or an
+   explainer card. Ported from companion.html's buildPostRevealContent, which is the
+   right reference: the companion is also a remote page following ONE question's
+   qstate node, which is exactly this object's shape.
+
+   Honoured whenever phase is 'post_reveal', without re-checking postReveal.enabled —
+   nothing enters that phase unless it was enabled, and re-gating it here is what made
+   post-reveal silently not appear on the companion (fixed there in v65). */
+const MEDALS = ['\u{1F947}','\u{1F948}','\u{1F949}'];
+
+function scoreOf(r){
+  return r.isCorrect === true ? 1
+       : typeof r.isCorrect === 'number' ? r.isCorrect
+       : r.isCorrect === false ? -1 : 0;
+}
+function rankResponses(resps){
+  return [...resps].sort((a,b)=>{
+    const sa = a.isCorrect===true?1:(typeof a.isCorrect==='number'?a.isCorrect:0);
+    const sb = b.isCorrect===true?1:(typeof b.isCorrect==='number'?b.isCorrect:0);
+    if (sb!==sa) return sb-sa;
+    return (a.elapsed||999999)-(b.elapsed||999999);
+  });
+}
+
+function postRevealHTML(q, resps){
+  const type = (q.postReveal && q.postReveal.type) || 'leaderboard';
+  const total = resps.length;
+  const sorted = rankResponses(resps);
+
+  if (type === 'explainer'){
+    const text = (q.postReveal && q.postReveal.explainerText) || '';
+    return `<div class="pr-card">
+      <div class="pr-kicker">\u{1F4A1} DID YOU KNOW?</div>
+      <div class="pr-body">${esc(text) || '<em style="color:var(--muted)">No explainer text set.</em>'}</div></div>`;
+  }
+
+  if (type === 'scorecard'){
+    const totalScore = resps.reduce((sum,r)=> sum + (r.isCorrect===true?1:(typeof r.isCorrect==='number'&&r.isCorrect>0?r.isCorrect:0)), 0);
+    const pct = total>0 ? Math.round(totalScore/total*100) : 0;
+    const full = resps.filter(r=>r.isCorrect===true).length;
+    const [emoji,label,col] = pct>=80?['\u{1F389}','Fantastic!','#1fa971']
+                            : pct>=60?['\u{1F44F}','Nice work!','#6c63ff']
+                            : pct>=40?['\u{1F4AA}','Keep going!','#f7b731']
+                            : ['\u{1F914}','Tough one!','#ff6584'];
+    return `<div class="pr-score">
+      <div class="pr-pct" style="color:${col}">${pct}%</div>
+      <div class="pr-sub">avg score \u00b7 ${full} fully correct / ${total}</div>
+      <div class="pr-emoji">${emoji}</div>
+      <div class="pr-label" style="color:${col}">${label}</div>
+      <div class="bar" style="margin-top:.8em"><div class="fill" style="width:${pct}%;background:${col}"></div></div>
+    </div>`;
+  }
+
+  if (type === 'podium'){
+    const top3 = sorted.slice(0,3);
+    const order = [1,0,2];                       // rendered left→right: 2nd, 1st, 3rd
+    /* Indexed by RANK, so 1st is tallest. companion.html has ['60px','90px','44px']
+       against the same rank index, which gives SECOND place the tallest podium — a
+       faithful port reproduced it here and the screenshot made it obvious. Left the
+       companion alone (it ships to the Mac app); flagged for Rod instead. */
+    const h = ['100%','62%','44%'];
+    const cols = ['#ff6584','#6c63ff','#f7b731'];
+    const cells = order.map(i => {
+      const r = top3[i];
+      if (!r) return `<div class="pr-col"></div>`;
+      return `<div class="pr-col">
+        <div class="pr-medal">${MEDALS[i]}</div>
+        <div class="pr-name">${esc(r.name && r.name.trim() ? r.name : 'Player '+(i+1))}</div>
+        ${r.elapsed?`<div class="pr-time">${(r.elapsed/1000).toFixed(1)}s</div>`:''}
+        <div class="pr-bar" style="height:${h[i]};background:${cols[i]}"></div>
+      </div>`;
+    }).join('');
+    return `<div class="pr-kicker">\u2726 TOP 3</div><div class="pr-podium">${cells}</div>`
+      + (sorted.length>3?`<div class="pr-sub" style="margin-top:.5em">+ ${sorted.length-3} more</div>`:'');
+  }
+
+  // leaderboard (default)
+  const fastest = sorted.findIndex(r => r.isCorrect === true);
+  const rows = sorted.slice(0,8).map((r,rank)=>{
+    const sc = scoreOf(r);
+    const col = sc===1?'var(--ok)':sc===-1?'var(--accent2)':sc!==0?'#f7b731':'var(--muted)';
+    const txt = sc===1?'\u2713':sc===-1?'\u2717':(sc>0&&sc<1)?Math.round(sc*100)+'%':'\u00b7';
+    return `<div class="pr-row">
+      <span class="pr-rank">${rank<3?MEDALS[rank]:'#'+(rank+1)}</span>
+      <span class="pr-who">${esc(r.name && r.name.trim() ? r.name : 'Player '+(rank+1))}${
+        r.elapsed?`<span class="pr-time"> ${(r.elapsed/1000).toFixed(1)}s</span>`:''}</span>
+      ${rank===fastest && r.isCorrect===true ? '<span class="pr-fast">\u26A1</span>' : ''}
+      <span style="color:${col}">${txt}</span></div>`;
+  }).join('') || '<p style="color:var(--muted)">No responses.</p>';
+  return `<div class="pr-kicker">\u2726 LEADERBOARD</div>${rows}`
+    + (sorted.length>8?`<div class="pr-sub" style="margin-top:.4em">+ ${sorted.length-8} more</div>`:'');
+}
+
+function renderResults(q, responses, revealed, post){
   const total = responses.length;
   const grew  = total > _lastTotal;
   _lastTotal  = total;
@@ -462,6 +579,11 @@ function renderResults(q, responses, revealed){
                : '')
     + `</div>`;
   const foot = `<div class="foot"><span class="brand">PollSlide</span><span>Scan the QR to answer</span></div>`;
+
+  if (post){
+    $('root').innerHTML = head + `<div class="rows">${postRevealHTML(q, responses)}</div>` + foot;
+    return;
+  }
 
   const isChoice = q && q.options && (q.type === 'multiple_choice' || q.type === 'multiple_choice_multi');
 
@@ -518,14 +640,20 @@ function renderResults(q, responses, revealed){
 
 async function goLive(b, editing){
   if (listener) { listener(); listener = null; }
+  if (_stopClaim) { _stopClaim(); _stopClaim = null; }
   loadPrefs(b);
-  let q = b.q;
-  if (!q) {
-    try {
-      const s = await db.ref('quiz_builder/'+b.code+'/questions/'+b.qIdx).get();
-      q = s.exists()? s.val() : null;
-    } catch(e){}
-  }
+  /* ALWAYS refetch. The binding carries a snapshot of the question taken when it was
+     chosen, and using it meant the slide froze at that moment: edit the wording, change
+     revealDelay, or switch post-reveal on, and the slide kept showing the old copy
+     forever. That is why post-reveal "never showed" — the cached question still had
+     postReveal.enabled false from before it was turned on. The snapshot is now only a
+     fallback for when the deck cannot be read. */
+  let q = null;
+  try {
+    const s = await db.ref('quiz_builder/'+b.code+'/questions/'+b.qIdx).get();
+    q = s.exists() ? s.val() : null;
+  } catch(e){}
+  if (!q) q = b.q;
   if (!q) { $('root').innerHTML = `<div class="pad"><h2>Question not found</h2><p>Open this slide in editing view and pick the question again.</p></div>`; return; }
 
   const qid = b.qid || PSQid.bucket(q, b.qIdx, b.code);
@@ -535,7 +663,7 @@ async function goLive(b, editing){
      STICKY: once a question had been revealed, that value sat in qstate forever, so the
      next time the deck was presented the slide came up with the answer already showing
      and no Reveal button — nothing could put it back. Presenting is not resuming. */
-  let revealed = false;
+  let revealed = false, post = false;
   _answerAt = 0;
   _launchedAt = Date.now();
   /* -1 means "presenter reveals manually" — no clock to show. */
@@ -547,13 +675,16 @@ async function goLive(b, editing){
   let latest = [];
 
   const paint = () => {
-    renderResults(q, latest, revealed);
+    renderResults(q, latest, revealed, post);
     if (editing) addControls(paint);
     /* Remove it on a reveal that happened ANYWHERE — the timer here, this button, or
        the presenter's own screen. Leaving a live "Reveal now" on a slide showing the
        answer is worse than never offering one. */
     if (revealed){ document.getElementById('psReveal')?.remove(); document.body.classList.remove('revealing'); }
     else addRevealButton(doReveal);
+    /* Once revealed, the same corner offers the next step — but only when the deck
+       actually asked for one. */
+    if (revealed && !post && q.postReveal && q.postReveal.enabled) addPostRevealButton(doPostReveal);
     startTick(paint, doReveal);
   };
 
@@ -567,6 +698,33 @@ async function goLive(b, editing){
     try { await db.ref('sessions/'+b.code+'/qstate/'+qid+'/phase').set('reveal'); }
     catch(e){ console.warn('reveal not published (showing it locally anyway)', e); }
     paint();
+    armPostReveal();
+  }
+
+  /* Move to the screen after the answer. In a deck driven only by these objects there
+     is no presenter to advance the phase, so this object does it — and publishes, so
+     phones and the companion follow. */
+  async function doPostReveal(){
+    if (post) return;
+    post = true;
+    clearTimeout(_prTimer); _prTimer = null;
+    document.getElementById('psPost')?.remove();
+    try { await db.ref('sessions/'+b.code+'/qstate/'+qid).update({ phase:'post_reveal', postRevealAt:null }); }
+    catch(e){ console.warn('post-reveal not published (showing it locally anyway)', e); }
+    paint();
+  }
+
+  /* advanceDelay is either a number of seconds or 'manual'. Manual means the button
+     stays and nothing happens until someone presses it. */
+  function armPostReveal(){
+    const pr = q.postReveal;
+    if (!pr || !pr.enabled || post) return;
+    const d = Number(pr.advanceDelay);
+    if (!isFinite(d) || d <= 0) return;                       // 'manual'
+    clearTimeout(_prTimer);
+    _prTimer = setTimeout(doPostReveal, d * 1000);
+    db.ref('sessions/'+b.code+'/qstate/'+qid)
+      .update({ postRevealAt: Date.now() + d*1000 }).catch(()=>{});
   }
 
   const fn = ref.on('value', snap => {
@@ -576,7 +734,7 @@ async function goLive(b, editing){
     if (latest.length > 0 && !_answerAt && !revealed) _answerAt = Date.now();
     paint();
   });
-  listener = () => { ref.off('value', fn); clearInterval(_tick); _tick = null; };
+  listener = () => { ref.off('value', fn); clearInterval(_tick); _tick = null; clearTimeout(_prTimer); _prTimer = null; };
 
   /* Follow a reveal triggered anywhere else, so this slide and the presenter's own
      screen land on the answer at the same moment. */
@@ -587,14 +745,42 @@ async function goLive(b, editing){
   let _echo = true;
   try {
     db.ref('sessions/'+b.code+'/qstate/'+qid+'/phase').on('value', s => {
-      const isReveal = s.exists() && s.val()==='reveal';
+      const ph = s.exists() ? s.val() : null;
       if (_echo){ _echo = false; return; }
-      if (isReveal && !revealed){ revealed = true; paint(); }
+      if (ph === 'post_reveal' && !post){ revealed = true; post = true; clearTimeout(_prTimer); paint(); return; }
+      if (ph === 'reveal' && !revealed){ revealed = true; paint(); armPostReveal(); }
     });
   } catch(e){}
 
   paint();
-  if (!editing) publishWhenVisible(b, q, qid);
+  if (!editing) _stopClaim = publishWhenVisible(b, q, qid);
+}
+
+/* Is this frame actually being PAINTED right now?
+
+   A deck holds one of these per slide and they can all be alive at once, so the wrong
+   one publishing puts the wrong question on every phone — which is exactly what
+   happened when slides were switched. document.visibilityState is not trustworthy
+   here: an embedded frame reports "hidden" merely because the host window lost focus,
+   which is why gating on it stopped publishing altogether earlier.
+
+   requestAnimationFrame is the honest signal. A frame that is not being composited
+   gets its callbacks throttled to nothing, so if several frames arrive quickly we are
+   genuinely on screen. Costs a few milliseconds and asks the browser what it is
+   actually drawing rather than what the host claims. */
+function isOnScreen(){
+  return new Promise(resolve => {
+    if (document.visibilityState === 'visible') return resolve(true);
+    let frames = 0, settled = false;
+    const finish = (v) => { if (!settled){ settled = true; clearTimeout(timer); resolve(v); } };
+    /* The deadline MUST be its own timer. Checking elapsed time inside the rAF callback
+       only works if the callback runs at all — and a frame starved of rAF is precisely
+       the case being detected, so the promise never settled and the publish hung
+       forever. A real timeout cannot be starved by the thing it is timing. */
+    const timer = setTimeout(() => finish(false), 400);
+    const step = () => { if (++frames >= 3) finish(true); else requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  });
 }
 
 /* Tell the session which question is live — the reason a phone never advanced.
@@ -605,27 +791,17 @@ async function goLive(b, editing){
    Guarded on visibility because a deck may hold several of these and they must not
    fight over who is live. The one the audience is actually looking at publishes. */
 function publishWhenVisible(b, q, qid){
-  let done = false;
-  const push = async () => {
-    if (done) return;
-    /* This used to require document.visibilityState === 'visible' before publishing,
-       to stop several objects in one deck fighting over who is live. It backfired: an
-       embedded frame reports "hidden" whenever the host window is not focused, so the
-       publish simply never ran and every phone stayed on the previous question — the
-       exact bug this function exists to fix.
+  const meRef = db.ref('sessions/'+b.code+'/currentQuestion');
 
-       Publishing on load is right for read view anyway: PowerPoint runs the add-in for
-       the slide you have REACHED, and edit view never publishes at all (see the
-       `if (!editing)` guard in goLive). The visibilitychange listener below stays as a
-       re-publish, not as a gate. */
-    done = true;
-    const launchedAt = _launchedAt || Date.now();
+  const payload = async () => {
     let gameMode = 'classic';
     try {
       const gm = await db.ref('sessions/'+b.code+'/meta/gameMode').get();
       if (gm.exists() && gm.val()) gameMode = String(gm.val());
     } catch(e){}
-    const payload = {
+    const launchedAt = _launchedAt || Date.now();
+    _launchedAt = launchedAt;
+    return {
       id: qid, qIndex: b.qIdx, index: b.qIdx + 1,
       text: q.text, type: q.type,
       options: q.options || null,
@@ -637,18 +813,55 @@ function publishWhenVisible(b, q, qid){
       postReveal: q.postReveal || null,
       phase: 'live', status: 'active', launchedAt, gameMode
     };
+  };
+
+  const claim = async () => {
     try {
-      await db.ref('sessions/'+b.code+'/currentQuestion').set(payload);
-      /* Clears a previous run's 'reveal' for every OTHER surface as well, so phones and
-         the companion do not sit on a revealed answer while this slide waits. */
-      await db.ref('sessions/'+b.code+'/qstate/'+qid).update({ phase:'live', launchedAt });
-      _launchedAt = launchedAt;
+      const p = await payload();
+      await meRef.set(p);
+      await db.ref('sessions/'+b.code+'/qstate/'+qid).update({ phase:'live', launchedAt: p.launchedAt });
     } catch(e){ console.warn('could not publish the live question', e); }
   };
-  push();
+
+  /* CLAIM-AND-RECLAIM, rather than a one-shot publish.
+
+     A deck holds one of these per slide and several can be alive at once, so a single
+     publish-on-load means whichever finished last owns the session — that is how the
+     WRONG question ended up on the phones when slides were switched.
+
+     Gating on visibility alone is not the answer either: an embedded frame is reported
+     hidden whenever the host window loses focus, and gating on that stopped publishing
+     altogether. So both are used, and the loop is what makes it converge: only a frame
+     that is actually being PAINTED may claim, and it re-checks every few seconds. The
+     slide on screen keeps getting animation frames and takes the session back within
+     seconds; the slides that are not on screen are throttled and cannot compete.
+
+     Seeding is the exception: if nothing has ever been published for this session,
+     publish regardless, so a deck where no frame ever reports painting still works. */
+  (async () => {
+    try {
+      const cur = await meRef.get();
+      if (!cur.exists()) await claim();
+    } catch(e){}
+  })();
+
+  let stop = false;
+  const loop = async () => {
+    if (stop) return;
+    try {
+      if (await isOnScreen()) {
+        const cur = await meRef.get();
+        if (!cur.exists() || cur.val().id !== qid) await claim();
+      }
+    } catch(e){}
+    if (!stop) setTimeout(loop, 2500);
+  };
+  setTimeout(loop, 600);
+
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible'){ done = false; push(); }
+    if (document.visibilityState === 'visible') loop();
   });
+  return () => { stop = true; };
 }
 
 /* Not every presenter wants a timer. Without this the only way to reveal was to wait
@@ -658,6 +871,16 @@ function addRevealButton(onClick){
   const b = document.createElement('button');
   b.id = 'psReveal'; b.className = 'reveal';
   b.textContent = 'Reveal now';
+  b.onclick = () => { b.remove(); document.body.classList.remove('revealing'); onClick(); };
+  document.body.appendChild(b);
+  document.body.classList.add('revealing');
+}
+
+function addPostRevealButton(onClick){
+  if (document.getElementById('psPost')) return;
+  const b = document.createElement('button');
+  b.id = 'psPost'; b.className = 'reveal';
+  b.textContent = 'Show more \u2192';
   b.onclick = () => { b.remove(); document.body.classList.remove('revealing'); onClick(); };
   document.body.appendChild(b);
   document.body.classList.add('revealing');

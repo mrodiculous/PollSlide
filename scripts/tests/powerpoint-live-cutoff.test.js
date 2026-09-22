@@ -219,14 +219,24 @@ console.log('\nRevealing, and telling phones which question is live');
   ok('it is removed once revealed, however that happened', /getElementById\('psReveal'\)\?\.remove\(\)/.test(c));
 
   // 3. phones stayed on the previous question
-  ok('read view publishes currentQuestion', /sessions\/'\+b\.code\+'\/currentQuestion'\)\.set\(payload\)/.test(c));
+  ok('read view publishes currentQuestion', /meRef\.set\(p\)/.test(c));
   ok('it publishes the bucket id and qIndex phones follow', /id: qid, qIndex: b\.qIdx/.test(c));
-  ok('edit view never publishes', /if \(!editing\) publishWhenVisible/.test(c));
+  ok('only a frame that is painting may claim', /if \(await isOnScreen\(\)\)/.test(c));
+  ok('it reclaims when another object owns the session', /cur\.val\(\)\.id !== qid/.test(c));
+  /* Checking the deadline inside the rAF callback could never fire for a frame starved
+     of rAF — which is exactly the case being detected — so the promise hung and the
+     publish never returned. Caught by a test that timed out at 45s. */
+  ok('the on-screen check cannot hang', /const timer = setTimeout\(\(\) => finish\(false\), 400\)/.test(c));
+  ok('a rebind stops the previous claimer', /if \(_stopClaim\) \{ _stopClaim\(\); _stopClaim = null; \}/.test(c));
+  /* Matches the guard, not the exact call syntax — this assertion has now broken twice
+     on harmless refactors of the same correct line. */
+  ok('edit view never publishes', /if \(!editing\)[^\n]*publishWhenVisible/.test(c));
   /* An embedded frame reports "hidden" whenever the host window is not focused, so
      gating the first publish on visibility meant it never ran at all. Verified against
      the live database with visibilityState === 'hidden'. */
-  ok('the first publish is NOT gated on visibility', !/if \(done \|\| document\.visibilityState/.test(c));
-  ok('visibilitychange re-publishes rather than gating', /done = false; push\(\);/.test(c));
+  /* Superseded by claim-and-reclaim: publish-on-load let whichever object finished
+     last own the session, which put the WRONG question on phones when slides changed. */
+  ok('seeding still happens when nothing is published', /if \(!cur\.exists\(\)\) await claim\(\)/.test(c));
   /* Superseded. That fix made the clock start on load so it would not wait for the
      publish round-trip — but starting on load was itself the bug: it ran down while
      the room was still reading. The clock now keys off _answerAt, so launchedAt no
@@ -247,7 +257,9 @@ console.log('\nThe reveal is per-run, and the clock waits for the room');
        3. .on('value') echoes the stored phase immediately, re-revealing a fresh run */
 
   ok('a run never inherits a previous reveal', /Presenting is not resuming/.test(c));
-  ok('revealed starts false every run', /let revealed = false;\s*\n\s*_answerAt = 0;/.test(c));
+  /* `post` joined `revealed` when post-reveal landed; BOTH must reset, or a re-present
+     would come up on the leaderboard instead of the question. */
+  ok('revealed and post both start false every run', /let revealed = false, post = false;\s*\n\s*_answerAt = 0;/.test(c));
 
   /* Matches powerpoint.html: "responses.length > 0 && !revealArmed && !revealed". */
   ok('the clock measures from the first answer, not launch', /_revealSecs - Math\.floor\(\(Date\.now\(\) - _answerAt\)/.test(c));
@@ -278,6 +290,38 @@ console.log('\nWord clouds and ratings draw properly, not as a raw list');
   ok('answer.html still auto-submits single choice and asks Submit for multi',
      /isMulti \? `<button class="btn btn-primary" id="submitBtn"/.test(answer));
   ok('answer.html still remembers a name per session', /ql_pname_\$\{SESSION\}/.test(answer));
+}
+
+console.log('\nPost-reveal: the screen after the answer');
+{
+  const c = fs.readFileSync(path.resolve(__dirname, '..', '..', 'powerpoint-content', 'index.html'), 'utf8');
+  ok('all four types are handled', ['leaderboard','podium','scorecard','explainer'].every(t2 => c.includes("'"+t2+"'")));
+  ok('leaderboard is the default', /\|\| 'leaderboard'/.test(c));
+  /* Re-gating on postReveal.enabled at render time is what made post-reveal silently
+     not appear on the companion (fixed there in v65). Nothing reaches this phase
+     unless it was enabled. */
+  ok('the phase is honoured without re-checking enabled', /without re-checking postReveal\.enabled/.test(c));
+  ok('enabled is still what ARMS it', /if \(!pr \|\| !pr\.enabled \|\| post\) return;/.test(c));
+  ok("advanceDelay 'manual' never auto-advances", /if \(!isFinite\(d\) \|\| d <= 0\) return;/.test(c));
+  ok('a numeric delay publishes postRevealAt for other surfaces', /postRevealAt: Date\.now\(\) \+ d\*1000/.test(c));
+  ok('an externally driven post_reveal is followed', /ph === 'post_reveal' && !post/.test(c));
+  ok('the pending timer is cleared when the object is torn down', /clearTimeout\(_prTimer\); _prTimer = null; \};/.test(c));
+
+  /* companion.html indexes heights by RANK as ['60px','90px','44px'], so SECOND place
+     gets the tallest podium. Ported faithfully, spotted in a screenshot, fixed here
+     only — the companion ships to the Mac app and is not ours to change today. */
+  ok('the podium winner is tallest', /const h = \['100%','62%','44%'\]/.test(c));
+}
+
+console.log('\nThe question on the slide is never a cached copy');
+{
+  const c = fs.readFileSync(path.resolve(__dirname, '..', '..', 'powerpoint-content', 'index.html'), 'utf8');
+  /* The binding stores a SNAPSHOT of the question taken when it was chosen. Reading it
+     froze the slide at that moment: turning post-reveal on in the presenter never
+     reached the slide, so post-reveal "never showed up". */
+  ok('the deck is refetched every time', /let q = null;\s*\n\s*try \{\s*\n\s*const s = await db\.ref\('quiz_builder\/'/.test(c));
+  ok('the snapshot is only a fallback', /if \(!q\) q = b\.q;/.test(c));
+  ok('the reason is recorded', /postReveal\.enabled false from before it was turned on/.test(c));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
