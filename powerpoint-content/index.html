@@ -152,7 +152,7 @@ let db, auth, bound = null, listener = null, presentations = {};
 /* Display prefs live WITH the binding in per-instance settings, so two objects on two
    slides can be sized differently and both survive reopening the deck. */
 let SCALE = 1, SHOW_MEDIA = true, DARK = false;
-let _tick = null, _launchedAt = 0, _revealSecs = 0;
+let _tick = null, _launchedAt = 0, _revealSecs = 0, _answerAt = 0;
 
 function applyPrefs(){
   document.documentElement.style.setProperty('--scale', String(SCALE));
@@ -322,9 +322,16 @@ function fireConfetti(){
    live and q.revealDelay is its length, which is the same arithmetic presenter.html
    does. Deriving it means a phone joining late shows the right number instead of
    restarting the clock, and there is no second source of truth to drift. */
+/* Measured from the FIRST ANSWER of this run, not from launch — the same rule
+   powerpoint.html uses ("responses.length > 0 && !revealArmed && !revealed").
+
+   Counting from launchedAt was wrong twice over: the clock ran down while the room was
+   still reading the question, and a launchedAt left in the database by an earlier run
+   was already expired, so re-presenting the deck revealed the answer the instant the
+   slide appeared. _answerAt is deliberately LOCAL and starts at 0 every run. */
 function secsLeft(){
-  if (!_launchedAt || !_revealSecs || _revealSecs < 0) return null;
-  const left = _revealSecs - Math.floor((Date.now() - _launchedAt) / 1000);
+  if (!_answerAt || !_revealSecs || _revealSecs < 0) return null;
+  const left = _revealSecs - Math.floor((Date.now() - _answerAt) / 1000);
   return left > 0 ? left : 0;
 }
 function startTick(redraw, onExpire){
@@ -389,12 +396,15 @@ function renderResults(q, responses, revealed){
   _lastTotal  = total;
 
   const left = revealed ? null : secsLeft();
+  const waiting = !revealed && !_answerAt && _revealSecs >= 0 && total === 0;
   const head = `<div class="q">${esc(q?.text||'')}</div>
     <div class="meta"><span class="dot"></span><span class="count ${grew?'pop':''}">${total}</span>&nbsp;response${total===1?'':'s'}`
     + (revealed ? ' · answer revealed'
                /* `left > 0`, not `!== null`: at zero the tick blanks the span and a bare
                   "reveals in" was left dangling on the slide. */
-               : (left > 0 ? ` · reveals in <span id="cd">${left}s</span>` : ''))
+               : left > 0 ? ` · reveals in <span id="cd">${left}s</span>`
+               : waiting ? ' · waiting for the first answer'
+               : '')
     + `</div>`;
   const foot = `<div class="foot"><span class="brand">PollSlide</span><span>Scan the QR to answer</span></div>`;
 
@@ -462,19 +472,18 @@ async function goLive(b, editing){
   if (!q) { $('root').innerHTML = `<div class="pad"><h2>Question not found</h2><p>Open this slide in editing view and pick the question again.</p></div>`; return; }
 
   const qid = b.qid || PSQid.bucket(q, b.qIdx, b.code);
+
+  /* EVERY TIME this object goes live it starts a fresh run, and a fresh run is never
+     revealed. Reading phase from the database and trusting it meant the reveal was
+     STICKY: once a question had been revealed, that value sat in qstate forever, so the
+     next time the deck was presented the slide came up with the answer already showing
+     and no Reveal button — nothing could put it back. Presenting is not resuming. */
   let revealed = false;
-  try {
-    const st = await db.ref('sessions/'+b.code+'/qstate/'+qid).get();
-    const v = st.exists() ? st.val() : null;
-    revealed = !!(v && v.phase === 'reveal');
-    _launchedAt = (v && Number(v.launchedAt)) || 0;
-  } catch(e){}
+  _answerAt = 0;
+  _launchedAt = Date.now();
   /* -1 means "presenter reveals manually" — no clock to show. */
   _revealSecs = (q && q.revealDelay !== undefined) ? Number(q.revealDelay) : 30;
-  /* No qstate yet means nothing has launched this question — this object is the first
-     surface up. Start the clock now rather than leaving it dead until the publish
-     round-trip lands, which showed as a countdown that never appeared. */
-  if (!_launchedAt) _launchedAt = Date.now();
+
   clearInterval(_tick); _tick = null;
 
   const ref = db.ref('sessions/'+b.code+'/responses/'+qid);
@@ -505,16 +514,25 @@ async function goLive(b, editing){
 
   const fn = ref.on('value', snap => {
     latest = snap.exists() ? Object.values(snap.val()) : [];
+    /* The clock starts when the room starts answering, not when the slide appears.
+       Armed once per run; a later answer must not restart it. */
+    if (latest.length > 0 && !_answerAt && !revealed) _answerAt = Date.now();
     paint();
   });
   listener = () => { ref.off('value', fn); clearInterval(_tick); _tick = null; };
 
   /* Follow a reveal triggered anywhere else, so this slide and the presenter's own
      screen land on the answer at the same moment. */
+  /* Following an external reveal is right — the presenter's own screen, the companion,
+     another surface — but `.on('value')` fires IMMEDIATELY with whatever is already
+     stored, and what is already stored is usually the previous run's 'reveal'. Honour
+     changes, never that first echo, or a fresh run reveals itself on load. */
+  let _echo = true;
   try {
     db.ref('sessions/'+b.code+'/qstate/'+qid+'/phase').on('value', s => {
-      const now = s.exists() && s.val()==='reveal';
-      if (now && !revealed){ revealed = true; paint(); }
+      const isReveal = s.exists() && s.val()==='reveal';
+      if (_echo){ _echo = false; return; }
+      if (isReveal && !revealed){ revealed = true; paint(); }
     });
   } catch(e){}
 
@@ -564,6 +582,8 @@ function publishWhenVisible(b, q, qid){
     };
     try {
       await db.ref('sessions/'+b.code+'/currentQuestion').set(payload);
+      /* Clears a previous run's 'reveal' for every OTHER surface as well, so phones and
+         the companion do not sit on a revealed answer while this slide waits. */
       await db.ref('sessions/'+b.code+'/qstate/'+qid).update({ phase:'live', launchedAt });
       _launchedAt = launchedAt;
     } catch(e){ console.warn('could not publish the live question', e); }

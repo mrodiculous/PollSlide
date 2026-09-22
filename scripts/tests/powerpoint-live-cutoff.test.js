@@ -227,7 +227,36 @@ console.log('\nRevealing, and telling phones which question is live');
      the live database with visibilityState === 'hidden'. */
   ok('the first publish is NOT gated on visibility', !/if \(done \|\| document\.visibilityState/.test(c));
   ok('visibilitychange re-publishes rather than gating', /done = false; push\(\);/.test(c));
-  ok('the clock starts without waiting for a round-trip', /if \(!_launchedAt\) _launchedAt = Date\.now\(\)/.test(c));
+  /* Superseded. That fix made the clock start on load so it would not wait for the
+     publish round-trip — but starting on load was itself the bug: it ran down while
+     the room was still reading. The clock now keys off _answerAt, so launchedAt no
+     longer gates it at all. See the per-run block below. */
+  ok('launchedAt is set locally, not awaited from the database', /_launchedAt = Date\.now\(\);/.test(c));
+}
+
+console.log('\nThe reveal is per-run, and the clock waits for the room');
+{
+  const c = fs.readFileSync(path.resolve(__dirname, '..', '..', 'powerpoint-content', 'index.html'), 'utf8');
+
+  /* Reported 2026-09-22: "always revealed, and no way to force the counter to start
+     after the first answer or reveal now". Three compounding causes:
+       1. phase:'reveal' is STICKY in qstate — once revealed, forever revealed, so
+          re-presenting the deck came up already showing the answer
+       2. the clock ran from launchedAt, so a launchedAt left by an earlier run was
+          already expired and it revealed the instant the slide appeared
+       3. .on('value') echoes the stored phase immediately, re-revealing a fresh run */
+
+  ok('a run never inherits a previous reveal', /Presenting is not resuming/.test(c));
+  ok('revealed starts false every run', /let revealed = false;\s*\n\s*_answerAt = 0;/.test(c));
+
+  /* Matches powerpoint.html: "responses.length > 0 && !revealArmed && !revealed". */
+  ok('the clock measures from the first answer, not launch', /_revealSecs - Math\.floor\(\(Date\.now\(\) - _answerAt\)/.test(c));
+  ok('it arms once per run on the first answer', /if \(latest\.length > 0 && !_answerAt && !revealed\) _answerAt = Date\.now\(\)/.test(c));
+  ok('no answers means no countdown at all', /waiting for the first answer/.test(c));
+
+  ok('the initial phase echo is ignored', /let _echo = true;/.test(c) && /if \(_echo\)\{ _echo = false; return; \}/.test(c));
+  ok('going live clears a stale reveal for other surfaces too', /phase:'live', launchedAt/.test(c));
+  ok('manual reveal stays available until something reveals', /function addRevealButton\(/.test(c));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
