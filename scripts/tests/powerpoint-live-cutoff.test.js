@@ -165,17 +165,69 @@ console.log('\nOption art and the presenter\'s size control');
      src would put a broken image on every slide, so the accessor is pinned. */
   ok('media src comes from o.img', /const u = o && typeof o === 'object' \? o\.img : null/.test(c));
   ok('imgGif is used only for alt text', /o\.imgGif && o\.imgGif\.alt/.test(c));
-  ok('videos get their own branch', /isVideoUrl/.test(c) && /<video src=/.test(c));
-  /* Verified 2026-09-21: a dead Giphy link must collapse the frame, not leave a torn
-     icon in front of a room. Proven when this machine could not reach giphy at all —
-     all four frames hid themselves. */
-  ok('a failed image hides its frame', /onerror="this\.parentElement\.style\.display='none'"/.test(c));
+  ok('videos get their own branch', /isVideoUrl/.test(c) && /<video class="thumb"/.test(c));
+  /* Was `this.parentElement.style.display='none'`, correct while the media was a
+     full-width banner in its own wrapper. Once it became a thumbnail INSIDE the label,
+     hiding the parent would have blanked the answer text too — so it now removes only
+     itself. Asserted in the thumbnail block below. */
   /* cqw/cqh silently fall back to the viewport with no container context. */
   ok('a container context exists for cq units', /container-type:\s*size/.test(c));
   ok('every text size is multiplied by --scale', (c.match(/\* var\(--scale\)/g)||[]).length >= 5);
   ok('scale is clamped to a sane range', /Math\.min\(1\.8, Math\.max\(0\.6/.test(c));
   ok('prefs persist with the per-instance binding', /bound\.scale = SCALE; bound\.media = SHOW_MEDIA/.test(c));
   ok('controls are edit-only', /if \(editing\) addControls/.test(c));
+}
+
+console.log('\nThumbnails, dark mode, and the countdown');
+{
+  const c = fs.readFileSync(path.resolve(__dirname, '..', '..', 'powerpoint-content', 'index.html'), 'utf8');
+  /* Option art was a full-width banner above each row: on a short object it pushed the
+     answers out of view entirely. */
+  ok('option art is a thumbnail beside the letter', /class="thumb"/.test(c) && /\.lbl\{display:flex/.test(c));
+  ok('a dead thumbnail removes only itself, not the answer text', /onerror="this\.remove\(\)"/.test(c));
+  ok('the old full-width banner is gone', !/\.optmedia img,\.optmedia video\{width:100%/.test(c));
+
+  ok('dark palette exists', /body\.dark\{/.test(c));
+  ok('the bar track is themed, not hard-coded', /background:var\(--track\)/.test(c));
+  ok('theme is chosen, not sniffed from the slide', /Chosen by the presenter, not sniffed/.test(c));
+  ok('theme persists with the binding', /bound\.dark = DARK/.test(c));
+
+  /* There was no countdown at all: the slide sat still while the presenter's own
+     screen ticked. Derived from launchedAt + revealDelay, never stored, so a late
+     joiner sees the true remaining time instead of restarting the clock. */
+  ok('countdown is derived from launchedAt + revealDelay', /function secsLeft\(\)/.test(c) && /_revealSecs - Math\.floor/.test(c));
+  ok('it ticks on an interval', /function startTick\(/.test(c) && /setInterval/.test(c));
+  ok('it is not rendered once it hits zero', /left > 0 \?/.test(c));
+  ok('a manual-reveal question shows no clock', /manually.*no clock|no clock to show/i.test(c));
+}
+
+console.log('\nRevealing, and telling phones which question is live');
+{
+  const c = fs.readFileSync(path.resolve(__dirname, '..', '..', 'powerpoint-content', 'index.html'), 'utf8');
+
+  /* Reported 2026-09-22: answered while presenting, results updated live, but it never
+     revealed, no confetti, and the phone never moved on. Three causes, all here. */
+
+  // 1. the clock counted to zero and nothing performed the reveal
+  ok('the countdown has an expiry callback', /function startTick\(redraw, onExpire\)/.test(c));
+  ok('expiry actually reveals', /onExpire && onExpire\(\)/.test(c));
+  ok('reveal writes the phase so every other surface follows', /qstate\/'\+qid\+'\/phase'\)\.set\('reveal'\)/.test(c));
+  ok('a failed write still reveals on this slide', /showing it locally anyway/.test(c));
+
+  // 2. no way to reveal without a timer
+  ok('a manual Reveal now button exists', /function addRevealButton\(/.test(c));
+  ok('it is removed once revealed, however that happened', /getElementById\('psReveal'\)\?\.remove\(\)/.test(c));
+
+  // 3. phones stayed on the previous question
+  ok('read view publishes currentQuestion', /sessions\/'\+b\.code\+'\/currentQuestion'\)\.set\(payload\)/.test(c));
+  ok('it publishes the bucket id and qIndex phones follow', /id: qid, qIndex: b\.qIdx/.test(c));
+  ok('edit view never publishes', /if \(!editing\) publishWhenVisible/.test(c));
+  /* An embedded frame reports "hidden" whenever the host window is not focused, so
+     gating the first publish on visibility meant it never ran at all. Verified against
+     the live database with visibilityState === 'hidden'. */
+  ok('the first publish is NOT gated on visibility', !/if \(done \|\| document\.visibilityState/.test(c));
+  ok('visibilitychange re-publishes rather than gating', /done = false; push\(\);/.test(c));
+  ok('the clock starts without waiting for a round-trip', /if \(!_launchedAt\) _launchedAt = Date\.now\(\)/.test(c));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

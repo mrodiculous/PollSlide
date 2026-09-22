@@ -15,6 +15,14 @@
   :root{
     --bg:#ffffff; --ink:#12121f; --muted:#6b6b85;
     --accent:#6c63ff; --accent2:#ff6584; --ok:#1fa971; --line:rgba(0,0,0,.10);
+    --track:rgba(0,0,0,.07); --ctlbg:rgba(255,255,255,.92);
+  }
+  /* Slides are as often dark as light, and white-on-dark-deck looked like a mistake.
+     Chosen by the presenter, not sniffed: nothing here can see the slide behind it. */
+  body.dark{
+    --bg:#0d0d18; --ink:#f4f4fc; --muted:#9aa0bd;
+    --ok:#43e97b; --line:rgba(255,255,255,.14);
+    --track:rgba(255,255,255,.10); --ctlbg:rgba(30,30,48,.92);
   }
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{height:100%}
@@ -46,7 +54,7 @@
   .rowtop{display:flex;justify-content:space-between;gap:.6em;
           font-size:calc((clamp(10px,2.5cqw,19px)) * var(--scale));font-weight:600}
   .rowtop .n{color:var(--muted);font-weight:500;flex-shrink:0}
-  .bar{height:calc(clamp(7px,1.9cqh,20px) * var(--scale));background:rgba(0,0,0,.07);border-radius:100px;overflow:hidden}
+  .bar{height:calc(clamp(7px,1.9cqh,20px) * var(--scale));background:var(--track);border-radius:100px;overflow:hidden}
   .fill{height:100%;border-radius:100px;background:linear-gradient(90deg,var(--accent),#a78bfa);
         width:0;transition:width .45s cubic-bezier(.22,1,.36,1)}
   .row.correct .fill{background:linear-gradient(90deg,var(--ok),#5fe0a6)}
@@ -55,12 +63,22 @@
   .free{border:1px solid var(--line);border-radius:9px;padding:.5em .65em;
         font-size:calc((clamp(10px,2.4cqw,18px)) * var(--scale));line-height:1.35}
   .free .who{color:var(--muted);font-size:.82em;margin-left:.5em}
-  .optmedia{margin-bottom:.3em;border-radius:.4em;overflow:hidden;line-height:0}
-  .optmedia img,.optmedia video{width:100%;max-height:calc(clamp(38px,11cqh,110px) * var(--scale));
-        object-fit:cover;display:block;background:#000}
+  /* Was a full-width banner above each row, which pushed the answers off a short box
+     and buried the text. A thumbnail next to the letter keeps the list scannable. */
+  .lbl{display:flex;align-items:center;gap:.5em;min-width:0}
+  .thumb{width:calc(2.1em * var(--scale));height:calc(2.1em * var(--scale));
+        border-radius:.35em;object-fit:cover;flex-shrink:0;background:var(--track);display:block}
+  .rowtop{align-items:center}
+  /* The button and the footer hint both want the bottom-right corner. The button wins
+     while it is showing — it is the only thing on this slide anyone needs to click. */
+  body.revealing .foot span:last-child{visibility:hidden}
+  .reveal{position:absolute;bottom:.6em;right:.6em;z-index:6;cursor:pointer;
+        font-family:'Syne',sans-serif;font-weight:700;border:none;border-radius:8px;
+        background:var(--accent);color:#fff;padding:.5em .9em;
+        font-size:calc(clamp(10px,2.1cqw,15px) * var(--scale))}
   .ctl{position:absolute;top:.5em;right:.5em;z-index:5;display:flex;gap:.3em}
   .ctl button{font-family:'Syne',sans-serif;font-weight:700;border:1px solid var(--line);
-        background:rgba(255,255,255,.92);border-radius:7px;cursor:pointer;color:var(--ink);
+        background:var(--ctlbg);border-radius:7px;cursor:pointer;color:var(--ink);
         padding:.3em .55em;font-size:clamp(9px,1.9cqw,12px)}
   .foot{display:flex;align-items:center;justify-content:space-between;gap:.6em;
         font-size:calc((clamp(8px,1.9cqw,13px)) * var(--scale));color:var(--muted);flex-shrink:0;padding-top:.5em}
@@ -74,14 +92,14 @@
   .btn{font-family:'Syne',sans-serif;font-weight:700;border:none;border-radius:9px;
        padding:.7em 1.1em;font-size:clamp(10px,2.3cqw,15px);cursor:pointer;
        background:var(--accent);color:#fff}
-  .btn.ghost{background:rgba(0,0,0,.05);color:var(--ink)}
+  .btn.ghost{background:var(--track);color:var(--ink)}
   .list{overflow-y:auto;text-align:left;display:flex;flex-direction:column;gap:.4em;max-height:62%}
   .item{border:1px solid var(--line);border-radius:10px;padding:.6em .7em;cursor:pointer;
         font-size:clamp(10px,2.2cqw,15px)}
-  .item:hover{border-color:var(--accent);background:rgba(108,99,255,.05)}
+  .item:hover{border-color:var(--accent);background:rgba(108,99,255,.12)}
   .item .sub{color:var(--muted);font-size:.85em;margin-top:.15em}
   .field{display:flex;flex-direction:column;gap:.3em;text-align:left}
-  .field input{border:1px solid var(--line);border-radius:9px;padding:.6em .7em;
+  .field input{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:9px;padding:.6em .7em;
                font-size:clamp(10px,2.2cqw,15px);font-family:inherit}
   .err{color:var(--accent2);font-size:clamp(9px,2cqw,13px);min-height:1.2em}
   /* A new answer should be felt from the back of the room, not just tallied.
@@ -133,19 +151,22 @@ const LETTERS = ['A','B','C','D','E','F','G','H'];
 let db, auth, bound = null, listener = null, presentations = {};
 /* Display prefs live WITH the binding in per-instance settings, so two objects on two
    slides can be sized differently and both survive reopening the deck. */
-let SCALE = 1, SHOW_MEDIA = true;
+let SCALE = 1, SHOW_MEDIA = true, DARK = false;
+let _tick = null, _launchedAt = 0, _revealSecs = 0;
 
 function applyPrefs(){
   document.documentElement.style.setProperty('--scale', String(SCALE));
+  document.body.classList.toggle('dark', !!DARK);
 }
 function savePrefs(){
   if (!bound) return;
-  bound.scale = SCALE; bound.media = SHOW_MEDIA;
+  bound.scale = SCALE; bound.media = SHOW_MEDIA; bound.dark = DARK;
   cacheBinding(bound);
 }
 function loadPrefs(b){
   SCALE = (b && typeof b.scale === 'number') ? b.scale : 1;
   SHOW_MEDIA = (b && typeof b.media === 'boolean') ? b.media : true;
+  DARK = !!(b && b.dark);
   applyPrefs();
 }
 
@@ -293,6 +314,38 @@ function fireConfetti(){
   _raf = requestAnimationFrame(tick);
 }
 
+/* ── Countdown ───────────────────────────────────────────────────────────────
+   There was no countdown here at all — the pane only learned of a reveal after the
+   fact, so the slide sat still while the presenter's own screen ticked down.
+
+   It is DERIVED, never stored: qstate/<qid>/launchedAt is when the question went
+   live and q.revealDelay is its length, which is the same arithmetic presenter.html
+   does. Deriving it means a phone joining late shows the right number instead of
+   restarting the clock, and there is no second source of truth to drift. */
+function secsLeft(){
+  if (!_launchedAt || !_revealSecs || _revealSecs < 0) return null;
+  const left = _revealSecs - Math.floor((Date.now() - _launchedAt) / 1000);
+  return left > 0 ? left : 0;
+}
+function startTick(redraw, onExpire){
+  clearInterval(_tick);
+  if (secsLeft() === null) return;          // manual-reveal question: no clock, no expiry
+  _tick = setInterval(() => {
+    const el = document.getElementById('cd');
+    const n = secsLeft();
+    if (n === null || n <= 0){
+      clearInterval(_tick); _tick = null;
+      if (el) el.textContent = '';
+      /* The clock used to just stop. Nothing ever performed the reveal, so the slide
+         counted down to zero and then sat there: no answer shown, no confetti. */
+      onExpire && onExpire();
+      return;
+    }
+    if (el) el.textContent = n + 's';
+    else redraw && redraw();
+  }, 1000);
+}
+
 /* ── Live results ───────────────────────────────────────────────────────────── */
 let _lastTotal = 0, _celebrated = false;
 
@@ -317,9 +370,11 @@ const optMedia = (o) => {
   const u = o && typeof o === 'object' ? o.img : null;
   if (!u || !SHOW_MEDIA) return '';
   const alt = esc((o.imgGif && o.imgGif.alt) || '');
-  return `<div class="optmedia">${isVideoUrl(u)
-    ? `<video src="${esc(u)}" autoplay loop muted playsinline></video>`
-    : `<img src="${esc(u)}" alt="${alt}" onerror="this.parentElement.style.display='none'">`}</div>`;
+  /* A dead link removes ITSELF here, not its parent — the parent now holds the answer
+     text, and hiding that would blank the option entirely. */
+  return isVideoUrl(u)
+    ? `<video class="thumb" src="${esc(u)}" autoplay loop muted playsinline onerror="this.remove()"></video>`
+    : `<img class="thumb" src="${esc(u)}" alt="${alt}" onerror="this.remove()">`;
 };
 const optLabel = (o) => (o && typeof o === 'object') ? (o.text || o.label || '') : String(o == null ? '' : o);
 
@@ -333,8 +388,14 @@ function renderResults(q, responses, revealed){
   const grew  = total > _lastTotal;
   _lastTotal  = total;
 
+  const left = revealed ? null : secsLeft();
   const head = `<div class="q">${esc(q?.text||'')}</div>
-    <div class="meta"><span class="dot"></span><span class="count ${grew?'pop':''}">${total}</span>&nbsp;response${total===1?'':'s'}${revealed?' · answer revealed':''}</div>`;
+    <div class="meta"><span class="dot"></span><span class="count ${grew?'pop':''}">${total}</span>&nbsp;response${total===1?'':'s'}`
+    + (revealed ? ' · answer revealed'
+               /* `left > 0`, not `!== null`: at zero the tick blanks the span and a bare
+                  "reveals in" was left dangling on the slide. */
+               : (left > 0 ? ` · reveals in <span id="cd">${left}s</span>` : ''))
+    + `</div>`;
   const foot = `<div class="foot"><span class="brand">PollSlide</span><span>Scan the QR to answer</span></div>`;
 
   const isChoice = q && q.options && (q.type === 'multiple_choice' || q.type === 'multiple_choice_multi');
@@ -367,9 +428,8 @@ function renderResults(q, responses, revealed){
     const isC  = revealed && correct.includes(i);
     const dim  = revealed && hasC && !correct.includes(i);
     return `<div class="row ${isC?'correct':''} ${dim?'dim':''}">
-      ${optMedia(o)}
       <div class="rowtop">
-        <span>${LETTERS[i]}. ${esc(optLabel(o))}${isC?' <span class="tag">✓</span>':''}</span>
+        <span class="lbl">${optMedia(o)}<span>${LETTERS[i]}. ${esc(optLabel(o))}${isC?' <span class="tag">✓</span>':''}</span></span>
         <span class="n">${counts[i]} · ${pct}%</span>
       </div>
       <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
@@ -404,33 +464,132 @@ async function goLive(b, editing){
   const qid = b.qid || PSQid.bucket(q, b.qIdx, b.code);
   let revealed = false;
   try {
-    const st = await db.ref('sessions/'+b.code+'/qstate/'+qid+'/phase').get();
-    revealed = st.exists() && st.val()==='reveal';
+    const st = await db.ref('sessions/'+b.code+'/qstate/'+qid).get();
+    const v = st.exists() ? st.val() : null;
+    revealed = !!(v && v.phase === 'reveal');
+    _launchedAt = (v && Number(v.launchedAt)) || 0;
   } catch(e){}
+  /* -1 means "presenter reveals manually" — no clock to show. */
+  _revealSecs = (q && q.revealDelay !== undefined) ? Number(q.revealDelay) : 30;
+  /* No qstate yet means nothing has launched this question — this object is the first
+     surface up. Start the clock now rather than leaving it dead until the publish
+     round-trip lands, which showed as a countdown that never appeared. */
+  if (!_launchedAt) _launchedAt = Date.now();
+  clearInterval(_tick); _tick = null;
 
   const ref = db.ref('sessions/'+b.code+'/responses/'+qid);
-  const fn = ref.on('value', snap => {
-    const all = snap.exists() ? Object.values(snap.val()) : [];
-    renderResults(q, all, revealed);
-    if (editing) addControls(() => renderResults(q, all, revealed));
-  });
-  listener = () => ref.off('value', fn);
+  let latest = [];
 
-  /* Follow the reveal so the slide shows the right answer at the same moment the
-     presenter's own screen does. */
+  const paint = () => {
+    renderResults(q, latest, revealed);
+    if (editing) addControls(paint);
+    /* Remove it on a reveal that happened ANYWHERE — the timer here, this button, or
+       the presenter's own screen. Leaving a live "Reveal now" on a slide showing the
+       answer is worse than never offering one. */
+    if (revealed){ document.getElementById('psReveal')?.remove(); document.body.classList.remove('revealing'); }
+    else addRevealButton(doReveal);
+    startTick(paint, doReveal);
+  };
+
+  /* Actually perform the reveal. Writing phase='reveal' is what makes every OTHER
+     surface follow — the phones, the companion, a second object on another slide —
+     so it is attempted first, but a failure must not stop this slide from revealing:
+     the room is looking at it. Hence write-then-render, not write-and-then-hope. */
+  async function doReveal(){
+    if (revealed) return;
+    revealed = true;
+    try { await db.ref('sessions/'+b.code+'/qstate/'+qid+'/phase').set('reveal'); }
+    catch(e){ console.warn('reveal not published (showing it locally anyway)', e); }
+    paint();
+  }
+
+  const fn = ref.on('value', snap => {
+    latest = snap.exists() ? Object.values(snap.val()) : [];
+    paint();
+  });
+  listener = () => { ref.off('value', fn); clearInterval(_tick); _tick = null; };
+
+  /* Follow a reveal triggered anywhere else, so this slide and the presenter's own
+     screen land on the answer at the same moment. */
   try {
     db.ref('sessions/'+b.code+'/qstate/'+qid+'/phase').on('value', s => {
-      revealed = s.exists() && s.val()==='reveal';
-      ref.get().then(sn => { renderResults(q, sn.exists()?Object.values(sn.val()):[], revealed); if (editing) addControls(); }).catch(()=>{});
+      const now = s.exists() && s.val()==='reveal';
+      if (now && !revealed){ revealed = true; paint(); }
     });
   } catch(e){}
+
+  paint();
+  if (!editing) publishWhenVisible(b, q, qid);
 }
 
-/* Shown only while editing. Without it, a bound object could only be re-pointed by
-   deleting it and inserting a new one — and it must never appear during a show, where
-   there is nothing to click it with and it would just be clutter on the slide. */
+/* Tell the session which question is live — the reason a phone never advanced.
+   answer.html follows sessions/<code>/currentQuestion: it jumps to qIndex and takes
+   .id as the response bucket. The task pane publishes this; this object never did, so
+   moving to the next slide changed what the ROOM saw while every phone stayed put.
+
+   Guarded on visibility because a deck may hold several of these and they must not
+   fight over who is live. The one the audience is actually looking at publishes. */
+function publishWhenVisible(b, q, qid){
+  let done = false;
+  const push = async () => {
+    if (done) return;
+    /* This used to require document.visibilityState === 'visible' before publishing,
+       to stop several objects in one deck fighting over who is live. It backfired: an
+       embedded frame reports "hidden" whenever the host window is not focused, so the
+       publish simply never ran and every phone stayed on the previous question — the
+       exact bug this function exists to fix.
+
+       Publishing on load is right for read view anyway: PowerPoint runs the add-in for
+       the slide you have REACHED, and edit view never publishes at all (see the
+       `if (!editing)` guard in goLive). The visibilitychange listener below stays as a
+       re-publish, not as a gate. */
+    done = true;
+    const launchedAt = _launchedAt || Date.now();
+    let gameMode = 'classic';
+    try {
+      const gm = await db.ref('sessions/'+b.code+'/meta/gameMode').get();
+      if (gm.exists() && gm.val()) gameMode = String(gm.val());
+    } catch(e){}
+    const payload = {
+      id: qid, qIndex: b.qIdx, index: b.qIdx + 1,
+      text: q.text, type: q.type,
+      options: q.options || null,
+      correctAnswer: q.correctAnswer !== undefined ? q.correctAnswer : null,
+      ratingMax: q.ratingMax || null, ratingLabels: q.ratingLabels || null,
+      image: q.image || null, videoOpts: q.videoOpts || null,
+      revealDelay: q.revealDelay !== undefined ? q.revealDelay : 30,
+      displayMode: q.displayMode || 'bars',
+      postReveal: q.postReveal || null,
+      phase: 'live', status: 'active', launchedAt, gameMode
+    };
+    try {
+      await db.ref('sessions/'+b.code+'/currentQuestion').set(payload);
+      await db.ref('sessions/'+b.code+'/qstate/'+qid).update({ phase:'live', launchedAt });
+      _launchedAt = launchedAt;
+    } catch(e){ console.warn('could not publish the live question', e); }
+  };
+  push();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible'){ done = false; push(); }
+  });
+}
+
+/* Not every presenter wants a timer. Without this the only way to reveal was to wait
+   out a countdown that, on a manual-reveal question, never even starts. */
+function addRevealButton(onClick){
+  if (document.getElementById('psReveal')) return;
+  const b = document.createElement('button');
+  b.id = 'psReveal'; b.className = 'reveal';
+  b.textContent = 'Reveal now';
+  b.onclick = () => { b.remove(); document.body.classList.remove('revealing'); onClick(); };
+  document.body.appendChild(b);
+  document.body.classList.add('revealing');
+}
+
 /* Editing only. A show has nobody to click these and they would just be clutter on
-   the slide, so they are never rendered in read view. */
+   the slide, so they are never rendered in read view.
+   (Lost once to a careless region replace — the tests caught it. Keep it above the
+   edit-mode section, below the reveal button.) */
 function addControls(redraw){
   if (document.getElementById('psCtl')) return;
   const bar = document.createElement('div');
@@ -438,7 +597,8 @@ function addControls(redraw){
   bar.innerHTML =
     `<button id="cSm" title="Smaller text">A&minus;</button>` +
     `<button id="cLg" title="Bigger text">A+</button>` +
-    `<button id="cMed" title="Show or hide option images">${SHOW_MEDIA?'🖼':'🚫'}</button>` +
+    `<button id="cMed" title="Show or hide option images">${SHOW_MEDIA?'\u{1F5BC}':'\u{1F6AB}'}</button>` +
+    `<button id="cDk" title="Light or dark">${DARK?'\u2600':'\u{1F319}'}</button>` +
     `<button id="cRe">Change question</button>`;
   document.body.appendChild(bar);
   const bump = (d) => {
@@ -449,11 +609,16 @@ function addControls(redraw){
   document.getElementById('cLg').onclick = () => bump(+0.1);
   document.getElementById('cMed').onclick = () => {
     SHOW_MEDIA = !SHOW_MEDIA; savePrefs();
-    document.getElementById('cMed').textContent = SHOW_MEDIA ? '🖼' : '🚫';
+    document.getElementById('cMed').textContent = SHOW_MEDIA ? '\u{1F5BC}' : '\u{1F6AB}';
     if (typeof redraw === 'function') redraw();
+  };
+  document.getElementById('cDk').onclick = () => {
+    DARK = !DARK; applyPrefs(); savePrefs();
+    document.getElementById('cDk').textContent = DARK ? '\u2600' : '\u{1F319}';
   };
   document.getElementById('cRe').onclick = () => {
     bar.remove();
+    document.getElementById('psReveal')?.remove();
     if (listener) { listener(); listener = null; }
     if (auth.currentUser) showPicker(); else showSignIn();
   };
