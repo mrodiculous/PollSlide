@@ -259,5 +259,26 @@ console.log('\nThe reveal is per-run, and the clock waits for the room');
   ok('manual reveal stays available until something reveals', /function addRevealButton\(/.test(c));
 }
 
+console.log('\nWord clouds and ratings draw properly, not as a raw list');
+{
+  const c = fs.readFileSync(path.resolve(__dirname, '..', '..', 'powerpoint-content', 'index.html'), 'utf8');
+  ok('word_cloud displayMode is routed', /q\.displayMode === 'word_cloud'/.test(c));
+  ok('rating type is routed', /q\.type === 'rating'/.test(c));
+  ok('stop words are stripped', /STOP_WORDS/.test(c));
+  ok('word size tracks frequency', /w\.c\/max/.test(c));
+  /* Math.random() reshuffled the whole cloud on every incoming answer, which on a
+     projector reads as the slide glitching. The scatter is index-derived instead. */
+  ok('the cloud does not reshuffle on each answer', !/\.sort\(\(\)=>Math\.random/.test(c) && /\(i \* 37\) % 15/.test(c));
+  ok('ratings show an average', /Average \$\{avg\}/.test(c));
+  ok('free text still falls back to listing answers', /class="free"/.test(c));
+
+  /* These renderers were PORTED into the content add-in. The shared audience page and
+     the other presenter surfaces must stay untouched — that was the explicit ask. */
+  const answer = fs.readFileSync(path.resolve(__dirname, '..', '..', 'answer.html'), 'utf8');
+  ok('answer.html still auto-submits single choice and asks Submit for multi',
+     /isMulti \? `<button class="btn btn-primary" id="submitBtn"/.test(answer));
+  ok('answer.html still remembers a name per session', /ql_pname_\$\{SESSION\}/.test(answer));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

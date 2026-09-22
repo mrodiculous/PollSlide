@@ -63,6 +63,12 @@
   .free{border:1px solid var(--line);border-radius:9px;padding:.5em .65em;
         font-size:calc((clamp(10px,2.4cqw,18px)) * var(--scale));line-height:1.35}
   .free .who{color:var(--muted);font-size:.82em;margin-left:.5em}
+  .cloud{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;
+        gap:.25em .6em;line-height:1.15;padding:.3em 0}
+  .cw{font-family:'Syne',sans-serif;font-weight:800;display:inline-block;
+        font-size:calc(1em * var(--scale))}
+  .avg{font-family:'Syne',sans-serif;font-weight:800;margin-bottom:.4em;
+        font-size:calc(clamp(12px,3cqw,22px) * var(--scale))}
   /* Was a full-width banner above each row, which pushed the answers off a short box
      and buried the text. A thumbnail next to the letter keeps the list scannable. */
   .lbl{display:flex;align-items:center;gap:.5em;min-width:0}
@@ -390,6 +396,55 @@ function safeAnswer(a){
   catch(e){ return String(a == null ? '' : a); }
 }
 
+/* Free text with displayMode 'word_cloud', and ratings, were falling through to a
+   plain list of raw answers — readable, but not what the presenter chose. Ported from
+   presenter.html (buildWordCloud / the rating branch) so the slide and the presenter's
+   own screen agree. Nothing in presenter.html, answer.html or present.html is touched:
+   this only teaches the new object to draw what they already draw. */
+const STOP_WORDS = new Set(['the','a','an','and','or','but','in','on','at','to','for','of','with','is','are','was','were','be','been','have','has','had','it','i','you','we','they','he','she','that','this','what','how','why','when','do','did','not','no','yes','my','your','their','our','its','as','by','from','up','so','if','me','him','her','us','them','about','into','out','than','then','now']);
+const CLOUD_PALETTE = ['#6c63ff','#ff6584','#43e97b','#f7b731','#4facfe','#a78bfa','#f093fb','#43cfcf'];
+
+function wordCloudHTML(responses){
+  const freq = {};
+  responses.forEach(r => {
+    let a = r && r.answer;
+    try { const v = JSON.parse(a); if (typeof v === 'string') a = v; } catch(e){}
+    if (!a || a === '__none__') return;
+    String(a).split(/\s+/).forEach(w => {
+      const clean = w.toLowerCase().replace(/[^a-z0-9']/g,'');
+      if (clean.length > 2 && !STOP_WORDS.has(clean)) freq[clean] = (freq[clean]||0)+1;
+    });
+  });
+  const words = Object.entries(freq).sort((a,b)=>b[1]-a[1]).slice(0,40).map(([t,c])=>({t,c}));
+  if (!words.length) return '<p style="color:var(--muted)">Waiting for answers…</p>';
+  const max = Math.max(...words.map(w=>w.c), 1);
+  /* Deterministic scatter: Math.random() would reshuffle the whole cloud on every
+     incoming answer, which on a projector reads as the slide glitching. */
+  return `<div class="cloud">` + words.map((w,i)=>{
+    const size = 0.75 + (w.c/max) * 1.9;
+    const rot  = ((i * 37) % 15) - 7;
+    return `<span class="cw" style="font-size:${size}em;color:${CLOUD_PALETTE[i % CLOUD_PALETTE.length]};transform:rotate(${rot}deg)" title="${w.c}">${esc(w.t)}</span>`;
+  }).join('') + `</div>`;
+}
+
+function ratingHTML(q, responses){
+  const max = Number(q.ratingMax) || 5;
+  const counts = {}; for (let i=1;i<=max;i++) counts[i]=0;
+  let n = 0;
+  responses.forEach(r => {
+    try { const v = JSON.parse(r.answer); if (v && counts[v] !== undefined){ counts[v]++; n++; } } catch(e){}
+  });
+  const avg = n ? (Object.entries(counts).reduce((s,[k,v])=>s+(Number(k)*v),0)/n).toFixed(1) : '—';
+  const rows = Object.entries(counts).map(([val,c])=>{
+    const pct = n ? Math.round(c/n*100) : 0;
+    return `<div class="row">
+      <div class="rowtop"><span class="lbl"><span>★ ${val}</span></span><span class="n">${c} · ${pct}%</span></div>
+      <div class="bar"><div class="fill" style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+  return `<div class="avg">Average ${avg}</div>${rows}`;
+}
+
 function renderResults(q, responses, revealed){
   const total = responses.length;
   const grew  = total > _lastTotal;
@@ -411,11 +466,13 @@ function renderResults(q, responses, revealed){
   const isChoice = q && q.options && (q.type === 'multiple_choice' || q.type === 'multiple_choice_multi');
 
   if (!isChoice){
-    /* Open text, word cloud, rating — show the answers themselves. */
-    const rows = responses.slice(-12).map(r =>
-      `<div class="free">${esc(safeAnswer(r.answer))}${r.name?`<span class="who">— ${esc(r.name)}</span>`:''}</div>`).join('');
-    $('root').innerHTML = head +
-      `<div class="rows">${rows || '<p style="color:var(--muted)">Waiting for answers…</p>'}</div>` + foot;
+    let inner;
+    if (q && q.type === 'rating') inner = ratingHTML(q, responses);
+    else if (q && q.displayMode === 'word_cloud') inner = wordCloudHTML(responses);
+    else inner = responses.slice(-12).map(r =>
+      `<div class="free">${esc(safeAnswer(r.answer))}${r.name?`<span class="who">— ${esc(r.name)}</span>`:''}</div>`).join('')
+      || '<p style="color:var(--muted)">Waiting for answers…</p>';
+    $('root').innerHTML = head + `<div class="rows">${inner}</div>` + foot;
     return;
   }
 
