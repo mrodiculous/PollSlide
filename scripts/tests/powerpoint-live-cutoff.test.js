@@ -150,6 +150,19 @@ console.log('\nA newly inserted content object asks; it never inherits');
   ok('the notes/localStorage fallbacks sit AFTER that guard',
      c.indexOf("if (view !== 'read') return null;") < c.indexOf('readCachedBinding()', c.indexOf("if (view !== 'read') return null;")));
   ok('boot passes the view through', /resolveBinding\(view\)/.test(c));
+
+  /* Both read-mode fallbacks are shared in different ways, but the notes marker belongs
+     to ONE slide while localStorage holds whatever was bound last anywhere. With the
+     cache first, PowerPoint on the web (where settings.get returns null while presenting
+     — office-js#3406, the case this chain exists for) showed the SAME question on every
+     slide. Order is only reachable when settings are null, so desktop is unaffected. */
+  {
+    const guard = c.indexOf("if (view !== 'read') return null;");
+    const notes = c.indexOf('await readNotesBinding()', guard);
+    const cache = c.indexOf('readCachedBinding()', guard);
+    ok('the per-slide notes marker is tried before the shared cache',
+       notes > -1 && cache > -1 && notes < cache);
+  }
   ok('a guessed binding is not written back as if it were chosen',
      /deliberately not re-cached/.test(c));
   /* addRebind grew into addControls when the size and image toggles landed; the
@@ -211,32 +224,57 @@ console.log('\nRevealing, and telling phones which question is live');
   // 1. the clock counted to zero and nothing performed the reveal
   ok('the countdown has an expiry callback', /function startTick\(redraw, onExpire\)/.test(c));
   ok('expiry actually reveals', /onExpire && onExpire\(\)/.test(c));
-  ok('reveal writes the phase so every other surface follows', /qstate\/'\+qid\+'\/phase'\)\.set\('reveal'\)/.test(c));
+  /* The phase word itself, and the claim that other surfaces follow it, are now
+     checked against presenter.html and companion.html directly — see the vocabulary
+     block at the end of this file. Here we only assert a reveal is published at all. */
+  ok('reveal publishes the phase', /qstate\/'\+qid\+'\/phase'\)\.set\('revealed'\)/.test(c));
   ok('a failed write still reveals on this slide', /showing it locally anyway/.test(c));
 
   // 2. no way to reveal without a timer
   ok('a manual Reveal now button exists', /function addRevealButton\(/.test(c));
   ok('it is removed once revealed, however that happened', /getElementById\('psReveal'\)\?\.remove\(\)/.test(c));
 
-  // 3. phones stayed on the previous question
-  ok('read view publishes currentQuestion', /meRef\.set\(p\)/.test(c));
-  ok('it publishes the bucket id and qIndex phones follow', /id: qid, qIndex: b\.qIdx/.test(c));
-  ok('only a frame that is painting may claim', /if \(await isOnScreen\(\)\)/.test(c));
-  ok('it reclaims when another object owns the session', /cur\.val\(\)\.id !== qid/.test(c));
-  /* Checking the deadline inside the rAF callback could never fire for a frame starved
-     of rAF — which is exactly the case being detected — so the promise hung and the
-     publish never returned. Caught by a test that timed out at 45s. */
-  ok('the on-screen check cannot hang', /const timer = setTimeout\(\(\) => finish\(false\), 400\)/.test(c));
-  ok('a rebind stops the previous claimer', /if \(_stopClaim\) \{ _stopClaim\(\); _stopClaim = null; \}/.test(c));
-  /* Matches the guard, not the exact call syntax — this assertion has now broken twice
-     on harmless refactors of the same correct line. */
-  ok('edit view never publishes', /if \(!editing\)[^\n]*publishWhenVisible/.test(c));
-  /* An embedded frame reports "hidden" whenever the host window is not focused, so
-     gating the first publish on visibility meant it never ran at all. Verified against
-     the live database with visibilityState === 'hidden'. */
-  /* Superseded by claim-and-reclaim: publish-on-load let whichever object finished
-     last own the session, which put the WRONG question on phones when slides changed. */
-  ok('seeding still happens when nothing is published', /if \(!cur\.exists\(\)\) await claim\(\)/.test(c));
+  /* 3. phones stayed on the previous question — and all three fixes for it were wrong.
+     Publishing currentQuestion from this object is now FORBIDDEN, and these assertions
+     are deliberately inverted from the ones they replace.
+
+     Reported 2026-09-22 from a real session: the phone cycled between questions, then
+     stopped registering answers at all — for the presenter and for a second phone — and
+     presenter view stopped seeing them too. Cause: inside PowerPoint every add-in frame
+     reports itself visible, so the object on every slide reclaimed currentQuestion every
+     2.5s. answer.html follows that node, and goToQuestion() resets `answered` and swaps
+     STABLE_QID mid-flight, so submitted answers landed in a bucket nobody was reading.
+
+     The old behaviour passed its own tests and still destroyed live answers. What is
+     guarded here is therefore the ABSENCE of it. Do not "restore" these. */
+  ok('the add-in never references currentQuestion in a database path',
+     !/ref\([^)]*currentQuestion/.test(c));
+  ok('no claim / reclaim machinery survives',
+     !/publishWhenVisible|_stopClaim|isOnScreen|meRef/.test(c));
+
+  /* Written as a sweep rather than one fixed string so it keeps holding if the writes
+     are refactored: ANY future session write that is not question-scoped fails this. */
+  const sessionWrites = [...c.matchAll(/db\.ref\('sessions\/[^)]*\)/g)]
+    .filter(m => /^\s*\.(set|update|remove|push)\(/
+      .test(c.slice(m.index + m[0].length, m.index + m[0].length + 40)))
+    .map(m => m[0]);
+  ok('there is at least one session write to check', sessionWrites.length > 0);
+  ok('every session write is scoped to this question\'s own qstate node',
+     sessionWrites.every(r => /\/qstate\/'\+qid/.test(r)));
+
+  ok('the launch write announces this question only',
+     /\.update\(\{ phase:'live', launchedAt: _launchedAt \}\)/.test(c));
+  ok('edit view writes nothing to the session at all',
+     /if \(!editing && _announced !== qid\) \{[\s\S]{0,160}?qstate\/'\+qid/.test(c));
+
+  /* The reclaim loop is what turned a wrong guess into a repeating one. A timer that
+     writes is the shape of that bug, so the tick is checked for database access. */
+  const tick = c.slice(c.indexOf('_tick = setInterval('));
+  ok('the repeating tick never writes to the database',
+     !/db\.ref/.test(tick.slice(0, tick.indexOf('}, 1000);'))));
+
+  ok('the reason is recorded where the next person will look',
+     /WHY THIS OBJECT NEVER WRITES sessions\/<code>\/currentQuestion/.test(c));
   /* Superseded. That fix made the clock start on load so it would not wait for the
      publish round-trip — but starting on load was itself the bug: it ran down while
      the room was still reading. The clock now keys off _answerAt, so launchedAt no
@@ -322,6 +360,40 @@ console.log('\nThe question on the slide is never a cached copy');
   ok('the deck is refetched every time', /let q = null;\s*\n\s*try \{\s*\n\s*const s = await db\.ref\('quiz_builder\/'/.test(c));
   ok('the snapshot is only a fallback', /if \(!q\) q = b\.q;/.test(c));
   ok('the reason is recorded', /postReveal\.enabled false from before it was turned on/.test(c));
+}
+
+console.log('\nThe slide speaks the same phase vocabulary as the rest of the product');
+{
+  const root = path.resolve(__dirname, '..', '..');
+  const c   = fs.readFileSync(path.join(root, 'powerpoint-content', 'index.html'), 'utf8');
+  const pres = fs.readFileSync(path.join(root, 'presenter.html'), 'utf8');
+  const comp = fs.readFileSync(path.join(root, 'companion.html'), 'utf8');
+
+  /* Found 2026-09-22 auditing why presenter view "did not detect answers". This one was
+     not the cause, but it meant reveal never propagated in EITHER direction: this file
+     wrote phase 'reveal' while presenter.html writes 'revealed' and companion.html tests
+     for 'revealed'. A presenter reveal left the slide counting; a slide reveal left the
+     companion counting. Two surfaces, one vocabulary — so the check reads both files
+     rather than hard-coding the word here. */
+  ok('presenter still writes the phase word this test is anchored to',
+     /phase: 'revealed'/.test(pres));
+  ok('the companion still tests for it', /presentPhase === 'revealed'/.test(comp));
+  ok('the slide writes that same word', /qstate\/'\+qid\+'\/phase'\)\.set\('revealed'\)/.test(c));
+  ok('the slide no longer writes the private one', !/\.set\('reveal'\)/.test(c));
+  ok('it still accepts the old spelling left in existing sessions',
+     /ph === 'revealed' \|\| ph === 'reveal'/.test(c));
+
+  /* An undetached listener kept the dead run's closure alive: it repainted over the live
+     run, re-armed its tick, and clobbered the shared _prTimer. */
+  ok('the phase listener is detachable', /_phaseOff = \(\) => phRef\.off\('value', phFn\)/.test(c));
+  ok('and is detached with the rest of the run', /if \(_phaseOff\)\{ _phaseOff\(\); _phaseOff = null; \}/.test(c));
+
+  /* goLive re-enters on every ActiveViewChanged. Re-stamping phase:'live' dragged the
+     companion back to "answering" after the presenter had already revealed. */
+  ok('a question is announced once per page-load', /if \(!editing && _announced !== qid\) \{/.test(c));
+  ok('the guard is actually set', /_announced = qid;/.test(c));
+  ok('first sight still announces, so a stale reveal cannot deadlock the slide',
+     /clears a stale 'revealed' left/.test(c));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

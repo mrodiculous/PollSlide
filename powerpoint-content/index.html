@@ -182,7 +182,11 @@ let db, auth, bound = null, listener = null, presentations = {};
 /* Display prefs live WITH the binding in per-instance settings, so two objects on two
    slides can be sized differently and both survive reopening the deck. */
 let SCALE = 1, SHOW_MEDIA = true, DARK = false;
-let _tick = null, _launchedAt = 0, _revealSecs = 0, _answerAt = 0, _prTimer = null, _stopClaim = null;
+let _tick = null, _launchedAt = 0, _revealSecs = 0, _answerAt = 0, _prTimer = null;
+/* The qid this page-load has already announced as live, and the detach handle for
+   the phase listener. Both exist to stop a re-entry of goLive from trampling a run
+   that is already under way — see the notes at each use. */
+let _announced = null, _phaseOff = null;
 
 function applyPrefs(){
   document.documentElement.style.setProperty('--scale', String(SCALE));
@@ -215,10 +219,10 @@ const esc = (s) => String(s==null?'':s).replace(/[&<>"']/g, c =>
    binding at exactly the moment you present would make this product pointless,
    so the binding is resolved through a chain and cached the moment we see it:
 
-     1. document settings            — the real store
-     2. localStorage, partition-keyed — survives the web read-mode null
-     3. the slide's notes marker      — written by the task pane's Insert QR
-                                        (<!-- pollslide:CODE/idx -->)
+     1. document settings            — the real store, and the only PER-INSTANCE one
+     2. the slide's notes marker      — belongs to THIS slide (<!-- pollslide:CODE/idx -->),
+                                        written by the task pane's Insert QR
+     3. localStorage, partition-keyed — a last-resort guess, shared by every object
 
    Anything we successfully resolve is written back to layers 1 and 2, so a single
    visit in edit mode arms presentation mode even if settings go dark there. */
@@ -272,16 +276,20 @@ function readNotesBinding(){
    a binding.
 
    edit  → settings only. No settings means this object is new: ask.
-   read  → settings, then the shared fallbacks, because settings.get is reported to
-           return null in PowerPoint on the web while presenting (office-js#3406) and
-           showing the right question beats showing nothing when nobody can click. */
+   read  → settings, then the fallbacks, because settings.get is reported to return
+           null in PowerPoint on the web while presenting (office-js#3406) and showing
+           the right question beats showing nothing when nobody can click.
+
+   The notes marker is tried BEFORE localStorage. Both are fallbacks, but the marker
+   belongs to one slide while localStorage holds whatever was bound last ANYWHERE — so
+   with settings dark (web, presenting: the exact case this chain exists for) the cache
+   made every object on every slide show the SAME question. Order only matters when
+   settings are null, so this cannot change desktop behaviour, where step 1 always wins. */
 async function resolveBinding(view){
   const s = readSettingsBinding();
   if (s) { cacheBinding(s); return s; }
   if (view !== 'read') return null;          // editing: never guess, show the picker
 
-  const c = readCachedBinding();
-  if (c) return c;                           // deliberately not re-cached: it is a guess
   const n = await readNotesBinding();
   if (n && n.code && n.qIdx != null) {
     /* The notes marker carries an index, not a bucket id. Resolve it the way every
@@ -292,6 +300,9 @@ async function resolveBinding(view){
       if (q) return { code:n.code, qIdx:n.qIdx, qid:PSQid.bucket(q,n.qIdx,n.code), text:q.text||'', q };
     } catch(e){}
   }
+
+  const c = readCachedBinding();
+  if (c) return c;                           // deliberately not re-cached: it is a guess
   return null;
 }
 
@@ -640,7 +651,6 @@ function renderResults(q, responses, revealed, post){
 
 async function goLive(b, editing){
   if (listener) { listener(); listener = null; }
-  if (_stopClaim) { _stopClaim(); _stopClaim = null; }
   loadPrefs(b);
   /* ALWAYS refetch. The binding carries a snapshot of the question taken when it was
      chosen, and using it meant the slide froze at that moment: edit the wording, change
@@ -688,14 +698,19 @@ async function goLive(b, editing){
     startTick(paint, doReveal);
   };
 
-  /* Actually perform the reveal. Writing phase='reveal' is what makes every OTHER
-     surface follow — the phones, the companion, a second object on another slide —
-     so it is attempted first, but a failure must not stop this slide from revealing:
-     the room is looking at it. Hence write-then-render, not write-and-then-hope. */
+  /* Publishing the reveal is what lets the companion and a second object follow, so
+     it is attempted first — but a failure must not stop THIS slide from revealing: the
+     room is looking at it. Hence write-then-render, not write-and-then-hope.
+
+     The word is 'revealed', not 'reveal'. presenter.html:6559 writes 'revealed' and
+     companion.html:478/538 tests for it; this file invented 'reveal' and so spoke to
+     nobody — a presenter-side reveal never reached the slide, and a slide-side reveal
+     never reached the companion. The phones are NOT in this list: answer.html reads
+     currentQuestion only and never looks at qstate at all. */
   async function doReveal(){
     if (revealed) return;
     revealed = true;
-    try { await db.ref('sessions/'+b.code+'/qstate/'+qid+'/phase').set('reveal'); }
+    try { await db.ref('sessions/'+b.code+'/qstate/'+qid+'/phase').set('revealed'); }
     catch(e){ console.warn('reveal not published (showing it locally anyway)', e); }
     paint();
     armPostReveal();
@@ -734,7 +749,8 @@ async function goLive(b, editing){
     if (latest.length > 0 && !_answerAt && !revealed) _answerAt = Date.now();
     paint();
   });
-  listener = () => { ref.off('value', fn); clearInterval(_tick); _tick = null; clearTimeout(_prTimer); _prTimer = null; };
+  listener = () => { ref.off('value', fn); if (_phaseOff){ _phaseOff(); _phaseOff = null; }
+                     clearInterval(_tick); _tick = null; clearTimeout(_prTimer); _prTimer = null; };
 
   /* Follow a reveal triggered anywhere else, so this slide and the presenter's own
      screen land on the answer at the same moment. */
@@ -744,125 +760,75 @@ async function goLive(b, editing){
      changes, never that first echo, or a fresh run reveals itself on load. */
   let _echo = true;
   try {
-    db.ref('sessions/'+b.code+'/qstate/'+qid+'/phase').on('value', s => {
+    const phRef = db.ref('sessions/'+b.code+'/qstate/'+qid+'/phase');
+    const phFn = phRef.on('value', s => {
       const ph = s.exists() ? s.val() : null;
       if (_echo){ _echo = false; return; }
       if (ph === 'post_reveal' && !post){ revealed = true; post = true; clearTimeout(_prTimer); paint(); return; }
-      if (ph === 'reveal' && !revealed){ revealed = true; paint(); armPostReveal(); }
+      /* Read both spellings. 'revealed' is the real one; 'reveal' is what this file used
+         to write, so it is still sitting in sessions that ran the old build. */
+      if ((ph === 'revealed' || ph === 'reveal') && !revealed){ revealed = true; paint(); armPostReveal(); }
     });
+    /* This listener used to be attached and never detached. Every re-entry of goLive left
+       the previous closure alive, still holding the dead run's question and results: it
+       repainted over the live one, re-armed its timer, and could re-fire the reveal write
+       and cancel the current run's post-reveal by overwriting the shared _prTimer. */
+    _phaseOff = () => phRef.off('value', phFn);
   } catch(e){}
 
   paint();
-  if (!editing) _stopClaim = publishWhenVisible(b, q, qid);
+  /* Announce THIS question's state only. Never currentQuestion — see the long note
+     above the reveal button.
+
+     Announced ONCE per question per page-load. goLive re-enters on every
+     ActiveViewChanged, and an unguarded write here stamped phase:'live' again each
+     time — dragging the companion back to "answering" after the presenter had already
+     revealed. Writing on first sight is still right: it clears a stale 'revealed' left
+     in the node by an earlier run, which would otherwise make the slide open revealed
+     forever when presenting from PowerPoint alone. */
+  if (!editing && _announced !== qid) {
+    _announced = qid;
+    db.ref('sessions/'+b.code+'/qstate/'+qid)
+      .update({ phase:'live', launchedAt: _launchedAt }).catch(()=>{});
+  }
 }
 
-/* Is this frame actually being PAINTED right now?
+/* WHY THIS OBJECT NEVER WRITES sessions/<code>/currentQuestion
+   ---------------------------------------------------------------------------
+   It used to, and it broke the product twice.
 
-   A deck holds one of these per slide and they can all be alive at once, so the wrong
-   one publishing puts the wrong question on every phone — which is exactly what
-   happened when slides were switched. document.visibilityState is not trustworthy
-   here: an embedded frame reports "hidden" merely because the host window lost focus,
-   which is why gating on it stopped publishing altogether earlier.
+   answer.html watches currentQuestion and calls goToQuestion() whenever qIndex
+   changes — that is how a phone follows the presenter. But a deck holds ONE of these
+   objects per slide and they are all alive at once, so every one of them was a
+   candidate publisher:
 
-   requestAnimationFrame is the honest signal. A frame that is not being composited
-   gets its callbacks throttled to nothing, so if several frames arrive quickly we are
-   genuinely on screen. Costs a few milliseconds and asks the browser what it is
-   actually drawing rather than what the host claims. */
-function isOnScreen(){
-  return new Promise(resolve => {
-    if (document.visibilityState === 'visible') return resolve(true);
-    let frames = 0, settled = false;
-    const finish = (v) => { if (!settled){ settled = true; clearTimeout(timer); resolve(v); } };
-    /* The deadline MUST be its own timer. Checking elapsed time inside the rAF callback
-       only works if the callback runs at all — and a frame starved of rAF is precisely
-       the case being detected, so the promise never settled and the publish hung
-       forever. A real timeout cannot be starved by the thing it is timing. */
-    const timer = setTimeout(() => finish(false), 400);
-    const step = () => { if (++frames >= 3) finish(true); else requestAnimationFrame(step); };
-    requestAnimationFrame(step);
-  });
-}
+     attempt 1  publish on load          → whichever frame finished last owned the
+                                           session, so switching slides often put the
+                                           WRONG question on every phone
+     attempt 2  publish only when visible → an embedded frame reports hidden merely
+                                           because the host window lost focus, so
+                                           nothing published at all
+     attempt 3  claim, and reclaim every  → inside PowerPoint EVERY add-in frame
+                2.5s when "on screen"      reports visible, so all of them reclaimed,
+                                           forever. The phone cycled between questions,
+                                           and because goToQuestion() resets `answered`
+                                           and swaps STABLE_QID mid-flight, submitted
+                                           answers landed in the wrong bucket or were
+                                           lost outright.
 
-/* Tell the session which question is live — the reason a phone never advanced.
-   answer.html follows sessions/<code>/currentQuestion: it jumps to qIndex and takes
-   .id as the response bucket. The task pane publishes this; this object never did, so
-   moving to the next slide changed what the ROOM saw while every phone stayed put.
+   There is no reliable way, from inside a sandboxed add-in frame, to know whether the
+   slide you live on is the one being shown. visibilityState lies, requestAnimationFrame
+   is throttled inconsistently, and getSelectedSlides is not dependable in a slide show.
+   Every scheme above was an attempt to guess it, and each guess failed differently.
 
-   Guarded on visibility because a deck may hold several of these and they must not
-   fight over who is live. The one the audience is actually looking at publishes. */
-function publishWhenVisible(b, q, qid){
-  const meRef = db.ref('sessions/'+b.code+'/currentQuestion');
+   So this object does not guess. It is a DISPLAY surface: it renders one question and
+   writes only that question's own node, sessions/<code>/qstate/<qid>, which no other
+   object ever touches. Zero contention, by construction — nothing to race.
 
-  const payload = async () => {
-    let gameMode = 'classic';
-    try {
-      const gm = await db.ref('sessions/'+b.code+'/meta/gameMode').get();
-      if (gm.exists() && gm.val()) gameMode = String(gm.val());
-    } catch(e){}
-    const launchedAt = _launchedAt || Date.now();
-    _launchedAt = launchedAt;
-    return {
-      id: qid, qIndex: b.qIdx, index: b.qIdx + 1,
-      text: q.text, type: q.type,
-      options: q.options || null,
-      correctAnswer: q.correctAnswer !== undefined ? q.correctAnswer : null,
-      ratingMax: q.ratingMax || null, ratingLabels: q.ratingLabels || null,
-      image: q.image || null, videoOpts: q.videoOpts || null,
-      revealDelay: q.revealDelay !== undefined ? q.revealDelay : 30,
-      displayMode: q.displayMode || 'bars',
-      postReveal: q.postReveal || null,
-      phase: 'live', status: 'active', launchedAt, gameMode
-    };
-  };
-
-  const claim = async () => {
-    try {
-      const p = await payload();
-      await meRef.set(p);
-      await db.ref('sessions/'+b.code+'/qstate/'+qid).update({ phase:'live', launchedAt: p.launchedAt });
-    } catch(e){ console.warn('could not publish the live question', e); }
-  };
-
-  /* CLAIM-AND-RECLAIM, rather than a one-shot publish.
-
-     A deck holds one of these per slide and several can be alive at once, so a single
-     publish-on-load means whichever finished last owns the session — that is how the
-     WRONG question ended up on the phones when slides were switched.
-
-     Gating on visibility alone is not the answer either: an embedded frame is reported
-     hidden whenever the host window loses focus, and gating on that stopped publishing
-     altogether. So both are used, and the loop is what makes it converge: only a frame
-     that is actually being PAINTED may claim, and it re-checks every few seconds. The
-     slide on screen keeps getting animation frames and takes the session back within
-     seconds; the slides that are not on screen are throttled and cannot compete.
-
-     Seeding is the exception: if nothing has ever been published for this session,
-     publish regardless, so a deck where no frame ever reports painting still works. */
-  (async () => {
-    try {
-      const cur = await meRef.get();
-      if (!cur.exists()) await claim();
-    } catch(e){}
-  })();
-
-  let stop = false;
-  const loop = async () => {
-    if (stop) return;
-    try {
-      if (await isOnScreen()) {
-        const cur = await meRef.get();
-        if (!cur.exists() || cur.val().id !== qid) await claim();
-      }
-    } catch(e){}
-    if (!stop) setTimeout(loop, 2500);
-  };
-  setTimeout(loop, 600);
-
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') loop();
-  });
-  return () => { stop = true; };
-}
+   The audience stays on the question whose QR they scanned, which is the whole point
+   of a QR per slide. If you want phones to auto-advance instead, that belongs to a
+   surface there is exactly ONE of — presenter.html, or the task-pane add-in, which
+   already publishes correctly for that reason. */
 
 /* Not every presenter wants a timer. Without this the only way to reveal was to wait
    out a countdown that, on a manual-reveal question, never even starts. */
