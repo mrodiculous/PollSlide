@@ -190,39 +190,41 @@ console.log('\nBUG C — the phone and every reader derive the SAME response buc
   const PSQid = ctx.window.PSQid;
 
   const ans = read('answer.html');
-  const m = ans.match(/if \(!\(_liveQ && _liveQ\.id && Number\(_liveQ\.qIndex\) === Q_INDEX\)\) \{[\s\S]*?\n  \}/);
-  ok('answer.html still derives the bucket from the question', !!m);
+  /* The bucket is derived UNCONDITIONALLY from the loaded question — no longer gated on
+     currentQuestion. Match the exact shipped statement. */
+  const m = ans.match(/try \{ STABLE_QID = PSQid\.bucket\(questionData, Q_INDEX, SESSION\); \} catch \(e\) \{\}/);
+  ok('answer.html derives the bucket from its own loaded question', !!m);
+  ok('and it does so unconditionally (no currentQuestion.id guard)',
+     !/if \(!\(_liveQ && _liveQ\.id && Number\(_liveQ\.qIndex\) === Q_INDEX\)\) \{\s*\n\s*try \{ STABLE_QID = PSQid\.bucket/.test(ans));
+  /* The watcher must NOT adopt currentQuestion.id for the current question — that is the
+     hole a positional-id driver (the native Mac companion) fell through. */
+  ok('the currentQuestion watcher no longer overrides STABLE_QID with cq.id',
+     !/STABLE_QID = cq\.id;/.test(ans));
 
-  if (!m) { console.log('  … skipping the bucket-agreement checks'); }
-  else {
+  {
     const CODE = 'XZESB7L';
-    /* Models the real order: the currentQuestion watcher (answer.html:1136) and
-       goToQuestion (:1148) have already set STABLE_QID before loadQuestion runs. */
-    const phone = (q, idx, liveQ) => {
-      const seeded = (liveQ && liveQ.id && Number(liveQ.qIndex) === idx)
-        ? liveQ.id : ('q' + idx + '_stable_' + CODE);
-      return new Function('PSQid', 'questionData', 'Q_INDEX', 'SESSION', '_liveQ', 'SEEDED',
-        'let STABLE_QID = SEEDED;\n' + m[0] + '\nreturn STABLE_QID;')(PSQid, q, idx, CODE, liveQ, seeded);
-    };
+    // The phone's bucket now depends ONLY on the question it loaded from quiz_builder.
+    const phone = (q, idx) => PSQid.bucket(q, idx, CODE);
     const reader = (q, idx) => PSQid.bucket(q, idx, CODE);   // presenter, companion, present, add-in
 
     const FRESH = { id: 'qzmtseycnxb9ork', text: 'Q', type: 'multiple_choice' };
-    ok('with NO controller publishing, phone and slide agree',
-       phone(FRESH, 0, null) === reader(FRESH, 0), { phone: phone(FRESH, 0, null), reader: reader(FRESH, 0) });
-    ok('and that is the very bucket Clear tally removes',
-       phone(FRESH, 0, null) === reader(FRESH, 0));
-
-    /* The no-change guarantee for every deck that already has answers. */
+    ok('phone and every reader agree for a fresh-id question',
+       phone(FRESH, 0) === reader(FRESH, 0));
     ok('a legacy q<n>_stable id still resolves to its historical positional key',
-       phone({ id: 'q3_stable', text: 'Q' }, 3, null) === 'q3_stable_' + CODE);
+       phone({ id: 'q3_stable', text: 'Q' }, 3) === 'q3_stable_' + CODE);
     ok('a question with no id is completely unchanged',
-       phone({ text: 'Q' }, 2, null) === 'q2_stable_' + CODE);
+       phone({ text: 'Q' }, 2) === 'q2_stable_' + CODE);
 
-    // A controller IS authoritative for the question it names.
-    const live = { id: reader(FRESH, 0), qIndex: 0 };
-    ok('currentQuestion still wins for the question it names', phone(FRESH, 0, live) === live.id);
-    ok('but a currentQuestion about a DIFFERENT question cannot hijack the bucket',
-       phone(FRESH, 0, { id: 'qzOTHER_' + CODE, qIndex: 5 }) === reader(FRESH, 0));
+    /* THE Mac-companion bug, as a guard. The driver (native app) publishes a POSITIONAL
+       currentQuestion.id from the slide index; the companion (targeted mode) reads the
+       real quiz_builder id. Before the fix the following phone trusted the positional id
+       and its fresh-id answers vanished. Now the phone ignores the pointer entirely, so
+       for a fresh-id question it writes the real bucket the companion reads — Q2 registers. */
+    const companionTargeted = (q, idx) => PSQid.bucket(q, idx, CODE);   // resolves from quiz_builder
+    ok('following phone matches the companion even when the driver published a positional id',
+       phone(FRESH, 1) === companionTargeted(FRESH, 1));
+    ok('and a legacy question still matched all along (why only Q1 worked before)',
+       phone({ id: 'q0_stable', text: 'Q' }, 0) === 'q0_stable_' + CODE);
   }
 }
 

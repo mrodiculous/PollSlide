@@ -1132,9 +1132,12 @@ async function followLive(){
     const idx = cq.qIndex != null ? Number(cq.qIndex) : NaN;
     if (!isNaN(idx) && idx >= 0 && idx !== Q_INDEX) {
       goToQuestion(idx);   // IN-PLACE swap — no full page reload (fast + reliable on mobile)
-    } else if (cq.id && !isNaN(idx) && idx === Q_INDEX) {
-      STABLE_QID = cq.id;  // same question, but now we know its real bucket
     }
+    /* We deliberately do NOT set STABLE_QID = cq.id for the current question any more.
+       The bucket is derived from quiz_builder in loadQuestion (the shared source of
+       truth), so a driver that publishes a positional/guessed id — the native Mac
+       companion does, from the slide index alone — can never drag this phone onto a
+       bucket the companion and presenter are not reading. */
   });
 }
 
@@ -1348,11 +1351,19 @@ async function loadQuestion() {
      PSQid.bucket is the same pure function presenter.html, companion.html, present.html
      and the add-in all use, so this makes every surface agree. For a question with no
      id, or a legacy q<n>_stable id at index n, it returns exactly the string used
-     before — so nothing moves for existing decks. currentQuestion still wins when a
-     controller is driving THIS question, since that is the authoritative live pointer. */
-  if (!(_liveQ && _liveQ.id && Number(_liveQ.qIndex) === Q_INDEX)) {
-    try { STABLE_QID = PSQid.bucket(questionData, Q_INDEX, SESSION); } catch (e) {}
-  }
+     before — so nothing moves for existing decks.
+
+     This is now UNCONDITIONAL — it no longer defers to currentQuestion.id. A driver can
+     publish a bucket that DISAGREES with quiz_builder: the native Mac companion follows
+     the slide's QR and knows only the slide INDEX, so it publishes a positional
+     q<idx>_stable_<code> pointer. A following phone that trusted that wrote to the
+     positional bucket while the companion (targeted mode) read the real quiz_builder id —
+     so a legacy-id question (positional == real) registered and a fresh 'qz…' question
+     did not. That is the "answer works on one question, not the other, especially with
+     the Mac companion" bug. The phone's own loaded question is the source of truth every
+     other surface also reads, so deriving from it makes them agree no matter what pointer
+     the driver publishes. */
+  try { STABLE_QID = PSQid.bucket(questionData, Q_INDEX, SESSION); } catch (e) {}
 
   // Check if this participant already answered this question
   // Response is stored at: sessions/SESSION/responses/STABLE_QID/participantId
