@@ -185,6 +185,7 @@
 <script src="/qid.js?v=5e6ebfdc"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <link rel="icon" type="image/svg+xml" href="https://pollslide.com/logo.svg">
 <link rel="icon" type="image/x-icon" href="https://pollslide.com/favicon.ico">
@@ -234,6 +235,19 @@ const FIREBASE_CONFIG = {
 };
 firebase.initializeApp(FIREBASE_CONFIG);
 const db = firebase.database();
+/* The companion PUBLISHES sessions/<code>/currentQuestion so the audience's phones follow
+   the slide the Mac app detected (targeted mode below). That write needs auth
+   (currentQuestion .write is "auth != null"), and the companion has no user login — so it
+   signs in anonymously. Best-effort: if anonymous auth is not enabled on the project the
+   sign-in fails, the publish is silently skipped, and the companion still DISPLAYS results
+   exactly as before — it just cannot drive following until anonymous auth is turned on. */
+let _authReady = Promise.resolve();
+try {
+  const _auth = firebase.auth();
+  _authReady = _auth.signInAnonymously().catch(e => {
+    console.warn('companion: anonymous auth unavailable — phones will not follow this companion until it is enabled', e && e.code);
+  });
+} catch (e) { /* auth SDK missing — degrade to display-only */ }
 
 const letters = ['A','B','C','D','E','F'];
 const BASE_URL = "https://app.pollslide.com/answer";
@@ -430,6 +444,33 @@ function toggleTheme() {
 }
 applyTheme(); // apply saved preference on load
 
+/* Publish the live pointer so phones FOLLOW the slide the Mac companion detected. The
+   companion is single-instance (one Mac app per presenter), so — unlike the per-slide
+   PowerPoint content add-in — it is a legitimate writer of the shared currentQuestion.
+   launchedAt is stamped fresh each time, so when the presenter is idle in the background
+   the companion's detection is the most-recent writer and wins (phones follow the
+   companion); when the user actively drives the web presenter, ITS launch is newer and
+   wins (phones follow the presenter). That is exactly the required behaviour. The id is
+   the real quiz_builder bucket, so it matches where the phone writes and where every
+   reader reads. */
+function publishCompanionLive(session, qIdx, q, qId, total) {
+  _authReady.then(() => {
+    db.ref('sessions/' + session + '/currentQuestion').set({
+      id: qId, qIndex: qIdx, index: (qIdx || 0) + 1, total: total || null,
+      text: q.text || '', type: q.type || 'multiple_choice',
+      options: q.options || null,
+      correctAnswer: (q.correctAnswer !== undefined && q.correctAnswer !== null) ? q.correctAnswer : null,
+      ratingMax: q.ratingMax || null, ratingLabels: q.ratingLabels || null,
+      image: q.image || null,
+      revealDelay: q.revealDelay !== undefined ? q.revealDelay : 30,
+      displayMode: q.displayMode || 'bars',
+      postReveal: q.postReveal || null,
+      hideResults: !!q.hideResults,
+      phase: 'live', status: 'active', launchedAt: Date.now()
+    }).catch(() => {});
+  });
+}
+
 // Show a specific question directly from quiz_builder — guarantees it matches the QR.
 function showTargetedQuestion(session, qIdx) {
   sessionCode = session;
@@ -453,6 +494,8 @@ function showTargetedQuestion(session, qIdx) {
       presentPhase = 'live';
       liveStartedAt = q.launchedAt || 0;
       watchResponses(qId);
+      // Drive the audience's phones to this slide (see publishCompanionLive).
+      publishCompanionLive(session, qIdx, q, qId, Array.isArray(questions) ? questions.length : null);
     }
     curQ = qObj;
     renderAll();
