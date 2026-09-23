@@ -238,16 +238,38 @@ const db = firebase.database();
 /* The companion PUBLISHES sessions/<code>/currentQuestion so the audience's phones follow
    the slide the Mac app detected (targeted mode below). That write needs auth
    (currentQuestion .write is "auth != null"), and the companion has no user login — so it
-   signs in anonymously. Best-effort: if anonymous auth is not enabled on the project the
-   sign-in fails, the publish is silently skipped, and the companion still DISPLAYS results
-   exactly as before — it just cannot drive following until anonymous auth is turned on. */
-let _authReady = Promise.resolve();
-try {
-  const _auth = firebase.auth();
-  _authReady = _auth.signInAnonymously().catch(e => {
-    console.warn('companion: anonymous auth unavailable — phones will not follow this companion until it is enabled', e && e.code);
-  });
-} catch (e) { /* auth SDK missing — degrade to display-only */ }
+   signs in anonymously.
+
+   BULLETPROOFING (2026-09-23): the companion runs inside the Mac app's WKWebView, where the
+   default Firebase auth persistence (IndexedDB / 'local') can be unavailable or blocked —
+   and when it is, signInAnonymously silently fails and EVERY currentQuestion write fails
+   with it, which is exactly "phones don't follow the companion even with anonymous auth
+   enabled." So we force IN-MEMORY persistence (needs no IndexedDB; we re-auth each load
+   anyway), reuse an already-signed-in user if the webview has one, and resolve _authReady
+   only once a user is actually present. _authState is exposed for the on-screen debug. */
+let _authState = 'init', _lastPublishOk = null;
+let _authReady = new Promise(resolve => {
+  let settled = false;
+  const done = (state) => { _authState = state; if (!settled) { settled = true; resolve(); } };
+  let _auth;
+  try { _auth = firebase.auth(); }
+  catch (e) { done('no-sdk'); return; }
+  try {
+    _auth.onAuthStateChanged(u => { if (u) done(u.isAnonymous ? 'anon' : 'user'); });
+  } catch (e) {}
+  Promise.resolve(_auth.setPersistence(firebase.auth.Auth.Persistence.NONE).catch(() => {}))
+    .then(() => {
+      if (_auth.currentUser) { done(_auth.currentUser.isAnonymous ? 'anon' : 'user'); return; }
+      return _auth.signInAnonymously().then(
+        cred => done(cred && cred.user && !cred.user.isAnonymous ? 'user' : 'anon'),
+        err => { console.warn('companion: sign-in failed — phones cannot follow this companion', err && err.code); done('failed'); }
+      );
+    })
+    .catch(err => { console.warn('companion: auth error', err && err.code); done('failed'); });
+  // Never hang the publisher: if auth stalls (blocked storage, offline), resolve after 4s
+  // so the write is at least attempted (and its own .catch reports the outcome).
+  setTimeout(() => done(_authState === 'init' ? 'timeout' : _authState), 4000);
+});
 
 const letters = ['A','B','C','D','E','F'];
 const BASE_URL = "https://app.pollslide.com/answer";
@@ -467,7 +489,10 @@ function publishCompanionLive(session, qIdx, q, qId, total) {
       postReveal: q.postReveal || null,
       hideResults: !!q.hideResults,
       phase: 'live', status: 'active', launchedAt: Date.now()
-    }).catch(() => {});
+    }).then(
+      () => { _lastPublishOk = true; },
+      err => { _lastPublishOk = false; console.warn('companion: currentQuestion publish REJECTED ('+(err&&err.code)+') — auth='+_authState+'. Enable Anonymous sign-in in Firebase, or check WKWebView storage.'); }
+    );
   });
 }
 

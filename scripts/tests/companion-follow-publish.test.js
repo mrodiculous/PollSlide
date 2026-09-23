@@ -25,8 +25,15 @@ console.log('\nThe companion can drive following (and does so safely)');
 {
   ok('it loads the auth SDK (currentQuestion .write needs auth)',
      /firebasejs\/[\d.]+\/firebase-auth-compat\.js/.test(src));
-  ok('it signs in anonymously, best-effort', /signInAnonymously\(\)\.catch\(/.test(src));
-  ok('the publish waits for auth then never throws', /_authReady\.then\(\(\) => \{[\s\S]*?\}\)\.catch\(\(\) => \{\}\)/.test(src));
+  ok('it signs in anonymously', /signInAnonymously\(\)/.test(src));
+  /* WKWebView-safe: the default IndexedDB persistence can be blocked in the Mac app, which
+     silently kills sign-in and every currentQuestion write with it. In-memory persistence
+     needs no storage. This is the fix for "enabled anonymous auth but still not following". */
+  ok('it forces in-memory auth persistence (no IndexedDB dependency)',
+     /setPersistence\(firebase\.auth\.Auth\.Persistence\.NONE\)/.test(src));
+  ok('it reuses an already-signed-in user if present', /_auth\.currentUser/.test(src));
+  ok('the publisher waits for auth (_authReady) before writing', /_authReady\.then\(\(\) => \{/.test(src));
+  ok('a rejected publish is reported, not swallowed silently', /publish REJECTED/.test(src));
 
   // Only in targeted/QR mode — never when merely following the presenter (mac_link mode).
   const boot = src.slice(src.indexOf('function boot()'), src.indexOf('boot();'));
@@ -47,11 +54,11 @@ console.log('\nThe published pointer matches where the phone writes and the comp
   vm.runInContext(fs.readFileSync(path.join(ROOT, 'qid.js'), 'utf8'), ctx);
   const PSQid = ctx.window.PSQid;
 
-  const m = src.match(/db\.ref\('sessions\/' \+ session \+ '\/currentQuestion'\)\.set\(\{[\s\S]*?\}\)\.catch/);
+  const m = src.match(/db\.ref\('sessions\/' \+ session \+ '\/currentQuestion'\)\.set\(\{[\s\S]*?\}\)\.then/);
   ok('the publish payload is present', !!m);
 
   if (m) {
-    const payloadSrc = m[0].replace(/^db\.ref[^{]*\.set\(/, '(').replace(/\)\.catch$/, ')');
+    const payloadSrc = m[0].replace(/^db\.ref[^{]*\.set\(/, '(').replace(/\)\.then$/, ')');
     const build = new Function('session', 'qIdx', 'q', 'qId', 'total', 'return ' + payloadSrc + ';');
     const CODE = 'ABC1234';
     const deck = [
