@@ -234,65 +234,63 @@ console.log('\nRevealing, and telling phones which question is live');
   ok('a manual Reveal now button exists', /function addRevealButton\(/.test(c));
   ok('it is removed once revealed, however that happened', /getElementById\('psReveal'\)\?\.remove\(\)/.test(c));
 
-  /* 3. phones stayed on the previous question — and all three fixes for it were wrong.
-     Publishing currentQuestion from this object is now FORBIDDEN, and these assertions
-     are deliberately inverted from the ones they replace.
+  /* 3. THE FIX FOR "phones don't follow the slide in PowerPoint".
+     ------------------------------------------------------------------------------
+     This object MUST publish sessions/<code>/currentQuestion — that is the only node
+     answer.html follows, and while presenting from PowerPoint nothing else writes it.
+     v247 removed the publish entirely, so phones stopped advancing to the next question
+     and Q2 answers landed in Q1's bucket. It is restored here.
 
-     Reported 2026-09-22 from a real session: the phone cycled between questions, then
-     stopped registering answers at all — for the presenter and for a second phone — and
-     presenter view stopped seeing them too. Cause: inside PowerPoint every add-in frame
-     reports itself visible, so the object on every slide reclaimed currentQuestion every
-     2.5s. answer.html follows that node, and goToQuestion() resets `answered` and swaps
-     STABLE_QID mid-flight, so submitted answers landed in a bucket nobody was reading.
+     What it must NEVER be again is the v244 reclaim loop: a poll that re-took the session
+     every 2.5s "when visible" — and every add-in frame looks visible in PowerPoint, so
+     all of them re-took it forever and the phone cycled between questions, destroying
+     answers (goToQuestion resets `answered` and swaps STABLE_QID mid-flight). These
+     assertions pin the SAFE shape: publish, but by last-writer-wins transaction with an
+     event-driven (not polled) re-claim. */
+  ok('the live question is published so phones can follow',
+     /db\.ref\('sessions\/'\+b\.code\+'\/currentQuestion'\)/.test(c) &&
+     /function publishLiveQuestion\(/.test(c));
 
-     The old behaviour passed its own tests and still destroyed live answers. What is
-     guarded here is therefore the ABSENCE of it. Do not "restore" these. */
-  /* The guarantee is "never WRITE currentQuestion", not "never mention it" — READING it
-     is how this slide follows whoever is driving, and N read-only followers cannot
-     contend. So every currentQuestion ref is checked for what FOLLOWS it. */
-  const cqRefs = [...c.matchAll(/db\.ref\([^)]*currentQuestion[^)]*\)/g)];
-  ok('there is at least one currentQuestion ref to check', cqRefs.length > 0);
-  ok('and not one of them is a write',
-     cqRefs.every(m => !/^\s*\.(set|update|remove|push)\(/
-       .test(c.slice(m.index + m[0].length, m.index + m[0].length + 40))));
-  ok('no claim / reclaim machinery survives',
-     !/publishWhenVisible|_stopClaim|isOnScreen|meRef/.test(c));
+  /* The claim is guarded by a transaction that refuses to overwrite a NEWER launchedAt.
+     That is what makes an older background frame unable to steal the session — no war,
+     no cycling. */
+  ok('the claim overwrites only when not older (last-writer-wins by launchedAt)',
+     /meRef\.transaction\(cur => \{[\s\S]*?Number\(cur\.launchedAt\) > p\.launchedAt\) return;[\s\S]*?return p;/.test(c));
 
-  /* Written as a sweep rather than one fixed string so it keeps holding if the writes
-     are refactored: ANY future session write that is not question-scoped fails this. */
+  /* The re-claim is an EVENT, fired once per transition — the thing the old poll was not.
+     No setInterval/poll may drive a currentQuestion write. */
+  ok('the re-claim is driven by visibilitychange, not a poll',
+     /addEventListener\('visibilitychange', onVis\)/.test(c));
+  ok('the old reclaim-loop machinery is gone',
+     !/publishWhenVisible|_stopClaim|isOnScreen\(\)/.test(c) && !/setTimeout\(loop/.test(c));
+
+  /* The publisher's visibility listener must be detachable, or a goLive re-entry leaks a
+     closure that keeps claiming for a dead run. */
+  ok('the publisher is torn down with the run',
+     /_pubStop = \(\) => document\.removeEventListener\('visibilitychange', onVis\)/.test(c) &&
+     /if \(_pubStop\)\{ _pubStop\(\); _pubStop = null; \}/.test(c));
+
+  /* Every WRITE to sessions/<code> is still either the follow pointer (currentQuestion,
+     via the guarded transaction) or this question's own qstate node — never another
+     question's, and never an unguarded session-wide clobber. */
   const sessionWrites = [...c.matchAll(/db\.ref\('sessions\/[^)]*\)/g)]
-    .filter(m => /^\s*\.(set|update|remove|push)\(/
+    .filter(m => /^\s*\.(set|update|remove|push|transaction)\(/
       .test(c.slice(m.index + m[0].length, m.index + m[0].length + 40)))
     .map(m => m[0]);
   ok('there is at least one session write to check', sessionWrites.length > 0);
-  ok('every session write is scoped to this question\'s own qstate node',
-     sessionWrites.every(r => /\/qstate\/'\+qid/.test(r)));
+  ok('every session write is either currentQuestion or this question\'s qstate node',
+     sessionWrites.every(r => /\/currentQuestion'/.test(r) || /\/qstate\/'\+qid/.test(r)));
 
-  ok('the launch write announces this question only',
-     /\.update\(\{ phase:'live', launchedAt: _launchedAt \}\)/.test(c));
-  /* Structural, not a character budget: this assertion has broken twice purely because
-     the guarded block grew. What matters is that the ONLY qstate write in goLive's tail
-     lives inside the !editing guard, not how many characters precede it. */
-  {
-    const guard = c.indexOf("if (!editing && _announced !== qid) {");
-    const write = c.indexOf("qstate/'+qid", guard);
-    const nextFn = c.indexOf('\n/* WHY THIS OBJECT NEVER WRITES', guard);
-    ok('edit view writes nothing to the session at all',
-       guard > -1 && write > guard && (nextFn === -1 || write < nextFn));
-  }
-
-  /* The reclaim loop is what turned a wrong guess into a repeating one. A timer that
-     writes is the shape of that bug, so the tick is checked for database access. */
+  /* First sight announces this question once (publishes the pointer + stamps qstate live
+     to clear a stale reveal); the repeating tick must never write to the database. */
+  ok('the question is announced once per page-load', /if \(_announced !== qid\) \{/.test(c));
   const tick = c.slice(c.indexOf('_tick = setInterval('));
   ok('the repeating tick never writes to the database',
      !/db\.ref/.test(tick.slice(0, tick.indexOf('}, 1000);'))));
 
-  ok('the reason is recorded where the next person will look',
-     /WHY THIS OBJECT NEVER WRITES sessions\/<code>\/currentQuestion/.test(c));
-  /* Superseded. That fix made the clock start on load so it would not wait for the
-     publish round-trip — but starting on load was itself the bug: it ran down while
-     the room was still reading. The clock now keys off _answerAt, so launchedAt no
-     longer gates it at all. See the per-run block below. */
+  ok('the history is recorded where the next person will look',
+     /this object publishes sessions\/<code>\/currentQuestion|makes phones FOLLOW the slide/i.test(c));
+
   ok('launchedAt is set locally, not awaited from the database', /_launchedAt = Date\.now\(\);/.test(c));
 }
 
@@ -402,19 +400,18 @@ console.log('\nThe slide speaks the same phase vocabulary as the rest of the pro
   ok('the phase listener is detachable', /const offPh = \(\) => phRef\.off\('value', phFn\)/.test(c));
   ok('and is detached with the rest of the run', /if \(_phaseOff\)\{ _phaseOff\(\); _phaseOff = null; \}/.test(c));
 
-  /* goLive re-enters on every ActiveViewChanged. Re-stamping phase:'live' dragged the
-     companion back to "answering" after the presenter had already revealed. */
-  ok('a question is announced once per page-load', /if \(!editing && _announced !== qid\) \{/.test(c));
+  /* goLive re-enters on every ActiveViewChanged. The once-per-question guard means the
+     first-sight publish + qstate 'live' stamp happen once, not on every re-entry (which
+     would drag the companion back to "answering" after a reveal). */
+  ok('a question is announced once per page-load', /if \(_announced !== qid\) \{/.test(c));
   ok('the guard is actually set', /_announced = qid;/.test(c));
-  /* This used to assert that a COMMENT existed. The comment survived a change that made
-     the behaviour it described conditional, so the assertion stayed green over exactly the
-     regression it was written to catch. Assert the code instead. */
+  /* First sight stamps qstate live unconditionally, which clears any stale 'revealed' an
+     earlier run left in this node — asserted as code, not a comment, so it cannot rot. */
   {
-    const guard = c.indexOf("if (!editing && _announced !== qid) {");
-    const body  = c.slice(guard, c.indexOf('\n}', guard));
-    ok('first sight announces unconditionally, so a stale reveal cannot deadlock the slide',
-       guard > -1 && /\.update\(\{ phase:'live', launchedAt: _launchedAt \}\)/.test(body)
-                  && !/\bif\s*\(/.test(body.slice(body.indexOf('{') + 1)));
+    const guard = c.indexOf("if (_announced !== qid) {");
+    const body  = c.slice(guard, c.indexOf('\n  }', guard));
+    ok('first sight stamps qstate live so a stale reveal cannot deadlock the slide',
+       guard > -1 && /\.update\(\{ phase:'live', launchedAt: _launchedAt \}\)/.test(body));
   }
 }
 

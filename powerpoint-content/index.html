@@ -183,10 +183,10 @@ let db, auth, bound = null, listener = null, presentations = {};
    slides can be sized differently and both survive reopening the deck. */
 let SCALE = 1, SHOW_MEDIA = true, DARK = false;
 let _tick = null, _launchedAt = 0, _revealSecs = 0, _answerAt = 0, _prTimer = null;
-/* The qid this page-load has already announced as live, and the detach handle for
-   the phase listener. Both exist to stop a re-entry of goLive from trampling a run
-   that is already under way — see the notes at each use. */
-let _announced = null, _phaseOff = null;
+/* The qid this page-load has already announced as live, the detach handle for the phase
+   listener, and the detach handle for the live-question publisher's visibility hook.
+   All exist to stop a re-entry of goLive from trampling a run already under way. */
+let _announced = null, _phaseOff = null, _pubStop = null;
 /* The presenter's "hide results until reveal" choice. It is published on
    currentQuestion ONLY (presenter.html:5928) — qstate never carries it — so the
    guarded currentQuestion watcher below is the only way this slide can honour it.
@@ -783,6 +783,7 @@ async function goLive(b, editing){
     paint();
   });
   listener = () => { ref.off('value', fn); if (_phaseOff){ _phaseOff(); _phaseOff = null; }
+                     if (_pubStop){ _pubStop(); _pubStop = null; }
                      clearInterval(_tick); _tick = null; clearTimeout(_prTimer); _prTimer = null; };
 
   /* Follow a reveal triggered anywhere else, so this slide and the presenter's own
@@ -854,65 +855,78 @@ async function goLive(b, editing){
   } catch(e){}
 
   paint();
-  /* Announce THIS question's state only. Never currentQuestion — see the long note
-     above the reveal button.
+  if (!editing) publishLiveQuestion(b, q, qid);
+}
 
-     Announced ONCE per question per page-load. goLive re-enters on every
-     ActiveViewChanged, and an unguarded write here stamped phase:'live' again each
-     time — dragging the companion back to "answering" after the presenter had already
-     revealed. Writing on first sight is still right: it clears a stale 'revealed' left
-     in the node by an earlier run, which would otherwise make the slide open revealed
-     forever when presenting from PowerPoint alone. */
-  if (!editing && _announced !== qid) {
+/* PUBLISH THE LIVE QUESTION — this is what makes phones FOLLOW the slide.
+   ---------------------------------------------------------------------------
+   answer.html follows sessions/<code>/currentQuestion: it reads qIndex to advance the
+   phone and takes .id as the response bucket. Nothing else publishes it while presenting
+   from PowerPoint (the task pane's publish fires on selection changes in EDIT view, not
+   during a running slide show), so when this object stopped writing it, phones stopped
+   advancing to the next question and their answers landed in the previous question's
+   bucket. Restoring this write is the whole fix for "phones don't follow / Q2 never
+   registers" in PowerPoint.
+
+   The hazard is that a deck holds one of these frames PER SLIDE, all alive at once. The
+   v244 version reclaimed the session every 2.5s whenever the frame "looked visible" — but
+   in PowerPoint every frame looks visible, so all of them reclaimed forever and the phone
+   cycled between questions, destroying answers. This version cannot do that:
+
+     • last-writer-wins by launchedAt, enforced by a transaction — a background frame
+       (older launchedAt) can NEVER overwrite the slide shown more recently. There is no
+       reclaim war because an older claim is simply refused.
+     • the re-claim is an EVENT (visibilitychange), fired once per transition, not a poll.
+       The slide you navigate TO becomes visible, re-stamps a newer launchedAt, and wins.
+
+   phase/reveal still travels on qstate, which the companion reads in QR-targeted mode;
+   the visibility re-claim touches only the follow pointer, so it never un-reveals a slide
+   you navigate back to. */
+function publishLiveQuestion(b, q, qid){
+  const meRef = db.ref('sessions/'+b.code+'/currentQuestion');
+  const build = () => ({
+    id: qid, qIndex: b.qIdx, index: (b.qIdx || 0) + 1,
+    text: q.text || '', type: q.type || 'multiple_choice',
+    options: q.options || null,
+    correctAnswer: (q.correctAnswer !== undefined && q.correctAnswer !== null) ? q.correctAnswer : null,
+    ratingMax: q.ratingMax || null, ratingLabels: q.ratingLabels || null,
+    image: q.image || null,
+    revealDelay: q.revealDelay !== undefined ? q.revealDelay : 30,
+    displayMode: q.displayMode || 'bars',
+    postReveal: q.postReveal || null,
+    phase: 'live', status: 'active', launchedAt: _launchedAt
+  });
+  const claim = () => {
+    const p = build();
+    meRef.transaction(cur => {
+      if (cur && Number(cur.launchedAt) > p.launchedAt) return;   // a newer frame owns it — do not steal
+      return p;
+    }).catch(()=>{});
+  };
+
+  // First sight of this question: publish the follow pointer, and stamp qstate live to
+  // clear any stale 'revealed' an earlier run left in this node. Once per question.
+  if (_announced !== qid) {
     _announced = qid;
-    /* Unconditional on purpose. A version of this skipped the stamp when currentQuestion
-       said this question was already revealed — but currentQuestion is never cleared, so
-       "already revealed" was usually last session's leftover, and skipping left that
-       leftover in qstate with nothing to clear it. The slide opened revealed, and so did
-       the companion in QR-targeted mode, permanently. Clearing stale state is the whole
-       job of this write; a controller that is genuinely mid-reveal re-asserts it through
-       the watcher above the moment it does anything. */
+    claim();
     db.ref('sessions/'+b.code+'/qstate/'+qid)
       .update({ phase:'live', launchedAt: _launchedAt }).catch(()=>{});
   }
+
+  // Re-arm the visibility re-claim each goLive, detaching the previous handler first so a
+  // re-entry can never leak a listener.
+  if (_pubStop) { _pubStop(); _pubStop = null; }
+  const onVis = () => {
+    if (document.visibilityState === 'visible') { _launchedAt = Date.now(); claim(); }
+  };
+  document.addEventListener('visibilitychange', onVis);
+  _pubStop = () => document.removeEventListener('visibilitychange', onVis);
 }
 
-/* WHY THIS OBJECT NEVER WRITES sessions/<code>/currentQuestion
-   ---------------------------------------------------------------------------
-   It used to, and it broke the product twice.
-
-   answer.html watches currentQuestion and calls goToQuestion() whenever qIndex
-   changes — that is how a phone follows the presenter. But a deck holds ONE of these
-   objects per slide and they are all alive at once, so every one of them was a
-   candidate publisher:
-
-     attempt 1  publish on load          → whichever frame finished last owned the
-                                           session, so switching slides often put the
-                                           WRONG question on every phone
-     attempt 2  publish only when visible → an embedded frame reports hidden merely
-                                           because the host window lost focus, so
-                                           nothing published at all
-     attempt 3  claim, and reclaim every  → inside PowerPoint EVERY add-in frame
-                2.5s when "on screen"      reports visible, so all of them reclaimed,
-                                           forever. The phone cycled between questions,
-                                           and because goToQuestion() resets `answered`
-                                           and swaps STABLE_QID mid-flight, submitted
-                                           answers landed in the wrong bucket or were
-                                           lost outright.
-
-   There is no reliable way, from inside a sandboxed add-in frame, to know whether the
-   slide you live on is the one being shown. visibilityState lies, requestAnimationFrame
-   is throttled inconsistently, and getSelectedSlides is not dependable in a slide show.
-   Every scheme above was an attempt to guess it, and each guess failed differently.
-
-   So this object does not guess. It is a DISPLAY surface: it renders one question and
-   writes only that question's own node, sessions/<code>/qstate/<qid>, which no other
-   object ever touches. Zero contention, by construction — nothing to race.
-
-   The audience stays on the question whose QR they scanned, which is the whole point
-   of a QR per slide. If you want phones to auto-advance instead, that belongs to a
-   surface there is exactly ONE of — presenter.html, or the task-pane add-in, which
-   already publishes correctly for that reason. */
+/* This object publishes sessions/<code>/currentQuestion via publishLiveQuestion() above.
+   It USED to refuse to (see that function's note for the history and why the old
+   reclaim-loop version was dangerous); the current transaction + event approach makes
+   publishing safe, and publishing is required for phones to follow the slide. */
 
 /* Not every presenter wants a timer. Without this the only way to reveal was to wait
    out a countdown that, on a manual-reveal question, never even starts. */
