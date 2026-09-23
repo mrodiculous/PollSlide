@@ -39,7 +39,9 @@ console.log('\nBUG A — the live cutoff survives a reload, but never outlives t
      read as "no coverage". */
   const grab = (re, label) => { const m = src.match(re); ok('presenter.html still has: ' + label, !!m); return m ? m[0] : null; };
   const LAUNCH = grab(/const runKey = 'ql_runStart_' \+ qId;[\s\S]*?const launchedAt = _qLaunchedAt\[qId\];/, 'the launchQuestion cutoff');
-  const FILTER = grab(/const responses = allResponses\.filter\(r => \(r\.submittedAt \|\| 0\) >= liveStartedAt\);/, 'the listenResponses filter');
+  const FILTER = grab(/const responses = allResponses\.filter\(r => \(r\.submittedAt \|\| 0\) >= liveStartedAt - RESP_CLOCK_SKEW_MS\);/, 'the listenResponses filter');
+  const GRACE = Number((src.match(/const RESP_CLOCK_SKEW_MS = ([^;]+);/)||[])[1] ? (src.match(/const RESP_CLOCK_SKEW_MS = ([^;]+);/)[1].split('*').reduce((a,b)=>a*Number(b),1)) : 0);
+  ok('the cutoff tolerates client clock skew (grace present)', GRACE >= 60000);
 
   ok('the cutoff is no longer kept in memory only',
      !/_qLaunchedAt\[qId\] = _qLaunchedAt\[qId\] \|\| Date\.now\(\)/.test(src));
@@ -63,7 +65,7 @@ console.log('\nBUG A — the live cutoff survives a reload, but never outlives t
         ${LAUNCH}
         return { launchedAt, mem: _qLaunchedAt };`)(tab, mem, qId, now);
     const counted = (cutoff, rows) =>
-      new Function('allResponses', 'liveStartedAt', `${FILTER} return responses.length;`)(rows, cutoff);
+      new Function('allResponses', 'liveStartedAt', 'RESP_CLOCK_SKEW_MS', `${FILTER} return responses.length;`)(rows, cutoff, GRACE);
     const tabStore = () => { const o = {}; return { getItem: k => (k in o ? o[k] : null), setItem: (k, v) => { o[k] = String(v); }, removeItem: k => { delete o[k]; }, _o: o }; };
 
     const QID = 'qzmtseycnxb9ork_XZESB7L';
@@ -99,6 +101,21 @@ console.log('\nBUG A — the live cutoff survives a reload, but never outlives t
     ok('a reset clears the persisted per-index start', /localStorage\.setItem\(`ql_liveStart_/.test(reset[0]));
     ok('a reset clears the in-memory map too', /delete _qLaunchedAt\[stableQId\]/.test(reset[0]));
     ok('a reset clears this run\'s cutoff too', /removeItem\('ql_runStart_' \+ stableQId\)/.test(reset[0]));
+  }
+
+  /* Clock-skew grace: a phone whose clock runs behind the presenter must still register.
+     submittedAt is the phone's tap time (never rewritten — offline-queue.js), liveStartedAt
+     is the presenter's clock, so without a grace a behind phone is silently dropped. This
+     is the intermittent "sometimes an answer doesn't register on the presenter/companion".
+     The grace must still filter genuinely stale prior-session data (hours old). */
+  {
+    const GRACE = src.match(/const RESP_CLOCK_SKEW_MS = ([^;]+);/)[1].split('*').reduce((a,b)=>a*Number(b),1);
+    const pass = (submittedAt, liveStartedAt) => (submittedAt||0) >= liveStartedAt - GRACE;
+    const L = 1e12;
+    ok('a phone 30s behind still registers', pass(L-30000, L));
+    ok('a phone a few minutes behind still registers', pass(L-180000, L));
+    ok('a two-hour-old prior-session answer is still filtered out', !pass(L-2*3600*1000, L));
+    ok('the grace is bounded (well under a same-code session gap)', GRACE <= 10*60*1000);
   }
 }
 

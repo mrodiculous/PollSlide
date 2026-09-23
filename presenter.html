@@ -2604,6 +2604,14 @@ let liveQIdx      = null;
 let liveQId       = null;
 let editMode      = false; // when true, show editor for selected question; else live view
 let liveStartedAt = 0;    // timestamp (ms) when the current question was made live — used to filter old responses
+/* Respondents' phones stamp submittedAt with THEIR OWN clock (never rewritten — it is the
+   student's real tap time, see offline-queue.js), while liveStartedAt is the presenter's/
+   driver's clock. A phone whose clock runs a little behind would have its LIVE answer
+   silently dropped by the cutoff below — the intermittent "sometimes an answer doesn't
+   register." This grace tolerates realistic device clock skew. It stays well under the gap
+   between two real sessions that reuse one presentation's code (hours), and Reset Tally
+   still removes a bucket outright, so genuinely stale prior-run data is still filtered. */
+const RESP_CLOCK_SKEW_MS = 5 * 60 * 1000;
 let respListener  = null; // active listener for current question
 let respListeners = {}; // all active listeners by qIdx
 // ── Answer reveal state ──
@@ -6277,7 +6285,7 @@ function listenResponses(qIdx, qId, q) {
     // Stale responses left in Firebase from a previous run (same stable qId)
     // are ignored entirely — never counted, displayed, or used for reveal.
     // This is what makes the product "just work" — old data can't leak through.
-    const responses = allResponses.filter(r => (r.submittedAt || 0) >= liveStartedAt);
+    const responses = allResponses.filter(r => (r.submittedAt || 0) >= liveStartedAt - RESP_CLOCK_SKEW_MS);
     const rc = document.getElementById('respCounter');
     if (rc) rc.textContent = `${responses.length} response${responses.length!==1?'s':''}`;
     // Start the reveal countdown on the first answer of THIS session.
@@ -6582,7 +6590,7 @@ function _doRevealNow() {
   if (code && liveQId && liveQIdx !== null) {
     db.ref(`sessions/${code}/responses/${liveQId}`).get().then(snap => {
       const all = snap.exists() ? Object.values(snap.val()) : [];
-      const responses = all.filter(r => (r.submittedAt || 0) >= liveStartedAt);
+      const responses = all.filter(r => (r.submittedAt || 0) >= liveStartedAt - RESP_CLOCK_SKEW_MS);
       renderRightPanel(questions[liveQIdx], responses);
       renderPList(responses);
       // Keep present mode in sync with the freshly-fetched count too.
@@ -10039,7 +10047,7 @@ function _subscribePresentResponses() {
     if (document.getElementById('presentOverlay')?.style.display !== 'flex') return;
     const all = snap.exists() ? Object.values(snap.val()) : [];
     const before = (_lastPresResponses || []).length;
-    _lastPresResponses = all.filter(r=>(r.submittedAt||0) >= liveStartedAt);
+    _lastPresResponses = all.filter(r=>(r.submittedAt||0) >= liveStartedAt - RESP_CLOCK_SKEW_MS);
     /* The room hearing itself answer. Twenty answers arriving over half a minute IS the
        build-up, and it costs nothing — the sound was already written and unused here.
        Capped, because a lecture hall of 300 all answering at once is not a drum roll. */

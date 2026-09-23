@@ -267,6 +267,14 @@ let revealRemaining = 0;
 let revealSeconds = 30;
 let curQId = null;
 let liveStartedAt = 0;
+/* Respondents' phones stamp submittedAt with THEIR OWN clock (never rewritten — it is the
+   student's real tap time, see offline-queue.js), while liveStartedAt is the presenter's/
+   driver's clock. A phone whose clock runs a little behind would have its LIVE answer
+   silently dropped by the cutoff below — the intermittent "sometimes an answer doesn't
+   register." This grace tolerates realistic device clock skew. It stays well under the gap
+   between two real sessions that reuse one presentation's code (hours), and Reset Tally
+   still removes a bucket outright, so genuinely stale prior-run data is still filtered. */
+const RESP_CLOCK_SKEW_MS = 5 * 60 * 1000;
 let showQR = false;
 let showMedia = false; // media OFF by default in the poll window (results are the focus)
 let presentPhase = 'live'; // 'live' | 'revealed' | 'post_reveal' — mirrors presenter's Firebase phase
@@ -559,7 +567,7 @@ function watchResponses(qId) {
     const all = snap.exists() ? Object.values(snap.val()) : [];
     // Only use responses from the current live session — ignore stale data
     // left over in Firebase from a previous run of this same question.
-    const newResponses = all.filter(r => (r.submittedAt||0) >= liveStartedAt);
+    const newResponses = all.filter(r => (r.submittedAt||0) >= liveStartedAt - RESP_CLOCK_SKEW_MS);
     // Track timestamps for velocity indicator (Feature 5)
     const newCount = newResponses.length;
     if (newCount > responses.length) {
