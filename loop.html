@@ -82,7 +82,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 <script src="/gifs.js?v=ed7add18"></script>
-<script src="/loop-i18n.js?v=659ae400"></script>
+<script src="/loop-i18n.js?v=481670f3"></script>
 <script src="/loop-engine.js?v=8cbfc46c"></script>
 <script>
 /* LoopSlide Studio — build, publish and run loops for public screens.
@@ -212,8 +212,11 @@ async function newLoop() {
 }
 
 // ── EDITOR ───────────────────────────────────────────────────────────────────
+let curSuspended = null;   // set by PollSlide support (admin → LoopSlide → Pause); the owner can't clear it
 function openLoop(code) {
   const l = myLoops[code]; if (!l) return;
+  curSuspended = null;
+  db.ref('loops/' + code + '/suspended').get().then(s => { if (s.val() && curCode === code) { curSuspended = s.val(); editorView(); } }).catch(() => {});
   curCode = code; cur = draftShape(JSON.parse(JSON.stringify(l.def || {})));
   editorView();
 }
@@ -254,6 +257,7 @@ function editorView() {
         <button class="btn primary" onclick="publish()">${l.publishedAt ? 'Publish changes' : 'Publish'}</button>
       </span></div>
 
+    ${curSuspended ? `<div class="card" style="border-color:var(--accent2);"><h2 style="margin:0 0 6px;">⏸ ${esc(T('Paused by PollSlide support'))}</h2><p class="sub" data-noi18n>${esc(curSuspended)}</p><p class="note" style="margin-top:6px;">${esc(T('Screens and phones show “paused” until support resumes it. Questions? help@pollslide.com'))}</p></div>` : ''}
     ${l.publishedAt ? `<div class="card"><div class="row"><div><h2 style="margin:0;">It's live</h2><div class="note">${T('Code {x}', { x: '<b>' + esc(curCode) + '</b>' })}</div></div>
       <span style="margin-left:auto;" class="row">
         <button class="btn green" onclick="screensView('', '${esc(curCode)}')">📺 Put on a TV</button>
@@ -421,7 +425,7 @@ async function publish() {
   const prev = (await db.ref('loops/' + curCode).get()).val();
   norm.epoch = (prev && prev.def && prev.def.epoch) || Date.now();   // keep the clock running across edits
   const rec = { ownerUid: user.uid, def: norm, banned: (prev && prev.banned) || null, updatedAt: Date.now(),
-                cap: plan.players || null };
+                cap: plan.players || null, suspended: (prev && prev.suspended) || null };
   const upd = {};
   if (prev) rec.slot = prev.slot || null;
   else {

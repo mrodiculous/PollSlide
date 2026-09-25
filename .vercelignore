@@ -1,2 +1,15 @@
 # Server-side only — never deploy/serve these as static assets on the app domain.
 converter-service
+
+# Internal documents, never public (found 2026-09-26: every .md at the repo root — runbooks,
+# the disaster-recovery plan, the AppSource guide with the reviewer login — was downloadable
+# from app.pollslide.com). None of these are loaded by any page or API; tests guard that.
+*.md
+docs/
+scripts/
+SUBMIT-TO-MICROSOFT/
+*.pptx
+*.key
+*.pdf
+database-rules.json
+database-rules-workspaces.json

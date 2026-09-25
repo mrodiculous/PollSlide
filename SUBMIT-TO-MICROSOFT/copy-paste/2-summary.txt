@@ -1,0 +1,1 @@
+Live poll, quiz and word-cloud results on your slide, updating as your audience answers.

@@ -11,6 +11,7 @@
 <script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script src="/loop-engine.js?v=8cbfc46c"></script>
 <style>
 :root{--bg:#07070f;--bg2:#0d0d18;--surface:#13131f;--surface2:#1a1a2c;--border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.14);--accent:#6c63ff;--accent2:#ff6584;--accent3:#43e97b;--accent4:#f7b731;--text:#f4f4fc;--muted:#9090b8;--r:12px;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -289,6 +290,9 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
     <div class="nav-item" onclick="showPage('autopilot')" id="nav-autopilot">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="3"/></svg>Auto-pilot<span id="apBadge" class="pill pill-danger" style="margin-left:auto;display:none;"></span>
     </div>
+    <div class="nav-item" onclick="showPage('launch')" id="nav-launch">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><circle cx="7" cy="17" r="4"/></svg>Launch checks
+    </div>
     <div class="nav-item" onclick="showPage('errors')" id="nav-errors">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Errors in the wild<span id="errBadge" class="pill pill-danger" style="margin-left:auto;display:none;"></span>
     </div>
@@ -302,6 +306,9 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
     </div>
     <div class="nav-item" onclick="showPage('billing')" id="nav-billing">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>Billing / Stripe
+    </div>
+    <div class="nav-item" onclick="showPage('loopslide')" id="nav-loopslide">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>LoopSlide
     </div>
     <div class="nav-item" onclick="showPage('sharing')" id="nav-sharing">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Sharing &amp; collaboration
@@ -466,7 +473,7 @@ function showPage(page){
   closeDetail();renderPage();
 }
 function renderPage(){
-  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture,runbook:renderRunbook,billing:renderBilling,errors:renderErrors,autopilot:renderAutopilot,sharing:renderSharing,seo:renderSEO,leads:renderEnterpriseLeads,compliance:renderCompliance};
+  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture,runbook:renderRunbook,billing:renderBilling,errors:renderErrors,autopilot:renderAutopilot,sharing:renderSharing,seo:renderSEO,leads:renderEnterpriseLeads,compliance:renderCompliance,loopslide:renderLoopslide,launch:renderLaunch};
   const fn=map[currentPage];
   if(!fn) return;
   /* A page that fails must SAY so. Two of these renderers are async, so a throw inside
@@ -649,6 +656,7 @@ function renderDetailBody(uid){
     <label style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Recent Polly generations</label>
     <div id="pollyLog_${uid}" style="font-size:11.5px;color:var(--muted);margin-top:4px;">Loading…</div>
   </div>
+  ${loopUsageHtml(uid)}
   <div class="dp-sec">
     <h3>🕵️ Support</h3>
     <p style="font-size:11.5px;color:var(--muted);margin:0 0 8px;">Open PollSlide signed in as this user to reproduce their issue. Anything you change there changes their real account. Every use is logged.</p>
@@ -3739,6 +3747,203 @@ function toast(msg,type){const el=document.getElementById('toast');el.textConten
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeDetail();hideConfirm();}});
 
 async function loadWhiteEnquiriesAlways(){const el=document.getElementById('whiteEnquiries');if(el)await loadWhiteEnquiries();}
+
+// ═══ LOOPSLIDE ════════════════════════════════════════════════════════════════
+/* Everything here reads public LoopSlide data (loops, tv_devices, loop_scores are
+   readable by anyone) plus the admin user index. The only writes are support actions,
+   which go through /api/loop-admin (admin-only, logged to admin/loop_actions). */
+const LS_PLANS = { free:{loops:1,slides:10,screens:1,players:25}, pro:{loops:5,slides:20,screens:3,players:0},
+  team_small:{loops:20,slides:40,screens:10,players:0}, team_large:{loops:80,slides:150,screens:40,players:0},
+  enterprise:{loops:Infinity,slides:Infinity,screens:Infinity,players:0} };
+const lsPlan = t => LS_PLANS[t==='team'?'team_small':t==='white'?'team_large':t] || LS_PLANS.free;
+const LSCODE = /^[A-Z0-9]{4,12}$/, LSPID = /^p[a-z0-9]{1,20}$/;
+async function loopAdmin(action, body){
+  const tk = await auth.currentUser.getIdToken();
+  const r = await fetch('/api/loop-admin',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tk},body:JSON.stringify(Object.assign({action},body))});
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error||('HTTP '+r.status));
+  return d;
+}
+// Cheap counts over REST (shallow = keys only), so a busy loop never downloads its scores.
+async function lsShallowCount(path){
+  try{ const tk=await auth.currentUser.getIdToken();
+    const r=await fetch(FB.databaseURL+'/'+path+'.json?shallow=true&auth='+encodeURIComponent(tk)); const d=await r.json();
+    return d&&typeof d==='object'?Object.keys(d).length:0; }catch(e){ return null; }
+}
+function loopUsageHtml(uid){
+  const u=allUsers[uid]||{}, loops=u.loops||{}, tvs=u.tvs||{}, pl=lsPlan(u.tier);
+  const nL=Object.keys(loops).length, nPub=Object.values(loops).filter(l=>l&&l.publishedAt).length, nT=Object.keys(tvs).length;
+  if(!nL&&!nT) return '';
+  const lim=v=>v===Infinity?'∞':v;
+  return `<div class="dp-sec"><h3>🔁 LoopSlide</h3>
+    <div class="dp-row"><span class="lbl">Loops (published)</span><span>${nL} (${nPub}) of ${lim(pl.loops)}</span></div>
+    <div class="dp-row"><span class="lbl">TVs paired</span><span>${nT} of ${lim(pl.screens)}</span></div>
+    <div class="dp-row"><span class="lbl">Slides per loop</span><span>${lim(pl.slides)}${pl.players?' · '+pl.players+' players':''}</span></div>
+    ${Object.entries(loops).slice(0,8).map(([c,l])=>LSCODE.test(c)?`<div class="dp-row"><span class="lbl">${esc(l.name||'Untitled')}</span><span><a href="/screen#${c}" target="_blank" rel="noopener">${c}</a>${l.publishedAt?'':' · draft'}</span></div>`:'').join('')}
+  </div>`;
+}
+async function renderLoopslide(){
+  const el=document.getElementById('content');
+  el.innerHTML=`<div class="stat-grid" id="lsStats"><div class="loader">Loading…</div></div>
+    <div class="card"><div class="card-hd"><h2>Published loops</h2><button class="btn btn-sm" onclick="renderLoopslide()">↻ Refresh</button></div><div id="lsTable" style="padding:0 0 8px;"><div class="loader">Loading…</div></div></div>
+    <div class="card"><div class="card-hd"><h2>Players on a loop</h2></div>
+      <div style="padding:12px 18px;display:flex;gap:8px;"><input id="lsCode" placeholder="Loop code, e.g. K7P4QX" style="flex:1;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;padding:9px 11px;font-size:13px;text-transform:uppercase;" onkeydown="if(event.key==='Enter')lsPlayers()"><button class="btn btn-primary btn-sm" onclick="lsPlayers()">Show players</button></div>
+      <div id="lsPlayersOut" style="padding:0 18px 16px;color:var(--muted);font-size:13px;"></div></div>
+    <div class="card"><div class="card-hd"><h2>Support actions log</h2></div><div id="lsLog" style="padding:10px 18px 16px;font-size:12.5px;color:var(--muted);">Loading…</div></div>`;
+  const [ls, tvs] = await Promise.all([db.ref('loops').get().then(s=>s.val()||{}), db.ref('tv_devices').get().then(s=>s.val()||{})]);
+  const tvBy={}; Object.values(tvs).forEach(t=>{ if(t&&t.loop) tvBy[t.loop]=(tvBy[t.loop]||0)+1; });
+  const E=window.LoopEngine, now=Date.now();
+  const rows=Object.entries(ls).filter(([c])=>LSCODE.test(c)).map(([c,v])=>{ const L=E.normalizeLoop((v&&v.def)||{}); const u=allUsers[v&&v.ownerUid]||{};
+    return { c, v, L, owner:u.email||v.ownerUid||'?', tier:u.tier||'free', tvs:tvBy[c]||0, period:E.periodKey(L,now) }; })
+    .sort((a,b)=>((b.v.updatedAt||0)-(a.v.updatedAt||0)));
+  await Promise.all(rows.map(async r=>{ r.players=await lsShallowCount('loop_scores/'+r.c+'/'+r.period); }));
+  const paused=rows.filter(r=>r.v.suspended).length, players=rows.reduce((n,r)=>n+(r.players||0),0);
+  document.getElementById('lsStats').innerHTML=`
+    <div class="stat"><div class="stat-val">${rows.length}</div><div class="stat-label">Published loops</div></div>
+    <div class="stat"><div class="stat-val">${Object.keys(tvs).length}</div><div class="stat-label">TVs paired</div></div>
+    <div class="stat"><div class="stat-val">${players}</div><div class="stat-label">Players on current boards</div></div>
+    <div class="stat"><div class="stat-val">${paused}</div><div class="stat-label">Paused by support</div></div>`;
+  document.getElementById('lsTable').innerHTML=rows.length?`<table><thead><tr><th>Loop</th><th>Owner</th><th>Plan</th><th>TVs</th><th>Players now</th><th>Extras</th><th>Updated</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr>
+      <td><b>${esc(r.L.name)}</b><br><span style="color:var(--muted);font-size:11.5px;">${r.c}${r.v.suspended?' · <span class="pill pill-danger">paused</span>':''}</span></td>
+      <td>${esc(r.owner)}</td><td>${esc(r.tier)}</td><td>${r.tvs}</td><td>${r.players==null?'—':r.players}${r.v.cap?' / '+r.v.cap:''}</td>
+      <td style="font-size:11.5px;">${[r.L.extras.teams?'👥':'',r.L.extras.reactions?'🎉':'',r.L.extras.double?'⚡':'',r.L.reward?'🎁':'',r.L.autoTranslate?'🌐':''].join(' ')}</td>
+      <td style="font-size:11.5px;">${r.v.updatedAt?new Date(r.v.updatedAt).toLocaleString():''}</td>
+      <td style="white-space:nowrap;"><a class="btn btn-sm" href="/screen#${r.c}" target="_blank" rel="noopener">📺</a>
+        ${r.v.ownerUid&&allUsers[r.v.ownerUid]?`<button class="btn btn-sm" onclick="openDetail('${esc(r.v.ownerUid)}')">Owner</button>`:''}
+        ${r.v.suspended?`<button class="btn btn-sm btn-green" onclick="lsResume('${r.c}')">Resume</button>`:`<button class="btn btn-sm btn-amber" onclick="lsPause('${r.c}')">Pause</button>`}</td></tr>`).join('')}</tbody></table>`
+    :'<div style="padding:14px 18px;color:var(--muted);">No published loops yet.</div>';
+  try{ const s=await db.ref('admin/loop_actions').limitToLast(20).get(); const a=Object.values(s.val()||{}).reverse();
+    document.getElementById('lsLog').innerHTML=a.length?a.map(x=>`<div>${new Date(x.at).toLocaleString()} · <b>${esc(x.action)}</b> ${esc(x.code)}${x.pid?' · '+esc(x.pid):''}${x.reason?' — '+esc(x.reason):''} · ${esc(x.by)}</div>`).join(''):'No support actions yet.';
+  }catch(e){ document.getElementById('lsLog').textContent='Could not load the log.'; }
+}
+async function lsPause(code){
+  if(!LSCODE.test(code)) return;
+  const reason=prompt('Pause '+code+' on every screen and phone.\nReason (the owner sees this):','Paused while we review content reported as unsuitable for a public screen.');
+  if(reason==null) return;
+  try{ await loopAdmin('pause',{code,reason}); toast('Paused '+code,'success'); renderLoopslide(); }catch(e){ toast('Could not pause: '+e.message,'danger'); }
+}
+async function lsResume(code){
+  if(!LSCODE.test(code)||!confirm('Resume '+code+'? It goes back on every screen straight away.')) return;
+  try{ await loopAdmin('resume',{code}); toast('Resumed '+code,'success'); renderLoopslide(); }catch(e){ toast('Could not resume: '+e.message,'danger'); }
+}
+async function lsPlayers(){
+  const code=(document.getElementById('lsCode').value||'').toUpperCase().trim(), out=document.getElementById('lsPlayersOut');
+  if(!LSCODE.test(code)){ out.textContent='Enter a loop code.'; return; }
+  const v=(await db.ref('loops/'+code).get()).val(); if(!v){ out.textContent='No loop with that code.'; return; }
+  const L=window.LoopEngine.normalizeLoop(v.def||{}), per=window.LoopEngine.periodKey(L,Date.now()), banned=v.banned||{};
+  const sc=(await db.ref('loop_scores/'+code+'/'+per).get()).val()||{};
+  const rows=Object.entries(sc).filter(([pid])=>LSPID.test(pid)).sort((a,b)=>(b[1].pts||0)-(a[1].pts||0));
+  out.innerHTML=rows.length?`<table><thead><tr><th>Player</th><th>Points</th><th>Team</th><th></th></tr></thead><tbody>${rows.map(([pid,r])=>`<tr><td>${esc(r.a||'')} ${esc(r.n)}</td><td>${(r.pts||0).toLocaleString()}</td><td>${r.tm!=null&&L.extras.teamNames[r.tm]?esc(L.extras.teamNames[r.tm]):''}</td>
+      <td>${banned[pid]?`<button class="btn btn-sm" onclick="lsBan('${code}','${pid}',false)">Allow again</button>`:`<button class="btn btn-sm btn-amber" onclick="lsBan('${code}','${pid}',true)">Remove</button>`}</td></tr>`).join('')}</tbody></table>`:'No players on the current board.';
+}
+async function lsBan(code,pid,on){
+  if(!LSCODE.test(code)||!LSPID.test(pid)) return;
+  try{ await loopAdmin(on?'ban':'unban',{code,pid}); toast(on?'Removed from the screen':'Allowed again','success'); lsPlayers(); }catch(e){ toast('Could not change that player: '+e.message,'danger'); }
+}
+
+// ═══ LAUNCH CHECKS ════════════════════════════════════════════════════════════
+/* One click runs the real system end to end with this admin account — the same writes a
+   venue, a TV and a phone make, through the live database rules and the live APIs — then
+   deletes everything it made. It also proves the rules REFUSE what they should. */
+function renderLaunch(){
+  document.getElementById('content').innerHTML=`
+  <div class="card"><div class="card-hd"><h2>🔁 LoopSlide — live self-test</h2></div>
+    <div style="padding:12px 18px;color:var(--muted);font-size:12.5px;line-height:1.6;">Creates a test loop under this admin account, pairs a pretend TV, plays as a pretend phone, checks translation and GIF search, confirms the database rules refuse cheating, then deletes everything. Takes about 30 seconds. Nothing is shown on any real screen.</div>
+    <div style="padding:0 18px 12px;display:flex;gap:12px;align-items:center;"><button class="btn btn-primary" id="lsTestBtn" onclick="runLoopSelfTest()">▶ Run the self-test</button>
+      <label style="font-size:12.5px;color:var(--muted);"><input type="checkbox" id="lsTestPolly"> Also check Polly (uses 1 Polly generation)</label></div>
+    <div id="lsTestOut" style="padding:0 18px 16px;font-size:13px;"></div></div>
+  <div class="card"><div class="card-hd"><h2>🪟 Microsoft AppSource — reviewer account</h2></div>
+    <div style="padding:12px 18px;color:var(--muted);font-size:12.5px;line-height:1.6;">Microsoft's reviewer signs in as <b>appsource-review@pollslide.com</b> and picks the presentation named <b>Reviewer Demo</b>. This checks that it's all there before you submit.</div>
+    <div style="padding:0 18px 12px;"><button class="btn btn-primary" onclick="checkReviewerAccount()">▶ Check the reviewer account</button></div>
+    <div id="rvOut" style="padding:0 18px 16px;font-size:13px;"></div></div>`;
+}
+function ckRow(ok,label,detail){ return `<div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--border);"><span style="width:22px;">${ok===true?'✅':ok===false?'❌':'⚠️'}</span><span style="flex:1;"><b>${esc(label)}</b>${detail?`<br><span style="color:var(--muted);font-size:12px;">${esc(detail)}</span>`:''}</span></div>`; }
+async function runLoopSelfTest(){
+  const out=document.getElementById('lsTestOut'), btn=document.getElementById('lsTestBtn'); btn.disabled=true; out.innerHTML='Running…';
+  const E=window.LoopEngine, me=auth.currentUser, uid=me.uid, res=[]; const add=(ok,l,d)=>{ res.push(ckRow(ok,l,d)); out.innerHTML=res.join(''); };
+  const A='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  function rnd(n){ return Array.from({length:n},()=>A[Math.random()*A.length|0]).join(''); }
+  const code='ZT'+rnd(6), dev=rnd(24), pair=rnd(6), pid='pselftest'+rnd(4).toLowerCase().replace(/[^a-z0-9]/g,'x');
+  const tier=(allUsers[uid]&&allUsers[uid].tier)||'free', paid=['pro','team_small','team','team_large','white','enterprise'].includes(tier);
+  const expectFail=async(label,fn)=>{ try{ await fn(); add(false,label,'The database ACCEPTED this — it should have refused it.'); }catch(e){ add(true,label,'Refused, as it should be.'); } };
+  let slot=null, tvSlot=null, rogueDev=null;
+  const tk=await me.getIdToken();
+  const api=async(path,body)=>{ const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+tk},body:JSON.stringify(body)}); const d=await r.json().catch(()=>({})); return {r,d}; };
+  try{
+    // Pages are served
+    for(const pg of ['/loop','/screen','/play','/tv']){ const r=await fetch(pg,{cache:'no-store'}); add(r.ok,'Page '+pg+' is live','HTTP '+r.status); }
+    // Publish a loop the way the Studio does (plan slot + public record)
+    const used=(await db.ref('loop_slots/'+uid).get()).val()||{}; slot=0; while(used[slot]!==undefined) slot++;
+    const def=E.normalizeLoop({ name:'Self-test', lang:'en', epoch:Date.now(), extras:{teams:true,teamNames:['A','B']}, reward:{text:'Test reward',code:'T1',top:3},
+      compliance:{organiser:'PollSlide self-test',contact:'help@pollslide.com',rulesUrl:'https://pollslide.com/terms'},
+      sets:[{id:'s1',title:'Round 1',items:[{id:'q1',type:'q',text:'Which planet is red? 🪐',options:['Venus','Mars'],correct:1},{id:'a1',type:'ad',sponsored:false,headline:'Did you know?',body:'Mars has two moons.'}]}] });
+    try{ await db.ref().update({ ['loop_slots/'+uid+'/'+slot]:code, ['loops/'+code]:{ownerUid:uid,def,updatedAt:Date.now(),slot:String(slot),cap:paid?null:25} });
+      add(true,'Publish a loop (plan slot '+slot+')','Code '+code+'.'); }
+    catch(e){ add(false,'Publish a loop','Refused: '+e.message+'. This admin account is on "'+tier+'"; if its loop slots are full, delete a loop or use a paid plan.'); throw e; }
+    // TV pairing
+    await db.ref('tv_pair/'+pair).set({device:dev,createdAt:firebase.database.ServerValue.TIMESTAMP}); add(true,'A TV can post a pairing code','Code '+pair+'.');
+    const tu=(await db.ref('tv_slots/'+uid).get()).val()||{}; tvSlot=0; while(tu[tvSlot]!==undefined) tvSlot++;
+    await db.ref().update({ ['tv_slots/'+uid+'/'+tvSlot]:dev, ['tv_devices/'+dev]:{ownerUid:uid,loop:code,name:'Self-test TV',pair,slot:String(tvSlot),pairedAt:firebase.database.ServerValue.TIMESTAMP}, ['tv_pair/'+pair]:null });
+    const tv=(await db.ref('tv_devices/'+dev).get()).val(); add(!!tv&&tv.loop===code,'Pair the TV to the loop','The TV would now play '+code+'.');
+    rogueDev=rnd(24);
+    await expectFail('A TV can\'t be claimed without its live code', ()=>db.ref('tv_devices/'+rogueDev).set({ownerUid:uid,loop:code,name:'x',pair:'ZZZZZZ',slot:'9'}));
+    // Phone
+    const L=def, p=E.positionAt(L,Date.now()), per=E.periodKey(L,Date.now()), key=E.answerKey(p.cycle,'q1');
+    await db.ref(`loop_answers/${code}/${per}/${key}/${pid}`).set({n:'Tester',a:'🦊',c:1,ms:1200,pts:1900,t:Date.now(),x:2,tm:0});
+    await db.ref(`loop_scores/${code}/${per}/${pid}`).set({n:'Tester',a:'🦊',pts:1900,ans:1,last:key,tm:0,b:1,d:1});
+    add(true,'A phone can answer and score (with ⚡2× and a team)','');
+    await expectFail('Points above the per-answer limit are refused', ()=>db.ref(`loop_answers/${code}/${per}/9_q1/${pid}`).set({n:'x',c:1,ms:1,pts:5000,t:Date.now()}));
+    await db.ref(`loop_react/${code}/${pid}`).set({e:1,t:Date.now()}); add(true,'A phone can send a reaction','');
+    await expectFail('A second reaction inside 1.5 s is refused', ()=>db.ref(`loop_react/${code}/${pid}`).set({e:2,t:Date.now()}));
+    await expectFail('Only the six allowed reactions exist', ()=>db.ref(`loop_react/${code}/pother${rnd(3).toLowerCase()}`).set({e:9,t:Date.now()}));
+    // APIs
+    const tr=await api('/api/loop-translate',{code});
+    if(tr.r.ok&&tr.d.ok){ const es=(await db.ref('loop_i18n/'+code+'/es').get()).val(); const n=es&&es.u?Object.keys(es.u).length:0;
+      add(n>0,'Questions translate for players (Spanish checked)', n?n+' items translated.':'Nothing came back — check OPENAI_API_KEY / LOCAL_LLM_URL in Vercel.'); }
+    else add(false,'Questions translate for players', tr.d.reason||tr.d.error||('HTTP '+tr.r.status));
+    const gf=await api('/api/gif-search',{q:'celebrate',limit:3});
+    add(gf.r.ok&&Array.isArray(gf.d.results)&&gf.d.results.length>0,'GIF search works', gf.r.ok?(gf.d.results||[]).length+' results':(gf.d.error||'HTTP '+gf.r.status));
+    if(document.getElementById('lsTestPolly').checked){ const py=await api('/api/polly',{topic:'the planets',type:'quiz',count:1});
+      add(py.r.ok&&Array.isArray(py.d.questions)&&py.d.questions.length>0,'Polly writes questions', py.r.ok?'':(py.d.error||'HTTP '+py.r.status)); }
+  }catch(e){ add(false,'Stopped early',String(e&&e.message||e)); }
+  // Clean up everything it made
+  try{
+    /* Only delete what exists: a delete of a missing path can be refused by its rule, and
+       one refused path makes the whole update fail. The pairing code is gone once a TV is
+       paired, so it's only removed if pairing never finished. */
+    const has=async p=>(await db.ref(p).get()).exists();
+    const upd={};
+    if(await has('loops/'+code)) upd['loops/'+code]=null;
+    for(const n of ['loop_answers','loop_scores','loop_react','loop_i18n']) if(await has(n+'/'+code)) upd[n+'/'+code]=null;
+    if(await has('tv_devices/'+dev)) upd['tv_devices/'+dev]=null;
+    if(rogueDev && await has('tv_devices/'+rogueDev)) upd['tv_devices/'+rogueDev]=null;   // only if a refusal check wrongly got through
+    if(slot!=null && await has('loop_slots/'+uid+'/'+slot)) upd['loop_slots/'+uid+'/'+slot]=null;
+    if(tvSlot!=null && await has('tv_slots/'+uid+'/'+tvSlot)) upd['tv_slots/'+uid+'/'+tvSlot]=null;
+    if(Object.keys(upd).length) await db.ref().update(upd);
+    if(await has('tv_pair/'+pair)) await db.ref('tv_pair/'+pair).remove().catch(()=>{});
+    const left=(await db.ref('loops/'+code).get()).exists()||(await db.ref('tv_devices/'+dev).get()).exists();
+    add(!left,'Clean-up','Everything the test made has been deleted.');
+  }catch(e){ add(false,'Clean-up','Could not delete test data ('+e.message+'). Search the loops list for '+code+'.'); }
+  const bad=res.filter(r=>r.includes('❌')).length;
+  out.innerHTML=`<div style="margin-bottom:8px;font-weight:700;color:${bad?'var(--accent2)':'var(--accent3)'};">${bad?bad+' check(s) failed':'All checks passed — LoopSlide is working end to end.'}</div>`+res.join('');
+  btn.disabled=false;
+}
+async function checkReviewerAccount(){
+  const out=document.getElementById('rvOut'), res=[]; const add=(ok,l,d)=>{res.push(ckRow(ok,l,d)); out.innerHTML=res.join('');};
+  const email='appsource-review@pollslide.com';
+  const uid=Object.keys(allUsers).find(k=>String((allUsers[k]||{}).email||'').toLowerCase()===email);
+  if(!uid){ add(false,'The account exists','No user with '+email+'. Create it at app.pollslide.com/presenter with password 12345678.'); return; }
+  add(true,'The account exists',email);
+  const pres=(await db.ref('users/'+uid+'/presentations').get()).val()||{};
+  const demo=Object.entries(pres).find(([,p])=>p&&String(p.name||'').trim().toLowerCase()==='reviewer demo');
+  if(!demo){ add(false,'A presentation named "Reviewer Demo"','Sign in as the reviewer and create one (exact name) with a few questions.'); return; }
+  const d=demo[1], qs=Array.isArray(d.questions)?d.questions:Object.values(d.questions||{});
+  add(true,'A presentation named "Reviewer Demo"','');
+  add(!!d.sessionCode,'It has a session code', d.sessionCode?d.sessionCode:'Open it once in PollSlide so it gets one.');
+  add(qs.length>=2,'It has at least 2 questions', qs.length+' question(s).');
+  add(qs.some(q=>q&&q.type==='multiple_choice'),'At least one multiple-choice question','The in-slide add-in shows live bars for multiple choice — that is what the reviewer should see.');
+  add(!d.archived,'It is not archived','');
+}
 </script>
 </body>
 </html>

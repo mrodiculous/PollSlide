@@ -680,6 +680,11 @@ function renderResults(q, responses, revealed, post){
 async function goLive(b, editing){
   if (listener) { listener(); listener = null; }
   loadPrefs(b);
+  /* The edit controls live on <body>, outside #root, so a repaint never clears them. On
+     the desktop apps the SAME frame goes from editing into the slide show, and without
+     this the A−/A+/Change-question bar stayed on the wall. (On the web a slide show is a
+     fresh frame that never had the bar, so this is a no-op there.) */
+  if (!editing) document.getElementById('psCtl')?.remove();
   /* ALWAYS refetch. The binding carries a snapshot of the question taken when it was
      chosen, and using it meant the slide froze at that moment: edit the wording, change
      revealDelay, or switch post-reveal on, and the slide kept showing the old copy
@@ -1084,15 +1089,34 @@ Office.onReady(async () => {
     return;
   }
 
-  if (bound) { goLive(bound, true); return; }   // true = editing, offer a way to change it
-  auth.onAuthStateChanged(u => { if (u) showPicker(); else showSignIn(); });
-
+  /* Desktop PowerPoint (Windows and Mac) keeps this frame alive when the presenter starts
+     the slide show, and tells us only through ActiveViewChanged. This handler used to be
+     attached BELOW the early return for an already-bound slide — i.e. for every deck
+     opened after the question was chosen — so on desktop those slides never went live:
+     the edit bar stayed on the wall and currentQuestion was never published, so phones
+     did not follow. It is attached first now, for every edit-view start.
+     On the web a slide show is a new frame that boots straight into the 'read' branch
+     above and never reaches this, so the web path is unchanged. */
   try {
     Office.context.document.addHandlerAsync(Office.EventType.ActiveViewChanged, async () => {
       const v = await getView();
-      if (v === 'read' && bound) goLive(bound);
+      if (v === 'read') {
+        if (bound) goLive(bound);
+        else $('root').innerHTML = `<div class="pad"><h2>Not linked to a question</h2>
+      <p>Leave the slide show, click this box, and choose a question.</p></div>`;
+      } else {
+        /* Back to editing. Forget the announcement so the NEXT slide show publishes the
+           follow pointer again (publishLiveQuestion claims once per question), and give
+           the presenter the edit controls back. */
+        _announced = null;
+        if (bound) goLive(bound, true);
+        else if (auth.currentUser) showPicker(); else showSignIn();
+      }
     });
   } catch(e){}
+
+  if (bound) { goLive(bound, true); return; }   // true = editing, offer a way to change it
+  auth.onAuthStateChanged(u => { if (u) showPicker(); else showSignIn(); });
 });
 </script>
 </body>

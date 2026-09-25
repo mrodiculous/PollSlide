@@ -1,0 +1,4 @@
+Support URL:        https://pollslide.com/powerpoint-live
+Privacy policy URL: https://pollslide.com/privacy
+Terms of use URL:   https://pollslide.com/terms
+Support email:      help@pollslide.com

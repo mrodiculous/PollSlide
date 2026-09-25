@@ -77,7 +77,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="/loop-engine.js?v=8cbfc46c"></script>
-<script src="/loop-i18n.js?v=659ae400"></script>
+<script src="/loop-i18n.js?v=481670f3"></script>
 <script>
 /* LoopSlide phone — play#<CODE>[/<cycle>]
  * The phone computes what is on screen from the clock, exactly like the TV, so it can
@@ -149,6 +149,7 @@ else {
   db.ref('loops/' + CODE).on('value', s => {
     const v = s.val();
     if (!v || !v.def) { loop = null; V = null; app(`<h1>${esc(t('Game not found'))}</h1><div class="sub">${esc(t('Scan the code on the screen again.'))}</div>`); return; }
+    if (v.suspended) { loop = null; V = null; app(`<h1>${esc(t('This game is paused.'))}</h1><div class="sub">${esc(t('Check back later.'))}</div>`); return; }
     loop = E.normalizeLoop(v.def); banned = v.banned || {}; cap = Number(v.cap) || 0;
     document.documentElement.style.setProperty('--accent', loop.brand.accent);
     if (lastLang !== loop.lang + '|' + loop.autoTranslate) { lastLang = loop.lang + '|' + loop.autoTranslate; watchTranslation(); }

@@ -1,0 +1,22 @@
+PollSlide LIVE is a PowerPoint CONTENT add-in: it is inserted onto a slide and shows live audience results there, including during Slide Show.
+
+GETTING AN ACCOUNT
+This is NOT an enterprise-only add-in. Any individual can create a free account at app.pollslide.com/presenter in about a minute — no enterprise purchase, licence key or administrator provisioning, and no credit card for the free plan. Optional paid plans raise limits. The add-in says this on its first screen. Support: help@pollslide.com · https://pollslide.com/powerpoint-live
+
+FIRST RUN
+In editing view the object explains what it does and offers sign-in. During Slide Show it shows results only, with no sign-in prompt: results are readable without an account, and a login box on a slide in front of an audience would not be usable.
+
+TEST ACCOUNT
+  Email:    appsource-review@pollslide.com
+  Password: 12345678
+The account contains a presentation named "Reviewer Demo" with questions.
+
+HOW TO TEST (about 2 minutes) — PowerPoint on the web is quickest
+1. Insert > Add-ins > My Add-ins > PollSlide LIVE. It is inserted ONTO the slide as an object (not a task pane).
+2. Click the object and sign in with the test account above.
+3. Choose "Reviewer Demo", then any multiple-choice question.
+4. To answer as the audience: open https://app.pollslide.com/presenter in another browser tab (same test account), open "Reviewer Demo", and open the question's live view — it shows the QR code and the answer link. Open that link (or scan the QR with a phone) and submit an answer.
+5. The count and bars on the slide update within a second or two.
+6. Start the Slide Show — the object keeps showing and updating the results.
+
+Support: help@pollslide.com

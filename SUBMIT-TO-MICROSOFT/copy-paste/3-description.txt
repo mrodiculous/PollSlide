@@ -1,0 +1,21 @@
+PollSlide LIVE puts your audience's answers on the slide itself.
+
+Insert the PollSlide LIVE object onto any slide, choose one of your questions, and present. As people answer on their phones, the results on your slide update in real time. When you reveal, the correct answer turns green and the rest fade back.
+
+It stays on screen while you present. This is a PowerPoint content add-in, so it is part of the slide and keeps running in Slide Show.
+
+What you can do
+• Put live results on any slide, sized and positioned however you like — full width, or a narrow column beside your content
+• Use a different question on every slide
+• Live polls with animated bars, multiple-choice quizzes, word clouds and rating scales
+• Reveal the correct answer on a countdown or with one click
+• Match your slide with a light or dark style and adjustable text size
+• Your audience answers by scanning a QR code — nothing to install, no account to create
+
+Getting an account
+PollSlide is available to individuals as well as organisations. Anyone can create a free account at app.pollslide.com/presenter in about a minute — no enterprise purchase, licence key or administrator provisioning, and no credit card for the free plan. Optional paid plans raise limits. This is not an enterprise-only add-in.
+
+Who it is for
+Teachers who want the class to see the room's answer, trainers running a quiz, and anyone presenting to people holding phones.
+
+Support: help@pollslide.com · https://pollslide.com/powerpoint-live

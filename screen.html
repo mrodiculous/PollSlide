@@ -100,7 +100,7 @@
 <script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="/loop-i18n.js?v=659ae400"></script>
+<script src="/loop-i18n.js?v=481670f3"></script>
 <script src="/loop-engine.js?v=8cbfc46c"></script>
 <script>
 /* LoopSlide TV screen — screen#<CODE>
@@ -157,6 +157,9 @@ if (!CODE) {
   db.ref('loops/' + CODE).on('value', snap => {
     const v = snap.val();
     if (!v || !v.def) { loop = null; V = null; main('<div class="empty">' + t('No LoopSlide called {x}.', { x: '<b>' + esc(CODE) + '</b>' }) + '<br>' + esc(t('Check the link in LoopSlide Studio.')) + '</div>'); side(''); return; }
+    // Paused by PollSlide support: show nothing but a calm notice.
+    if (v.suspended) { loop = null; V = null; I.set(E.normalizeLoop(v.def).screenLang !== 'auto' ? E.normalizeLoop(v.def).screenLang : I.nav());
+      main('<div class="empty">' + esc(t('This screen is paused.')) + '</div>'); side(''); return; }
     loop = E.normalizeLoop(v.def);
     I.set(screenLang());
     document.getElementById('fs').textContent = t('⛶ Full screen');

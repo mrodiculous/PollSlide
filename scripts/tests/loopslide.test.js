@@ -357,5 +357,23 @@ console.log('\nGame extras: the things that keep a room playing');
   ok('no inline handler carries an escape sequence that breaks when rendered', !badHandlers.length, badHandlers);
 }
 
+console.log('\nSupport: admin tools and pausing a loop');
+{
+  const api = read('api/loop-admin.js'), adm = read('admin.html'), R = JSON.parse(read('database-rules.json')).rules;
+  ok('support actions are admin-only and logged before they apply', /ADMIN_EMAILS\.includes/.test(api) && api.indexOf("admin/loop_actions") < api.indexOf("'/suspended').set(reason)"));
+  ok('only pause, resume, ban and unban exist; codes and player ids are checked', /\['pause', 'resume', 'ban', 'unban'\]/.test(api) && /\^\[A-Z0-9\]\{4,12\}\$/.test(api) && /\^p\[a-z0-9\]\{1,20\}\$/.test(api));
+  ok('an owner can\'t clear a pause themselves', /suspended'\)\.val\(\) === data\.child\('suspended'\)\.val\(\)/.test(R.loops.$code['.validate']));
+  ok('publishing keeps a pause in place (so it neither fails nor clears it)', /suspended: \(prev && prev\.suspended\) \|\| null/.test(read('loop.html')));
+  ok('a paused loop shows "paused" on the TV and phones, and the reason in the Studio', /This screen is paused\./.test(read('screen.html')) && /This game is paused\./.test(read('play.html')) && /Paused by PollSlide support/.test(read('loop.html')));
+  ok('admin: LoopSlide page with loops, players, pause/resume and remove', /function renderLoopslide/.test(adm) && /function lsPause/.test(adm) && /function lsResume/.test(adm) && /function lsBan/.test(adm));
+  ok('admin: per-user LoopSlide usage against the plan', /function loopUsageHtml/.test(adm) && /\$\{loopUsageHtml\(uid\)\}/.test(adm));
+  ok('admin: player counts are shallow reads (never download a whole board)', /shallow=true/.test(adm));
+  ok('admin: codes and player ids are pattern-checked before they reach a button', /LSCODE\.test\(c\)/.test(adm) && /LSPID\.test\(pid\)/.test(adm));
+  ok('admin: the live self-test covers publish, pairing, play, reactions, translation, GIFs and clean-up', ['Publish a loop', 'Pair the TV', 'A phone can answer', 'A phone can send a reaction', 'Questions translate', 'GIF search works', 'Clean-up'].every(x => adm.includes(x)));
+  ok('admin: the self-test proves the rules REFUSE cheating', ['A TV can\\\'t be claimed without its live code', 'Points above the per-answer limit are refused', 'A second reaction inside 1.5 s is refused', 'Only the six allowed reactions exist'].every(x => adm.includes(x.replace(/\\\\/g, ''))));
+  ok('admin: clean-up only deletes what exists (one refused path would fail the whole update)', /const has=async p=>/.test(adm));
+  ok('admin: the AppSource reviewer account can be checked', /function checkReviewerAccount/.test(adm) && /reviewer demo/.test(adm));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
