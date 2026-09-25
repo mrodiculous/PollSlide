@@ -26,6 +26,9 @@
               "$studentId": {}
             }
           }
+        },
+        "tier": {
+          ".validate": "newData.val() === data.val() || newData.val() === 'free' || auth.token.email === 'help@pollslide.com'"
         }
       }
     },
@@ -155,7 +158,7 @@
         ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid) || data.child('ownerUid').val() === auth.uid)",
         "members": {
           "$uid": {
-            ".write": "auth != null && (data.parent().parent().child('ownerUid').val() === auth.uid || data.parent().parent().child('members').child(auth.uid).child('role').val() === 'admin' || $uid === auth.uid)",
+            ".write": "auth != null && (data.parent().parent().child('ownerUid').val() === auth.uid || data.parent().parent().child('members').child(auth.uid).child('role').val() === 'admin' || ($uid === auth.uid && (!newData.exists() || (data.exists() && newData.child('role').val() === data.child('role').val()) || (!data.exists() && data.parent().parent().child('invites').child(auth.token.email.toLowerCase().replace('.', '_').replace('#', '_').replace('$', '_').replace('/', '_').replace('[', '_').replace(']', '_').replace('@', '_')).child('email').val() === auth.token.email.toLowerCase() && (newData.child('role').val() === data.parent().parent().child('invites').child(auth.token.email.toLowerCase().replace('.', '_').replace('#', '_').replace('$', '_').replace('/', '_').replace('[', '_').replace(']', '_').replace('@', '_')).child('role').val() || (newData.child('role').val() === 'member' && !data.parent().parent().child('invites').child(auth.token.email.toLowerCase().replace('.', '_').replace('#', '_').replace('$', '_').replace('/', '_').replace('[', '_').replace(']', '_').replace('@', '_')).child('role').exists()))))))",
             ".validate": "!newData.exists() || newData.hasChildren(['email','role'])"
           }
         },
@@ -163,13 +166,16 @@
           "$emailKey": {
             ".write": "auth != null && (data.parent().parent().child('ownerUid').val() === auth.uid || data.parent().parent().child('members').child(auth.uid).child('role').val() === 'admin')"
           }
+        },
+        "tier": {
+          ".validate": "newData.val() === data.val() || newData.val() === 'free' || newData.val() === root.child('users').child(auth.uid).child('tier').val() || (newData.val() === 'team_small' && root.child('users').child(auth.uid).child('tier').val() === 'team') || (newData.val() === 'team_large' && root.child('users').child(auth.uid).child('tier').val() === 'white') || auth.token.email === 'help@pollslide.com'"
         }
       }
     },
     "team_invites": {
       "$emailKey": {
         ".read": "auth != null",
-        ".write": "auth != null"
+        ".write": "auth != null && ((newData.exists() && (root.child('workspaces').child(newData.child('wsId').val() + '').child('ownerUid').val() === auth.uid || root.child('workspaces').child(newData.child('wsId').val() + '').child('members').child(auth.uid).child('role').val() === 'admin')) || (!newData.exists() && ($emailKey === auth.token.email.toLowerCase().replace('.', '_').replace('#', '_').replace('$', '_').replace('/', '_').replace('[', '_').replace(']', '_').replace('@', '_') || root.child('workspaces').child(data.child('wsId').val() + '').child('ownerUid').val() === auth.uid || root.child('workspaces').child(data.child('wsId').val() + '').child('members').child(auth.uid).child('role').val() === 'admin')) || auth.token.email === 'help@pollslide.com')"
       }
     },
     "shares": {

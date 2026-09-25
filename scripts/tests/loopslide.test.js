@@ -304,7 +304,10 @@ console.log('\nThe same Polly, GIF and upload services as the rest of PollSlide'
   ok('Polly images through /api/polly-image, labelled AI', /fetch\('\/api\/polly-image'/.test(studio) && /setMedia\(await snap\.ref\.getDownloadURL\(\), true\)/.test(studio));
   ok('uploads use the same limits as the presenter (8 MB image, 20 MB / 30 s video)', /isVideo \? 20 : 8/.test(studio) && /secs > 30\.5/.test(studio));
   ok('the allowance running out is explained, not an error', /r\.status === 429 \|\| d\.overLimit/.test(studio));
-  ok('none of those APIs were changed', true);
+  const quota = read('lib/quota.js');
+  ok('Polly use from LoopSlide counts against the user\'s plan (server checks, then counts)', /checkQuota\(req\)/.test(read('api/polly.js')) && /consumeQuota\(quota\)/.test(read('api/polly.js')) && /if \(!tok\) throw \{ code: 401/.test(quota));
+  ok('…Polly images count too', /checkQuota\(req\)/.test(read('api/polly-image.js')) && /consumeQuota\(quota\)/.test(read('api/polly-image.js')));
+  ok('…and the plan it reads can no longer be self-edited', !!JSON.parse(read('database-rules.json')).rules.users.$uid.tier);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

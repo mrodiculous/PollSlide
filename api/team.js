@@ -115,7 +115,9 @@ module.exports = async function handler(req, res) {
         // Airtight: the invite on the workspace must match the caller's verified email.
         const wsInv = ws.invites && ws.invites[k];
         if (!wsInv || (wsInv.email || '').toLowerCase() !== callerEmail) return res.status(403).json({ error: 'Invite does not match your account' });
-        await db.ref('workspaces/' + inv.wsId + '/members/' + callerUid).set({ email: callerEmail, role: inv.role || 'member', joinedAt: Date.now() });
+        /* The role comes from the workspace's own invite (written by its owner/admin), never
+           from the team_invites index, which is only a lookup and must not grant anything. */
+        await db.ref('workspaces/' + inv.wsId + '/members/' + callerUid).set({ email: callerEmail, role: wsInv.role === 'admin' ? 'admin' : 'member', joinedAt: Date.now() });
         await db.ref('workspaces/' + inv.wsId + '/invites/' + k).remove();
         await db.ref('team_invites/' + k).remove();
         await db.ref('users/' + callerUid + '/workspaceId').set(inv.wsId);
