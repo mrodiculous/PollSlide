@@ -17,6 +17,7 @@
   .logo { font-family:'Syne',sans-serif; font-weight:800; font-size:19px; display:flex; align-items:center; gap:9px; }
   .logo .mk { width:26px; height:26px; border-radius:7px; background:linear-gradient(135deg,var(--accent),var(--accent2)); display:flex; align-items:center; justify-content:center; font-size:14px; }
   header a.back { color:var(--muted); text-decoration:none; font-size:13px; margin-left:auto; }
+  #langBox select { width:auto; padding:5px 8px; font-size:12px; }
   main { max-width:1100px; margin:0 auto; padding:24px 20px 80px; }
   h1 { font-family:'Syne',sans-serif; font-size:26px; margin-bottom:6px; }
   h2 { font-family:'Syne',sans-serif; font-size:18px; margin-bottom:12px; }
@@ -59,6 +60,10 @@
   #emoPal button { background:none; border:0; font-size:20px; padding:4px; border-radius:6px; cursor:pointer; }
   #emoPal button:hover { background:var(--surface3); }
   .oimgIn { max-width:190px; }
+  .gifgrid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin:8px 0; }
+  .gifgrid img { width:100%; height:86px; object-fit:cover; border-radius:8px; cursor:pointer; border:2px solid transparent; }
+  .gifgrid img:hover { border-color:var(--accent); }
+  .mediaRow { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
   .sticky { position:sticky; top:62px; z-index:4; background:var(--bg); padding:10px 0; }
   @media (max-width:720px){ .cols,.cols3{ grid-template-columns:1fr; } }
 </style>
@@ -67,6 +72,7 @@
 <header>
   <div class="logo"><span class="mk">🔁</span>LoopSlide <span class="pill">Studio</span></div>
   <a class="back" href="/presenter">← Back to PollSlide</a>
+  <span id="langBox"></span>
 </header>
 <main id="root"><div class="sub">Loading…</div></main>
 
@@ -74,7 +80,10 @@
 <script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-<script src="/loop-engine.js?v=eaf35aeb"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+<script src="/gifs.js?v=ed7add18"></script>
+<script src="/loop-i18n.js?v=6e536b03"></script>
+<script src="/loop-engine.js?v=0f37af28"></script>
 <script>
 /* LoopSlide Studio — build, publish and run loops for public screens.
  * Data:  users/<uid>/loops/<CODE>   { name, def (draft), publishedAt, updatedAt }  — private
@@ -92,23 +101,34 @@ const FIREBASE_CONFIG = {
   measurementId: "G-NWQY4YLNRC"
 };
 firebase.initializeApp(FIREBASE_CONFIG);
-const db = firebase.database(), auth = firebase.auth();
-const E = window.LoopEngine;
+const db = firebase.database(), auth = firebase.auth(), storage = firebase.storage();
+const E = window.LoopEngine, I = window.LoopI18n;
+/* The Studio speaks the language the user chose in PollSlide (ps_ui_lang, shared with the
+   presenter), else the browser's. Static copy is translated by exact match as it renders
+   (LoopI18n.observe); sentences with numbers or names go through T() with placeholders.
+   Anything the user typed is marked data-noi18n and never touched. */
+const T = I.t;
+I.set(I.stored('ps_ui_lang') || I.nav());
+I.observe(document.body);
+document.getElementById('langBox').appendChild(I.picker(I.get(), l => { try { localStorage.setItem('ps_ui_lang', l); } catch (e) {} location.reload(); }));
+const LANG_OPTS = sel => E.LANGS.map(l => `<option value="${l}" data-noi18n ${l === sel ? 'selected' : ''}>${I.NAMES[l]}</option>`).join('');
 const APP = (window.PS_ENV && PS_ENV.appOrigin) || location.origin;
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const $ = id => document.getElementById(id);
 const uid6 = () => Math.random().toString(36).slice(2, 8);
 const PRODUCT_ICON = { poll:'🗳️', survey:'📋', quiz:'🏆', study:'📚', present:'🎬' };
 const PRODUCT_NAME = { poll:'PollSlide', survey:'SurveySlide', quiz:'QuizSlide', study:'StudySlide' };
-/* What each plan includes. loops = loops you can keep; slides = questions + cards in ONE loop;
-   screens = TVs paired at once. Enterprise is set per deal, so it is unlimited here.
-   Client-side, like every other plan limit in PollSlide (see presenter.html TIERS). */
+/* What each plan includes. loops = loops you can keep; slides = questions + cards (sponsor
+   and media cards count) in ONE loop; screens = TVs paired at once; players = players per
+   leaderboard (0 = unlimited). Enterprise is set per deal, so it is unlimited here.
+   Published loops, paired screens and the player cap are ALSO enforced by the database
+   rules (loop_slots, tv_slots, loops/$code/cap), so they hold even if this page is bypassed. */
 const LOOP_PLANS = {
-  free:       { name: 'Free',       loops: 1,        slides: 5,        screens: 1 },
-  pro:        { name: 'Pro',        loops: 5,        slides: 20,       screens: 3 },
-  team_small: { name: 'Team Small', loops: 20,       slides: 40,       screens: 10 },
-  team_large: { name: 'Team Large', loops: 80,       slides: 150,      screens: 40 },
-  enterprise: { name: 'Enterprise', loops: Infinity, slides: Infinity, screens: Infinity },
+  free:       { name: 'Free',       loops: 1,        slides: 10,       screens: 1,        players: 25 },
+  pro:        { name: 'Pro',        loops: 5,        slides: 20,       screens: 3,        players: 0 },
+  team_small: { name: 'Team Small', loops: 20,       slides: 40,       screens: 10,       players: 0 },
+  team_large: { name: 'Team Large', loops: 80,       slides: 150,      screens: 40,       players: 0 },
+  enterprise: { name: 'Enterprise', loops: Infinity, slides: Infinity, screens: Infinity, players: 0 },
 };
 function planOf() {
   const t = tier === 'team' ? 'team_small' : tier === 'white' ? 'team_large' : tier;
@@ -117,7 +137,7 @@ function planOf() {
 function slideCount(def) { try { return (def.sets || []).reduce((n, s) => n + (s.items || []).length, 0); } catch (e) { return 0; } }
 function limitNote(what) {
   const p = planOf();
-  modal(`<h2>That's the limit on ${esc(p.name)}</h2><p class="sub" style="margin-bottom:14px;">${what}</p>
+  modal(`<h2>${esc(T('That’s the limit on {plan}', { plan: p.name }))}</h2><p class="sub" style="margin-bottom:14px;">${esc(what)}</p>
     <div class="row"><a class="btn primary" href="https://pollslide.com/pricing" target="_blank" rel="noopener">See plans</a><button class="btn" onclick="closeModal()">OK</button></div>`);
 }
 
@@ -126,7 +146,7 @@ let user = null, tier = 'free', myLoops = {}, cur = null, curCode = null, myTvs 
 let pendingPair = (location.hash.match(/pair=([A-Za-z0-9]{6})/) || [])[1] || '';
 if (pendingPair) pendingPair = pendingPair.toUpperCase();
 
-function toast(m) { document.querySelectorAll('.toast').forEach(t => t.remove()); const t = document.createElement('div'); t.className = 'toast'; t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 4200); }
+function toast(m) { document.querySelectorAll('.toast').forEach(x => x.remove()); const el = document.createElement('div'); el.className = 'toast'; el.textContent = T(m); document.body.appendChild(el); setTimeout(() => el.remove(), 4200); }
 function root(h) { $('root').innerHTML = h; }
 
 auth.onAuthStateChanged(async u => {
@@ -158,13 +178,13 @@ function listView() {
   const entries = Object.entries(myLoops).sort((a, b) => (b[1].updatedAt || 0) - (a[1].updatedAt || 0));
   root(`<div class="row" style="margin-bottom:18px;"><div><h1>Your loops</h1>
       <p class="sub">A loop plays your questions on a screen, over and over. People scan the QR, play on their phones, and climb the leaderboard.</p></div>
-      <span class="row" style="margin-left:auto;"><button class="btn" onclick="screensView()">📺 Screens${Object.keys(myTvs).length ? ' (' + Object.keys(myTvs).length + ')' : ''}</button>
+      <span class="row" style="margin-left:auto;"><button class="btn" onclick="screensView()"><span>📺 Screens</span><span data-noi18n>${Object.keys(myTvs).length ? ' (' + Object.keys(myTvs).length + ')' : ''}</span></button>
       <button class="btn primary" onclick="newLoop()">+ New loop</button></span></div>
     ${entries.length ? `<div class="grid">${entries.map(([code, l]) => `
       <div class="card loopcard" onclick="openLoop('${esc(code)}')">
-        <div class="row" style="margin-bottom:6px;"><b style="font-size:16px;">${esc(l.name || 'Untitled loop')}</b>
+        <div class="row" style="margin-bottom:6px;"><b style="font-size:16px;" data-noi18n>${esc(l.name || T('Untitled loop'))}</b>
           <span class="pill ${l.publishedAt ? 'live' : ''}" style="margin-left:auto;">${l.publishedAt ? '● Live' : 'Draft'}</span></div>
-        <div class="note">${countQs(l.def)} questions · code ${esc(code)}</div>
+        <div class="note">${esc(T('{n} questions · code {x}', { n: countQs(l.def), x: code }))}</div>
       </div>`).join('')}</div>`
     : `<div class="card" style="text-align:center;padding:40px 20px;"><div style="font-size:42px;margin-bottom:8px;">🔁</div>
         <h2>Make your first loop</h2><p class="sub" style="max-width:460px;margin:0 auto 16px;">Start from scratch, or import any deck you already have in PollSlide — polls, quizzes, surveys or study sets.</p>
@@ -177,14 +197,15 @@ function countQs(def) { try { return (def.sets || []).reduce((n, s) => n + (s.it
 
 async function newLoop() {
   const p = planOf();
-  if (Object.keys(myLoops).length >= p.loops) { limitNote(`${esc(p.name)} includes ${p.loops} loop${p.loops === 1 ? '' : 's'}. Delete one you no longer use, or upgrade for more.`); return; }
+  if (Object.keys(myLoops).length >= p.loops) { limitNote(T('{plan} includes {n} loop(s). Delete one you no longer use, or upgrade for more.', { plan: p.name, n: p.loops })); return; }
   let code = E.genCode();
   for (let i = 0; i < 5; i++) { const s = await db.ref('loops/' + code).get(); if (!s.exists() && !myLoops[code]) break; code = E.genCode(); }
-  const def = { name: 'New loop', brand: { accent: '#6c63ff', title: '' }, timing: Object.assign({}, E.DEFAULT_TIMING),
+  const def = { name: T('New loop'), brand: { accent: '#6c63ff', title: '' }, timing: Object.assign({}, E.DEFAULT_TIMING),
     board: { reset: 'days', days: 1, size: 5, speed: true, streak: true, rejoin: false },
     tzOffsetMin: -new Date().getTimezoneOffset(),
+    lang: I.get(), screenLang: 'auto', autoTranslate: true,
     compliance: { organiser: '', contact: user.email || '', minAge: 0, prize: '', rulesUrl: '', aiNote: false },
-    sets: [{ id: 's' + uid6(), title: 'Round 1', items: [] }] };
+    sets: [{ id: 's' + uid6(), title: T('Round {n}', { n: 1 }), items: [] }] };
   await db.ref('users/' + user.uid + '/loops/' + code).set({ name: def.name, def, updatedAt: Date.now() });
   openLoop(code);
 }
@@ -192,26 +213,46 @@ async function newLoop() {
 // ── EDITOR ───────────────────────────────────────────────────────────────────
 function openLoop(code) {
   const l = myLoops[code]; if (!l) return;
-  curCode = code; cur = JSON.parse(JSON.stringify(l.def || {}));
-  cur.sets = cur.sets || []; cur.brand = cur.brand || {}; cur.timing = cur.timing || {}; cur.board = cur.board || {};
+  curCode = code; cur = draftShape(JSON.parse(JSON.stringify(l.def || {})));
   editorView();
+}
+
+/* The database does not store empty lists: a new loop saved as { sets:[{ items: [] }] }
+   comes back with no `items` at all, and a question with blank options can come back with
+   none. Every editor action assumes the lists exist, so restore them the moment a loop is
+   opened — this is what made "+ Question" do nothing on a freshly created loop. */
+function draftShape(d) {
+  d = d && typeof d === 'object' ? d : {};
+  d.brand = d.brand || {}; d.timing = d.timing || {}; d.board = d.board || {}; d.compliance = d.compliance || {};
+  d.sets = Array.isArray(d.sets) ? d.sets.filter(Boolean) : Object.values(d.sets || {});
+  d.sets.forEach(s => {
+    s.items = Array.isArray(s.items) ? s.items.filter(Boolean) : Object.values(s.items || {});
+    s.items.forEach(it => {
+      if (it.type === 'ad') return;
+      it.options = Array.isArray(it.options) ? it.options.map(o => o == null ? '' : o) : Object.values(it.options || {});
+      while (it.options.length < 2) it.options.push('');
+      if (it.optImgs && !Array.isArray(it.optImgs)) it.optImgs = Object.assign([], it.optImgs);
+    });
+  });
+  return d;
 }
 
 function editorView() {
   const l = myLoops[curCode] || {};
   cur.compliance = cur.compliance || {};
-  const b = cur.board, t = cur.timing, comp = cur.compliance;
+  const b = cur.board, tm = cur.timing, comp = cur.compliance;
   const tl = E.timeline(E.normalizeLoop(cur));
   root(`<div class="sticky row">
       <button class="btn" onclick="saveDraft().then(listView)">← Loops</button>
-      <b style="font-size:16px;">${esc(cur.name || 'Untitled')}</b><span class="pill ${l.publishedAt ? 'live' : ''}">${l.publishedAt ? '● Live' : 'Draft'}</span>
-      <span class="note">One full loop ≈ ${Math.round(tl.length / 60000)} min · ${slideCount(cur)} / ${planOf().slides === Infinity ? '∞' : planOf().slides} slides</span>
+      <b style="font-size:16px;" data-noi18n>${esc(cur.name || T('Untitled loop'))}</b><span class="pill ${l.publishedAt ? 'live' : ''}">${l.publishedAt ? '● Live' : 'Draft'}</span>
+      <span class="note">${esc(T('One full loop ≈ {n} min · {a} / {b} slides', { n: Math.round(tl.length / 60000), a: slideCount(cur), b: planOf().slides === Infinity ? '∞' : planOf().slides }))}</span>
       <span style="margin-left:auto;" class="row">
+        <button class="btn danger" onclick="deleteLoop()">🗑 Delete loop</button>
         <button class="btn" onclick="saveDraft().then(()=>toast('Saved.'))">Save</button>
         <button class="btn primary" onclick="publish()">${l.publishedAt ? 'Publish changes' : 'Publish'}</button>
       </span></div>
 
-    ${l.publishedAt ? `<div class="card"><div class="row"><div><h2 style="margin:0;">It's live</h2><div class="note">Code <b>${esc(curCode)}</b></div></div>
+    ${l.publishedAt ? `<div class="card"><div class="row"><div><h2 style="margin:0;">It's live</h2><div class="note">${T('Code {x}', { x: '<b>' + esc(curCode) + '</b>' })}</div></div>
       <span style="margin-left:auto;" class="row">
         <button class="btn green" onclick="screensView('', '${esc(curCode)}')">📺 Put on a TV</button>
         <a class="btn" href="${esc(APP)}/screen#${esc(curCode)}" target="_blank" rel="noopener">Open screen here</a>
@@ -230,14 +271,18 @@ function editorView() {
         <div><label class="f">Title shown on screen</label><input value="${esc(cur.brand.title || '')}" placeholder="e.g. The Crown & Anchor Quiz Loop" oninput="cur.brand.title=this.value"></div>
         <div><label class="f">Logo (https image link)</label><input value="${esc(cur.brand.logo || '')}" placeholder="https://…/logo.png" oninput="cur.brand.logo=this.value"></div>
         <div><label class="f">Accent colour</label><input type="color" value="${esc(cur.brand.accent || '#6c63ff')}" oninput="cur.brand.accent=this.value"></div>
-      </div></div>
+        <div><label class="f">Questions are written in</label><select onchange="cur.lang=this.value">${LANG_OPTS(cur.lang || 'en')}</select></div>
+        <div><label class="f">TV screen language</label><select onchange="cur.screenLang=this.value"><option value="auto" ${!cur.screenLang || cur.screenLang === 'auto' ? 'selected' : ''}>Automatic (the TV's own language)</option>${LANG_OPTS(cur.screenLang)}</select></div>
+      </div>
+      <label class="row" style="margin-top:12px;font-size:14px;"><input type="checkbox" ${cur.autoTranslate !== false ? 'checked' : ''} onchange="cur.autoTranslate=this.checked"> Translate questions for players automatically</label>
+      <p class="note" style="margin-top:4px;">Each player sees the game in their phone's language. Questions are translated by AI when you publish, and labelled “Auto-translated” so players know. Answers and scores are the same in every language.</p></div>
 
     <div class="card"><h2>Timing</h2>
       <div class="cols3">
-        <div><label class="f">Seconds to answer</label><input type="number" min="5" max="120" value="${t.question ?? 20}" oninput="cur.timing.question=+this.value"></div>
-        <div><label class="f">Seconds showing the answer</label><input type="number" min="3" max="60" value="${t.reveal ?? 7}" oninput="cur.timing.reveal=+this.value"></div>
-        <div><label class="f">Seconds per sponsor card</label><input type="number" min="3" max="120" value="${t.ad ?? 10}" oninput="cur.timing.ad=+this.value"></div>
-        <div><label class="f">Seconds per leaderboard</label><input type="number" min="5" max="60" value="${t.board ?? 12}" oninput="cur.timing.board=+this.value"></div>
+        <div><label class="f">Seconds to answer</label><input type="number" min="5" max="120" value="${tm.question ?? 20}" oninput="cur.timing.question=+this.value"></div>
+        <div><label class="f">Seconds showing the answer</label><input type="number" min="3" max="60" value="${tm.reveal ?? 7}" oninput="cur.timing.reveal=+this.value"></div>
+        <div><label class="f">Seconds per sponsor card</label><input type="number" min="3" max="120" value="${tm.ad ?? 10}" oninput="cur.timing.ad=+this.value"></div>
+        <div><label class="f">Seconds per leaderboard</label><input type="number" min="5" max="60" value="${tm.board ?? 12}" oninput="cur.timing.board=+this.value"></div>
       </div></div>
 
     <div class="card"><h2>Leaderboard & game rules</h2>
@@ -275,6 +320,7 @@ function editorView() {
     <div class="row" style="margin:20px 0 6px;"><h2 style="margin:0;">Rounds</h2>
       <span class="note">Each round ends with its own leaderboard. With more than one round, the loop ends with the overall leaderboard.</span>
       <span style="margin-left:auto;" class="row">
+        <button class="btn primary" onclick="pollyView()">✨ Draft with Polly</button>
         <button class="btn" onclick="importView()">⬇ Import a PollSlide deck</button>
         <button class="btn" onclick="importFile()">Import file</button>
         <button class="btn" onclick="exportFile()">Export file</button>
@@ -299,16 +345,16 @@ function itemTools(si, ii) {
 function qHtml(it, si, ii) {
   const opts = it.options || [];
   const oi_ = it.optImgs || [];
-  return `<div class="item"><div class="hd">❓ Question ${ii + 1}${itemTools(si, ii)}</div>
+  return `<div class="item"><div class="hd">${esc(T('❓ Question {n}', { n: ii + 1 }))}${itemTools(si, ii)}</div>
     <div class="row" style="flex-wrap:nowrap;"><input value="${esc(it.text || '')}" placeholder="Ask something… emojis welcome 🎉" oninput="cur.sets[${si}].items[${ii}].text=this.value"><button type="button" class="emo" title="Add an emoji" onclick="emojiFor(this)">😀</button></div>
     ${opts.map((o, oi) => `<div class="opt"><input type="radio" name="c_${si}_${ii}" title="Right answer" ${it.correct === oi ? 'checked' : ''} onchange="cur.sets[${si}].items[${ii}].correct=${oi}">
-      <input type="text" value="${esc(o)}" placeholder="Option ${oi + 1}" oninput="cur.sets[${si}].items[${ii}].options[${oi}]=this.value"><button type="button" class="emo" title="Add an emoji" onclick="emojiFor(this)">😀</button>
-      <input class="oimgIn" value="${esc(oi_[oi] || '')}" placeholder="Answer image (https)" oninput="setOptImg(${si},${ii},${oi},this.value)">
+      <input type="text" value="${esc(o)}" placeholder="${esc(T('Option {n}', { n: oi + 1 }))}" oninput="cur.sets[${si}].items[${ii}].options[${oi}]=this.value"><button type="button" class="emo" title="Add an emoji" onclick="emojiFor(this)">😀</button>
+      <input class="oimgIn" value="${esc(oi_[oi] || '')}" placeholder="Answer image (https)" oninput="setOptImg(${si},${ii},${oi},this.value)"><button type="button" class="emo" title="Add media" onclick="mediaFor(${si},${ii},'o${oi}')">🖼</button>
       ${opts.length > 2 ? `<button class="btn sm" onclick="delOpt(${si},${ii},${oi})">✕</button>` : ''}</div>`).join('')}
     <div class="row" style="margin-top:6px;">
       ${opts.length < 6 ? `<button class="btn sm" onclick="addOpt(${si},${ii})">+ Option</button>` : ''}
       <label class="row note"><input type="radio" name="c_${si}_${ii}" ${it.correct === null || it.correct === undefined ? 'checked' : ''} onchange="cur.sets[${si}].items[${ii}].correct=null"> Opinion — no right answer</label>
-      <input style="flex:1;min-width:200px;" value="${esc(it.img || '')}" placeholder="Image, GIF or video for the question (https, optional)" oninput="cur.sets[${si}].items[${ii}].img=this.value">
+      <input style="flex:1;min-width:200px;" value="${esc(it.img || '')}" placeholder="Image, GIF or video for the question (https, optional)" oninput="cur.sets[${si}].items[${ii}].img=this.value"><button type="button" class="btn sm" onclick="mediaFor(${si},${ii},'img')">🖼 Add media</button>
       <input type="number" min="5" max="120" style="width:120px;" value="${it.time || ''}" placeholder="Secs (default)" title="Seconds to answer this question — leave blank for the loop's default" oninput="cur.sets[${si}].items[${ii}].time=+this.value||0">
       <label class="row note" title="Shows an “AI-generated” label with this question, as AI-transparency laws require"><input type="checkbox" ${it.ai || it.aiGenerated || it.aiImage ? 'checked' : ''} onchange="cur.sets[${si}].items[${ii}].ai=this.checked;delete cur.sets[${si}].items[${ii}].aiGenerated;delete cur.sets[${si}].items[${ii}].aiImage"> ✨ Made with AI</label>
     </div></div>`;
@@ -317,7 +363,7 @@ function adHtml(it, si, ii) {
   const sp = it.sponsored !== false;
   return `<div class="item ad"><div class="hd">${sp ? '📣 Sponsor card' : '🖼️ Media card'}${itemTools(si, ii)}</div>
     <div class="cols"><div class="row" style="flex-wrap:nowrap;"><input value="${esc(it.headline || '')}" placeholder="${sp ? 'Headline — e.g. 2-for-1 wings until 9pm' : 'Headline — e.g. Happy birthday, Jess! 🎂'}" oninput="cur.sets[${si}].items[${ii}].headline=this.value"><button type="button" class="emo" onclick="emojiFor(this)">😀</button></div>
-      <input value="${esc(it.img || '')}" placeholder="Image, GIF or video (https link)" oninput="cur.sets[${si}].items[${ii}].img=this.value"></div>
+      <div class="row" style="flex-wrap:nowrap;"><input value="${esc(it.img || '')}" placeholder="Image, GIF or video (https link)" oninput="cur.sets[${si}].items[${ii}].img=this.value"><button type="button" class="btn sm" onclick="mediaFor(${si},${ii},'img')">🖼 Add media</button></div></div>
     <div class="row" style="margin-top:8px;">
       <label class="row note"><input type="checkbox" ${sp ? 'checked' : ''} onchange="cur.sets[${si}].items[${ii}].sponsored=this.checked;editorView()"> This is an ad — label it “Sponsored”</label>
       ${sp ? `<input style="flex:1;min-width:200px;" value="${esc(it.sponsor || '')}" placeholder="Who it's from — e.g. Crown & Anchor Kitchen (required for ads)" oninput="cur.sets[${si}].items[${ii}].sponsor=this.value">` : ''}
@@ -327,10 +373,10 @@ function adHtml(it, si, ii) {
     <input style="margin-top:8px;" value="${esc(it.link || '')}" placeholder="Link for a scannable QR (https, optional)" oninput="cur.sets[${si}].items[${ii}].link=this.value"></div>`;
 }
 
-function addSet() { cur.sets.push({ id: 's' + uid6(), title: 'Round ' + (cur.sets.length + 1), items: [] }); editorView(); }
-function delSet(si) { if (confirm('Delete this round and its questions?')) { cur.sets.splice(si, 1); editorView(); } }
+function addSet() { cur.sets.push({ id: 's' + uid6(), title: T('Round {n}', { n: cur.sets.length + 1 }), items: [] }); editorView(); }
+function delSet(si) { if (confirm(T('Delete this round and its questions?'))) { cur.sets.splice(si, 1); editorView(); } }
 function moveSet(si, d) { const j = si + d; if (j < 0 || j >= cur.sets.length) return; [cur.sets[si], cur.sets[j]] = [cur.sets[j], cur.sets[si]]; editorView(); }
-function atSlideLimit() { const p = planOf(); if (slideCount(cur) < p.slides) return false; limitNote(`${esc(p.name)} includes ${p.slides} slides (questions and cards) per loop.`); return true; }
+function atSlideLimit() { const p = planOf(); if (slideCount(cur) < p.slides) return false; limitNote(T('{plan} includes {n} slides (questions and cards) per loop.', { plan: p.name, n: p.slides })); return true; }
 function addQ(si) { if (atSlideLimit()) return; cur.sets[si].items.push({ id: 'i' + uid6(), type: 'q', text: '', options: ['', ''], correct: 0 }); editorView(); }
 function addAd(si, sponsored) { if (atSlideLimit()) return; cur.sets[si].items.push({ id: 'i' + uid6(), type: 'ad', sponsored: sponsored !== false, headline: '', body: '', img: '', link: '' }); editorView(); }
 function setOptImg(si, ii, oi, v) { const it = cur.sets[si].items[ii]; it.optImgs = it.optImgs || []; it.optImgs[oi] = v; }
@@ -349,25 +395,85 @@ async function publish() {
   if (!norm.sets.length) { toast('Add at least one question with two or more options first.'); return; }
   const miss = complianceGaps(norm);
   if (miss.length) { modal(`<h2>Before this goes on a public screen</h2><p class="note" style="margin-bottom:10px;">Fill these in under “Rules &amp; compliance” or on the card:</p><ul style="margin:0 0 14px 18px;line-height:1.7;">${miss.map(m => '<li>' + esc(m) + '</li>').join('')}</ul><button class="btn" onclick="closeModal()">OK</button>`); return; }
-  const lim = planOf().slides, n = slideCount(norm);
-  if (n > lim) { limitNote(`This loop has ${n} slides; ${esc(planOf().name)} includes ${lim} per loop. Remove ${n - lim}, or upgrade.`); return; }
+  const plan = planOf(), lim = plan.slides, n = slideCount(norm);
+  if (n > lim) { limitNote(T('This loop has {n} slides; {plan} includes {lim} per loop. Remove {x}, or upgrade.', { n, plan: plan.name, lim, x: n - lim })); return; }
   const skipped = countQs(cur) - countQs(norm);
   await saveDraft();
-  const pub = await db.ref('loops/' + curCode).get();
-  const prev = pub.val();
+  const prev = (await db.ref('loops/' + curCode).get()).val();
   norm.epoch = (prev && prev.def && prev.def.epoch) || Date.now();   // keep the clock running across edits
-  await db.ref('loops/' + curCode).set({ ownerUid: user.uid, def: norm, banned: (prev && prev.banned) || null, updatedAt: Date.now() });
-  await db.ref('users/' + user.uid + '/loops/' + curCode).update({ publishedAt: Date.now() });
-  toast(skipped > 0 ? `Published. ${skipped} unfinished question(s) were left out — each needs text and two options.` : 'Published — screens update within seconds.');
+  const rec = { ownerUid: user.uid, def: norm, banned: (prev && prev.banned) || null, updatedAt: Date.now(),
+                cap: plan.players || null };
+  const upd = {};
+  if (prev) rec.slot = prev.slot || null;
+  else {
+    /* A first publish takes one of the plan's loop slots; the rules refuse a slot number
+       beyond the plan, so this limit holds even if this page is bypassed. */
+    const used = (await db.ref('loop_slots/' + user.uid).get()).val() || {};
+    let slot = 0; while (used[slot] !== undefined) slot++;
+    if (slot >= plan.loops) { limitNote(T('{plan} includes {n} published loop(s). Delete one you no longer use, or upgrade for more.', { plan: plan.name, n: plan.loops })); return; }
+    rec.slot = String(slot);
+    upd['loop_slots/' + user.uid + '/' + slot] = curCode;
+  }
+  upd['loops/' + curCode] = rec;
+  upd['users/' + user.uid + '/loops/' + curCode + '/publishedAt'] = Date.now();
+  try { await db.ref().update(upd); }
+  catch (e) {
+    /* Only while the database rules are older than this page (they are published by hand):
+       the old rules know nothing of plan slots, so write the loop the old way. Once the new
+       rules are live this path is refused too, so it can never get round a limit. */
+    try {
+      const legacy = Object.assign({}, rec); delete legacy.slot; if (!legacy.cap) delete legacy.cap;
+      await db.ref('loops/' + curCode).set(legacy);
+      await db.ref('users/' + user.uid + '/loops/' + curCode + '/publishedAt').set(Date.now());
+    } catch (e2) { toast('Could not publish. Check your plan’s limits, then try again.'); return; }
+  }
+  toast(skipped > 0 ? T('Published. {n} unfinished question(s) were left out — each needs text and two options.', { n: skipped }) : 'Published — screens update within seconds.');
   editorView();
+  translateLoop(curCode, norm);
+}
+/* Ask the server to translate this loop's questions for players in other languages.
+   Runs after publishing and never blocks it: until translations arrive, everyone sees
+   the original text. */
+async function translateLoop(code, norm) {
+  if (norm.autoTranslate === false) { db.ref('loop_i18n/' + code).remove().catch(() => {}); return; }
+  try {
+    const tok = await user.getIdToken();
+    const r = await fetch('/api/loop-translate', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tok }, body: JSON.stringify({ code }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.ok) toast('Translations for players are ready.');
+  } catch (e) {}
+}
+
+/* Delete a loop everywhere: the draft, the public loop, its scores and answers, its
+   translations, its plan slot — and any TVs showing it go back to their pairing code. */
+async function deleteLoop() {
+  const code = curCode;
+  if (!code || !confirm(T('Delete this loop? Its questions, scores and screen links are removed for good.'))) return;
+  const upd = {};
+  upd['users/' + user.uid + '/loops/' + code] = null;
+  const pub = (await db.ref('loops/' + code).get()).val();
+  if (pub && pub.ownerUid === user.uid) {
+    upd['loops/' + code] = null;
+    upd['loop_answers/' + code] = null;
+    upd['loop_scores/' + code] = null;
+    upd['loop_i18n/' + code] = null;
+    if (pub.slot != null) upd['loop_slots/' + user.uid + '/' + pub.slot] = null;
+  }
+  Object.entries(myTvs).forEach(([id, tv]) => {
+    if (!tv || tv.loop !== code) return;
+    upd['tv_devices/' + id] = null; upd['users/' + user.uid + '/tvs/' + id] = null;
+    if (tv.slot != null) upd['tv_slots/' + user.uid + '/' + tv.slot] = null;
+  });
+  try { await db.ref().update(upd); cur = null; toast('Loop deleted.'); listView(); }
+  catch (e) { toast('Could not delete that loop — try again.'); }
 }
 // What must be in place before a loop can be shown publicly.
 function complianceGaps(L) {
   const c = L.compliance, out = [];
-  if (!c.organiser) out.push('Organiser — the business running this loop.');
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.contact)) out.push('A contact email players can reach you on.');
-  if (c.prize && !c.rulesUrl) out.push('An official rules link (https) — you’ve offered a prize.');
-  L.sets.forEach(s => s.items.forEach(it => { if (it.type === 'ad' && it.sponsored && !it.sponsor) out.push(`Who the ad “${it.headline || 'untitled'}” is from (sponsor name).`); }));
+  if (!c.organiser) out.push(T('Organiser — the business running this loop.'));
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.contact)) out.push(T('A contact email players can reach you on.'));
+  if (c.prize && !c.rulesUrl) out.push(T('An official rules link (https) — you’ve offered a prize.'));
+  L.sets.forEach(s => s.items.forEach(it => { if (it.type === 'ad' && it.sponsored && !it.sponsor) out.push(T('Who the ad “{x}” is from (sponsor name).', { x: it.headline || T('untitled') })); }));
   return out;
 }
 async function restartLoop() {
@@ -375,11 +481,11 @@ async function restartLoop() {
   await db.ref('loops/' + curCode + '/def/epoch').set(Date.now()); toast('Restarted from the first question.');
 }
 async function resetBoard() {
-  if (!confirm('Clear every score and answer for this loop? This cannot be undone.')) return;
+  if (!confirm(T('Clear every score and answer for this loop? This cannot be undone.'))) return;
   await Promise.all([db.ref('loop_scores/' + curCode).remove(), db.ref('loop_answers/' + curCode).remove()]);
   toast('Leaderboard cleared.');
 }
-function copy(t) { (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Copied.')).catch(() => prompt('Copy this link:', t)); }
+function copy(txt) { (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => toast('Copied.')).catch(() => prompt(T('Copy this link:'), txt)); }
 
 // ── SCREENS (TV pairing) ─────────────────────────────────────────────────────
 /* A TV opens pollslide.com/tv, which shows a 6-letter code and a QR for loop#pair=CODE.
@@ -391,17 +497,17 @@ let onScreens = false;
 const TS = () => firebase.database.ServerValue.TIMESTAMP;
 function publishedLoops() { return Object.entries(myLoops).filter(([, l]) => l.publishedAt); }
 function loopOptions(sel) {
-  return publishedLoops().map(([c, l]) => `<option value="${esc(c)}" ${c === sel ? 'selected' : ''}>${esc(l.name || 'Untitled loop')} (${esc(c)})</option>`).join('');
+  return publishedLoops().map(([c, l]) => `<option value="${esc(c)}" data-noi18n ${c === sel ? 'selected' : ''}>${esc(l.name || 'Untitled loop')} (${esc(c)})</option>`).join('');
 }
 function screensView(pairCode, loopCode) {
   onScreens = true; cur = null; curCode = null;
   if (pairCode !== undefined) screensView._code = pairCode || '';
   if (loopCode !== undefined) screensView._loop = loopCode || '';
-  const tvs = Object.entries(myTvs).sort((a, b) => (a[1].pairedAt || 0) - (b[1].pairedAt || 0));
+  const tvs = Object.entries(myTvs).filter(([, tv]) => tv && typeof tv === 'object').sort((a, b) => (a[1].pairedAt || 0) - (b[1].pairedAt || 0));
   const pub = publishedLoops(), p = planOf();
   const full = tvs.length >= p.screens;
   root(`<div class="row" style="margin-bottom:18px;"><button class="btn" onclick="listView()">← Loops</button>
-      <div><h1 style="margin:0;">Screens</h1><p class="sub">TVs showing your loops · ${tvs.length} of ${p.screens === Infinity ? 'unlimited' : p.screens} on ${esc(p.name)}</p></div></div>
+      <div><h1 style="margin:0;">Screens</h1><p class="sub">${esc(p.screens === Infinity ? T('TVs showing your loops · {n} on {plan}', { n: tvs.length, plan: p.name }) : T('TVs showing your loops · {n} of {max} on {plan}', { n: tvs.length, max: p.screens, plan: p.name }))}</p></div></div>
 
     <div class="card"><h2>➕ Add a screen</h2>
       <ol class="sub" style="margin:0 0 14px 18px;line-height:1.7;">
@@ -409,7 +515,7 @@ function screensView(pairCode, loopCode) {
         <li>Type the 6-letter code the TV shows — or just scan the QR on the TV with your phone</li>
         <li>Pick a loop and press <b>Pair</b>. The TV starts playing in a few seconds.</li></ol>
       ${!pub.length ? `<p class="note" style="color:var(--accent2);">Publish a loop first — a TV can only play a published loop.</p>`
-      : full ? `<p class="note">${p.screens === 1 ? `Your ${esc(p.name)} plan includes one screen, and it's in use.` : `You're using all ${p.screens} screens on ${esc(p.name)}.`} Unpair one below, or <a href="https://pollslide.com/pricing" target="_blank" rel="noopener" style="color:var(--accent)">upgrade</a>.</p>`
+      : full ? `<p class="note">${esc(p.screens === 1 ? T('Your {plan} plan includes one screen, and it’s in use.', { plan: p.name }) : T('You’re using all {n} screens on {plan}.', { n: p.screens, plan: p.name }))} <span>Unpair one below, or</span> <a href="https://pollslide.com/pricing" target="_blank" rel="noopener" style="color:var(--accent)">upgrade</a>.</p>`
       : `<div class="cols3">
           <div><label class="f">Code on the TV</label><input id="pc" maxlength="7" autocapitalize="characters" autocomplete="off" placeholder="e.g. K7P4QX" value="${esc(screensView._code || '')}" style="font-size:20px;letter-spacing:.18em;text-transform:uppercase;"></div>
           <div><label class="f">Loop to play</label><select id="pl">${loopOptions(screensView._loop || (pub[0] && pub[0][0]))}</select></div>
@@ -418,10 +524,10 @@ function screensView(pairCode, loopCode) {
         <button class="btn primary" style="margin-top:12px;" id="pairBtn" onclick="pairScreen()">Pair</button>`}
     </div>
 
-    ${tvs.length ? `<div class="card"><h2>Your screens</h2>${tvs.map(([id, t]) => `
+    ${tvs.length ? `<div class="card"><h2>Your screens</h2>${tvs.map(([id, tv]) => `
       <div class="row" style="padding:10px 0;border-top:1px solid var(--border);flex-wrap:wrap;">
-        <b style="min-width:140px;">📺 ${esc(t.name || 'TV')}</b>
-        <select onchange="setTvLoop('${esc(id)}', this.value)" style="max-width:280px;">${loopOptions(t.loop)}${myLoops[t.loop] && myLoops[t.loop].publishedAt ? '' : `<option selected disabled>— loop no longer published —</option>`}</select>
+        <b style="min-width:140px;" data-noi18n>📺 ${esc(tv.name || 'TV')}</b>
+        <select onchange="setTvLoop('${esc(id)}', this.value)" style="max-width:280px;">${loopOptions(tv.loop)}${myLoops[tv.loop] && myLoops[tv.loop].publishedAt ? '' : `<option selected disabled>— loop no longer published —</option>`}</select>
         <span style="margin-left:auto;" class="row"><button class="btn sm" onclick="renameTv('${esc(id)}')">Rename</button>
         <button class="btn sm danger" onclick="unpairTv('${esc(id)}')">Unpair</button></span>
       </div>`).join('')}
@@ -431,7 +537,7 @@ function screensView(pairCode, loopCode) {
       <p class="sub" style="margin-bottom:8px;">Any TV with a web browser works. The easiest options:</p>
       <ul class="sub" style="margin:0 0 0 18px;line-height:1.7;">
         <li><b>Smart TV</b> (Samsung, LG, most others) — open the TV's <b>Internet</b> or <b>Web Browser</b> app</li>
-        <li><b>No browser?</b> Plug in an Amazon Fire TV Stick (about $30) and open its <b>Silk</b> browser</li>
+        <li><b>No browser?</b> Plug in an Amazon Fire TV Stick (about $30) and open its <b>Silk browser</b></li>
         <li><b>Signage player</b> (Yodeck, ScreenCloud, OptiSigns, BrightSign…) — add a web page / URL app pointing at the screen link</li>
         <li>Then turn off the TV's <b>sleep timer</b> / <b>auto power off</b> so it stays on</li>
       </ul>
@@ -447,27 +553,39 @@ async function pairScreen() {
   if (code.length !== 6) { toast('The code on the TV has 6 letters and numbers.'); return; }
   if (!loop) { toast('Pick a loop to play.'); return; }
   const p = planOf();
-  if (Object.keys(myTvs).length >= p.screens) { limitNote(`${esc(p.name)} includes ${p.screens} screen${p.screens === 1 ? '' : 's'}.`); return; }
-  const btn = $('pairBtn'); if (btn) { btn.disabled = true; btn.textContent = 'Pairing…'; }
+  if (Object.keys(myTvs).length >= p.screens) { limitNote(T('{plan} includes {n} screen(s).', { plan: p.name, n: p.screens })); return; }
+  const btn = $('pairBtn'); if (btn) { btn.disabled = true; btn.textContent = T('Pairing…'); }
   try {
     const v = (await db.ref('tv_pair/' + code).get()).val();
     if (!v || !v.device || !(v.createdAt > Date.now() - 15 * 60000)) {
       toast('No TV is showing that code right now. Check the code on the TV — it changes every 10 minutes.');
-      if (btn) { btn.disabled = false; btn.textContent = 'Pair'; }
+      if (btn) { btn.disabled = false; btn.textContent = T('Pair'); }
       return;
     }
     const id = String(v.device);
+    /* Each paired TV takes one of the plan's screen slots; the rules refuse a slot number
+       beyond the plan, so the screen limit holds even if this page is bypassed. */
+    const used = (await db.ref('tv_slots/' + user.uid).get()).val() || {};
+    let slot = 0; while (used[slot] !== undefined) slot++;
+    if (slot >= p.screens) { limitNote(T('{plan} includes {n} screen(s).', { plan: p.name, n: p.screens })); if (btn) { btn.disabled = false; btn.textContent = T('Pair'); } return; }
     const upd = {};
-    upd['tv_devices/' + id] = { ownerUid: user.uid, loop, name, pair: code, pairedAt: TS() };
-    upd['users/' + user.uid + '/tvs/' + id] = { loop, name, pairedAt: TS() };
+    upd['tv_slots/' + user.uid + '/' + slot] = id;
+    upd['tv_devices/' + id] = { ownerUid: user.uid, loop, name, pair: code, slot: String(slot), pairedAt: TS() };
+    upd['users/' + user.uid + '/tvs/' + id] = { loop, name, slot: String(slot), pairedAt: TS() };
     upd['tv_pair/' + code] = null;
-    await db.ref().update(upd);
+    try { await db.ref().update(upd); }
+    catch (e) {
+      // Same bridge as publish(): rules older than this page have no tv_slots yet.
+      delete upd['tv_slots/' + user.uid + '/' + slot];
+      delete upd['tv_devices/' + id].slot; delete upd['users/' + user.uid + '/tvs/' + id].slot;
+      await db.ref().update(upd);
+    }
     screensView._code = ''; screensView._loop = '';
     toast('Paired — the TV is starting now.');
     screensView();
   } catch (e) {
     toast('Could not pair that TV. Ask it for a new code (it refreshes on its own) and try again.');
-    if (btn) { btn.disabled = false; btn.textContent = 'Pair'; }
+    if (btn) { btn.disabled = false; btn.textContent = T('Pair'); }
   }
 }
 async function setTvLoop(id, loop) {
@@ -477,15 +595,18 @@ async function setTvLoop(id, loop) {
   } catch (e) { toast('Could not switch that screen.'); screensView(); }
 }
 async function renameTv(id) {
-  const n = prompt('Name this screen', (myTvs[id] && myTvs[id].name) || '');
+  const n = prompt(T('Name this screen'), (myTvs[id] && myTvs[id].name) || '');
   if (n == null) return;
   const name = n.trim().slice(0, 40) || 'TV';
   try { await db.ref().update({ ['tv_devices/' + id + '/name']: name, ['users/' + user.uid + '/tvs/' + id + '/name']: name }); }
   catch (e) { toast('Could not rename that screen.'); }
 }
 async function unpairTv(id) {
-  if (!confirm('Unpair this screen? It goes back to showing a pairing code.')) return;
-  try { await db.ref().update({ ['tv_devices/' + id]: null, ['users/' + user.uid + '/tvs/' + id]: null }); toast('Unpaired.'); }
+  if (!confirm(T('Unpair this screen? It goes back to showing a pairing code.'))) return;
+  const upd = { ['tv_devices/' + id]: null, ['users/' + user.uid + '/tvs/' + id]: null };
+  const slot = myTvs[id] && myTvs[id].slot;
+  if (slot != null) upd['tv_slots/' + user.uid + '/' + slot] = null;
+  try { await db.ref().update(upd); toast('Unpaired.'); }
   catch (e) { toast('Could not unpair that screen.'); }
 }
 
@@ -501,7 +622,7 @@ async function playersView() {
   modal(`<h2>Players on the current board</h2>
     <p class="note" style="margin-bottom:10px;">Remove anyone whose nickname shouldn't be on a public screen. They disappear from the screen and can't keep playing on that phone.</p>
     ${rows.length ? rows.map(([pid, r]) => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--border);">
-      <span>${esc(r.a || '')}</span><b style="flex:1;">${esc(r.n)}</b><span class="note">${(r.pts || 0).toLocaleString()} pts</span>
+      <span>${esc(r.a || '')}</span><b style="flex:1;" data-noi18n>${esc(r.n)}</b><span class="note">${esc(T('{n} pts', { n: (r.pts || 0).toLocaleString(I.get()) }))}</span>
       ${banned[pid] ? `<button class="btn sm" onclick="unban('${esc(pid)}')">Allow again</button>` : `<button class="btn sm danger" onclick="ban('${esc(pid)}')">Remove</button>`}</div>`).join('')
       : '<p class="sub">No players on this board yet.</p>'}
     <div class="row" style="margin-top:14px;"><button class="btn" onclick="closeModal()">Close</button></div>`);
@@ -537,6 +658,143 @@ document.addEventListener('click', e => { const p = document.getElementById('emo
 
 function modal(h) { closeModal(); const m = document.createElement('div'); m.className = 'modal'; m.id = 'mdl'; m.innerHTML = `<div class="card">${h}</div>`; m.onclick = e => { if (e.target === m) closeModal(); }; document.body.appendChild(m); }
 function closeModal() { const m = $('mdl'); if (m) m.remove(); }
+
+// ── POLLY, GIFS, UPLOADS — the same services the rest of PollSlide uses ─────
+/* Nothing here is LoopSlide-specific on the server: /api/polly, /api/polly-image and
+   /api/gif-search are called exactly as presenter.html calls them, so the monthly Polly
+   allowance, the GIF safety filter and the rate limits are the ones already in force.
+   Anything Polly writes or draws is marked `ai`, which puts the "AI-generated" label on
+   the TV and the phones. */
+async function authHeaders() { const tok = await user.getIdToken().catch(() => null); return Object.assign({ 'Content-Type': 'application/json' }, tok ? { Authorization: 'Bearer ' + tok } : {}); }
+async function readJson(r) { const t = await r.text(); try { return JSON.parse(t); } catch (e) { return {}; } }
+
+function pollyView() {
+  const room = planOf().slides - slideCount(cur);
+  if (room <= 0) { atSlideLimit(); return; }
+  const n = Math.min(5, room);
+  modal(`<h2>✨ Draft a round with Polly</h2>
+    <p class="note" style="margin-bottom:10px;">Describe a topic and Polly writes the questions with emojis. You can edit everything before you publish. Questions from Polly are labelled “AI-generated” on screen.</p>
+    <label class="f">Topic</label><input id="pyTopic" placeholder="e.g. 90s movies, football legends, local history" maxlength="200">
+    <div class="cols"><div><label class="f">Kind of questions</label><select id="pyKind"><option value="quiz">Trivia — with a right answer</option><option value="survey">Opinion poll — no right answer</option></select></div>
+      <div><label class="f">How many</label><input id="pyN" type="number" min="1" max="${room}" value="${n}"></div></div>
+    <div class="row" style="margin-top:14px;"><button class="btn primary" id="pyGo" onclick="pollyGo()">✨ Draft questions</button><button class="btn" onclick="closeModal()">Cancel</button></div>
+    <p class="note" id="pySt" style="margin-top:8px;"></p>`);
+  setTimeout(() => { const t = $('pyTopic'); if (t) t.focus(); }, 30);
+}
+async function pollyGo() {
+  const topic = ($('pyTopic').value || '').trim();
+  if (!topic) { $('pySt').textContent = T('Type a topic first.'); return; }
+  const kind = $('pyKind').value === 'survey' ? 'survey' : 'quiz';
+  const room = planOf().slides - slideCount(cur);
+  const count = Math.max(1, Math.min(room, parseInt($('pyN').value, 10) || 5, 20));
+  const go = $('pyGo'); go.disabled = true; go.textContent = T('Polly is writing…');
+  try {
+    const avoid = cur.sets.flatMap(s => s.items.filter(i => i.type !== 'ad' && i.text).map(i => ({ text: i.text, answers: i.options })));
+    const r = await fetch('/api/polly', { method: 'POST', headers: await authHeaders(),
+      body: JSON.stringify({ topic, type: kind, count, avoid: avoid.slice(0, 50), language: cur.lang || 'en', audience: 'people in a bar or at an event, playing on their phones' }) });
+    const d = await readJson(r);
+    if (r.status === 429 || d.overLimit) { closeModal(); limitNote(d.error || T('You’ve used this month’s Polly allowance.')); return; }
+    if (!r.ok || !Array.isArray(d.questions) || !d.questions.length) throw new Error(d.error || 'no questions');
+    const items = d.questions.slice(0, room).map(q => {
+      const opts = (q.options || []).map(o => String(o || '').slice(0, 80)).filter(Boolean).slice(0, 6);
+      const c = kind === 'quiz' && Array.isArray(q.correctAnswers) && q.correctAnswers.length ? Number(q.correctAnswers[0]) : null;
+      const text = (q.emoji && !String(q.text).includes(q.emoji) ? q.emoji + ' ' : '') + String(q.text || '');
+      return { id: 'i' + uid6(), type: 'q', text: text.slice(0, 200), options: opts, correct: Number.isInteger(c) && c < opts.length ? c : null, ai: true };
+    }).filter(it => it.text && it.options.length >= 2);
+    if (!items.length) throw new Error('no usable questions');
+    cur.sets.push({ id: 's' + uid6(), title: topic.slice(0, 60), items });
+    closeModal(); editorView();
+    toast(T('Polly drafted {n} question(s). Check them before you publish.', { n: items.length }));
+  } catch (e) {
+    go.disabled = false; go.textContent = T('✨ Draft questions');
+    $('pySt').textContent = T('Polly couldn’t write those just now. Try again, or rephrase the topic.');
+  }
+}
+
+/* One "Add media" box for a question image ('img'), a card image ('img') or an answer
+   image ('o<index>'): upload your own, pick a GIF, or have Polly draw one. */
+let _media = null;
+function mediaFor(si, ii, field) {
+  const it = cur && cur.sets[si] && cur.sets[si].items[ii];
+  if (!it) return;
+  _media = { si, ii, field };
+  const term = window.PSGifs && it ? PSGifs.searchTerm(field[0] === 'o' ? (it.options[+field.slice(1)] || it.text || '') : (it.text || it.headline || '')) : '';
+  modal(`<h2>🖼 Add media</h2>
+    <div class="mediaRow"><button class="btn" onclick="mediaUpload()">⬆ Upload a photo or video</button><span class="note">Images up to 8 MB, videos up to 20 MB (played muted on the TV).</span></div>
+    <label class="f" style="margin-top:14px;">Search GIFs</label>
+    <div class="row" style="flex-wrap:nowrap;"><input id="gq" value="${esc(term)}" placeholder="Search GIFs" onkeydown="if(event.key==='Enter')gifSearch()"><button class="btn" onclick="gifSearch()">Search</button></div>
+    <div class="gifgrid" id="gres"></div><div class="note" id="gattr"></div>
+    <label class="f" style="margin-top:14px;">✨ Generate an image with Polly</label>
+    <div class="row" style="flex-wrap:nowrap;"><input id="ip" value="${esc(field[0] === 'o' ? (it.options[+field.slice(1)] || '') : (it.text || it.headline || ''))}" placeholder="Describe the picture"><select id="ist" style="width:auto;">
+      <option value="illustration">🎨 Illustration</option><option value="realistic">📷 Realistic photo</option><option value="cartoon">😄 Cartoon</option><option value="render3d">🧊 3D render</option></select>
+      <button class="btn" id="ipGo" onclick="pollyImage()">Generate</button></div>
+    <p class="note" style="margin-top:6px;">Generated images are labelled “AI-generated” on screen.</p>
+    <div class="row" style="margin-top:14px;"><button class="btn" onclick="closeModal()">Cancel</button></div>`);
+  if (term) gifSearch();
+}
+function setMedia(url, ai) {
+  if (!_media) return;
+  const it = cur.sets[_media.si].items[_media.ii];
+  if (_media.field === 'img') it.img = url;
+  else { const oi = +_media.field.slice(1); it.optImgs = it.optImgs || []; it.optImgs[oi] = url; }
+  if (ai) it.ai = true;
+  closeModal(); editorView();
+}
+async function gifSearch() {
+  const q = ($('gq').value || '').trim(); if (!q) return;
+  const box = $('gres'); box.innerHTML = `<span class="note">${esc(T('Searching…'))}</span>`;
+  try {
+    const r = await fetch('/api/gif-search', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ q, limit: 12 }) });
+    const d = await readJson(r);
+    if (!r.ok) throw new Error(d.error || 'search failed');
+    const list = (d.results || []).filter(g => g && /^https:/.test(g.url));
+    box.innerHTML = list.length ? '' : `<span class="note">${esc(T('No GIFs found — try other words.'))}</span>`;
+    list.forEach(g => { const im = document.createElement('img'); im.src = g.still || g.url; im.alt = g.alt || ''; im.title = g.alt || ''; im.onclick = () => setMedia(g.url, false); box.appendChild(im); });
+    $('gattr').textContent = d.attribution || '';
+  } catch (e) { box.innerHTML = `<span class="note">${esc(T('GIF search isn’t available right now.'))}</span>`; }
+}
+async function pollyImage() {
+  const base = ($('ip').value || '').trim(); if (!base) return;
+  const style = $('ist').value;
+  const MODS = { illustration: 'clean modern vector illustration, flat bold shapes, vibrant colors', realistic: 'photorealistic photograph, sharp focus, natural lighting, fine detail',
+                 cartoon: 'playful cartoon, bold clean outlines, bright cheerful colors', render3d: 'detailed 3D render, isometric, soft studio lighting, glossy octane style' };
+  const btn = $('ipGo'); btn.disabled = true; btn.textContent = T('Generating…');
+  try {
+    const prompt = base + ' — ' + (MODS[style] || MODS.illustration) + '. The main subject is large, centered, and fills most of the frame. Simple uncluttered background, no text, no watermark, high quality';
+    const r = await fetch('/api/polly-image', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ prompt, size: '1536x1024', style }) });
+    const d = await readJson(r);
+    if (r.status === 429 || d.overLimit) { closeModal(); limitNote(d.error || T('You’ve used this month’s Polly allowance.')); return; }
+    if (!r.ok || !d.image) throw new Error(d.error || 'no image');
+    const blob = await (await fetch(d.image)).blob();
+    const ext = ((blob.type.split('/')[1] || 'png').split('+')[0]);
+    const snap = await storage.ref(`users/${user.uid}/images/polly_${Date.now()}_${uid6()}.${ext}`).put(blob);
+    setMedia(await snap.ref.getDownloadURL(), true);
+    toast('Image added ✨');
+  } catch (e) { btn.disabled = false; btn.textContent = T('Generate'); toast('Couldn’t generate that image — try again.'); }
+}
+function mediaUpload() {
+  const inp = document.createElement('input'); inp.type = 'file';
+  inp.accept = 'image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm,video/quicktime';
+  inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    const isVideo = f.type.startsWith('video/'), maxMB = isVideo ? 20 : 8;
+    if (f.size > maxMB * 1024 * 1024) { toast(T('That file is too big — {n} MB maximum.', { n: maxMB })); return; }
+    // Same 30-second video cap as the rest of PollSlide.
+    if (isVideo) {
+      const secs = await new Promise(res => { const v = document.createElement('video'); v.preload = 'metadata';
+        v.onloadedmetadata = () => { URL.revokeObjectURL(v.src); res(v.duration); }; v.onerror = () => res(0); v.src = URL.createObjectURL(f); });
+      if (secs > 30.5) { toast('Videos can be up to 30 seconds long.'); return; }
+    }
+    toast('Uploading…');
+    try {
+      const safe = f.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-60);
+      const snap = await storage.ref(`users/${user.uid}/${isVideo ? 'videos' : 'images'}/${Date.now()}_${safe}`).put(f);
+      setMedia(await snap.ref.getDownloadURL(), false);
+      toast('Uploaded.');
+    } catch (e) { toast('Upload failed — try again.'); }
+  };
+  inp.click();
+}
 
 // ── IMPORT / EXPORT — the bridge to the rest of PollSlide ──────────────────
 /* A PollSlide deck → a LoopSlide round.
@@ -578,7 +836,7 @@ async function importView() {
   modal(`<h2>Import a deck from PollSlide</h2>
     <p class="note" style="margin-bottom:10px;">It becomes a new round in this loop. Your original deck isn't changed. Multiple-choice questions and study cards come across; open-text, rating and word-cloud questions are skipped because there's nothing to tap on a screen.</p>
     ${decks.length ? decks.map(([id, d]) => `<div class="deck" onclick="doImport('${esc(id)}')"><span style="font-size:22px;">${PRODUCT_ICON[d.productType] || '🗳️'}</span>
-      <div style="flex:1;"><b>${esc(d.name || 'Untitled')}</b><div class="note">${esc(PRODUCT_NAME[d.productType] || 'PollSlide')} · ${(Array.isArray(d.questions) ? d.questions : Object.values(d.questions || {})).length} questions</div></div><span class="note">Import →</span></div>`).join('')
+      <div style="flex:1;"><b data-noi18n>${esc(d.name || 'Untitled')}</b><div class="note">${esc(PRODUCT_NAME[d.productType] || 'PollSlide')} · ${esc(T('{n} questions', { n: (Array.isArray(d.questions) ? d.questions : Object.values(d.questions || {})).length }))}</div></div><span class="note">Import →</span></div>`).join('')
       : '<p class="sub">You have no decks yet.</p>'}
     <div class="row" style="margin-top:12px;"><button class="btn" onclick="closeModal()">Cancel</button></div>`);
 }
@@ -588,12 +846,12 @@ async function doImport(id) {
   closeModal();
   if (!round.items.length) { toast('Nothing to import — that deck has no multiple-choice questions or study cards.'); return; }
   cur.sets.push(round); editorView();
-  toast(`Imported ${round.items.length} question(s)` + (skipped ? `, skipped ${skipped} that can't be tapped on a screen.` : '.'));
+  toast(skipped ? T('Imported {n} question(s), skipped {x} that can’t be tapped on a screen.', { n: round.items.length, x: skipped }) : T('Imported {n} question(s).', { n: round.items.length }));
 }
 
 /* A LoopSlide round → a new PollSlide deck in the product of your choice. */
 function exportView(si) {
-  modal(`<h2>Send “${esc(cur.sets[si].title || 'this round')}” to PollSlide</h2>
+  modal(`<h2>${esc(T('Send “{x}” to PollSlide', { x: cur.sets[si].title || T('this round') }))}</h2>
     <p class="note" style="margin-bottom:10px;">A new deck is created in your library. Sponsor cards stay in LoopSlide.</p>
     ${['quiz','poll','survey','study'].map(p => `<div class="deck" onclick="doExport(${si},'${p}')"><span style="font-size:22px;">${PRODUCT_ICON[p]}</span><b style="flex:1;">${PRODUCT_NAME[p]}</b><span class="note">Create deck →</span></div>`).join('')}
     <div class="row" style="margin-top:12px;"><button class="btn" onclick="closeModal()">Cancel</button></div>`);
@@ -607,18 +865,18 @@ async function doExport(si, product) {
       .map(q => ({ id: 'qz' + Date.now().toString(36) + uid6(), type: 'flashcard', front: q.text, back: q.options[q.correct] }));
   } else {
     questions = qs.map(q => ({ id: 'qz' + Date.now().toString(36) + uid6(), text: q.text, type: 'multiple_choice',
-      options: q.options.map((t, i) => ({ text: t || '', img: (q.optImgs && q.optImgs[i]) || '' })).filter(o => o.text || o.img),
+      options: q.options.map((ot, i) => ({ text: ot || '', img: (q.optImgs && q.optImgs[i]) || '' })).filter(o => o.text || o.img),
       correctAnswer: q.correct === null || q.correct === undefined ? null : q.correct,
       image: q.img || '', ...(q.ai ? { aiGenerated: true } : {}), timer: 0, displayMode: 'bars', revealDelay: 30,
       postReveal: { enabled: false, type: 'leaderboard', explainerText: '', advanceDelay: 'manual' } }));
   }
-  if (!questions.length) { toast('Nothing to send — this round has no finished questions' + (product === 'study' ? ' with a right answer.' : '.')); return; }
+  if (!questions.length) { toast(product === 'study' ? 'Nothing to send — this round has no finished questions with a right answer.' : 'Nothing to send — this round has no finished questions.'); return; }
   const id = 'pres_' + Date.now();
   await db.ref('users/' + user.uid + '/presentations/' + id).set({
     id, name: (set.title || 'LoopSlide round'), sessionCode: E.genCode(), createdAt: Date.now(), lastOpenedAt: Date.now(),
     productType: product, questions });
   closeModal();
-  toast(`Created “${set.title || 'LoopSlide round'}” in ${PRODUCT_NAME[product]} with ${questions.length} question(s).`);
+  toast(T('Created “{x}” in {p} with {n} question(s).', { x: set.title || 'LoopSlide round', p: PRODUCT_NAME[product], n: questions.length }));
 }
 
 function exportFile() {
@@ -638,7 +896,7 @@ function importFile() {
         const sets = j && j.format === 'loopslide' && j.loop ? j.loop.sets : (j && j.questions ? [deckToRound(j).round] : null);
         if (!Array.isArray(sets) || !sets.length) throw new Error('bad');
         sets.forEach(s => { s.id = 's' + uid6(); (s.items || []).forEach(it => { it.id = 'i' + uid6(); }); cur.sets.push(s); });
-        editorView(); toast(`Imported ${sets.length} round(s).`);
+        draftShape(cur); editorView(); toast(T('Imported {n} round(s).', { n: sets.length }));
       } catch (e) { toast('That file isn’t a LoopSlide export or a PollSlide deck.'); }
     };
     r.readAsText(f);

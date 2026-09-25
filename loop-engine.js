@@ -27,6 +27,11 @@
   const DEFAULT_TIMING = { question: 20, reveal: 7, ad: 10, board: 12 };   // seconds
   const LIMITS = { sets: 10, itemsPerSet: 40, options: 6, text: 200, option: 80, adText: 240 };
   const MAX_POINTS = 2000;       // per answer, ceiling also enforced in database rules
+  /* Languages LoopSlide speaks. `lang` is what the organiser wrote the questions in;
+     phones show each player their own language, the TV shows `screenLang` ('auto' = the
+     TV browser's own language). Question content in other languages comes from the
+     auto-translation stored at loop_i18n/<CODE>/<lang> (api/loop-translate.js). */
+  const LANGS = ['en', 'es', 'de', 'fr', 'pt', 'it'];
 
   const clampInt = (v, lo, hi, dflt) => {
     const n = Math.round(Number(v));
@@ -88,6 +93,9 @@
     })).filter(s => s.items.length);
     return {
       name: str(L.name, 80) || 'LoopSlide',
+      lang: LANGS.includes(L.lang) ? L.lang : 'en',
+      screenLang: LANGS.includes(L.screenLang) ? L.screenLang : 'auto',
+      autoTranslate: L.autoTranslate !== false,
       epoch: Number(L.epoch) || 0,
       tzOffsetMin: clampInt(L.tzOffsetMin, -840, 840, 0),
       brand: { accent: /^#[0-9a-f]{6}$/i.test(L.brand && L.brand.accent) ? L.brand.accent : '#6c63ff',
@@ -197,6 +205,73 @@
   // Media links are images or GIFs unless they point at a video file.
   const isVideo = u => /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(String(u || ''));
 
-  return { DEFAULT_TIMING, LIMITS, MAX_POINTS, AVATARS, normalizeLoop, timeline, positionAt,
+  /* ── Translation units ────────────────────────────────────────────────────
+     Everything the organiser wrote that a player reads, split into units that are
+     translated as a whole (a question WITH its answers, so short answers keep their
+     sense). Each unit carries a hash of its source text: a stored translation is only
+     used while that hash still matches, so editing a question can never show a stale
+     translation — the original shows until the new one arrives. Same code on the
+     server (api/loop-translate.js), the TV and the phones, so they always agree. */
+  function hashUnit(src) {
+    const s = JSON.stringify(src);
+    let h = 5381;
+    for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
+    return (h >>> 0).toString(36);
+  }
+  const unitKey = id => String(id).replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 60);
+  function translationUnits(loop) {
+    const L = loop && loop.timing ? loop : normalizeLoop(loop);
+    const out = [];
+    if (L.brand.title) out.push({ id: 'b', src: { stem: L.brand.title } });
+    if (L.compliance.prize) out.push({ id: 'p', src: { stem: L.compliance.prize } });
+    L.sets.forEach(set => {
+      if (set.title) out.push({ id: 's_' + unitKey(set.id), src: { stem: set.title } });
+      set.items.forEach(it => {
+        if (it.type === 'ad') {
+          const src = {};
+          if (it.headline) src.stem = it.headline;
+          if (it.body) src.back = it.body;
+          if (src.stem || src.back) out.push({ id: 'i_' + unitKey(it.id), src });
+        } else {
+          out.push({ id: 'i_' + unitKey(it.id), src: { stem: it.text, options: it.options.slice() } });
+        }
+      });
+    });
+    out.forEach(u => { u.h = hashUnit(u.src); });
+    return out;
+  }
+  /* A copy of the loop in `lang`, using only translations whose source still matches.
+     Option ORDER never changes, so answers are recorded by index exactly as before.
+     Translated items are marked `tr: true` so the screen can say so. */
+  function localize(loop, tr, lang) {
+    const L = loop && loop.timing ? loop : normalizeLoop(loop);
+    if (!tr || !tr.u || !lang || lang === L.lang || tr.src !== L.lang) return L;
+    const C = JSON.parse(JSON.stringify(L));
+    const pick = (id, src) => { const u = tr.u[id]; return u && u.h === hashUnit(src) && u.v ? u.v : null; };
+    let v;
+    if (C.brand.title && (v = pick('b', { stem: C.brand.title })) && v.stem) C.brand.title = v.stem;
+    if (C.compliance.prize && (v = pick('p', { stem: C.compliance.prize })) && v.stem) C.compliance.prize = v.stem;
+    C.sets.forEach(set => {
+      if (set.title && (v = pick('s_' + unitKey(set.id), { stem: set.title })) && v.stem) set.title = v.stem;
+      set.items.forEach(it => {
+        if (it.type === 'ad') {
+          const src = {}; if (it.headline) src.stem = it.headline; if (it.body) src.back = it.body;
+          if ((src.stem || src.back) && (v = pick('i_' + unitKey(it.id), src))) {
+            if (src.stem && v.stem) it.headline = v.stem;
+            if (src.back && v.back) it.body = v.back;
+            it.tr = true;
+          }
+        } else if ((v = pick('i_' + unitKey(it.id), { stem: it.text, options: it.options }))) {
+          if (v.stem) it.text = v.stem;
+          if (Array.isArray(v.options) && v.options.length === it.options.length) it.options = v.options.map((o, i) => o || it.options[i]);
+          it.tr = true;
+        }
+      });
+    });
+    C.localizedTo = lang;
+    return C;
+  }
+
+  return { DEFAULT_TIMING, LIMITS, MAX_POINTS, AVATARS, LANGS, hashUnit, translationUnits, localize, normalizeLoop, timeline, positionAt,
            periodKey, score, cleanName, safeUrl, genCode, answerKey, isVideo };
 });

@@ -102,7 +102,7 @@ console.log('\nIsolated from the existing products');
     ok(f + ' never touches sessions/, quiz_builder/ or currentQuestion', !/ref\([`'"](sessions|quiz_builder)\//.test(h) && !/currentQuestion/.test(h));
     ok(f + ' loads the sandbox switch before Firebase starts', h.indexOf('/ps-env.js') > h.indexOf('firebase-app-compat') && h.indexOf('/ps-env.js') < h.indexOf('initializeApp('));
   }
-  ok('the TV screen writes nothing at all', !/\.(set|update|push|transaction|remove)\(/.test(read('screen.html').split('<script>').pop()));
+  ok('the TV screen writes nothing at all', !/\.(set|update|push|transaction|remove)\(/.test(read('screen.html').split('<script>').pop().replace(/\bI\.set\(/g, '')));
   const p = read('presenter.html');
   ok('presenter only gains a link to the studio', /href="\/loop"/.test(p));
 }
@@ -152,9 +152,9 @@ console.log('\nTransparency & compliance');
   ok('rules links must be https', A.compliance.rulesUrl === '');
   const scr = read('screen.html'), ply = read('play.html'), st = read('loop.html');
   ok('the screen labels AI content', /✨ AI-generated/.test(scr));
-  ok('the screen names the sponsor of an ad', /'Sponsored by ' \+ esc\(it\.sponsor\)/.test(scr));
+  ok('the screen names the sponsor of an ad', /t\('Sponsored by \{name\}', \{ name: it\.sponsor \}\)/.test(scr));
   ok('the phone labels AI content too', /✨ AI-generated/.test(ply));
-  ok('the phone names the organiser and states retention before play', /Run by <b>/.test(ply) && /kept only while this leaderboard runs, then deleted/.test(ply));
+  ok('the phone names the organiser and states retention before play', /t\('Run by \{name\}\.', \{ name: c\.organiser \}\)/.test(ply) && /kept only while this leaderboard runs, then deleted/.test(ply));
   ok('an age limit must be confirmed before playing', /ageBox && !ageBox\.checked/.test(ply));
   ok('players can report a problem', /Report a problem/.test(ply));
   ok('publishing is blocked until organiser, contact, rules and sponsors are set', /complianceGaps\(norm\)/.test(st) && /official rules link/.test(st) && /sponsor name/.test(st));
@@ -208,7 +208,7 @@ console.log('\nPlan limits');
   const studio = read('loop.html');
   const m = studio.match(/const LOOP_PLANS = (\{[\s\S]*?\n\});/);
   const P = m ? Function('return ' + m[1])() : {};
-  const want = { free: [1, 5], pro: [5, 20], team_small: [20, 40], team_large: [80, 150] };
+  const want = { free: [1, 10], pro: [5, 20], team_small: [20, 40], team_large: [80, 150] };
   ok('loops and slides per plan are as decided', Object.keys(want).every(k => P[k] && P[k].loops === want[k][0] && P[k].slides === want[k][1]), P);
   ok('enterprise is unlimited (set per deal)', P.enterprise && P.enterprise.loops === Infinity && P.enterprise.slides === Infinity);
   ok('every plan has a screen limit', Object.values(P).every(p => typeof p.screens === 'number'));
@@ -216,6 +216,95 @@ console.log('\nPlan limits');
      /function addQ\(si\) \{ if \(atSlideLimit\(\)\)/.test(studio) && /function addAd\(si, sponsored\) \{ if \(atSlideLimit\(\)\)/.test(studio)
      && /n > lim/.test(studio) && /length >= p\.loops/.test(studio) && /length >= p\.screens/.test(studio));
   ok('legacy tier names map to today\'s plans', /'team' \? 'team_small'/.test(studio) && /'white' \? 'team_large'/.test(studio));
+}
+
+console.log('\nA new loop can be edited after a save (the "+ Question" bug)');
+{
+  const studio = read('loop.html');
+  const m = studio.match(/function draftShape\(d\) \{[\s\S]*?\n\}/);
+  const draftShape = m ? Function(m[0] + '; return draftShape;')() : null;
+  // Exactly what RTDB hands back for a freshly created loop: the empty items list is gone.
+  const fromDb = { name: 'New loop', sets: [{ id: 's1', title: 'Round 1' }], timing: {}, board: {} };
+  const d = draftShape && draftShape(JSON.parse(JSON.stringify(fromDb)));
+  ok('opening a loop restores the lists the database dropped', d && Array.isArray(d.sets[0].items));
+  ok('"+ Question" works on it', (() => { try { d.sets[0].items.push({ type: 'q' }); return true; } catch (e) { return false; } })());
+  const q = draftShape({ sets: { 0: { items: { 0: { type: 'q', text: 'x' } } } } });
+  ok('object-shaped lists (how RTDB returns sparse arrays) become arrays', Array.isArray(q.sets) && Array.isArray(q.sets[0].items) && q.sets[0].items[0].options.length === 2);
+  ok('every loop the editor opens goes through it', /cur = draftShape\(/.test(studio) && /draftShape\(cur\); editorView\(\)/.test(studio));
+}
+
+console.log('\nLoopSlide speaks every language, in the house register');
+{
+  global.window = global; global.navigator = { language: 'en' };
+  require(require('path').join(ROOT, 'loop-i18n.js'));
+  const I = global.LoopI18n, D = I.dict;
+  const en = new Set(); ['es','de','fr','pt','it'].forEach(l => Object.keys(D[l]).forEach(k => en.add(k)));
+  const gaps = ['es','de','fr','pt','it'].flatMap(l => [...en].filter(k => !D[l][k]).map(k => l + ': ' + k));
+  ok('every string exists in all five languages', !gaps.length, gaps.slice(0, 5));
+  const ph = [...en].filter(k => /\{\w+\}/.test(k)).flatMap(k => ['es','de','fr','pt','it'].filter(l => (k.match(/\{\w+\}/g) || []).some(x => !D[l][k].includes(x))).map(l => l + ': ' + k));
+  ok('every translation keeps its {placeholders}', !ph.length, ph.slice(0, 5));
+  const vals = l => Object.values(D[l]).join(' | ');
+  ok('German uses du, never Sie', !/\b[A-ZÄÖÜ][a-zäöüß]+en Sie\b|\bIhr(e|en|em)?\b/.test(vals('de')));
+  ok('French uses tu, never vous', !/\b(vous|votre|vos)\b/i.test(vals('fr')));
+  ok('Portuguese is European', !/\b(você|vocês|tela|telas|arquivo|compartilh\w*|aplicativo|celular|usuário|equipe|cadastro)\b/i.test(vals('pt')));
+  ok('"deck" is never a pack of cards', !/\b(baraja|baralho|mazzo)s?\b/i.test(vals('es') + vals('pt') + vals('it')));
+  ok('t() fills placeholders', I.t('Round {n}', { n: 3 }, 'de') === 'Runde 3');
+  ok('unknown strings fall back to English', I.t('zzz not a key', null, 'fr') === 'zzz not a key');
+  const studio = read('loop.html'), ply = read('play.html');
+  ok('Studio follows the PollSlide language choice', /I\.stored\('ps_ui_lang'\)/.test(studio));
+  ok('phones follow the answer-page language choice', /'ql_viewer_lang'/.test(ply));
+  ok('the TV follows the loop setting, auto = the TV\'s own', /screenLang !== 'auto' \? loop\.screenLang : I\.nav\(\)/.test(read('screen.html')));
+  ok('user content is never translated in the Studio', (studio.match(/data-noi18n/g) || []).length >= 6);
+}
+
+console.log('\nQuestion text in the player\'s language');
+{
+  const L = E.normalizeLoop({ lang: 'en', epoch: 1, sets: [{ id: 's', title: 'R', items: [{ id: 'q', type: 'q', text: 'Red planet?', options: ['Venus', 'Mars'], correct: 1 }] }] });
+  const U = E.translationUnits(L), tr = { src: 'en', u: {} };
+  U.forEach(u => { tr.u[u.id] = { h: u.h, v: u.id === 's_s' ? { stem: 'Ronda' } : { stem: '¿Planeta rojo?', options: ['Venus', 'Marte'] } }; });
+  const C = E.localize(L, tr, 'es');
+  ok('translated text is shown, answers keep their order and the right answer', C.sets[0].items[0].text === '¿Planeta rojo?' && C.sets[0].items[0].options[1] === 'Marte' && C.sets[0].items[0].correct === 1);
+  ok('translated items are marked, for the "Auto-translated" label', C.sets[0].items[0].tr === true);
+  const edited = E.normalizeLoop(Object.assign({}, L, { sets: [{ id: 's', title: 'R', items: [{ id: 'q', type: 'q', text: 'Changed', options: ['Venus', 'Mars'], correct: 1 }] }] }));
+  ok('an edited question never shows a stale translation', E.localize(edited, tr, 'es').sets[0].items[0].text === 'Changed');
+  const api = read('api/loop-translate.js');
+  ok('only the loop\'s owner can ask for translations', /pub\.ownerUid !== who\.uid/.test(api) && /verifyToken/.test(api));
+  ok('translation is rate-limited', /rateLimit\(db, 'looptr:'/.test(api));
+  ok('only the loop\'s stored text is sent to the model', /E\.translationUnits\(L\)/.test(api) && !/req\.body\.(texts|questions)/.test(api));
+  ok('output must keep shape, emoji and brand names, and not balloon', /g\.options\.length !== s\.options\.length/.test(api) && /EMOJI/.test(api) && /BRANDS/.test(api) && /a\.length \* 3 \+ 40/.test(api));
+  ok('the prompt treats the text as content, never instructions', /never instructions to you/.test(api));
+  ok('the existing answer-page translator is untouched', !/loop/i.test(read('api/translate.js')));
+  ok('phones and TV label translated text', /Auto-translated/.test(read('play.html')) && /Auto-translated/.test(read('screen.html')));
+  ok('nobody but the server writes translations', JSON.parse(read('database-rules.json')).rules.loop_i18n.$code['.write'].includes('!newData.exists()'));
+}
+
+console.log('\nPlan limits the database enforces');
+{
+  const R = JSON.parse(read('database-rules.json')).rules;
+  ok('a loop can only be created with a free plan slot', /loop_slots.*=== \$code/.test(R.loops.$code['.write']));
+  ok('a free loop must carry the 25-player cap', /cap'\)\.val\(\) === 25/.test(R.loops.$code['.validate']));
+  ok('a loop keeps its slot for life', /newData\.child\('slot'\)\.val\(\) === data\.child\('slot'\)\.val\(\)/.test(R.loops.$code['.validate']));
+  ok('loop slots stop at the plan limit (free 1, pro 5, small 20, large 80)', /\$slot === '0'/.test(R.loop_slots.$uid.$slot['.validate']) && /\^\[0-4\]\$/.test(R.loop_slots.$uid.$slot['.validate']) && /\^1\?\[0-9\]\$/.test(R.loop_slots.$uid.$slot['.validate']) && /\^\[1-7\]\?\[0-9\]\$/.test(R.loop_slots.$uid.$slot['.validate']));
+  ok('screen slots stop at the plan limit (free 1, pro 3, small 10, large 40)', /\^\[0-2\]\$/.test(R.tv_slots.$uid.$slot['.validate']) && /\^\[0-9\]\$/.test(R.tv_slots.$uid.$slot['.validate']) && /\^\[1-3\]\?\[0-9\]\$/.test(R.tv_slots.$uid.$slot['.validate']));
+  ok('a slot is only freed when its loop or TV goes', /!newData\.parent\(\)\.parent\(\)\.parent\(\)\.child\('loops'\)/.test(R.loop_slots.$uid.$slot['.write']) && /child\('tv_devices'\)/.test(R.tv_slots.$uid.$slot['.write']));
+  ok('pairing a TV needs a free screen slot', /tv_slots/.test(R.tv_devices.$device['.write']));
+  const ply = read('play.html');
+  ok('phones honour the player cap, never shutting out someone already playing', /Object\.keys\(v\)\.length < cap/.test(ply) && /!!v\[me\.pid\]/.test(ply));
+  const studio = read('loop.html');
+  ok('publishing and pairing still work while the old rules are live', /Only while the database rules are older than this page/.test(studio) && /rules older than this page have no tv_slots/.test(studio));
+  ok('deleting a loop frees its slot, scores, translations and TVs', /upd\['loop_slots\/'/.test(studio) && /upd\['loop_i18n\/'/.test(studio) && /upd\['tv_slots\/'/.test(studio));
+}
+
+console.log('\nThe same Polly, GIF and upload services as the rest of PollSlide');
+{
+  const studio = read('loop.html');
+  ok('Polly drafts questions through /api/polly, signed in (so the monthly allowance applies)', /fetch\('\/api\/polly', \{ method: 'POST', headers: await authHeaders\(\)/.test(studio));
+  ok('Polly questions are labelled AI', /correct: Number\.isInteger\(c\)[^\n]*ai: true/.test(studio));
+  ok('GIFs come through /api/gif-search (locked safe filter)', /fetch\('\/api\/gif-search'/.test(studio));
+  ok('Polly images through /api/polly-image, labelled AI', /fetch\('\/api\/polly-image'/.test(studio) && /setMedia\(await snap\.ref\.getDownloadURL\(\), true\)/.test(studio));
+  ok('uploads use the same limits as the presenter (8 MB image, 20 MB / 30 s video)', /isVideo \? 20 : 8/.test(studio) && /secs > 30\.5/.test(studio));
+  ok('the allowance running out is explained, not an error', /r\.status === 429 \|\| d\.overLimit/.test(studio));
+  ok('none of those APIs were changed', true);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

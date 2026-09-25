@@ -55,6 +55,7 @@
   .ad h2 { font-family:'Syne',sans-serif; font-size:7vmin; line-height:1.05; }
   .ad p { font-size:3.4vmin; color:#d8d8f0; line-height:1.4; max-width:80%; }
   .empty { flex:1; display:flex; align-items:center; justify-content:center; text-align:center; font-size:3.6vmin; color:var(--muted); padding:6vmin; line-height:1.5; }
+  .tr { display:inline-block; background:rgba(67,233,123,.12); color:#9ff0bd; border:.2vmin solid rgba(67,233,123,.4); border-radius:10vmin; padding:.4vmin 1.4vmin; font-size:1.7vmin; font-weight:700; vertical-align:middle; margin-left:1vmin; text-transform:none; letter-spacing:0; }
   .tag { align-self:flex-start; display:inline-block; background:var(--panel2); color:var(--muted); border-radius:10vmin; padding:.6vmin 1.8vmin; font-size:1.9vmin; font-weight:700; margin-bottom:1.6vmin; }
   .ai { display:inline-block; background:rgba(108,99,255,.18); color:#c9c5ff; border:.2vmin solid rgba(108,99,255,.5); border-radius:10vmin; padding:.4vmin 1.4vmin; font-size:1.7vmin; font-weight:700; letter-spacing:.02em; vertical-align:middle; margin-left:1vmin; text-transform:none; }
   .prize { font-size:2.1vmin; line-height:1.4; }
@@ -71,7 +72,7 @@
 </head>
 <body>
 <div id="stage">
-  <div id="main"><div class="empty">Loading LoopSlide…</div></div>
+  <div id="main"><div class="empty">…</div></div>
   <div id="side"></div>
 </div>
 <button id="fs" onclick="goFull()">⛶ Full screen</button>
@@ -80,7 +81,8 @@
 <script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="/loop-engine.js?v=eaf35aeb"></script>
+<script src="/loop-i18n.js?v=6e536b03"></script>
+<script src="/loop-engine.js?v=0f37af28"></script>
 <script>
 /* LoopSlide TV screen — screen#<CODE>
  * Reads only. What to show is computed from the clock (LoopEngine.positionAt), so this
@@ -99,8 +101,10 @@ const FIREBASE_CONFIG = {
 };
 firebase.initializeApp(FIREBASE_CONFIG);
 const db = firebase.database();
-const E = window.LoopEngine;
-const CODE = (location.hash || '').replace(/^#/, '').trim().toUpperCase().slice(0, 12);
+const E = window.LoopEngine, I = window.LoopI18n, t = I.t;
+const CODE = (location.hash || '').replace(/^#/, '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+I.set(I.nav());
+const num = n => Number(n || 0).toLocaleString(I.get());
 const APP = (window.PS_ENV && PS_ENV.appOrigin) || location.origin;
 const LETTERS = ['A','B','C','D','E','F'];
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -109,19 +113,36 @@ let offset = 0;                     // server − local clock, ms
 db.ref('.info/serverTimeOffset').on('value', s => { offset = s.val() || 0; });
 const now = () => Date.now() + offset;
 
-let loop = null, banned = {}, slotKey = '', ansRef = null, scoreRef = null;
+let loop = null, V = null, tr = null, trRef = null, trLang = null, banned = {}, slotKey = '', ansRef = null, scoreRef = null;
+/* The TV speaks the loop's screen language ('auto' = this TV browser's own). V is what the
+   room READS — translated where the organiser's auto-translation has it; loop is what the
+   clock runs on. Same rounds, same items, same answer order. */
+function screenLang() { return loop && loop.screenLang !== 'auto' ? loop.screenLang : I.nav(); }
+function relocalize() { V = loop ? (loop.autoTranslate ? E.localize(loop, tr, I.get()) : loop) : null; slotKey = ''; }
+function watchTranslation() {
+  const want = loop && loop.autoTranslate && I.get() !== loop.lang ? I.get() : null;
+  if (want === trLang) return;
+  if (trRef) { trRef.off(); trRef = null; }
+  tr = null; trLang = want;
+  if (want) { trRef = db.ref('loop_i18n/' + CODE + '/' + want); trRef.on('value', s => { tr = s.val(); relocalize(); }); }
+}
+document.getElementById('fs').textContent = t('⛶ Full screen');
 let answers = {}, scores = {};
 
 function main(html) { document.getElementById('main').innerHTML = html; }
 function side(html) { document.getElementById('side').innerHTML = html; }
 
 if (!CODE) {
-  main('<div class="empty">This screen needs a LoopSlide code.<br>Open it from LoopSlide Studio → “Open screen”.</div>');
+  main('<div class="empty">' + esc(t('This screen needs a LoopSlide code.')) + '<br>' + esc(t('Pair it at pollslide.com/tv.')) + '</div>');
 } else {
   db.ref('loops/' + CODE).on('value', snap => {
     const v = snap.val();
-    if (!v || !v.def) { loop = null; main('<div class="empty">No LoopSlide called <b>' + esc(CODE) + '</b>.<br>Check the link in LoopSlide Studio.</div>'); side(''); return; }
+    if (!v || !v.def) { loop = null; V = null; main('<div class="empty">' + t('No LoopSlide called {x}.', { x: '<b>' + esc(CODE) + '</b>' }) + '<br>' + esc(t('Check the link in LoopSlide Studio.')) + '</div>'); side(''); return; }
     loop = E.normalizeLoop(v.def);
+    I.set(screenLang());
+    document.getElementById('fs').textContent = t('⛶ Full screen');
+    watchTranslation();
+    relocalize();
     banned = v.banned || {};
     document.documentElement.style.setProperty('--accent', loop.brand.accent);
     slotKey = '';                    // force a redraw with the new definition
@@ -137,21 +158,21 @@ function renderSide(p) {
   side(`
     <div class="card">
       <div class="qr" id="qrBox"></div>
-      <div class="scan">Scan to play</div>
+      <div class="scan">${esc(t('Scan to play'))}</div>
       <div class="code">${esc(APP.replace(/^https?:\/\//, ''))}/play · ${esc(CODE)}</div>
     </div>
-    ${q ? `<div class="card"><div class="stat"><b id="ansCount">${Object.keys(answers).length}</b>answered this one</div></div>` : ''}
+    ${q ? `<div class="card"><div class="stat"><b id="ansCount">${Object.keys(answers).length}</b>${esc(t('answered this one'))}</div></div>` : ''}
     <div class="card leader">${leader
-      ? `👑 <span class="who">${esc(leader.a || '')} ${esc(leader.n)}</span> leads with <b>${leader.pts.toLocaleString()}</b>.<br>Can you beat them?`
-      : 'No one on the board yet — <b>first to answer takes the crown.</b>'}</div>
-    ${loop.compliance.prize ? `<div class="card prize">🎁 <b>${esc(loop.compliance.prize)}</b><br><span class="stat" style="font-size:1.8vmin;">No purchase necessary · rules on your phone</span></div>` : ''}
-    <div class="foot">${loop.compliance.organiser ? 'Run by ' + esc(loop.compliance.organiser) + ' · ' : ''}${loop.compliance.aiNote ? 'Some content made with AI · ' : ''}LoopSlide by PollSlide</div>`);
+      ? `👑 ${t('{x} leads with {n}.', { x: `<span class="who">${esc(leader.a || '')} ${esc(leader.n)}</span>`, n: `<b>${num(leader.pts)}</b>` })}<br>${esc(t('Can you beat them?'))}`
+      : esc(t('No one on the board yet — first to answer takes the crown.'))}</div>
+    ${loop.compliance.prize ? `<div class="card prize">🎁 <b>${esc(V.compliance.prize)}</b><br><span class="stat" style="font-size:1.8vmin;">${esc(t('No purchase necessary · rules on your phone'))}</span></div>` : ''}
+    <div class="foot">${loop.compliance.organiser ? esc(t('Run by {name}', { name: loop.compliance.organiser })) + ' · ' : ''}${loop.compliance.aiNote ? esc(t('Some content made with AI')) + ' · ' : ''}LoopSlide by PollSlide</div>`);
   const box = document.getElementById('qrBox');
   if (box && window.QRCode) { try { new QRCode(box, { text: playUrl() + '/' + p.cycle, width: 256, height: 256, correctLevel: QRCode.CorrectLevel.M }); } catch (e) {} }
 }
 
 function brandHtml() {
-  const b = loop.brand;
+  const b = V.brand;
   return `<div class="brand">${b.logo ? `<img src="${esc(b.logo)}" alt="">` : ''}<div class="t">${esc(b.title || loop.name)}</div></div>`;
 }
 
@@ -165,10 +186,12 @@ function media(url, cls) {
 }
 // Transparency labels: AI-generated content (EU AI Act art. 50, California SB 942, China's
 // labelling measures) and who an ad is from (FTC endorsement guides, EU DSA art. 26).
-const aiTag = it => it && it.ai ? '<span class="ai">✨ AI-generated</span>' : '';
+const aiTag = it => (it && it.ai ? `<span class="ai">${esc(t('✨ AI-generated'))}</span>` : '') + (it && it.tr ? `<span class="tr">${esc(t('🌐 Auto-translated'))}</span>` : '');
 function optMedia(it, i) { const u = it.optImgs && it.optImgs[i]; return u ? `<img class="oimg" src="${esc(u)}" alt="">` : ''; }
 
-function itemOf(slot) { const s = loop.sets[slot.set]; return s ? s.items[slot.item] : null; }
+// The item to SHOW (translated where available). Answers, ids and the correct index are
+// identical to the untranslated one, so the counting below is unaffected.
+function itemOf(slot) { const s = (V || loop).sets[slot.set]; return s ? s.items[slot.item] : null; }
 
 function watch(p) {
   // Answers to the question on screen (for the count and the reveal), and the running
@@ -202,7 +225,7 @@ function topScores(n) {
 function tick() {
   if (!loop) return;
   const p = E.positionAt(loop, now());
-  if (!p) { main('<div class="empty">This LoopSlide has no questions yet.<br>Add some in LoopSlide Studio and publish.</div>'); side(''); return; }
+  if (!p) { main('<div class="empty">' + esc(t('This LoopSlide has no questions yet.')) + '<br>' + esc(t('Add some in LoopSlide Studio and publish.')) + '</div>'); side(''); return; }
   const key = p.cycle + ':' + p.index;
   if (key !== slotKey) { slotKey = key; watch(p); draw(p); renderSide(p); }
   const bar = document.querySelector('.bar i');
@@ -220,9 +243,9 @@ function draw(p) {
 }
 
 function drawQuestion(p) {
-  const it = itemOf(p.slot), set = loop.sets[p.slot.set];
+  const it = itemOf(p.slot), set = V.sets[p.slot.set];
   main(`${brandHtml()}<div class="bar"><i></i></div>
-    <div class="kicker">${esc(set.title || 'Question')} · <span id="cd"></span>s${aiTag(it)}</div>
+    <div class="kicker">${esc(set.title || t('Question'))} · <span id="cd"></span>s${aiTag(it)}</div>
     ${media(it.img, 'qimg')}
     <div class="q">${esc(it.text)}</div>
     <div class="opts">${it.options.map((o, i) => `<div class="opt"><span class="L">${LETTERS[i]}</span>${optMedia(it, i)}<span>${esc(o)}</span></div>`).join('')}</div>`);
@@ -238,38 +261,38 @@ function drawReveal(p) {
   const hasC = it.correct !== null;
   const right = hasC ? per[it.correct] : 0;
   main(`${brandHtml()}<div class="bar"><i></i></div>
-    <div class="kicker">${hasC ? (n ? Math.round(right / n * 100) + '% got it right' : 'The answer') : 'How the room voted'}${aiTag(it)}</div>
+    <div class="kicker">${esc(hasC ? (n ? t('{n}% got it right', { n: Math.round(right / n * 100) }) : t('The answer')) : t('How the room voted'))}${aiTag(it)}</div>
     <div class="q">${esc(it.text)}</div>
     <div class="opts">${it.options.map((o, i) => {
       const pc = n ? Math.round(per[i] / n * 100) : 0;
       const cls = hasC ? (i === it.correct ? 'good' : 'dim') : '';
       return `<div class="opt ${cls}"><span class="fill" style="width:${pc}%"></span><span class="L">${hasC && i === it.correct ? '✓' : LETTERS[i]}</span>${optMedia(it, i)}<span>${esc(o)}</span><span class="pct">${pc}%</span></div>`;
     }).join('')}</div>
-    ${fastest.length ? `<div class="kicker" style="margin-top:3vmin;">${hasC ? '⚡ Fastest right' : '🙌 First in'}</div>
+    ${fastest.length ? `<div class="kicker" style="margin-top:3vmin;">${esc(hasC ? t('⚡ Fastest right') : t('🙌 First in'))}</div>
       <div class="board">${fastest.map((a, i) => `<div class="row ${i === 0 ? 'first' : ''}"><span class="rk">${['🥇','🥈','🥉'][i]}</span><span class="av">${esc(a.a || '')}</span><span class="nm">${esc(a.n)}</span><span class="pt">${a.ms ? (a.ms / 1000).toFixed(1) + 's' : ''}</span></div>`).join('')}</div>` : ''}`);
 }
 
 function drawAd(p) {
   const it = itemOf(p.slot);
   main(`${brandHtml()}<div class="bar"><i></i></div>
-    <div class="ad"><div>${it.sponsored ? `<span class="tag">${it.sponsor ? 'Sponsored by ' + esc(it.sponsor) : 'Sponsored'}</span>` : ''}${aiTag(it)}</div>
+    <div class="ad"><div>${it.sponsored ? `<span class="tag">${esc(it.sponsor ? t('Sponsored by {name}', { name: it.sponsor }) : t('Sponsored'))}</span>` : ''}${aiTag(it)}</div>
       ${media(it.img, 'hero')}
       ${it.headline ? `<h2>${esc(it.headline)}</h2>` : ''}
       ${it.body ? `<p>${esc(it.body)}</p>` : ''}
-      ${it.link ? `<div style="display:flex;align-items:center;gap:2.4vmin;"><div class="qr" id="adQr" style="padding:1vmin;"></div><div class="stat" style="font-size:2.6vmin;">Scan for the offer</div></div>` : ''}
+      ${it.link ? `<div style="display:flex;align-items:center;gap:2.4vmin;"><div class="qr" id="adQr" style="padding:1vmin;"></div><div class="stat" style="font-size:2.6vmin;">${esc(t('Scan for the offer'))}</div></div>` : ''}
     </div>`);
   const b = document.getElementById('adQr');
   if (b && window.QRCode) { try { new QRCode(b, { text: it.link, width: 160, height: 160 }); b.querySelectorAll('canvas,img').forEach(x => { x.style.cssText = 'width:15vmin!important;height:15vmin!important'; }); } catch (e) {} }
 }
 
 function boardHtml(rows, empty) {
-  return rows.length ? `<div class="board">${rows.map((r, i) => `<div class="row ${i === 0 ? 'first' : ''}"><span class="rk">${i < 3 ? ['🥇','🥈','🥉'][i] : '#' + (i + 1)}</span><span class="av">${esc(r.a || '')}</span><span class="nm">${esc(r.n)}</span><span class="pt">${(r.pts || 0).toLocaleString()}</span></div>`).join('')}</div>`
+  return rows.length ? `<div class="board">${rows.map((r, i) => `<div class="row ${i === 0 ? 'first' : ''}"><span class="rk">${i < 3 ? ['🥇','🥈','🥉'][i] : '#' + (i + 1)}</span><span class="av">${esc(r.a || '')}</span><span class="nm">${esc(r.n)}</span><span class="pt">${num(r.pts)}</span></div>`).join('')}</div>`
     : `<div class="empty" style="flex:0;padding:4vmin 0;">${empty}</div>`;
 }
 
 async function drawSetBoard(p) {
-  const set = loop.sets[p.slot.set];
-  main(`${brandHtml()}<div class="bar"><i></i></div><div class="kicker">🏁 ${esc(set.title || 'Round')} — this round</div><div id="sb"><div class="empty" style="flex:0;">Counting…</div></div>`);
+  const set = loop.sets[p.slot.set], vset = V.sets[p.slot.set];
+  main(`${brandHtml()}<div class="bar"><i></i></div><div class="kicker">${esc(t('🏁 {x} — this round', { x: vset.title || t('Round') }))}</div><div id="sb"><div class="empty" style="flex:0;">${esc(t('Counting…'))}</div></div>`);
   // Sum this cycle's answers for this set's questions.
   const period = E.periodKey(loop, now());
   const totals = {};
@@ -284,13 +307,13 @@ async function drawSetBoard(p) {
     } catch (e) {}
   }));
   const rows = Object.values(totals).sort((a, b) => b.pts - a.pts).slice(0, loop.board.size);
-  const el = document.getElementById('sb'); if (el) el.innerHTML = boardHtml(rows, 'Nobody played this round — scan the code and be first next time!');
+  const el = document.getElementById('sb'); if (el) el.innerHTML = boardHtml(rows, esc(t('Nobody played this round — scan the code and be first next time!')));
 }
 
 function drawGrand() {
-  const label = loop.board.reset === 'never' ? 'All-time leaders' : loop.board.reset === 'cycle' ? 'Leaders this loop'
-    : loop.board.days === 1 ? "Today's leaders" : `Leaders — ${loop.board.days}-day board`;
-  main(`${brandHtml()}<div class="bar"><i></i></div><div class="kicker">🏆 ${label}</div>${boardHtml(topScores(loop.board.size), 'The board is empty — scan the code and claim the top spot!')}`);
+  const label = loop.board.reset === 'never' ? t('All-time leaders') : loop.board.reset === 'cycle' ? t('Leaders this loop')
+    : loop.board.days === 1 ? t('Today’s leaders') : t('Leaders — {n}-day board', { n: loop.board.days });
+  main(`${brandHtml()}<div class="bar"><i></i></div><div class="kicker">🏆 ${esc(label)}</div>${boardHtml(topScores(loop.board.size), esc(t('The board is empty — scan the code and claim the top spot!')))}`);
 }
 
 // ── Kiosk behaviour: full screen, keep the display awake, and a nightly refresh so a

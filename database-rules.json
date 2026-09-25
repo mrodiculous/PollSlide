@@ -209,8 +209,8 @@
     "loops": {
       "$code": {
         ".read": true,
-        ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid) || (data.exists() && data.child('ownerUid').val() === auth.uid && (!newData.exists() || newData.child('ownerUid').val() === auth.uid)))",
-        ".validate": "!newData.exists() || (newData.hasChildren(['ownerUid','def']) && newData.child('ownerUid').isString())"
+        ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid && newData.parent().parent().child('loop_slots').child(auth.uid).child(newData.child('slot').val() + '').val() === $code) || (data.exists() && data.child('ownerUid').val() === auth.uid && (!newData.exists() || newData.child('ownerUid').val() === auth.uid)))",
+        ".validate": "!newData.exists() || (newData.hasChildren(['ownerUid','def']) && newData.child('ownerUid').isString() && (!data.exists() || newData.child('slot').val() === data.child('slot').val()) && (newData.child('cap').val() === 25 || (root.child('users').child(auth.uid).child('tier').val() === 'pro' || root.child('users').child(auth.uid).child('tier').val() === 'team_small' || root.child('users').child(auth.uid).child('tier').val() === 'team' || root.child('users').child(auth.uid).child('tier').val() === 'team_large' || root.child('users').child(auth.uid).child('tier').val() === 'white' || root.child('users').child(auth.uid).child('tier').val() === 'enterprise')))"
       }
     },
     "loop_answers": {
@@ -258,7 +258,7 @@
     "tv_devices": {
       "$device": {
         ".read": true,
-        ".write": "auth != null && ((data.exists() && data.child('ownerUid').val() === auth.uid && (!newData.exists() || newData.child('ownerUid').val() === auth.uid)) || (!data.exists() && newData.child('ownerUid').val() === auth.uid && root.child('tv_pair').child(newData.child('pair').val() + '').child('device').val() === $device && root.child('tv_pair').child(newData.child('pair').val() + '').child('createdAt').val() > now - 900000))",
+        ".write": "auth != null && ((data.exists() && data.child('ownerUid').val() === auth.uid && (!newData.exists() || newData.child('ownerUid').val() === auth.uid)) || (!data.exists() && newData.child('ownerUid').val() === auth.uid && root.child('tv_pair').child(newData.child('pair').val() + '').child('device').val() === $device && root.child('tv_pair').child(newData.child('pair').val() + '').child('createdAt').val() > now - 900000 && newData.parent().parent().child('tv_slots').child(auth.uid).child(newData.child('slot').val() + '').val() === $device))",
         ".validate": "newData.hasChildren(['ownerUid','loop','name'])",
         "ownerUid": {
           ".validate": "newData.isString()"
@@ -277,7 +277,34 @@
         },
         "$other": {
           ".validate": false
+        },
+        "slot": {
+          ".validate": "newData.isString() && (!data.exists() || newData.val() === data.val())"
         }
+      }
+    },
+    "loop_slots": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "$slot": {
+          ".write": "auth != null && auth.uid === $uid && ((!data.exists() && newData.exists()) || (data.exists() && !newData.exists() && !newData.parent().parent().parent().child('loops').child(data.val() + '').exists()))",
+          ".validate": "newData.isString() && ($slot === '0' || (root.child('users').child(auth.uid).child('tier').val() === 'pro' && $slot.matches(/^[0-4]$/)) || ((root.child('users').child(auth.uid).child('tier').val() === 'team_small' || root.child('users').child(auth.uid).child('tier').val() === 'team') && $slot.matches(/^1?[0-9]$/)) || ((root.child('users').child(auth.uid).child('tier').val() === 'team_large' || root.child('users').child(auth.uid).child('tier').val() === 'white') && $slot.matches(/^[1-7]?[0-9]$/)) || (root.child('users').child(auth.uid).child('tier').val() === 'enterprise' && $slot.matches(/^[0-9]{1,4}$/)))"
+        }
+      }
+    },
+    "tv_slots": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "$slot": {
+          ".write": "auth != null && auth.uid === $uid && ((!data.exists() && newData.exists()) || (data.exists() && !newData.exists() && !newData.parent().parent().parent().child('tv_devices').child(data.val() + '').exists()))",
+          ".validate": "newData.isString() && ($slot === '0' || (root.child('users').child(auth.uid).child('tier').val() === 'pro' && $slot.matches(/^[0-2]$/)) || ((root.child('users').child(auth.uid).child('tier').val() === 'team_small' || root.child('users').child(auth.uid).child('tier').val() === 'team') && $slot.matches(/^[0-9]$/)) || ((root.child('users').child(auth.uid).child('tier').val() === 'team_large' || root.child('users').child(auth.uid).child('tier').val() === 'white') && $slot.matches(/^[1-3]?[0-9]$/)) || (root.child('users').child(auth.uid).child('tier').val() === 'enterprise' && $slot.matches(/^[0-9]{1,4}$/)))"
+        }
+      }
+    },
+    "loop_i18n": {
+      "$code": {
+        ".read": true,
+        ".write": "auth != null && !newData.exists() && root.child('loops').child($code).child('ownerUid').val() === auth.uid"
       }
     }
   }
