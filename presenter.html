@@ -1124,6 +1124,7 @@
 </div>
 
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
@@ -1139,12 +1140,40 @@ const FIREBASE_CONFIG = {
   appId: "1:285529140046:web:983c1ee8000a2ca8f80c1f",
   measurementId: "G-NWQY4YLNRC"
 };
-const BASE_URL = "https://app.pollslide.com/answer";
+const BASE_URL = ((window.PS_ENV && PS_ENV.appOrigin) || 'https://app.pollslide.com') + "/answer";
 
 firebase.initializeApp(FIREBASE_CONFIG);
-const db = firebase.database();
-const auth = firebase.auth();
-const storage = firebase.storage();
+/* MASQUERADE (admin support "view as this user"). Only when opened by admin.html with
+   ?masquerade=1. The session lives in a SEPARATE, in-memory Firebase app, so it never
+   touches the admin's own saved sign-in (which every other tab shares) and vanishes when
+   this window closes. Without the flag this is exactly the default app, as before. */
+const _MASQ = /[?&]masquerade=1(&|$)/.test(location.search) && !!window.opener;
+const _fbApp = _MASQ ? firebase.initializeApp(FIREBASE_CONFIG, 'ps-masquerade') : firebase.app();
+const db = _fbApp.database();
+const auth = _fbApp.auth();
+if (_MASQ) {
+  auth.setPersistence(firebase.auth.Auth.Persistence.NONE).catch(()=>{});
+  window.addEventListener('message', e => {
+    if (e.origin !== location.origin || e.source !== window.opener) return;
+    if (!e.data || e.data.type !== 'ps-masq-token' || !e.data.token) return;
+    auth.signInWithCustomToken(e.data.token).then(() => {
+      const bar = document.createElement('div');
+      bar.id = 'psMasqBar';
+      bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483000;background:#c0392b;color:#fff;font:600 13px/1.4 -apple-system,BlinkMacSystemFont,sans-serif;padding:8px 14px;display:flex;gap:12px;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.3);';
+      const txt = document.createElement('span');
+      txt.textContent = '🕵️ Viewing as ' + (e.data.email || 'user') + ' — changes here affect their real account.';
+      const out = document.createElement('button');
+      out.textContent = 'Exit';
+      out.style.cssText = 'background:#fff;color:#c0392b;border:0;border-radius:6px;padding:4px 12px;font-weight:800;cursor:pointer;';
+      out.onclick = () => auth.signOut().finally(() => window.close());
+      bar.append(txt, out);
+      document.body.appendChild(bar);
+      document.title = '[Viewing as ' + (e.data.email || 'user') + '] ' + document.title;
+    }).catch(() => alert('Could not open this account. Close this window and try again.'));
+  });
+  window.addEventListener('load', () => { try { window.opener.postMessage({ type: 'ps-masq-ready' }, location.origin); } catch (err) {} });
+}
+const storage = _fbApp.storage();   // same app as db/auth (matters in masquerade mode)
 
 // ─── AUTH STATE ───────────────────────────────────────────────────────────────
 let currentUser = null;
@@ -1384,18 +1413,21 @@ auth.onAuthStateChanged(user => {
       lastSeen: Date.now(),
       createdAt: user.metadata?.creationTime ? new Date(user.metadata.creationTime).getTime() : Date.now(),
     };
-    db.ref(`users/${userId}`).update(loginMeta).catch(()=>{});
-    db.ref(`admin/users_index/${userId}`).update(Object.assign({}, loginMeta, { tier: userTier || 'free' })).catch(()=>{});
+    // Not while an admin is viewing as this user — that is not the user logging in.
+    if (!_MASQ) {
+      db.ref(`users/${userId}`).update(loginMeta).catch(()=>{});
+      db.ref(`admin/users_index/${userId}`).update(Object.assign({}, loginMeta, { tier: userTier || 'free' })).catch(()=>{});
+    }
 
-    // Check inbox for admin messages and show unread ones as toasts
+    // Check inbox for admin messages. They used to be 3.5-second toasts, marked read the
+    // moment they were SHOWN — so a message that arrived while the tab was in the background,
+    // or several at once, vanished before anyone read it and never came back. Now they sit in
+    // a card until the user dismisses them, and are only marked read on dismissal.
     db.ref(`users/${userId}/inbox`).orderByChild('read').equalTo(false).once('value').then(snap => {
       if (!snap.exists()) return;
-      Object.entries(snap.val()).forEach(([msgId, msg]) => {
-        if (!msg.read) {
-          setTimeout(() => toast('📬 Message from PollSlide: ' + msg.text, msg.type || 'info'), 1200);
-          db.ref(`users/${userId}/inbox/${msgId}/read`).set(true);
-        }
-      });
+      const unread = Object.entries(snap.val()).filter(([, m]) => m && !m.read && m.text)
+        .sort((a, b) => (a[1].sentAt || 0) - (b[1].sentAt || 0));
+      if (unread.length) setTimeout(() => showAdminMessages(unread), 1200);
     }).catch(()=>{});
 
     // Re-consent: if an admin has pushed a newer policy version than this user has
@@ -2505,7 +2537,7 @@ function openPPTGuide() {
     const code = pres.sessionCode || '';
     if (liveQIdx !== null && code) {
       const q = questions[liveQIdx];
-      const url = `https://app.pollslide.com/answer?session=${code}&q=${liveQIdx}`;
+      const url = `${((window.PS_ENV && PS_ENV.appOrigin) || 'https://app.pollslide.com')}/answer?session=${code}&q=${liveQIdx}`;
       codeEl.innerHTML = `
         <div>
           <div style="font-size:10px;color:var(--muted);margin-bottom:2px;">Session code · Q${liveQIdx+1}: ${(q?.text||'').slice(0,40)}</div>
@@ -3564,6 +3596,12 @@ function renderProductTabs() {
       <span class="product-tab-label">${p.short}${n?` (${n})`:''}</span>
     </div>`;
   }));
+  // LoopSlide lives in its own studio (/loop) — it runs on public screens, not in a deck
+  // list — so its tab is a link, not a filter. The four tabs above behave exactly as before.
+  tabs.push(`<a class="product-tab" href="/loop" style="text-decoration:none;color:inherit;" title="LoopSlide — questions that loop on a TV or display, with leaderboards and sponsor cards">
+      <span class="product-tab-icon">🔁</span>
+      <span class="product-tab-label">Loops <span style="font-size:9px;font-weight:800;background:var(--accent2);color:#fff;border-radius:6px;padding:1px 5px;margin-left:3px;">NEW</span></span>
+    </a>`);
   bar.innerHTML = tabs.join('');
   // Brand + create button follow activeProduct (a real product), never typeFilter,
   // which may be 'all'.
@@ -7832,6 +7870,10 @@ async function runPolly() {
     for (const gq of data.questions) {
       const q = pollyToQuestion(gq);   // emojis baked into the text; add images per-question if wanted
       if (!q.id) q.id = PSQid.fresh();
+      // Provenance for AI-transparency rules (EU AI Act art. 50, California SB 942, China's
+      // labelling measures). Metadata only — nothing in the live products reads it; LoopSlide
+      // uses it to label AI-written questions on public screens.
+      q.aiGenerated = true;
       questions.push(q);
       added++;
     }
@@ -8495,7 +8537,8 @@ async function generateQImage(idx) {
     }
     if (!r.ok || !d.image) throw new Error(d.error || 'Generation failed');
     const url = await uploadDataUrl(d.image);   // host it → small, stable URL
-    questions[idx].image = url; saveBack(); renderEditor(idx);   // the server counts this toward the quota
+    questions[idx].image = url; questions[idx].aiImage = true;   // provenance, see aiGenerated
+    saveBack(); renderEditor(idx);   // the server counts this toward the quota
     toast('Image generated! ✨', 'success');
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = 'Generate image'; }
@@ -8802,6 +8845,51 @@ function toast(msg,type='info',action){
   }
   document.body.appendChild(el);setTimeout(()=>el.remove(),ttl);
   return el;
+}
+
+// ─── MESSAGES FROM POLLSLIDE (admin broadcasts) ───────────────────────────────
+// A card that stays until dismissed. Text is set with textContent — admin text is never
+// parsed as HTML here. Marked read only when the user clicks, so nothing is lost.
+function showAdminMessages(list) {
+  if (!list || !list.length || document.getElementById('psAdminMsgs')) return;
+  const tone = { success:'var(--accent3)', warning:'var(--accent4)', danger:'var(--accent2)', info:'var(--accent)' };
+  const wrap = document.createElement('div');
+  wrap.id = 'psAdminMsgs';
+  wrap.setAttribute('role', 'dialog');
+  wrap.setAttribute('aria-label', 'Messages from PollSlide');
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:100050;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+  const card = document.createElement('div');
+  card.style.cssText = 'background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:16px;max-width:480px;width:100%;max-height:80vh;overflow:auto;padding:22px 22px 18px;box-shadow:0 20px 60px rgba(0,0,0,.45);';
+  const h = document.createElement('div');
+  h.style.cssText = "font-family:'Syne',sans-serif;font-weight:800;font-size:18px;margin-bottom:14px;";
+  h.textContent = '📬 ' + (list.length > 1 ? list.length + ' messages from PollSlide' : 'Message from PollSlide');
+  card.appendChild(h);
+  list.forEach(([, m]) => {
+    const row = document.createElement('div');
+    row.style.cssText = 'border-left:3px solid ' + (tone[m.type] || tone.info) + ';background:var(--surface2);border-radius:10px;padding:12px 14px;margin-bottom:10px;white-space:pre-wrap;line-height:1.5;font-size:14px;';
+    row.textContent = m.text;
+    if (m.sentAt) {
+      const d = document.createElement('div');
+      d.style.cssText = 'font-size:11px;color:var(--muted);margin-top:6px;';
+      d.textContent = new Date(m.sentAt).toLocaleString();
+      row.appendChild(d);
+    }
+    card.appendChild(row);
+  });
+  const btn = document.createElement('button');
+  btn.type = 'button'; btn.className = 'btn btn-primary';
+  btn.style.cssText = 'width:100%;justify-content:center;margin-top:4px;';
+  btn.textContent = 'Got it';
+  btn.onclick = () => {
+    const upd = {};
+    list.forEach(([id]) => { upd[`users/${userId}/inbox/${id}/read`] = true; });
+    if (!_MASQ) db.ref().update(upd).catch(()=>{});   // an admin viewing as the user must not mark them read
+    wrap.remove();
+  };
+  card.appendChild(btn);
+  wrap.appendChild(card);
+  document.body.appendChild(wrap);
+  btn.focus();
 }
 
 // ─── POLICY RE-CONSENT BANNER ─────────────────────────────────────────────────
@@ -10373,7 +10461,7 @@ function renderPresentSlide(idx) {
             </div>`
           : '');
 
-  const qUrl = `https://app.pollslide.com/answer#${presentations[activePresId]?.sessionCode||''}/${idx}`;
+  const qUrl = `${((window.PS_ENV && PS_ENV.appOrigin) || 'https://app.pollslide.com')}/answer#${presentations[activePresId]?.sessionCode||''}/${idx}`;
   const qrId = 'presentQR_' + idx;
 
   // ── Left 2/9 column inner HTML ────────────────────────────────────────────

@@ -12,6 +12,7 @@
 <script src="/present-display.js?v=b01c9c51"></script>
 <script src="/ui-lang.js?v=02d1bd21"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 
 <!-- QR generator for audience code display -->
@@ -393,7 +394,7 @@ const FB_CONFIG = {
   messagingSenderId: "285529140046",
   appId: "1:285529140046:web:983c1ee8000a2ca8f80c1f"
 };
-const BASE_URL   = "https://app.pollslide.com/answer";
+const BASE_URL   = ((window.PS_ENV && PS_ENV.appOrigin) || 'https://app.pollslide.com') + "/answer";
 const letters    = ['A','B','C','D','E','F'];
 
 let db;

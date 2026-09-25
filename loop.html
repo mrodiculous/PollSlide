@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>LoopSlide Studio — PollSlide</title>
+<link rel="icon" href="/icon-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#0b0b15; --surface:#13131f; --surface2:#1b1b2c; --surface3:#23233a; --border:#2a2a45; --text:#ececff; --muted:#9090b8;
+          --accent:#6c63ff; --accent2:#ff6584; --accent3:#43e97b; --accent4:#f7b731; --radius:14px; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:var(--bg); color:var(--text); font-family:'DM Sans',system-ui,sans-serif; min-height:100vh; }
+  header { display:flex; align-items:center; gap:14px; padding:14px 22px; border-bottom:1px solid var(--border); position:sticky; top:0; background:rgba(11,11,21,.92); backdrop-filter:blur(8px); z-index:5; }
+  .logo { font-family:'Syne',sans-serif; font-weight:800; font-size:19px; display:flex; align-items:center; gap:9px; }
+  .logo .mk { width:26px; height:26px; border-radius:7px; background:linear-gradient(135deg,var(--accent),var(--accent2)); display:flex; align-items:center; justify-content:center; font-size:14px; }
+  header a.back { color:var(--muted); text-decoration:none; font-size:13px; margin-left:auto; }
+  main { max-width:1100px; margin:0 auto; padding:24px 20px 80px; }
+  h1 { font-family:'Syne',sans-serif; font-size:26px; margin-bottom:6px; }
+  h2 { font-family:'Syne',sans-serif; font-size:18px; margin-bottom:12px; }
+  .sub { color:var(--muted); font-size:14px; line-height:1.55; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:18px; margin-bottom:14px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:12px; }
+  .loopcard { cursor:pointer; transition:border-color .15s, transform .15s; }
+  .loopcard:hover { border-color:var(--accent); transform:translateY(-2px); }
+  .btn { display:inline-flex; align-items:center; gap:6px; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:10px; padding:9px 14px; font:600 13px 'DM Sans',sans-serif; cursor:pointer; text-decoration:none; }
+  .btn:hover { border-color:var(--accent); }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.green { background:rgba(67,233,123,.14); border-color:rgba(67,233,123,.5); color:var(--accent3); }
+  .btn.danger { color:var(--accent2); }
+  .btn.sm { padding:6px 10px; font-size:12px; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  label.f { display:block; font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:10px 0 5px; }
+  input, select, textarea { width:100%; background:var(--surface2); color:var(--text); border:1px solid var(--border); border-radius:9px; padding:9px 11px; font:500 14px 'DM Sans',sans-serif; }
+  textarea { min-height:60px; resize:vertical; }
+  input[type=color] { padding:2px; height:38px; }
+  input[type=checkbox], input[type=radio] { width:auto; }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .cols3 { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  .set { border-left:3px solid var(--accent); }
+  .item { background:var(--surface2); border:1px solid var(--border); border-radius:12px; padding:12px; margin:10px 0; }
+  .item.ad { border-left:3px solid var(--accent4); }
+  .item .hd { display:flex; align-items:center; gap:8px; margin-bottom:8px; font-weight:700; font-size:13px; }
+  .item .hd .sp { margin-left:auto; display:flex; gap:4px; }
+  .opt { display:flex; gap:8px; align-items:center; margin:6px 0; }
+  .opt input[type=text] { flex:1; }
+  .pill { font-size:11px; font-weight:700; padding:3px 9px; border-radius:100px; background:var(--surface3); color:var(--muted); }
+  .pill.live { background:rgba(67,233,123,.15); color:var(--accent3); }
+  .toast { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); background:var(--surface2); border:1px solid var(--border); border-left:4px solid var(--accent); padding:12px 18px; border-radius:10px; font-weight:600; z-index:50; max-width:90vw; }
+  .modal { position:fixed; inset:0; background:rgba(0,0,0,.6); display:flex; align-items:center; justify-content:center; padding:16px; z-index:40; }
+  .modal .card { max-width:560px; width:100%; max-height:84vh; overflow:auto; margin:0; }
+  .deck { display:flex; align-items:center; gap:10px; padding:10px; border-radius:10px; cursor:pointer; }
+  .deck:hover { background:var(--surface2); }
+  .note { font-size:12.5px; color:var(--muted); line-height:1.5; }
+  .emo { background:var(--surface3); border:1px solid var(--border); border-radius:8px; padding:6px 8px; cursor:pointer; font-size:15px; flex-shrink:0; }
+  #emoPal { position:fixed; z-index:60; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:8px; display:grid; grid-template-columns:repeat(10,1fr); gap:2px; width:340px; max-width:92vw; box-shadow:0 12px 40px rgba(0,0,0,.5); }
+  #emoPal button { background:none; border:0; font-size:20px; padding:4px; border-radius:6px; cursor:pointer; }
+  #emoPal button:hover { background:var(--surface3); }
+  .oimgIn { max-width:190px; }
+  .sticky { position:sticky; top:62px; z-index:4; background:var(--bg); padding:10px 0; }
+  @media (max-width:720px){ .cols,.cols3{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo"><span class="mk">🔁</span>LoopSlide <span class="pill">Studio</span></div>
+  <a class="back" href="/presenter">← Back to PollSlide</a>
+</header>
+<main id="root"><div class="sub">Loading…</div></main>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="/ps-env.js?v=717fca7b"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script src="/loop-engine.js?v=eaf35aeb"></script>
+<script>
+/* LoopSlide Studio — build, publish and run loops for public screens.
+ * Data:  users/<uid>/loops/<CODE>   { name, def (draft), publishedAt, updatedAt }  — private
+ *        loops/<CODE>               { ownerUid, def, banned, updatedAt }            — public
+ * Import/export speaks PollSlide's own deck format (users/<uid>/presentations), so a
+ * round can come from — or go back to — any PollSlide product. */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME",
+  authDomain: "echonest-live-survey.firebaseapp.com",
+  databaseURL: "https://echonest-live-survey-default-rtdb.firebaseio.com",
+  projectId: "echonest-live-survey",
+  storageBucket: "echonest-live-survey.firebasestorage.app",
+  messagingSenderId: "285529140046",
+  appId: "1:285529140046:web:983c1ee8000a2ca8f80c1f",
+  measurementId: "G-NWQY4YLNRC"
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.database(), auth = firebase.auth();
+const E = window.LoopEngine;
+const APP = (window.PS_ENV && PS_ENV.appOrigin) || location.origin;
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $ = id => document.getElementById(id);
+const uid6 = () => Math.random().toString(36).slice(2, 8);
+const PRODUCT_ICON = { poll:'🗳️', survey:'📋', quiz:'🏆', study:'📚', present:'🎬' };
+const PRODUCT_NAME = { poll:'PollSlide', survey:'SurveySlide', quiz:'QuizSlide', study:'StudySlide' };
+const LOOP_LIMIT = { free: 1 };   // loops a Free account may keep; paid plans are unlimited
+
+let user = null, tier = 'free', myLoops = {}, cur = null, curCode = null;
+
+function toast(m) { document.querySelectorAll('.toast').forEach(t => t.remove()); const t = document.createElement('div'); t.className = 'toast'; t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 4200); }
+function root(h) { $('root').innerHTML = h; }
+
+auth.onAuthStateChanged(async u => {
+  user = u;
+  if (!u) return signInView();
+  try { const t = await db.ref('users/' + u.uid + '/tier').get(); tier = t.val() || 'free'; } catch (e) {}
+  db.ref('users/' + u.uid + '/loops').on('value', s => { myLoops = s.val() || {}; if (!cur) listView(); });
+});
+
+function signInView(err) {
+  root(`<div class="card" style="max-width:420px;margin:40px auto;">
+    <h1>Sign in to LoopSlide</h1><p class="sub" style="margin-bottom:12px;">Use your PollSlide account.</p>
+    <input id="em" type="email" placeholder="Email" autocomplete="email" style="margin-bottom:8px;">
+    <input id="pw" type="password" placeholder="Password" autocomplete="current-password" style="margin-bottom:8px;">
+    <div class="note" style="color:var(--accent2);min-height:18px;">${esc(err || '')}</div>
+    <button class="btn primary" style="width:100%;justify-content:center;margin-top:6px;" onclick="doSignIn()">Sign in</button>
+    <p class="note" style="margin-top:12px;">No account? <a href="/presenter" style="color:var(--accent)">Create one free in PollSlide</a>, then come back.</p></div>`);
+}
+function doSignIn() { auth.signInWithEmailAndPassword($('em').value.trim(), $('pw').value).catch(e => signInView(e.message)); }
+
+// ── LIST ─────────────────────────────────────────────────────────────────────
+function listView() {
+  cur = null; curCode = null;
+  const entries = Object.entries(myLoops).sort((a, b) => (b[1].updatedAt || 0) - (a[1].updatedAt || 0));
+  root(`<div class="row" style="margin-bottom:18px;"><div><h1>Your loops</h1>
+      <p class="sub">A loop plays your questions on a screen, over and over. People scan the QR, play on their phones, and climb the leaderboard.</p></div>
+      <button class="btn primary" style="margin-left:auto;" onclick="newLoop()">+ New loop</button></div>
+    ${entries.length ? `<div class="grid">${entries.map(([code, l]) => `
+      <div class="card loopcard" onclick="openLoop('${esc(code)}')">
+        <div class="row" style="margin-bottom:6px;"><b style="font-size:16px;">${esc(l.name || 'Untitled loop')}</b>
+          <span class="pill ${l.publishedAt ? 'live' : ''}" style="margin-left:auto;">${l.publishedAt ? '● Live' : 'Draft'}</span></div>
+        <div class="note">${countQs(l.def)} questions · code ${esc(code)}</div>
+      </div>`).join('')}</div>`
+    : `<div class="card" style="text-align:center;padding:40px 20px;"><div style="font-size:42px;margin-bottom:8px;">🔁</div>
+        <h2>Make your first loop</h2><p class="sub" style="max-width:460px;margin:0 auto 16px;">Start from scratch, or import any deck you already have in PollSlide — polls, quizzes, surveys or study sets.</p>
+        <button class="btn primary" onclick="newLoop()">+ New loop</button></div>`}
+    <div class="card" style="margin-top:18px;"><h2>📺 Putting a loop on a TV</h2>
+      <p class="sub">Any screen with a web browser works: a smart TV's built-in browser, a Fire TV / Chromecast with a browser, or a small computer plugged into the screen. Open the screen link, press <b>Full screen</b>, and leave it — it keeps itself awake, refreshes itself overnight, and picks up where it should after a power cut.</p></div>`);
+}
+function countQs(def) { try { return (def.sets || []).reduce((n, s) => n + (s.items || []).filter(i => i.type !== 'ad').length, 0); } catch (e) { return 0; } }
+
+async function newLoop() {
+  const paid = tier && tier !== 'free';
+  if (!paid && Object.keys(myLoops).length >= LOOP_LIMIT.free) { toast('Free accounts include 1 loop. Upgrade in PollSlide for unlimited loops.'); return; }
+  let code = E.genCode();
+  for (let i = 0; i < 5; i++) { const s = await db.ref('loops/' + code).get(); if (!s.exists() && !myLoops[code]) break; code = E.genCode(); }
+  const def = { name: 'New loop', brand: { accent: '#6c63ff', title: '' }, timing: Object.assign({}, E.DEFAULT_TIMING),
+    board: { reset: 'days', days: 1, size: 5, speed: true, streak: true, rejoin: false },
+    tzOffsetMin: -new Date().getTimezoneOffset(),
+    compliance: { organiser: '', contact: user.email || '', minAge: 0, prize: '', rulesUrl: '', aiNote: false },
+    sets: [{ id: 's' + uid6(), title: 'Round 1', items: [] }] };
+  await db.ref('users/' + user.uid + '/loops/' + code).set({ name: def.name, def, updatedAt: Date.now() });
+  openLoop(code);
+}
+
+// ── EDITOR ───────────────────────────────────────────────────────────────────
+function openLoop(code) {
+  const l = myLoops[code]; if (!l) return;
+  curCode = code; cur = JSON.parse(JSON.stringify(l.def || {}));
+  cur.sets = cur.sets || []; cur.brand = cur.brand || {}; cur.timing = cur.timing || {}; cur.board = cur.board || {};
+  editorView();
+}
+
+function editorView() {
+  const l = myLoops[curCode] || {};
+  cur.compliance = cur.compliance || {};
+  const b = cur.board, t = cur.timing, comp = cur.compliance;
+  const tl = E.timeline(E.normalizeLoop(cur));
+  root(`<div class="sticky row">
+      <button class="btn" onclick="saveDraft().then(listView)">← Loops</button>
+      <b style="font-size:16px;">${esc(cur.name || 'Untitled')}</b><span class="pill ${l.publishedAt ? 'live' : ''}">${l.publishedAt ? '● Live' : 'Draft'}</span>
+      <span class="note">One full loop ≈ ${Math.round(tl.length / 60000)} min</span>
+      <span style="margin-left:auto;" class="row">
+        <button class="btn" onclick="saveDraft().then(()=>toast('Saved.'))">Save</button>
+        <button class="btn primary" onclick="publish()">${l.publishedAt ? 'Publish changes' : 'Publish'}</button>
+      </span></div>
+
+    ${l.publishedAt ? `<div class="card"><div class="row"><div><h2 style="margin:0;">It's live</h2><div class="note">Code <b>${esc(curCode)}</b></div></div>
+      <span style="margin-left:auto;" class="row">
+        <a class="btn green" href="${esc(APP)}/screen#${esc(curCode)}" target="_blank" rel="noopener">📺 Open screen</a>
+        <button class="btn" onclick="copy('${esc(APP)}/screen#${esc(curCode)}')">Copy screen link</button>
+        <a class="btn" href="${esc(APP)}/play#${esc(curCode)}" target="_blank" rel="noopener">📱 Try it on this device</a>
+      </span></div>
+      <div class="row" style="margin-top:12px;">
+        <button class="btn sm" onclick="restartLoop()">↺ Restart from the top</button>
+        <button class="btn sm" onclick="playersView()">👥 Players & moderation</button>
+        <button class="btn sm danger" onclick="resetBoard()">Clear the leaderboard</button>
+      </div></div>` : ''}
+
+    <div class="card"><h2>Basics</h2>
+      <div class="cols">
+        <div><label class="f">Loop name</label><input value="${esc(cur.name || '')}" oninput="cur.name=this.value"></div>
+        <div><label class="f">Title shown on screen</label><input value="${esc(cur.brand.title || '')}" placeholder="e.g. The Crown & Anchor Quiz Loop" oninput="cur.brand.title=this.value"></div>
+        <div><label class="f">Logo (https image link)</label><input value="${esc(cur.brand.logo || '')}" placeholder="https://…/logo.png" oninput="cur.brand.logo=this.value"></div>
+        <div><label class="f">Accent colour</label><input type="color" value="${esc(cur.brand.accent || '#6c63ff')}" oninput="cur.brand.accent=this.value"></div>
+      </div></div>
+
+    <div class="card"><h2>Timing</h2>
+      <div class="cols3">
+        <div><label class="f">Seconds to answer</label><input type="number" min="5" max="120" value="${t.question ?? 20}" oninput="cur.timing.question=+this.value"></div>
+        <div><label class="f">Seconds showing the answer</label><input type="number" min="3" max="60" value="${t.reveal ?? 7}" oninput="cur.timing.reveal=+this.value"></div>
+        <div><label class="f">Seconds per sponsor card</label><input type="number" min="3" max="120" value="${t.ad ?? 10}" oninput="cur.timing.ad=+this.value"></div>
+        <div><label class="f">Seconds per leaderboard</label><input type="number" min="5" max="60" value="${t.board ?? 12}" oninput="cur.timing.board=+this.value"></div>
+      </div></div>
+
+    <div class="card"><h2>Leaderboard & game rules</h2>
+      <div class="cols">
+        <div><label class="f">Leaderboard resets</label>
+          <select onchange="cur.board.reset=this.value;editorView()">
+            <option value="cycle" ${b.reset === 'cycle' ? 'selected' : ''}>Every time the loop starts over</option>
+            <option value="days" ${b.reset === 'days' ? 'selected' : ''}>Every N days</option>
+            <option value="never" ${b.reset === 'never' ? 'selected' : ''}>Never (all-time board)</option>
+          </select></div>
+        <div ${b.reset === 'days' ? '' : 'style="opacity:.4;pointer-events:none;"'}><label class="f">N days (1 = daily, at midnight your time)</label><input type="number" min="1" max="365" value="${b.days || 1}" oninput="cur.board.days=+this.value"></div>
+        <div><label class="f">Players shown on the board</label><input type="number" min="3" max="10" value="${b.size || 5}" oninput="cur.board.size=+this.value"></div>
+        <div></div>
+      </div>
+      <label class="row" style="margin-top:12px;font-size:14px;"><input type="checkbox" ${b.speed !== false ? 'checked' : ''} onchange="cur.board.speed=this.checked"> Faster right answers earn more points</label>
+      <label class="row" style="margin-top:8px;font-size:14px;"><input type="checkbox" ${b.streak !== false ? 'checked' : ''} onchange="cur.board.streak=this.checked"> Streak bonus — up to 2× for answers in a row</label>
+      <label class="row" style="margin-top:8px;font-size:14px;"><input type="checkbox" ${b.rejoin ? 'checked' : ''} onchange="cur.board.rejoin=this.checked"> Players must re-scan the screen each loop (keeps it to people who are actually there)</label>
+    </div>
+
+
+    <div class="card"><h2>Rules &amp; compliance</h2>
+      <p class="note" style="margin-bottom:6px;">Shown to players before they play. You're the organiser — the business running this at your venue — so players need to know who you are and how to reach you. These are the basics most countries require; they're not legal advice.</p>
+      <div class="cols">
+        <div><label class="f">Organiser (your business name) *</label><input value="${esc(comp.organiser || '')}" placeholder="e.g. Crown & Anchor Ltd" oninput="cur.compliance.organiser=this.value"></div>
+        <div><label class="f">Contact email for players *</label><input value="${esc(comp.contact || '')}" placeholder="hello@yourvenue.com" oninput="cur.compliance.contact=this.value"></div>
+        <div><label class="f">Minimum age</label><select onchange="cur.compliance.minAge=+this.value">
+          ${[[0,'No age limit'],[13,'13+'],[16,'16+'],[18,'18+ (e.g. bars in most countries)'],[21,'21+ (e.g. US bars)']].map(([v,l]) => `<option value="${v}" ${(comp.minAge||0) == v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div></div>
+        <div><label class="f">Prize (optional)</label><input value="${esc(comp.prize || '')}" placeholder="e.g. Tonight's winner gets a free pitcher" oninput="cur.compliance.prize=this.value"></div>
+        <div><label class="f">Official rules link (required if there's a prize)</label><input value="${esc(comp.rulesUrl || '')}" placeholder="https://yourvenue.com/quiz-rules" oninput="cur.compliance.rulesUrl=this.value"></div>
+      </div>
+      <label class="row" style="margin-top:12px;font-size:14px;"><input type="checkbox" ${comp.aiNote ? 'checked' : ''} onchange="cur.compliance.aiNote=this.checked"> This loop uses AI-generated text, images or video — show “Some content made with AI” on screen</label>
+      <p class="note" style="margin-top:10px;">Prizes turn a game into a promotion, which has its own rules in most places (e.g. US sweepstakes and skill-contest laws, UK and Canadian promotion rules, Quebec's registration). Winners here are decided by skill and speed, and no purchase is ever needed to play — keep it that way, and publish your own official rules.</p>
+    </div>
+    <div class="row" style="margin:20px 0 6px;"><h2 style="margin:0;">Rounds</h2>
+      <span class="note">Each round ends with its own leaderboard. With more than one round, the loop ends with the overall leaderboard.</span>
+      <span style="margin-left:auto;" class="row">
+        <button class="btn" onclick="importView()">⬇ Import a PollSlide deck</button>
+        <button class="btn" onclick="importFile()">Import file</button>
+        <button class="btn" onclick="exportFile()">Export file</button>
+        <button class="btn" onclick="addSet()">+ Round</button>
+      </span></div>
+    ${cur.sets.map((s, si) => setHtml(s, si)).join('')}`);
+}
+
+function setHtml(s, si) {
+  return `<div class="card set">
+    <div class="row"><input style="flex:1;font-weight:700;" value="${esc(s.title || '')}" placeholder="Round title" oninput="cur.sets[${si}].title=this.value">
+      <button class="btn sm" onclick="exportView(${si})">⬆ Send to PollSlide</button>
+      <button class="btn sm" onclick="moveSet(${si},-1)">↑</button><button class="btn sm" onclick="moveSet(${si},1)">↓</button>
+      <button class="btn sm danger" onclick="delSet(${si})">Delete round</button></div>
+    ${(s.items || []).map((it, ii) => it.type === 'ad' ? adHtml(it, si, ii) : qHtml(it, si, ii)).join('') || '<p class="note" style="margin:12px 0;">No questions yet.</p>'}
+    <div class="row" style="margin-top:8px;"><button class="btn sm" onclick="addQ(${si})">+ Question</button><button class="btn sm" onclick="addAd(${si},false)">+ Media card</button><button class="btn sm" onclick="addAd(${si},true)">+ Sponsor card</button></div>
+  </div>`;
+}
+function itemTools(si, ii) {
+  return `<span class="sp"><button class="btn sm" onclick="moveItem(${si},${ii},-1)">↑</button><button class="btn sm" onclick="moveItem(${si},${ii},1)">↓</button><button class="btn sm danger" onclick="delItem(${si},${ii})">✕</button></span>`;
+}
+function qHtml(it, si, ii) {
+  const opts = it.options || [];
+  const oi_ = it.optImgs || [];
+  return `<div class="item"><div class="hd">❓ Question ${ii + 1}${itemTools(si, ii)}</div>
+    <div class="row" style="flex-wrap:nowrap;"><input value="${esc(it.text || '')}" placeholder="Ask something… emojis welcome 🎉" oninput="cur.sets[${si}].items[${ii}].text=this.value"><button type="button" class="emo" title="Add an emoji" onclick="emojiFor(this)">😀</button></div>
+    ${opts.map((o, oi) => `<div class="opt"><input type="radio" name="c_${si}_${ii}" title="Right answer" ${it.correct === oi ? 'checked' : ''} onchange="cur.sets[${si}].items[${ii}].correct=${oi}">
+      <input type="text" value="${esc(o)}" placeholder="Option ${oi + 1}" oninput="cur.sets[${si}].items[${ii}].options[${oi}]=this.value"><button type="button" class="emo" title="Add an emoji" onclick="emojiFor(this)">😀</button>
+      <input class="oimgIn" value="${esc(oi_[oi] || '')}" placeholder="Answer image (https)" oninput="setOptImg(${si},${ii},${oi},this.value)">
+      ${opts.length > 2 ? `<button class="btn sm" onclick="delOpt(${si},${ii},${oi})">✕</button>` : ''}</div>`).join('')}
+    <div class="row" style="margin-top:6px;">
+      ${opts.length < 6 ? `<button class="btn sm" onclick="addOpt(${si},${ii})">+ Option</button>` : ''}
+      <label class="row note"><input type="radio" name="c_${si}_${ii}" ${it.correct === null || it.correct === undefined ? 'checked' : ''} onchange="cur.sets[${si}].items[${ii}].correct=null"> Opinion — no right answer</label>
+      <input style="flex:1;min-width:200px;" value="${esc(it.img || '')}" placeholder="Image, GIF or video for the question (https, optional)" oninput="cur.sets[${si}].items[${ii}].img=this.value">
+      <input type="number" min="5" max="120" style="width:120px;" value="${it.time || ''}" placeholder="Secs (default)" title="Seconds to answer this question — leave blank for the loop's default" oninput="cur.sets[${si}].items[${ii}].time=+this.value||0">
+      <label class="row note" title="Shows an “AI-generated” label with this question, as AI-transparency laws require"><input type="checkbox" ${it.ai || it.aiGenerated || it.aiImage ? 'checked' : ''} onchange="cur.sets[${si}].items[${ii}].ai=this.checked;delete cur.sets[${si}].items[${ii}].aiGenerated;delete cur.sets[${si}].items[${ii}].aiImage"> ✨ Made with AI</label>
+    </div></div>`;
+}
+function adHtml(it, si, ii) {
+  const sp = it.sponsored !== false;
+  return `<div class="item ad"><div class="hd">${sp ? '📣 Sponsor card' : '🖼️ Media card'}${itemTools(si, ii)}</div>
+    <div class="cols"><div class="row" style="flex-wrap:nowrap;"><input value="${esc(it.headline || '')}" placeholder="${sp ? 'Headline — e.g. 2-for-1 wings until 9pm' : 'Headline — e.g. Happy birthday, Jess! 🎂'}" oninput="cur.sets[${si}].items[${ii}].headline=this.value"><button type="button" class="emo" onclick="emojiFor(this)">😀</button></div>
+      <input value="${esc(it.img || '')}" placeholder="Image, GIF or video (https link)" oninput="cur.sets[${si}].items[${ii}].img=this.value"></div>
+    <div class="row" style="margin-top:8px;">
+      <label class="row note"><input type="checkbox" ${sp ? 'checked' : ''} onchange="cur.sets[${si}].items[${ii}].sponsored=this.checked;editorView()"> This is an ad — label it “Sponsored”</label>
+      ${sp ? `<input style="flex:1;min-width:200px;" value="${esc(it.sponsor || '')}" placeholder="Who it's from — e.g. Crown & Anchor Kitchen (required for ads)" oninput="cur.sets[${si}].items[${ii}].sponsor=this.value">` : ''}
+      <label class="row note"><input type="checkbox" ${it.ai ? 'checked' : ''} onchange="cur.sets[${si}].items[${ii}].ai=this.checked"> ✨ Made with AI</label>
+    </div>
+    <textarea style="margin-top:8px;" placeholder="Details (optional)" oninput="cur.sets[${si}].items[${ii}].body=this.value">${esc(it.body || '')}</textarea>
+    <input style="margin-top:8px;" value="${esc(it.link || '')}" placeholder="Link for a scannable QR (https, optional)" oninput="cur.sets[${si}].items[${ii}].link=this.value"></div>`;
+}
+
+function addSet() { cur.sets.push({ id: 's' + uid6(), title: 'Round ' + (cur.sets.length + 1), items: [] }); editorView(); }
+function delSet(si) { if (confirm('Delete this round and its questions?')) { cur.sets.splice(si, 1); editorView(); } }
+function moveSet(si, d) { const j = si + d; if (j < 0 || j >= cur.sets.length) return; [cur.sets[si], cur.sets[j]] = [cur.sets[j], cur.sets[si]]; editorView(); }
+function addQ(si) { cur.sets[si].items.push({ id: 'i' + uid6(), type: 'q', text: '', options: ['', ''], correct: 0 }); editorView(); }
+function addAd(si, sponsored) { cur.sets[si].items.push({ id: 'i' + uid6(), type: 'ad', sponsored: sponsored !== false, headline: '', body: '', img: '', link: '' }); editorView(); }
+function setOptImg(si, ii, oi, v) { const it = cur.sets[si].items[ii]; it.optImgs = it.optImgs || []; it.optImgs[oi] = v; }
+function delItem(si, ii) { cur.sets[si].items.splice(ii, 1); editorView(); }
+function moveItem(si, ii, d) { const a = cur.sets[si].items, j = ii + d; if (j < 0 || j >= a.length) return; [a[ii], a[j]] = [a[j], a[ii]]; editorView(); }
+function addOpt(si, ii) { cur.sets[si].items[ii].options.push(''); editorView(); }
+function delOpt(si, ii, oi) { const it = cur.sets[si].items[ii]; it.options.splice(oi, 1); if (it.optImgs) it.optImgs.splice(oi, 1); if (it.correct === oi) it.correct = 0; else if (it.correct > oi) it.correct--; editorView(); }
+
+async function saveDraft() {
+  if (!curCode) return;
+  await db.ref('users/' + user.uid + '/loops/' + curCode).update({ name: cur.name || 'Untitled loop', def: cur, updatedAt: Date.now() });
+}
+
+async function publish() {
+  const norm = E.normalizeLoop(cur);
+  if (!norm.sets.length) { toast('Add at least one question with two or more options first.'); return; }
+  const miss = complianceGaps(norm);
+  if (miss.length) { modal(`<h2>Before this goes on a public screen</h2><p class="note" style="margin-bottom:10px;">Fill these in under “Rules &amp; compliance” or on the card:</p><ul style="margin:0 0 14px 18px;line-height:1.7;">${miss.map(m => '<li>' + esc(m) + '</li>').join('')}</ul><button class="btn" onclick="closeModal()">OK</button>`); return; }
+  const skipped = countQs(cur) - countQs(norm);
+  await saveDraft();
+  const pub = await db.ref('loops/' + curCode).get();
+  const prev = pub.val();
+  norm.epoch = (prev && prev.def && prev.def.epoch) || Date.now();   // keep the clock running across edits
+  await db.ref('loops/' + curCode).set({ ownerUid: user.uid, def: norm, banned: (prev && prev.banned) || null, updatedAt: Date.now() });
+  await db.ref('users/' + user.uid + '/loops/' + curCode).update({ publishedAt: Date.now() });
+  toast(skipped > 0 ? `Published. ${skipped} unfinished question(s) were left out — each needs text and two options.` : 'Published — screens update within seconds.');
+  editorView();
+}
+// What must be in place before a loop can be shown publicly.
+function complianceGaps(L) {
+  const c = L.compliance, out = [];
+  if (!c.organiser) out.push('Organiser — the business running this loop.');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.contact)) out.push('A contact email players can reach you on.');
+  if (c.prize && !c.rulesUrl) out.push('An official rules link (https) — you’ve offered a prize.');
+  L.sets.forEach(s => s.items.forEach(it => { if (it.type === 'ad' && it.sponsored && !it.sponsor) out.push(`Who the ad “${it.headline || 'untitled'}” is from (sponsor name).`); }));
+  return out;
+}
+async function restartLoop() {
+  const s = await db.ref('loops/' + curCode + '/def').get(); if (!s.exists()) return;
+  await db.ref('loops/' + curCode + '/def/epoch').set(Date.now()); toast('Restarted from the first question.');
+}
+async function resetBoard() {
+  if (!confirm('Clear every score and answer for this loop? This cannot be undone.')) return;
+  await Promise.all([db.ref('loop_scores/' + curCode).remove(), db.ref('loop_answers/' + curCode).remove()]);
+  toast('Leaderboard cleared.');
+}
+function copy(t) { (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Copied.')).catch(() => prompt('Copy this link:', t)); }
+
+// ── PLAYERS & MODERATION ────────────────────────────────────────────────────
+async function playersView() {
+  const def = E.normalizeLoop(Object.assign({}, cur, { epoch: 1 }));
+  const pub = (await db.ref('loops/' + curCode).get()).val() || {};
+  const loopPub = E.normalizeLoop(pub.def || {});
+  const period = E.periodKey(loopPub, Date.now());
+  const sc = (await db.ref('loop_scores/' + curCode + '/' + period).get()).val() || {};
+  const banned = pub.banned || {};
+  const rows = Object.entries(sc).sort((a, b) => (b[1].pts || 0) - (a[1].pts || 0));
+  modal(`<h2>Players on the current board</h2>
+    <p class="note" style="margin-bottom:10px;">Remove anyone whose nickname shouldn't be on a public screen. They disappear from the screen and can't keep playing on that phone.</p>
+    ${rows.length ? rows.map(([pid, r]) => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--border);">
+      <span>${esc(r.a || '')}</span><b style="flex:1;">${esc(r.n)}</b><span class="note">${(r.pts || 0).toLocaleString()} pts</span>
+      ${banned[pid] ? `<button class="btn sm" onclick="unban('${esc(pid)}')">Allow again</button>` : `<button class="btn sm danger" onclick="ban('${esc(pid)}')">Remove</button>`}</div>`).join('')
+      : '<p class="sub">No players on this board yet.</p>'}
+    <div class="row" style="margin-top:14px;"><button class="btn" onclick="closeModal()">Close</button></div>`);
+}
+async function ban(pid) { await db.ref('loops/' + curCode + '/banned/' + pid).set(true); toast('Removed from the screen.'); playersView(); }
+async function unban(pid) { await db.ref('loops/' + curCode + '/banned/' + pid).remove(); playersView(); }
+
+// ── Emoji picker — inserts at the caret of the field next to the button ─────
+const EMOJI = '😀 😂 🤣 😎 🤩 🥳 😱 🤔 🙌 👏 🔥 ⚡ 🎉 🎯 🏆 🥇 🍺 🍷 🍹 🍕 🍔 🌮 🍟 🍩 ⚽ 🏀 🏈 ⚾ 🎾 🏒 🎬 🎵 🎸 🎮 🎲 🧠 📚 🌍 🗽 🚀 ❤️ ⭐ ✅ ❌ 💰 🎁 🐶 🐱 🦁 🐸'.split(' ');
+let _emoTarget = null;
+function emojiFor(btn) {
+  const pal = document.getElementById('emoPal');
+  if (pal) { pal.remove(); if (_emoTarget === btn) { _emoTarget = null; return; } }
+  _emoTarget = btn;
+  const field = btn.previousElementSibling;
+  const p = document.createElement('div'); p.id = 'emoPal';
+  EMOJI.forEach(e => { const b = document.createElement('button'); b.type = 'button'; b.textContent = e;
+    b.onclick = () => { const m = field.dataset.caret !== undefined ? +field.dataset.caret : field.value.length;
+      const a = Math.min(m, field.value.length), z = a; field.dataset.caret = a + e.length;
+      field.value = field.value.slice(0, a) + e + field.value.slice(z); field.dispatchEvent(new Event('input'));
+      field.focus(); try { field.setSelectionRange(a + e.length, a + e.length); } catch (x) {} };
+    p.appendChild(b); });
+  document.body.appendChild(p);
+  const r = btn.getBoundingClientRect();
+  p.style.top = Math.min(window.innerHeight - p.offsetHeight - 8, r.bottom + 6) + 'px';
+  p.style.left = Math.max(8, Math.min(window.innerWidth - p.offsetWidth - 8, r.right - p.offsetWidth)) + 'px';
+}
+// Remember where the cursor was in each field, so an emoji goes there (or at the end).
+['keyup', 'click', 'select'].forEach(ev => document.addEventListener(ev, e => {
+  const f = e.target; if (f && f.tagName === 'INPUT' && f.type === 'text' || f && f.tagName === 'INPUT' && !f.type) f.dataset.caret = f.selectionStart;
+}, true));
+document.addEventListener('click', e => { const p = document.getElementById('emoPal'); if (p && !p.contains(e.target) && !e.target.classList.contains('emo')) { p.remove(); _emoTarget = null; } });
+
+function modal(h) { closeModal(); const m = document.createElement('div'); m.className = 'modal'; m.id = 'mdl'; m.innerHTML = `<div class="card">${h}</div>`; m.onclick = e => { if (e.target === m) closeModal(); }; document.body.appendChild(m); }
+function closeModal() { const m = $('mdl'); if (m) m.remove(); }
+
+// ── IMPORT / EXPORT — the bridge to the rest of PollSlide ──────────────────
+/* A PollSlide deck → a LoopSlide round.
+   multiple choice (single or multi) → question; the first correct option is the answer
+   study flashcard → question: the card's back is the right answer, other cards' backs
+                     are the wrong ones (so a study set becomes a quiz round)
+   rating / free text / word cloud / NPS / ranking → skipped (they have no options to tap) */
+function deckToRound(deck) {
+  const qs = Array.isArray(deck.questions) ? deck.questions : Object.values(deck.questions || {});
+  const backs = qs.filter(q => q && q.type === 'flashcard' && q.back).map(q => String(q.back));
+  const items = []; let skipped = 0;
+  qs.forEach(q => {
+    if (!q) return;
+    if (q.type === 'flashcard') {
+      if (!q.front || !q.back) { skipped++; return; }
+      const wrong = backs.filter(b => b !== q.back).sort(() => Math.random() - .5).slice(0, 3);
+      if (!wrong.length) { skipped++; return; }
+      const options = [String(q.back)].concat(wrong).sort(() => Math.random() - .5);
+      items.push({ id: 'i' + uid6(), type: 'q', text: String(q.front), options, correct: options.indexOf(String(q.back)), ai: !!q.aiGenerated });
+      return;
+    }
+    if (q.type !== 'multiple_choice' && q.type !== 'multiple_choice_multi') { skipped++; return; }
+    const raw = (q.options || []).map(o => typeof o === 'object' && o ? { t: String(o.text || '').trim(), i: /^https:/.test(o.img || '') ? o.img : '' } : { t: String(o || '').trim(), i: '' })
+      .filter(o => o.t || o.i).slice(0, 6);
+    const options = raw.map(o => o.t), optImgs = raw.map(o => o.i);
+    if (!q.text || options.length < 2) { skipped++; return; }
+    const ca = Array.isArray(q.correctAnswer) ? q.correctAnswer[0] : q.correctAnswer;
+    const c = ca === null || ca === undefined || ca === '' ? null : Number(ca);
+    items.push({ id: 'i' + uid6(), type: 'q', ai: !!(q.aiGenerated || q.aiImage), text: String(q.text), options, optImgs, correct: Number.isInteger(c) && c < options.length ? c : null,
+                 img: q.image && /^https:/.test(q.image) ? q.image : '' });
+  });
+  return { round: { id: 's' + uid6(), title: deck.name || 'Imported round', items }, skipped };
+}
+
+async function importView() {
+  const s = await db.ref('users/' + user.uid + '/presentations').get();
+  const decks = Object.entries(s.val() || {}).filter(([, d]) => d && !d.archived)
+    .sort((a, b) => (b[1].lastOpenedAt || b[1].createdAt || 0) - (a[1].lastOpenedAt || a[1].createdAt || 0));
+  modal(`<h2>Import a deck from PollSlide</h2>
+    <p class="note" style="margin-bottom:10px;">It becomes a new round in this loop. Your original deck isn't changed. Multiple-choice questions and study cards come across; open-text, rating and word-cloud questions are skipped because there's nothing to tap on a screen.</p>
+    ${decks.length ? decks.map(([id, d]) => `<div class="deck" onclick="doImport('${esc(id)}')"><span style="font-size:22px;">${PRODUCT_ICON[d.productType] || '🗳️'}</span>
+      <div style="flex:1;"><b>${esc(d.name || 'Untitled')}</b><div class="note">${esc(PRODUCT_NAME[d.productType] || 'PollSlide')} · ${(Array.isArray(d.questions) ? d.questions : Object.values(d.questions || {})).length} questions</div></div><span class="note">Import →</span></div>`).join('')
+      : '<p class="sub">You have no decks yet.</p>'}
+    <div class="row" style="margin-top:12px;"><button class="btn" onclick="closeModal()">Cancel</button></div>`);
+}
+async function doImport(id) {
+  const s = await db.ref('users/' + user.uid + '/presentations/' + id).get();
+  const { round, skipped } = deckToRound(s.val() || {});
+  closeModal();
+  if (!round.items.length) { toast('Nothing to import — that deck has no multiple-choice questions or study cards.'); return; }
+  cur.sets.push(round); editorView();
+  toast(`Imported ${round.items.length} question(s)` + (skipped ? `, skipped ${skipped} that can't be tapped on a screen.` : '.'));
+}
+
+/* A LoopSlide round → a new PollSlide deck in the product of your choice. */
+function exportView(si) {
+  modal(`<h2>Send “${esc(cur.sets[si].title || 'this round')}” to PollSlide</h2>
+    <p class="note" style="margin-bottom:10px;">A new deck is created in your library. Sponsor cards stay in LoopSlide.</p>
+    ${['quiz','poll','survey','study'].map(p => `<div class="deck" onclick="doExport(${si},'${p}')"><span style="font-size:22px;">${PRODUCT_ICON[p]}</span><b style="flex:1;">${PRODUCT_NAME[p]}</b><span class="note">Create deck →</span></div>`).join('')}
+    <div class="row" style="margin-top:12px;"><button class="btn" onclick="closeModal()">Cancel</button></div>`);
+}
+async function doExport(si, product) {
+  const set = cur.sets[si];
+  const qs = (set.items || []).filter(it => it.type !== 'ad' && it.text && (it.options || []).filter(Boolean).length >= 2);
+  let questions;
+  if (product === 'study') {
+    questions = qs.filter(q => q.correct !== null && q.correct !== undefined)
+      .map(q => ({ id: 'qz' + Date.now().toString(36) + uid6(), type: 'flashcard', front: q.text, back: q.options[q.correct] }));
+  } else {
+    questions = qs.map(q => ({ id: 'qz' + Date.now().toString(36) + uid6(), text: q.text, type: 'multiple_choice',
+      options: q.options.map((t, i) => ({ text: t || '', img: (q.optImgs && q.optImgs[i]) || '' })).filter(o => o.text || o.img),
+      correctAnswer: q.correct === null || q.correct === undefined ? null : q.correct,
+      image: q.img || '', ...(q.ai ? { aiGenerated: true } : {}), timer: 0, displayMode: 'bars', revealDelay: 30,
+      postReveal: { enabled: false, type: 'leaderboard', explainerText: '', advanceDelay: 'manual' } }));
+  }
+  if (!questions.length) { toast('Nothing to send — this round has no finished questions' + (product === 'study' ? ' with a right answer.' : '.')); return; }
+  const id = 'pres_' + Date.now();
+  await db.ref('users/' + user.uid + '/presentations/' + id).set({
+    id, name: (set.title || 'LoopSlide round'), sessionCode: E.genCode(), createdAt: Date.now(), lastOpenedAt: Date.now(),
+    productType: product, questions });
+  closeModal();
+  toast(`Created “${set.title || 'LoopSlide round'}” in ${PRODUCT_NAME[product]} with ${questions.length} question(s).`);
+}
+
+function exportFile() {
+  const blob = new Blob([JSON.stringify({ format: 'loopslide', version: 1, loop: cur }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = (cur.name || 'loop').replace(/[^\w-]+/g, '-').slice(0, 40) + '.loopslide.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+function importFile() {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.json,application/json';
+  inp.onchange = () => {
+    const f = inp.files[0]; if (!f) return;
+    const r = new FileReader();
+    r.onload = () => {
+      try {
+        const j = JSON.parse(r.result);
+        const sets = j && j.format === 'loopslide' && j.loop ? j.loop.sets : (j && j.questions ? [deckToRound(j).round] : null);
+        if (!Array.isArray(sets) || !sets.length) throw new Error('bad');
+        sets.forEach(s => { s.id = 's' + uid6(); (s.items || []).forEach(it => { it.id = 'i' + uid6(); }); cur.sets.push(s); });
+        editorView(); toast(`Imported ${sets.length} round(s).`);
+      } catch (e) { toast('That file isn’t a LoopSlide export or a PollSlide deck.'); }
+    };
+    r.readAsText(f);
+  };
+  inp.click();
+}
+</script>
+</body>
+</html>

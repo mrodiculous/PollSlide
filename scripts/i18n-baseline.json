@@ -41,8 +41,8 @@
   },
   "help.html": {
     "pct": 100,
-    "hit": 720,
-    "total": 720
+    "hit": 763,
+    "total": 764
   },
   "how-to-run-a-pub-quiz.html": {
     "pct": 5,
@@ -51,13 +51,18 @@
   },
   "index.html": {
     "pct": 100,
-    "hit": 274,
-    "total": 274
+    "hit": 276,
+    "total": 277
   },
   "integrations.html": {
     "pct": 100,
     "hit": 55,
     "total": 55
+  },
+  "loopslide.html": {
+    "pct": 100,
+    "hit": 95,
+    "total": 95
   },
   "pollslide-for-google-slides.html": {
     "pct": 9,
@@ -70,9 +75,9 @@
     "total": 64
   },
   "pollslide-for-powerpoint.html": {
-    "pct": 13,
-    "hit": 11,
-    "total": 84
+    "pct": 19,
+    "hit": 17,
+    "total": 90
   },
   "pricing.html": {
     "pct": 100,

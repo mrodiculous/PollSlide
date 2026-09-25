@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#07070f">
+<title>LoopSlide — Play</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#07070f; --panel:#11111f; --panel2:#1b1b33; --text:#f3f3ff; --muted:#9a9ac0; --accent:#6c63ff; --good:#43e97b; --bad:#ff6584; --gold:#f7b731; }
+  * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  html, body { min-height:100%; background:var(--bg); color:var(--text); font-family:'DM Sans',system-ui,sans-serif; }
+  #app { max-width:480px; margin:0 auto; padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(24px + env(safe-area-inset-bottom,0px)); }
+  .top { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+  .top .me { font-weight:700; }
+  .top .pts { margin-left:auto; font-family:'Syne',sans-serif; color:var(--gold); }
+  .bar { height:6px; background:var(--panel2); border-radius:6px; overflow:hidden; margin-bottom:16px; }
+  .bar i { display:block; height:100%; background:var(--accent); transform-origin:left; }
+  h1 { font-family:'Syne',sans-serif; font-weight:800; font-size:24px; line-height:1.2; margin-bottom:14px; }
+  .sub { color:var(--muted); font-size:14px; line-height:1.5; margin-bottom:14px; }
+  .kicker { font-size:12px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
+  .opt { width:100%; text-align:left; background:var(--panel); color:var(--text); border:2px solid var(--panel2); border-radius:14px; padding:16px; margin-bottom:10px; font:700 17px 'DM Sans',sans-serif; display:flex; gap:12px; align-items:center; cursor:pointer; }
+  .opt .L { width:32px; height:32px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-family:'Syne',sans-serif; flex-shrink:0; }
+  .opt .oimg { width:44px; height:44px; border-radius:8px; object-fit:cover; flex-shrink:0; }
+  .qmedia { width:100%; max-height:220px; object-fit:contain; border-radius:12px; margin-bottom:14px; background:#000; }
+  .opt:active { transform:scale(.99); }
+  .opt.picked { border-color:var(--accent); box-shadow:0 0 0 3px rgba(108,99,255,.25); }
+  .opt:disabled { cursor:default; }
+  .big { font-family:'Syne',sans-serif; font-weight:800; font-size:44px; line-height:1; margin:6px 0 8px; }
+  .card { background:var(--panel); border:1px solid var(--panel2); border-radius:16px; padding:18px; margin-bottom:12px; }
+  .good { color:var(--good); } .bad { color:var(--bad); } .gold { color:var(--gold); }
+  input { width:100%; background:var(--panel); color:var(--text); border:2px solid var(--panel2); border-radius:12px; padding:14px; font:600 17px 'DM Sans',sans-serif; margin-bottom:12px; }
+  .avs { display:grid; grid-template-columns:repeat(6,1fr); gap:8px; margin-bottom:16px; }
+  .avs button { font-size:26px; background:var(--panel); border:2px solid var(--panel2); border-radius:12px; padding:8px 0; cursor:pointer; }
+  .avs button.on { border-color:var(--accent); background:var(--panel2); }
+  .btn { width:100%; background:var(--accent); color:#fff; border:0; border-radius:14px; padding:16px; font:800 17px 'DM Sans',sans-serif; cursor:pointer; }
+  .btn.ghost { background:transparent; border:2px solid var(--panel2); color:var(--text); }
+  .err { color:var(--bad); font-size:14px; margin:-4px 0 12px; min-height:18px; }
+  .row { display:flex; gap:10px; align-items:center; padding:10px 0; border-bottom:1px solid var(--panel2); font-weight:700; }
+  .row:last-child { border-bottom:0; }
+  .row .nm { flex:1; } .row.me { color:var(--gold); }
+  .toast { position:fixed; left:12px; right:12px; bottom:calc(16px + env(safe-area-inset-bottom,0px)); max-width:456px; margin:0 auto; background:var(--panel2); border-left:4px solid var(--gold); border-radius:12px; padding:14px 16px; font-weight:700; box-shadow:0 8px 30px rgba(0,0,0,.4); z-index:10; }
+  .ai { display:inline-block; background:rgba(108,99,255,.18); color:#c9c5ff; border:1px solid rgba(108,99,255,.5); border-radius:100px; padding:2px 9px; font-size:11px; font-weight:700; margin-left:6px; text-transform:none; letter-spacing:0; }
+  .chk { display:flex; gap:10px; align-items:flex-start; font-size:14px; line-height:1.4; margin-bottom:14px; }
+  .chk input { width:auto; margin:3px 0 0; }
+  .fine { color:#5b5b80; font-size:12px; line-height:1.5; margin-top:18px; text-align:center; }
+  .fine a { color:#7a7aa8; }
+</style>
+</head>
+<body>
+<div id="app"><div class="sub">Loading…</div></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="/ps-env.js?v=717fca7b"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script src="/loop-engine.js?v=eaf35aeb"></script>
+<script>
+/* LoopSlide phone — play#<CODE>[/<cycle>]
+ * The phone computes what is on screen from the clock, exactly like the TV, so it can
+ * never drift onto a different question. Writes: one answer per question
+ * (loop_answers/…), then this player's running total for the leaderboard period
+ * (loop_scores/…). Both are checked by database rules (see database-rules.json). */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME",
+  authDomain: "echonest-live-survey.firebaseapp.com",
+  databaseURL: "https://echonest-live-survey-default-rtdb.firebaseio.com",
+  projectId: "echonest-live-survey",
+  storageBucket: "echonest-live-survey.firebasestorage.app",
+  messagingSenderId: "285529140046",
+  appId: "1:285529140046:web:983c1ee8000a2ca8f80c1f",
+  measurementId: "G-NWQY4YLNRC"
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.database();
+const E = window.LoopEngine;
+const [CODE_RAW, CYCLE_RAW] = (location.hash || '').replace(/^#/, '').split('/');
+const CODE = String(CODE_RAW || '').trim().toUpperCase().slice(0, 12);
+const JOINED_CYCLE = CYCLE_RAW !== undefined && CYCLE_RAW !== '' ? parseInt(CYCLE_RAW, 10) : null;
+const LETTERS = ['A','B','C','D','E','F'];
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const app = h => { document.getElementById('app').innerHTML = h; };
+
+let offset = 0;
+db.ref('.info/serverTimeOffset').on('value', s => { offset = s.val() || 0; });
+const now = () => Date.now() + offset;
+
+// One player identity per loop, kept on this phone.
+const LS = 'loopslide_player_' + CODE;
+let me = null;
+try { me = JSON.parse(localStorage.getItem(LS) || 'null'); } catch (e) {}
+const save = () => { try { localStorage.setItem(LS, JSON.stringify(me)); } catch (e) {} };
+
+let loop = null, banned = {}, drawn = '', myScore = null, lastRank = null;
+
+if (!CODE) app('<h1>Scan the code on the screen</h1><div class="sub">This page opens from the QR code on a LoopSlide screen.</div>');
+else {
+  db.ref('loops/' + CODE).on('value', s => {
+    const v = s.val();
+    if (!v || !v.def) { loop = null; app('<h1>Game not found</h1><div class="sub">Scan the code on the screen again.</div>'); return; }
+    loop = E.normalizeLoop(v.def); banned = v.banned || {};
+    document.documentElement.style.setProperty('--accent', loop.brand.accent);
+    drawn = '';
+  });
+  setInterval(tick, 250);
+}
+
+function topBar(p) {
+  return `<div class="top"><span style="font-size:24px">${esc(me.a)}</span><span class="me">${esc(me.n)}</span><span class="pts">${myScore ? myScore.pts.toLocaleString() + ' pts' : ''}</span></div>
+          <div class="bar"><i></i></div>`;
+}
+
+function joinScreen(msg) {
+  const pick = (me && me.a) || E.AVATARS[Math.floor(Math.random() * E.AVATARS.length)];
+  app(`<div class="kicker">${esc(loop.brand.title || loop.name)}</div>
+    <h1>Pick your player</h1>
+    <div class="sub">Your nickname and emoji show on the big screen when you make the leaderboard.</div>
+    <input id="nm" maxlength="18" placeholder="Nickname" value="${esc(me && me.n || '')}" autocomplete="off">
+    <div class="err" id="err">${esc(msg || '')}</div>
+    <div class="avs">${E.AVATARS.map(a => `<button type="button" data-a="${a}" class="${a === pick ? 'on' : ''}">${a}</button>`).join('')}</div>
+    ${C().minAge ? `<label class="chk"><input type="checkbox" id="age"> <span>I am ${C().minAge} or older.</span></label>` : ''}
+    <button class="btn" id="go">Play →</button>
+    <div class="fine">No sign-up and no real name needed. ${C().organiser ? `Run by <b>${esc(C().organiser)}</b>. ` : ''}Your nickname and answers are shown on the screen here and kept only while this leaderboard runs, then deleted.
+      ${C().prize ? `<br>🎁 ${esc(C().prize)} — no purchase necessary${C().rulesUrl ? ` · <a href="${esc(C().rulesUrl)}" target="_blank" rel="noopener">Official rules</a>` : ''}.` : ''}
+      <br><a href="https://pollslide.com/privacy" target="_blank" rel="noopener">Privacy</a> · ${reportLink()}</div>`);
+  let av = pick;
+  document.querySelectorAll('.avs button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.avs button').forEach(x => x.classList.remove('on')); b.classList.add('on'); av = b.dataset.a;
+  });
+  document.getElementById('go').onclick = () => {
+    const ageBox = document.getElementById('age');
+    if (ageBox && !ageBox.checked) { document.getElementById('err').textContent = `This game is for ages ${C().minAge}+.`; return; }
+    const n = E.cleanName(document.getElementById('nm').value);
+    if (!n) { document.getElementById('err').textContent = 'Pick a different nickname.'; return; }
+    me = Object.assign(me || { pid: 'p' + Math.random().toString(36).slice(2, 12) }, { n, a: av, streak: 0, best: (me && me.best) || 0 });
+    save(); drawn = ''; tick();
+  };
+}
+
+function tick() {
+  if (!loop) return;
+  if (!me || !me.n) { if (drawn !== 'join') { drawn = 'join'; joinScreen(); } return; }
+  if (banned[me.pid]) { if (drawn !== 'banned') { drawn = 'banned'; app('<h1>You can’t play this game</h1><div class="sub">The venue has removed this player.</div>'); } return; }
+  const p = E.positionAt(loop, now());
+  if (!p) { if (drawn !== 'none') { drawn = 'none'; app('<h1>Get ready</h1><div class="sub">The next game hasn’t started yet.</div>'); } return; }
+  if (loop.board.rejoin && JOINED_CYCLE !== null && p.cycle > JOINED_CYCLE) {
+    if (drawn !== 'rejoin') { drawn = 'rejoin'; app(`${topBar(p)}<h1>New round!</h1><div class="sub">Scan the code on the screen again to keep playing.</div>`); }
+    return;
+  }
+  const key = p.cycle + ':' + p.index;
+  if (key !== drawn) { drawn = key; draw(p); }
+  const bar = document.querySelector('.bar i');
+  if (bar) bar.style.transform = 'scaleX(' + Math.max(0, p.remainingMs / (p.slot.dur * 1000)) + ')';
+}
+
+function media(url) {
+  if (!url) return '';
+  return E.isVideo(url) ? `<video class="qmedia" src="${esc(url)}" autoplay muted loop playsinline></video>` : `<img class="qmedia" src="${esc(url)}" alt="">`;
+}
+const C = () => (loop && loop.compliance) || {};
+const aiTag = it => it && it.ai ? '<span class="ai">✨ AI-generated</span>' : '';
+function reportLink() {
+  const c = C().contact || '';
+  const to = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c) ? c : 'help@pollslide.com';
+  return `<a href="mailto:${esc(to)}?subject=${encodeURIComponent('LoopSlide ' + CODE + ' — problem report')}">Report a problem</a>`;
+}
+const itemOf = slot => { const s = loop.sets[slot.set]; return s ? s.items[slot.item] : null; };
+const answeredKey = (p, it) => 'loopslide_ans_' + CODE + '_' + E.periodKey(loop, now()) + '_' + E.answerKey(p.cycle, it.id);
+
+function draw(p) {
+  refreshScore();
+  const k = p.slot.kind;
+  if (k === 'question') return drawQuestion(p);
+  if (k === 'reveal') return drawReveal(p);
+  if (k === 'ad') {
+    const it = itemOf(p.slot);
+    return app(`${topBar(p)}<div class="kicker">${it.sponsored ? (it.sponsor ? 'Sponsored by ' + esc(it.sponsor) : 'Sponsored') : 'Next question coming up'}${aiTag(it)}</div>${media(it.img)}<h1>${esc(it.headline || 'Stay tuned')}</h1>
+      ${it.body ? `<div class="sub">${esc(it.body)}</div>` : ''}
+      ${it.link ? `<a class="btn" style="display:block;text-align:center;text-decoration:none;" href="${esc(it.link)}" target="_blank" rel="noopener sponsored">See the offer</a>` : ''}`);
+  }
+  return drawStanding(p);
+}
+
+function drawQuestion(p) {
+  const it = itemOf(p.slot);
+  const mine = localStorage.getItem(answeredKey(p, it));
+  app(`${topBar(p)}<div class="kicker">${esc(loop.sets[p.slot.set].title || 'Question')}${aiTag(it)}</div>${media(it.img)}<h1>${esc(it.text)}</h1>
+    ${it.options.map((o, i) => `<button class="opt ${mine == i ? 'picked' : ''}" data-i="${i}" ${mine !== null ? 'disabled' : ''}><span class="L">${LETTERS[i]}</span>${it.optImgs && it.optImgs[i] ? `<img class="oimg" src="${esc(it.optImgs[i])}" alt="">` : ''}<span>${esc(o)}</span></button>`).join('')}
+    <div class="sub" id="st">${mine !== null ? 'Locked in — watch the screen for the answer.' : 'Faster right answers score more.'}</div>`);
+  if (mine !== null) return;
+  document.querySelectorAll('.opt').forEach(b => b.onclick = () => submit(p, it, +b.dataset.i, b));
+}
+
+async function submit(p, it, choice, btn) {
+  const t = now();
+  if (t >= p.end) { document.getElementById('st').textContent = 'Too late — time was up.'; return; }
+  document.querySelectorAll('.opt').forEach(b => b.disabled = true);
+  btn.classList.add('picked');
+  const period = E.periodKey(loop, t);
+  const key = E.answerKey(p.cycle, it.id);
+  const ms = Math.max(0, t - p.start);
+  const correct = it.correct === null ? null : choice === it.correct;
+  const streak = correct === true ? (me.streak || 0) + 1 : (correct === false ? 0 : (me.streak || 0));
+  const pts = E.score({ correct, ms, windowMs: p.slot.dur * 1000, streak, speed: loop.board.speed, streakOn: loop.board.streak });
+  const rec = { n: me.n, a: me.a, c: choice, ms, pts, t };
+  try {
+    await db.ref(`loop_answers/${CODE}/${period}/${key}/${me.pid}`).set(rec);
+    await db.ref(`loop_scores/${CODE}/${period}/${me.pid}`).transaction(cur => ({
+      n: me.n, a: me.a, pts: (cur ? cur.pts : 0) + pts, ans: (cur ? cur.ans : 0) + 1, last: key,
+    }));
+    me.streak = streak; save();
+    localStorage.setItem(answeredKey(p, it), String(choice));
+    document.getElementById('st').textContent = 'Locked in — watch the screen for the answer.';
+    refreshScore();
+  } catch (e) {
+    document.querySelectorAll('.opt').forEach(b => b.disabled = false); btn.classList.remove('picked');
+    document.getElementById('st').textContent = 'That didn’t go through — tap again.';
+  }
+}
+
+async function drawReveal(p) {
+  const it = itemOf(p.slot);
+  const mine = localStorage.getItem(answeredKey(p, it));
+  const hasC = it.correct !== null;
+  let head;
+  if (mine === null) head = `<h1>You missed this one</h1><div class="sub">Answer: <b>${hasC ? esc(it.options[it.correct]) : '—'}</b></div>`;
+  else if (!hasC) head = `<h1>Thanks for voting!</h1><div class="sub">You picked <b>${esc(it.options[+mine])}</b>.</div>`;
+  else if (+mine === it.correct) head = `<div class="big good">Correct!</div><div class="sub">${me.streak > 1 ? `🔥 ${me.streak} in a row — bonus points!` : 'Keep it going.'}</div>`;
+  else head = `<div class="big bad">Not this time</div><div class="sub">It was <b>${esc(it.options[it.correct])}</b>.</div>`;
+  app(`${topBar(p)}${head}<div id="standing"></div>`);
+  drawStandingInto(document.getElementById('standing'));
+}
+
+async function refreshScore() {
+  try {
+    const s = await db.ref(`loop_scores/${CODE}/${E.periodKey(loop, now())}/${me.pid}`).get();
+    myScore = s.val();
+    const el = document.querySelector('.top .pts'); if (el && myScore) el.textContent = myScore.pts.toLocaleString() + ' pts';
+    if (myScore && myScore.pts > (me.best || 0)) { me.best = myScore.pts; save(); }
+  } catch (e) {}
+}
+
+function drawStanding(p) {
+  const label = p.slot.kind === 'setboard' ? '🏁 Round over' : '🏆 Leaderboard';
+  app(`${topBar(p)}<div class="kicker">${label}</div><div id="standing"></div>`);
+  drawStandingInto(document.getElementById('standing'));
+}
+
+async function drawStandingInto(el) {
+  if (!el) return;
+  let rows = [];
+  try {
+    const s = await db.ref(`loop_scores/${CODE}/${E.periodKey(loop, now())}`).get();
+    rows = Object.entries(s.val() || {}).filter(([pid]) => !banned[pid]).map(([pid, v]) => Object.assign({ pid }, v))
+      .sort((a, b) => (b.pts - a.pts) || (b.ans - a.ans));
+  } catch (e) {}
+  const i = rows.findIndex(r => r.pid === me.pid);
+  const rank = i >= 0 ? i + 1 : null;
+  if (rank && lastRank && rank < lastRank) toast(`⬆️ You moved up to #${rank}!`);
+  if (rank === 1 && lastRank !== 1) toast('👑 You’re on top of the leaderboard!');
+  if (rank) lastRank = rank;
+  const lead = rows[0];
+  el.innerHTML = `<div class="card">
+      ${rank ? `<div class="sub" style="margin:0">Your rank</div><div class="big gold">#${rank}<span style="font-size:18px;color:var(--muted)"> of ${rows.length}</span></div>` : '<div class="sub" style="margin:0">Answer a question to get on the board.</div>'}
+      ${lead && rank !== 1 && myScore ? `<div class="sub" style="margin:8px 0 0">${(lead.pts - myScore.pts + 1).toLocaleString()} points to take the crown from ${esc(lead.a)} ${esc(lead.n)}.</div>` : ''}
+      ${me.best ? `<div class="sub" style="margin:8px 0 0">Personal best: <b>${me.best.toLocaleString()}</b></div>` : ''}
+    </div>
+    <div class="card">${rows.slice(0, 5).map((r, j) => `<div class="row ${r.pid === me.pid ? 'me' : ''}"><span>${j < 3 ? ['🥇','🥈','🥉'][j] : '#' + (j + 1)}</span><span>${esc(r.a || '')}</span><span class="nm">${esc(r.n)}</span><span>${(r.pts || 0).toLocaleString()}</span></div>`).join('') || '<div class="sub" style="margin:0">No scores yet.</div>'}</div>
+    ${C().prize ? `<div class="card">🎁 <b>${esc(C().prize)}</b><div class="sub" style="margin:6px 0 0">No purchase necessary.${C().rulesUrl ? ` <a style="color:var(--accent)" href="${esc(C().rulesUrl)}" target="_blank" rel="noopener">Official rules</a>` : ''}</div></div>` : ''}
+    <button class="btn ghost" onclick="joinScreen()">Change nickname</button>
+    <div class="fine">${reportLink()}</div>`;
+}
+
+let _toastT = null;
+function toast(msg) {
+  document.querySelectorAll('.toast').forEach(t => t.remove());
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.appendChild(t);
+  clearTimeout(_toastT); _toastT = setTimeout(() => t.remove(), 5000);
+}
+</script>
+</body>
+</html>

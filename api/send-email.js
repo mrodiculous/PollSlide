@@ -153,14 +153,49 @@ const TEMPLATES = {
     `, 'https://app.pollslide.com/presenter', 'Join the team →')
   }),
 
-  // Generic notification (used by the legal/compliance watcher and other internal alerts).
-  notify: (data) => ({
-    subject: data.subject || 'PollSlide notification',
-    html: baseLayout(data.subject || 'Notification',
-      `<h1 style="font-size:22px;font-weight:800;margin:0 0 12px;color:#15152a;">${data.heading || 'Heads up'}</h1>
-       <div style="font-size:15px;color:#5a5a78;line-height:1.6;">${data.body || ''}</div>`,
-      data.ctaUrl || 'https://app.pollslide.com/admin', data.ctaText || 'Open admin')
-  }),
+  // Admin broadcast (admin.html → "Broadcast" / "Send message"), sent alongside the in-app
+  // message. ADMIN-ONLY — not in USER_TYPES — because the body is free text. The text is
+  // escaped and line breaks kept; every copy carries a one-click unsubscribe (built by the
+  // handler from a server-side signature, so it cannot be forged for another account).
+  announcement: (data) => {
+    const tone = { success: BRAND_GREEN, warning: BRAND_AMBER, danger: BRAND_PINK, info: BRAND_COLOR }[data.type] || BRAND_COLOR;
+    const heading = { success: 'News from PollSlide', warning: 'Important: PollSlide notice', danger: 'Important: PollSlide notice' }[data.type] || 'A message from PollSlide';
+    const text = esc(data.text).replace(/\r?\n/g, '<br>');
+    const unsub = data.unsubUrl
+      ? `<p style="font-size:12px;color:#9090b8;margin:18px 0 0;">You're receiving this because you have a PollSlide account. <a href="${esc(data.unsubUrl)}" style="color:#9090b8;">Unsubscribe from announcements</a>.</p>`
+      : '';
+    return {
+      subject: oneLine(data.subject) || heading,
+      replyTo: 'help@pollslide.com',
+      html: baseLayout(esc(heading), `
+        <h1 style="font-size:22px;font-weight:800;margin:0 0 14px;color:#15152a;">${esc(heading)}</h1>
+        <div style="background:#f4f4fc;border-radius:10px;padding:14px 16px;font-size:15px;color:#15152a;line-height:1.6;border-left:3px solid ${tone};">${text}</div>
+        ${unsub}
+      `, 'https://app.pollslide.com/presenter', 'Open PollSlide'),
+    };
+  },
+
+  // Generic notification. Used by internal alerts (legal/compliance watchers, auto-pilot,
+  // backups) AND by user-facing mail such as collaboration invites (api/share.js).
+  // The admin button is for STAFF ONLY: a collaborator has no use for it, and handing
+  // every recipient a link to the admin console advertises where it lives. So the default
+  // button depends on who is receiving it (ctx.staff, decided in the handler from the
+  // recipient address) — never on the caller remembering to override it.
+  notify: (data, ctx) => {
+    const staff = !!(ctx && ctx.staff);
+    const wantsAdmin = !data.ctaUrl || isAdminUrl(data.ctaUrl);
+    const ctaUrl  = staff ? (data.ctaUrl || 'https://app.pollslide.com/admin')
+                          : (wantsAdmin ? 'https://app.pollslide.com/presenter' : data.ctaUrl);
+    const ctaText = staff ? (data.ctaText || 'Open admin')
+                          : (wantsAdmin ? 'Open PollSlide' : (data.ctaText || 'Open PollSlide'));
+    return {
+      subject: data.subject || 'PollSlide notification',
+      html: baseLayout(data.subject || 'Notification',
+        `<h1 style="font-size:22px;font-weight:800;margin:0 0 12px;color:#15152a;">${data.heading || 'Heads up'}</h1>
+         <div style="font-size:15px;color:#5a5a78;line-height:1.6;">${data.body || ''}</div>`,
+        ctaUrl, ctaText)
+    };
+  },
   welcome: (data) => ({
     subject: 'Welcome to PollSlide!',
     html: baseLayout('Welcome to PollSlide', `
@@ -281,6 +316,35 @@ const TEMPLATES = {
 // Templates a signed-in (non-admin) browser user may trigger — only ever to
 // their own verified address.
 const USER_TYPES = ['welcome'];
+
+/* Staff = the admin accounts plus the ops/legal alert inboxes. Only these addresses may
+   ever receive a link into the admin console. Everyone else — collaborators, customers —
+   gets a PollSlide link instead. */
+const lc = e => String(e || '').trim().toLowerCase();
+function staffSet() {
+  return new Set([...ADMIN_EMAILS, process.env.LEGAL_ALERT_EMAIL, process.env.OPS_ALERT_EMAIL,
+                  'help@pollslide.com'].filter(Boolean).map(lc));
+}
+/* One-click unsubscribe. The link carries the uid and an HMAC of it made with a server
+   secret, so nobody can unsubscribe (or probe) someone else's account by editing the URL. */
+function unsubSig(uid) {
+  const key = process.env.INTERNAL_API_KEY || '';
+  if (!key || !uid) return '';
+  return crypto.createHmac('sha256', key).update('unsub:' + uid).digest('hex').slice(0, 32);
+}
+function unsubUrl(uid) {
+  const sig = unsubSig(uid);
+  return sig ? `https://app.pollslide.com/api/unsubscribe?u=${encodeURIComponent(uid)}&s=${sig}` : '';
+}
+function isStaffRecipient(to) { return staffSet().has(lc(to)); }
+function isAdminUrl(u) { return /pollslide\.com\/admin(\.html)?(\b|[\/?#]|$)/i.test(String(u || '')); }
+/* Last line of defence for non-staff mail: whatever a template or caller put in, no link
+   into the admin console leaves this server addressed to a customer. */
+function stripAdminLinks(html) {
+  return String(html)
+    .replace(/https:\/\/app\.pollslide\.com\/admin(\.html)?[^"'\s<]*/gi, 'https://app.pollslide.com/presenter')
+    .replace(/>\s*Open admin\s*</gi, '>Open PollSlide<');
+}
 const USER_HOURLY_LIMIT = 5;
 
 function internalKeyOk(req) {
@@ -344,7 +408,20 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: `Unknown email type "${type}".`, available_types: Object.keys(TEMPLATES) });
   }
 
-  const { subject, html, replyTo } = templateFn(data || {});
+  if (type === 'announcement') {
+    const uid = data && typeof data.uid === 'string' ? data.uid : '';
+    if (uid) {
+      try {
+        const pref = await admin.database(getApp()).ref('users/' + uid + '/emailPrefs/announcements').get();
+        if (pref.exists() && pref.val() === false) return res.status(200).json({ success: true, skipped: 'unsubscribed', type, to });
+      } catch (e) { /* cannot read the preference — fall through and send; the link still works */ }
+      data.unsubUrl = unsubUrl(uid);
+    }
+  }
+
+  const staff = isStaffRecipient(to);
+  let { subject, html, replyTo } = templateFn(data || {}, { staff });
+  if (!staff) html = stripAdminLinks(html);
 
   try {
     const response = await fetch('https://api.resend.com/emails', {
@@ -380,3 +457,6 @@ module.exports = async function handler(req, res) {
 module.exports.TEMPLATES = TEMPLATES;
 module.exports.USER_TYPES = USER_TYPES;
 module.exports.TICKET_REPLY_CHROME = TICKET_REPLY_CHROME;
+module.exports.isStaffRecipient = isStaffRecipient;
+module.exports.stripAdminLinks = stripAdminLinks;
+module.exports.unsubSig = unsubSig;

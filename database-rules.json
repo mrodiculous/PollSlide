@@ -205,6 +205,39 @@
           ".write": "auth != null && (auth.uid == $ownerUid || root.child('deckGrants').child($ownerUid).child($presId).child(auth.uid).exists())"
         }
       }
+    },
+    "loops": {
+      "$code": {
+        ".read": true,
+        ".write": "auth != null && ((!data.exists() && newData.child('ownerUid').val() === auth.uid) || (data.exists() && data.child('ownerUid').val() === auth.uid && (!newData.exists() || newData.child('ownerUid').val() === auth.uid)))",
+        ".validate": "!newData.exists() || (newData.hasChildren(['ownerUid','def']) && newData.child('ownerUid').isString())"
+      }
+    },
+    "loop_answers": {
+      "$code": {
+        ".read": true,
+        "$period": {
+          "$key": {
+            "$pid": {
+              ".write": "!data.exists() && newData.exists() && root.child('loops').child($code).exists() && !root.child('loops').child($code).child('banned').child($pid).exists()",
+              ".validate": "newData.hasChildren(['n','t']) && newData.child('n').isString() && newData.child('n').val().length >= 1 && newData.child('n').val().length <= 18 && newData.child('t').isNumber() && newData.child('t').val() <= now + 60000 && newData.child('t').val() >= now - 60000 && (!newData.child('pts').exists() || (newData.child('pts').isNumber() && newData.child('pts').val() >= 0 && newData.child('pts').val() <= 2000)) && (!newData.child('c').exists() || newData.child('c').isNumber()) && (!newData.child('ms').exists() || newData.child('ms').isNumber()) && (!newData.child('a').exists() || (newData.child('a').isString() && newData.child('a').val().length <= 8))"
+            }
+          }
+        },
+        ".write": "auth != null && root.child('loops').child($code).child('ownerUid').val() === auth.uid && !newData.exists()"
+      }
+    },
+    "loop_scores": {
+      "$code": {
+        ".read": true,
+        "$period": {
+          "$pid": {
+            ".write": "newData.exists() && root.child('loops').child($code).exists() && !root.child('loops').child($code).child('banned').child($pid).exists()",
+            ".validate": "newData.hasChildren(['n','pts','ans','last']) && newData.child('n').isString() && newData.child('n').val().length >= 1 && newData.child('n').val().length <= 18 && newData.child('ans').isNumber() && newData.child('ans').val() === (data.exists() ? data.child('ans').val() + 1 : 1) && newData.child('pts').isNumber() && newData.child('pts').val() >= (data.exists() ? data.child('pts').val() : 0) && newData.child('pts').val() <= (data.exists() ? data.child('pts').val() : 0) + 2000 && newData.child('last').isString() && (!data.exists() || newData.child('last').val() !== data.child('last').val()) && root.child('loop_answers').child($code).child($period).child(newData.child('last').val()).child($pid).exists() && (!newData.child('a').exists() || (newData.child('a').isString() && newData.child('a').val().length <= 8))"
+          }
+        },
+        ".write": "auth != null && root.child('loops').child($code).child('ownerUid').val() === auth.uid && !newData.exists()"
+      }
     }
   }
 }

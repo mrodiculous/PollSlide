@@ -184,6 +184,7 @@
 <script src="/errors.js?v=25c25f5f"></script>
 <script src="/qid.js?v=5e6ebfdc"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -272,7 +273,7 @@ let _authReady = new Promise(resolve => {
 });
 
 const letters = ['A','B','C','D','E','F'];
-const BASE_URL = "https://app.pollslide.com/answer";
+const BASE_URL = ((window.PS_ENV && PS_ENV.appOrigin) || 'https://app.pollslide.com') + "/answer";
 
 // ── Parse the hash: companion#<userId>  OR  companion#<userId>/<sessionCode>/<qIndex> ──
 // The extended form is sent by the Mac app when it decodes a QR on the slide,

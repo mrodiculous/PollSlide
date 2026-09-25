@@ -8,6 +8,7 @@
 <script src="/errors.js?v=25c25f5f"></script>
 <script src="/tickets.js?v=edb362ec"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <style>
@@ -649,9 +650,15 @@ function renderDetailBody(uid){
     <div id="pollyLog_${uid}" style="font-size:11.5px;color:var(--muted);margin-top:4px;">Loading…</div>
   </div>
   <div class="dp-sec">
+    <h3>🕵️ Support</h3>
+    <p style="font-size:11.5px;color:var(--muted);margin:0 0 8px;">Open PollSlide signed in as this user to reproduce their issue. Anything you change there changes their real account. Every use is logged.</p>
+    <button class="btn btn-sm btn-amber" style="width:100%;" onclick="masqueradeAs('${uid}')">View as this user</button>
+  </div>
+  <div class="dp-sec">
     <h3>Send message</h3>
     <select id="msgTypeDP" style="margin-bottom:6px;"><option value="info">Info</option><option value="warning">Warning</option><option value="success">Good news</option></select>
-    <textarea id="msgTextDP" placeholder="Message shown as notification in the app…"></textarea>
+    <textarea id="msgTextDP" placeholder="Message shown in the app until the user dismisses it…"></textarea>
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin:6px 0;"><input type="checkbox" id="msgEmailDP" checked style="width:auto;"> Also send by email</label>
     <button class="btn btn-sm btn-purple" style="margin-top:6px;width:100%;" onclick="sendMsgFromDetail('${uid}')">Send message</button>
   </div>
   <div class="dp-sec">
@@ -1432,6 +1439,9 @@ function renderComms(){
       <select id="bulkTier"><option value="all">All users</option><option value="free">Free users</option><option value="pro">Pro users</option><option value="team">Team users</option><option value="white">White Label</option></select>
       <select id="bulkType"><option value="info">ℹ Info</option><option value="success">✅ Announcement</option><option value="warning">⚠ Warning</option></select>
       <textarea id="bulkMsg" placeholder="Broadcast message…"></textarea>
+      <input id="bulkSubject" placeholder="Email subject (optional)">
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;"><input type="checkbox" id="bulkEmail" checked style="width:auto;"> Also send by email (skips anyone who unsubscribed)</label>
+      <div id="bulkProgress" style="font-size:12px;color:var(--muted);"></div>
       <button class="btn btn-amber" style="align-self:flex-start;padding:10px 20px;" onclick="sendBulk()">Broadcast</button>
     </div>
   </div>
@@ -1452,20 +1462,67 @@ async function sendBulk(){
   const targets=Object.entries(allUsers).filter(([,u])=>tier==='all'||(u.tier||'free')===tier);
   if(!targets.length){toast('No users in that tier.','danger');return;}
   showConfirm(`Send to ${targets.length} users?`,`"${text.slice(0,60)}${text.length>60?'…':''}" → ${targets.length} ${tier==='all'?'users':tier+' users'}.`,async()=>{
-    for(const[uid]of targets)await doSendMsg(uid,text,type);
-    document.getElementById('bulkMsg').value='';loadSentLog();toast(`Sent to ${targets.length} users.`,'success');
+    const email=document.getElementById('bulkEmail')?.checked;const subject=document.getElementById('bulkSubject')?.value.trim()||'';
+    const prog=document.getElementById('bulkProgress');let mailed=0,skipped=0,failed=0,i=0;
+    for(const[uid,u]of targets){
+      i++; await doSendMsg(uid,text,type,{quiet:true});
+      if(email&&u&&u.email){ const r=await emailAnnouncement(uid,u.email,text,type,subject); if(r==='sent')mailed++; else if(r==='skipped')skipped++; else failed++;
+        // Resend allows ~2 requests/second; pace so a large broadcast is not rejected part-way.
+        await new Promise(res=>setTimeout(res,600)); }
+      if(prog)prog.textContent=`In-app ${i}/${targets.length}`+(email?` · emailed ${mailed}, unsubscribed ${skipped}, failed ${failed}`:'');
+    }
+    document.getElementById('bulkMsg').value='';loadSentLog();
+    toast(`Sent to ${targets.length} users`+(email?` · ${mailed} emailed${skipped?`, ${skipped} unsubscribed`:''}${failed?`, ${failed} failed`:''}`:'')+'.',failed?'warning':'success');
+  });
+}
+// ── Masquerade ("view as this user") ────────────────────────────────────────
+// The window is opened FIRST, synchronously inside the click, so no popup blocker stops
+// it; the token follows by postMessage once both it and the window are ready.
+function masqueradeAs(uid){
+  const email=(allUsers[uid]||{}).email||uid;
+  showConfirm('View as '+email+'?','A new window opens signed in as this user. Anything you change there changes their real account. This is logged. Your admin session here is not affected.',async()=>{
+    const w=window.open('/presenter.html?masquerade=1','_blank');
+    if(!w){toast('Allow pop-ups for this site, then try again.','danger');return;}
+    let ready=false,payload=null;
+    const send=()=>{ if(ready&&payload){ w.postMessage({type:'ps-masq-token',token:payload.token,email:payload.email},location.origin); window.removeEventListener('message',onMsg);} };
+    const onMsg=e=>{ if(e.origin!==location.origin||e.source!==w)return; if(e.data&&e.data.type==='ps-masq-ready'){ready=true;send();} };
+    window.addEventListener('message',onMsg);
+    try{
+      const t=await auth.currentUser.getIdToken();
+      const r=await fetch('/api/masquerade',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify({uid})});
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok||!j.token){ w.close(); window.removeEventListener('message',onMsg); toast(j.error||'Could not start the session.','danger'); return; }
+      payload=j; send(); toast('Opened as '+(j.email||uid)+' — logged.','success');
+    }catch(e){ w.close(); window.removeEventListener('message',onMsg); toast('Could not start the session.','danger'); }
   });
 }
 async function sendMsgFromDetail(uid){
   const text=document.getElementById('msgTextDP')?.value?.trim();const type=document.getElementById('msgTypeDP')?.value||'info';
   if(!text){toast('Write a message.','danger');return;}
-  await doSendMsg(uid,text,type);document.getElementById('msgTextDP').value='';
+  await doSendMsg(uid,text,type);
+  if(document.getElementById('msgEmailDP')?.checked){ const em=(allUsers[uid]||{}).email;
+    if(em){ const r=await emailAnnouncement(uid,em,text,type,''); toast(r==='sent'?'Emailed too.':r==='skipped'?'Not emailed — this user unsubscribed.':'Email failed — the in-app message was still sent.',r==='failed'?'warning':'success'); } }
+  document.getElementById('msgTextDP').value='';
 }
-async function doSendMsg(uid,text,type){
-  const msgId='msg_'+Date.now();
+async function doSendMsg(uid,text,type,opts){
+  // Unique per recipient: a broadcast writes many in one millisecond, and a shared id
+  // would collide in admin/messages.
+  const msgId='msg_'+Date.now()+'_'+Math.random().toString(36).slice(2,7);
   await db.ref(`admin/messages/${msgId}`).set({uid,text,type,sentAt:Date.now(),sentBy:currentAdminEmail});
   await db.ref(`users/${uid}/inbox/${msgId}`).set({text,type,sentAt:Date.now(),read:false});
-  toast('Message sent.','success');
+  if(!(opts&&opts.quiet))toast('Message sent.','success');
+}
+// Email copy of an admin message. The server checks the user's unsubscribe preference and
+// signs the unsubscribe link; this only reports what happened: 'sent' | 'skipped' | 'failed'.
+async function emailAnnouncement(uid,to,text,type,subject){
+  try{
+    const t=await auth.currentUser.getIdToken();
+    const r=await fetch('/api/send-email',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},
+      body:JSON.stringify({type:'announcement',to,data:{uid,text,type,subject}})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)return 'failed';
+    return j.skipped?'skipped':'sent';
+  }catch(e){return 'failed';}
 }
 async function loadSentLog(){
   const el=document.getElementById('sentLog');if(!el)return;

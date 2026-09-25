@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>LoopSlide — Screen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#07070f; --panel:#11111f; --panel2:#181830; --text:#f3f3ff; --muted:#9a9ac0; --accent:#6c63ff; --good:#43e97b; --bad:#ff6584; --gold:#f7b731; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { height:100%; background:var(--bg); color:var(--text); font-family:'DM Sans',system-ui,sans-serif; overflow:hidden; }
+  /* Everything is sized in vmin so it reads the same on a 32" bar TV and an 85" lobby wall. */
+  #stage { position:fixed; inset:0; display:grid; grid-template-columns:1fr 30vmin; gap:3vmin; padding:3.5vmin; }
+  #main { display:flex; flex-direction:column; min-width:0; }
+  #side { display:flex; flex-direction:column; gap:2.4vmin; }
+  .brand { display:flex; align-items:center; gap:1.6vmin; margin-bottom:2.4vmin; }
+  .brand img { height:6vmin; max-width:22vmin; object-fit:contain; }
+  .brand .t { font-family:'Syne',sans-serif; font-weight:800; font-size:3.4vmin; letter-spacing:-.01em; }
+  .bar { height:1.1vmin; background:var(--panel2); border-radius:1vmin; overflow:hidden; margin-bottom:3vmin; }
+  .bar i { display:block; height:100%; width:100%; background:var(--accent); transform-origin:left; }
+  .kicker { font-size:2.2vmin; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); margin-bottom:1.4vmin; }
+  .q { font-family:'Syne',sans-serif; font-weight:800; font-size:5.4vmin; line-height:1.12; margin-bottom:3vmin; }
+  .qimg { max-height:28vmin; max-width:100%; border-radius:1.6vmin; margin-bottom:2.4vmin; object-fit:contain; align-self:flex-start; }
+  .opts { display:grid; grid-template-columns:1fr 1fr; gap:1.8vmin; }
+  .opt { background:var(--panel); border:.3vmin solid var(--panel2); border-radius:1.8vmin; padding:2.2vmin 2.6vmin; font-size:3.2vmin; font-weight:700; display:flex; align-items:center; gap:2vmin; position:relative; overflow:hidden; }
+  .opt .L { width:5.4vmin; height:5.4vmin; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-family:'Syne',sans-serif; flex-shrink:0; }
+  .opt .fill { position:absolute; left:0; top:0; bottom:0; background:rgba(255,255,255,.06); z-index:0; }
+  .opt > * { position:relative; z-index:1; }
+  .opt .oimg { width:9vmin; height:9vmin; border-radius:1.2vmin; object-fit:cover; flex-shrink:0; }
+  .opt .pct { margin-left:auto; font-family:'Syne',sans-serif; color:var(--muted); }
+  .opt.good { border-color:var(--good); box-shadow:0 0 3vmin rgba(67,233,123,.35); }
+  .opt.good .L { background:var(--good); color:#062; }
+  .opt.dim { opacity:.35; }
+  .card { background:var(--panel); border:.25vmin solid var(--panel2); border-radius:2vmin; padding:2.4vmin; }
+  .qr { background:#fff; border-radius:1.6vmin; padding:1.6vmin; display:flex; justify-content:center; }
+  .qr canvas, .qr img { width:24vmin !important; height:24vmin !important; }
+  .scan { text-align:center; font-weight:700; font-size:2.6vmin; margin-top:1.4vmin; }
+  .code { text-align:center; color:var(--muted); font-size:2vmin; margin-top:.6vmin; }
+  .stat { font-size:2.2vmin; color:var(--muted); }
+  .stat b { font-family:'Syne',sans-serif; font-size:4.6vmin; color:var(--text); display:block; line-height:1; margin-bottom:.4vmin; }
+  .count { font-family:'Syne',sans-serif; font-size:9vmin; font-weight:800; line-height:1; }
+  .leader { font-size:2.3vmin; line-height:1.35; }
+  .leader .who { font-weight:700; color:var(--gold); }
+  .board { display:flex; flex-direction:column; gap:1.2vmin; }
+  .row { display:flex; align-items:center; gap:2vmin; background:var(--panel); border-radius:1.6vmin; padding:1.8vmin 2.4vmin; font-size:3.2vmin; font-weight:700; }
+  .row .rk { width:6vmin; text-align:center; font-family:'Syne',sans-serif; }
+  .row .av { font-size:4vmin; }
+  .row .nm { flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row .pt { font-family:'Syne',sans-serif; color:var(--gold); }
+  .row.first { background:linear-gradient(90deg, rgba(247,183,49,.22), var(--panel)); border:.25vmin solid rgba(247,183,49,.5); }
+  .ad { flex:1; display:flex; flex-direction:column; justify-content:center; gap:2.4vmin; }
+  .ad .hero { max-height:52vmin; max-width:100%; object-fit:contain; border-radius:2vmin; align-self:flex-start; }
+  .ad h2 { font-family:'Syne',sans-serif; font-size:7vmin; line-height:1.05; }
+  .ad p { font-size:3.4vmin; color:#d8d8f0; line-height:1.4; max-width:80%; }
+  .empty { flex:1; display:flex; align-items:center; justify-content:center; text-align:center; font-size:3.6vmin; color:var(--muted); padding:6vmin; line-height:1.5; }
+  .tag { align-self:flex-start; display:inline-block; background:var(--panel2); color:var(--muted); border-radius:10vmin; padding:.6vmin 1.8vmin; font-size:1.9vmin; font-weight:700; margin-bottom:1.6vmin; }
+  .ai { display:inline-block; background:rgba(108,99,255,.18); color:#c9c5ff; border:.2vmin solid rgba(108,99,255,.5); border-radius:10vmin; padding:.4vmin 1.4vmin; font-size:1.7vmin; font-weight:700; letter-spacing:.02em; vertical-align:middle; margin-left:1vmin; text-transform:none; }
+  .prize { font-size:2.1vmin; line-height:1.4; }
+  #fs { position:fixed; right:2vmin; bottom:2vmin; background:rgba(255,255,255,.1); color:#fff; border:0; border-radius:1vmin; padding:1.2vmin 2vmin; font:700 1.8vmin 'DM Sans',sans-serif; cursor:pointer; opacity:.8; }
+  .foot { margin-top:auto; font-size:1.7vmin; color:#5b5b80; text-align:center; }
+  @media (orientation: portrait) {
+    #stage { grid-template-columns:1fr; grid-template-rows:1fr auto; }
+    #side { flex-direction:row; align-items:stretch; }
+    #side > * { flex:1; }
+    .opts { grid-template-columns:1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) { .bar i { transition:none !important; } }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="main"><div class="empty">Loading LoopSlide…</div></div>
+  <div id="side"></div>
+</div>
+<button id="fs" onclick="goFull()">⛶ Full screen</button>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="/ps-env.js?v=717fca7b"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="/loop-engine.js?v=eaf35aeb"></script>
+<script>
+/* LoopSlide TV screen — screen#<CODE>
+ * Reads only. What to show is computed from the clock (LoopEngine.positionAt), so this
+ * page has nothing to keep in step: reboot it, open it on three TVs, it lands on the same
+ * slot every time. The only data it reads is the loop itself and the answers/scores the
+ * phones write. */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME",
+  authDomain: "echonest-live-survey.firebaseapp.com",
+  databaseURL: "https://echonest-live-survey-default-rtdb.firebaseio.com",
+  projectId: "echonest-live-survey",
+  storageBucket: "echonest-live-survey.firebasestorage.app",
+  messagingSenderId: "285529140046",
+  appId: "1:285529140046:web:983c1ee8000a2ca8f80c1f",
+  measurementId: "G-NWQY4YLNRC"
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.database();
+const E = window.LoopEngine;
+const CODE = (location.hash || '').replace(/^#/, '').trim().toUpperCase().slice(0, 12);
+const APP = (window.PS_ENV && PS_ENV.appOrigin) || location.origin;
+const LETTERS = ['A','B','C','D','E','F'];
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+let offset = 0;                     // server − local clock, ms
+db.ref('.info/serverTimeOffset').on('value', s => { offset = s.val() || 0; });
+const now = () => Date.now() + offset;
+
+let loop = null, banned = {}, slotKey = '', ansRef = null, scoreRef = null;
+let answers = {}, scores = {};
+
+function main(html) { document.getElementById('main').innerHTML = html; }
+function side(html) { document.getElementById('side').innerHTML = html; }
+
+if (!CODE) {
+  main('<div class="empty">This screen needs a LoopSlide code.<br>Open it from LoopSlide Studio → “Open screen”.</div>');
+} else {
+  db.ref('loops/' + CODE).on('value', snap => {
+    const v = snap.val();
+    if (!v || !v.def) { loop = null; main('<div class="empty">No LoopSlide called <b>' + esc(CODE) + '</b>.<br>Check the link in LoopSlide Studio.</div>'); side(''); return; }
+    loop = E.normalizeLoop(v.def);
+    banned = v.banned || {};
+    document.documentElement.style.setProperty('--accent', loop.brand.accent);
+    slotKey = '';                    // force a redraw with the new definition
+  });
+  setInterval(tick, 250);
+}
+
+function playUrl() { return APP + '/play#' + CODE; }
+
+function renderSide(p) {
+  const leader = topScores(1)[0];
+  const q = p.slot.kind === 'question' || p.slot.kind === 'reveal';
+  side(`
+    <div class="card">
+      <div class="qr" id="qrBox"></div>
+      <div class="scan">Scan to play</div>
+      <div class="code">${esc(APP.replace(/^https?:\/\//, ''))}/play · ${esc(CODE)}</div>
+    </div>
+    ${q ? `<div class="card"><div class="stat"><b id="ansCount">${Object.keys(answers).length}</b>answered this one</div></div>` : ''}
+    <div class="card leader">${leader
+      ? `👑 <span class="who">${esc(leader.a || '')} ${esc(leader.n)}</span> leads with <b>${leader.pts.toLocaleString()}</b>.<br>Can you beat them?`
+      : 'No one on the board yet — <b>first to answer takes the crown.</b>'}</div>
+    ${loop.compliance.prize ? `<div class="card prize">🎁 <b>${esc(loop.compliance.prize)}</b><br><span class="stat" style="font-size:1.8vmin;">No purchase necessary · rules on your phone</span></div>` : ''}
+    <div class="foot">${loop.compliance.organiser ? 'Run by ' + esc(loop.compliance.organiser) + ' · ' : ''}${loop.compliance.aiNote ? 'Some content made with AI · ' : ''}LoopSlide by PollSlide</div>`);
+  const box = document.getElementById('qrBox');
+  if (box && window.QRCode) { try { new QRCode(box, { text: playUrl() + '/' + p.cycle, width: 256, height: 256, correctLevel: QRCode.CorrectLevel.M }); } catch (e) {} }
+}
+
+function brandHtml() {
+  const b = loop.brand;
+  return `<div class="brand">${b.logo ? `<img src="${esc(b.logo)}" alt="">` : ''}<div class="t">${esc(b.title || loop.name)}</div></div>`;
+}
+
+// Images, GIFs and videos. Videos are muted and looped — a public screen must never
+// start making noise on its own, and a clip shorter than its slot simply repeats.
+function media(url, cls) {
+  if (!url) return '';
+  return E.isVideo(url)
+    ? `<video class="${cls}" src="${esc(url)}" autoplay muted loop playsinline preload="auto"></video>`
+    : `<img class="${cls}" src="${esc(url)}" alt="">`;
+}
+// Transparency labels: AI-generated content (EU AI Act art. 50, California SB 942, China's
+// labelling measures) and who an ad is from (FTC endorsement guides, EU DSA art. 26).
+const aiTag = it => it && it.ai ? '<span class="ai">✨ AI-generated</span>' : '';
+function optMedia(it, i) { const u = it.optImgs && it.optImgs[i]; return u ? `<img class="oimg" src="${esc(u)}" alt="">` : ''; }
+
+function itemOf(slot) { const s = loop.sets[slot.set]; return s ? s.items[slot.item] : null; }
+
+function watch(p) {
+  // Answers to the question on screen (for the count and the reveal), and the running
+  // scores for this leaderboard period (for the crown and the boards).
+  const period = E.periodKey(loop, now());
+  if (ansRef) ansRef.off(); ansRef = null; answers = {};
+  const it = (p.slot.kind === 'question' || p.slot.kind === 'reveal') ? itemOf(p.slot) : null;
+  if (it) {
+    ansRef = db.ref(`loop_answers/${CODE}/${period}/${E.answerKey(p.cycle, it.id)}`);
+    ansRef.on('value', s => {
+      answers = s.val() || {};
+      Object.keys(banned).forEach(k => delete answers[k]);
+      const el = document.getElementById('ansCount'); if (el) el.textContent = Object.keys(answers).length;
+      if (p.slot.kind === 'reveal') drawReveal(p);
+    });
+  }
+  const pk = period;
+  if (!scoreRef || scoreRef._pk !== pk) {
+    if (scoreRef) scoreRef.off();
+    scoreRef = db.ref(`loop_scores/${CODE}/${pk}`);
+    scoreRef._pk = pk;
+    scoreRef.on('value', s => { scores = s.val() || {}; });
+  }
+}
+
+function topScores(n) {
+  return Object.entries(scores).filter(([pid]) => !banned[pid]).map(([pid, v]) => Object.assign({ pid }, v))
+    .sort((a, b) => (b.pts - a.pts) || (b.ans - a.ans)).slice(0, n);
+}
+
+function tick() {
+  if (!loop) return;
+  const p = E.positionAt(loop, now());
+  if (!p) { main('<div class="empty">This LoopSlide has no questions yet.<br>Add some in LoopSlide Studio and publish.</div>'); side(''); return; }
+  const key = p.cycle + ':' + p.index;
+  if (key !== slotKey) { slotKey = key; watch(p); draw(p); renderSide(p); }
+  const bar = document.querySelector('.bar i');
+  if (bar) bar.style.transform = 'scaleX(' + Math.max(0, p.remainingMs / (p.slot.dur * 1000)) + ')';
+  const cd = document.getElementById('cd'); if (cd) cd.textContent = Math.ceil(p.remainingMs / 1000);
+}
+
+function draw(p) {
+  const k = p.slot.kind;
+  if (k === 'question') return drawQuestion(p);
+  if (k === 'reveal') return drawReveal(p);
+  if (k === 'ad') return drawAd(p);
+  if (k === 'setboard') return drawSetBoard(p);
+  return drawGrand(p);
+}
+
+function drawQuestion(p) {
+  const it = itemOf(p.slot), set = loop.sets[p.slot.set];
+  main(`${brandHtml()}<div class="bar"><i></i></div>
+    <div class="kicker">${esc(set.title || 'Question')} · <span id="cd"></span>s${aiTag(it)}</div>
+    ${media(it.img, 'qimg')}
+    <div class="q">${esc(it.text)}</div>
+    <div class="opts">${it.options.map((o, i) => `<div class="opt"><span class="L">${LETTERS[i]}</span>${optMedia(it, i)}<span>${esc(o)}</span></div>`).join('')}</div>`);
+}
+
+function drawReveal(p) {
+  const it = itemOf(p.slot);
+  const list = Object.values(answers);
+  const n = list.length;
+  const per = it.options.map((_, i) => list.filter(a => a.c === i).length);
+  const fastest = list.filter(a => it.correct === null ? true : a.c === it.correct)
+    .sort((a, b) => (b.pts || 0) - (a.pts || 0) || (a.ms || 0) - (b.ms || 0)).slice(0, 3);
+  const hasC = it.correct !== null;
+  const right = hasC ? per[it.correct] : 0;
+  main(`${brandHtml()}<div class="bar"><i></i></div>
+    <div class="kicker">${hasC ? (n ? Math.round(right / n * 100) + '% got it right' : 'The answer') : 'How the room voted'}${aiTag(it)}</div>
+    <div class="q">${esc(it.text)}</div>
+    <div class="opts">${it.options.map((o, i) => {
+      const pc = n ? Math.round(per[i] / n * 100) : 0;
+      const cls = hasC ? (i === it.correct ? 'good' : 'dim') : '';
+      return `<div class="opt ${cls}"><span class="fill" style="width:${pc}%"></span><span class="L">${hasC && i === it.correct ? '✓' : LETTERS[i]}</span>${optMedia(it, i)}<span>${esc(o)}</span><span class="pct">${pc}%</span></div>`;
+    }).join('')}</div>
+    ${fastest.length ? `<div class="kicker" style="margin-top:3vmin;">${hasC ? '⚡ Fastest right' : '🙌 First in'}</div>
+      <div class="board">${fastest.map((a, i) => `<div class="row ${i === 0 ? 'first' : ''}"><span class="rk">${['🥇','🥈','🥉'][i]}</span><span class="av">${esc(a.a || '')}</span><span class="nm">${esc(a.n)}</span><span class="pt">${a.ms ? (a.ms / 1000).toFixed(1) + 's' : ''}</span></div>`).join('')}</div>` : ''}`);
+}
+
+function drawAd(p) {
+  const it = itemOf(p.slot);
+  main(`${brandHtml()}<div class="bar"><i></i></div>
+    <div class="ad"><div>${it.sponsored ? `<span class="tag">${it.sponsor ? 'Sponsored by ' + esc(it.sponsor) : 'Sponsored'}</span>` : ''}${aiTag(it)}</div>
+      ${media(it.img, 'hero')}
+      ${it.headline ? `<h2>${esc(it.headline)}</h2>` : ''}
+      ${it.body ? `<p>${esc(it.body)}</p>` : ''}
+      ${it.link ? `<div style="display:flex;align-items:center;gap:2.4vmin;"><div class="qr" id="adQr" style="padding:1vmin;"></div><div class="stat" style="font-size:2.6vmin;">Scan for the offer</div></div>` : ''}
+    </div>`);
+  const b = document.getElementById('adQr');
+  if (b && window.QRCode) { try { new QRCode(b, { text: it.link, width: 160, height: 160 }); b.querySelectorAll('canvas,img').forEach(x => { x.style.cssText = 'width:15vmin!important;height:15vmin!important'; }); } catch (e) {} }
+}
+
+function boardHtml(rows, empty) {
+  return rows.length ? `<div class="board">${rows.map((r, i) => `<div class="row ${i === 0 ? 'first' : ''}"><span class="rk">${i < 3 ? ['🥇','🥈','🥉'][i] : '#' + (i + 1)}</span><span class="av">${esc(r.a || '')}</span><span class="nm">${esc(r.n)}</span><span class="pt">${(r.pts || 0).toLocaleString()}</span></div>`).join('')}</div>`
+    : `<div class="empty" style="flex:0;padding:4vmin 0;">${empty}</div>`;
+}
+
+async function drawSetBoard(p) {
+  const set = loop.sets[p.slot.set];
+  main(`${brandHtml()}<div class="bar"><i></i></div><div class="kicker">🏁 ${esc(set.title || 'Round')} — this round</div><div id="sb"><div class="empty" style="flex:0;">Counting…</div></div>`);
+  // Sum this cycle's answers for this set's questions.
+  const period = E.periodKey(loop, now());
+  const totals = {};
+  await Promise.all(set.items.filter(it => it.type === 'q').map(async it => {
+    try {
+      const s = await db.ref(`loop_answers/${CODE}/${period}/${E.answerKey(p.cycle, it.id)}`).get();
+      Object.entries(s.val() || {}).forEach(([pid, a]) => {
+        if (banned[pid]) return;
+        const t = totals[pid] || (totals[pid] = { n: a.n, a: a.a, pts: 0 });
+        t.pts += a.pts || 0;
+      });
+    } catch (e) {}
+  }));
+  const rows = Object.values(totals).sort((a, b) => b.pts - a.pts).slice(0, loop.board.size);
+  const el = document.getElementById('sb'); if (el) el.innerHTML = boardHtml(rows, 'Nobody played this round — scan the code and be first next time!');
+}
+
+function drawGrand() {
+  const label = loop.board.reset === 'never' ? 'All-time leaders' : loop.board.reset === 'cycle' ? 'Leaders this loop'
+    : loop.board.days === 1 ? "Today's leaders" : `Leaders — ${loop.board.days}-day board`;
+  main(`${brandHtml()}<div class="bar"><i></i></div><div class="kicker">🏆 ${label}</div>${boardHtml(topScores(loop.board.size), 'The board is empty — scan the code and claim the top spot!')}`);
+}
+
+// ── Kiosk behaviour: full screen, keep the display awake, and a nightly refresh so a
+// screen left on for weeks always runs the latest version.
+function goFull() { const d = document.documentElement; (d.requestFullscreen || d.webkitRequestFullscreen || function(){}).call(d); }
+setTimeout(() => { const b = document.getElementById('fs'); if (b) b.style.display = 'none'; }, 15000);
+let wake = null;
+async function keepAwake() { try { if ('wakeLock' in navigator) wake = await navigator.wakeLock.request('screen'); } catch (e) {} }
+keepAwake(); document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') keepAwake(); });
+(function nightly() {
+  const d = new Date(), next = new Date(d); next.setHours(4, 0, 0, 0); if (next <= d) next.setDate(next.getDate() + 1);
+  setTimeout(() => location.reload(), next - d);
+})();
+</script>
+</body>
+</html>
