@@ -3868,34 +3868,51 @@ async function runLoopSelfTest(){
   const expectFail=async(label,fn)=>{ try{ await fn(); add(false,label,'The database ACCEPTED this — it should have refused it.'); }catch(e){ add(true,label,'Refused, as it should be.'); } };
   let slot=null, tvSlot=null, rogueDev=null;
   const tk=await me.getIdToken();
+  /* Every refusal names its step. A bare "PERMISSION_DENIED" under "Stopped early" gave no
+     clue which of a dozen writes the rules refused. */
+  const step=async(label,fn,hint)=>{ try{ return await fn(); }
+    catch(e){ add(false,label,'Refused: '+String(e&&e.message||e)+(hint?' — '+hint:'')); if(e&&typeof e==='object') e._shown=true; throw e; } };
+  /* The rules check phone timestamps against the SERVER clock (reactions allow only 5 s
+     ahead), so a Mac clock running a little fast would be refused. Use Firebase's time. */
+  let off=0; try{ off=(await db.ref('.info/serverTimeOffset').once('value')).val()||0; }catch(e){}
+  const NOW=()=>Date.now()+off;
+  const plan=lsPlan(tier);
   const api=async(path,body)=>{ const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+tk},body:JSON.stringify(body)}); const d=await r.json().catch(()=>({})); return {r,d}; };
   try{
     // Pages are served
     for(const pg of ['/loop','/screen','/play','/tv']){ const r=await fetch(pg,{cache:'no-store'}); add(r.ok,'Page '+pg+' is live','HTTP '+r.status); }
     // Publish a loop the way the Studio does (plan slot + public record)
     const used=(await db.ref('loop_slots/'+uid).get()).val()||{}; slot=0; while(used[slot]!==undefined) slot++;
+    if(slot>=plan.loops){ slot=null; add(null,'Test not run','This admin account is on "'+tier+'", which allows '+plan.loops+' loop(s), and it already has that many. Delete a loop in the Studio (or put this account on a paid plan) and run it again.'); throw {_shown:true}; }
     const def=E.normalizeLoop({ name:'Self-test', lang:'en', epoch:Date.now(), extras:{teams:true,teamNames:['A','B']}, reward:{text:'Test reward',code:'T1',top:3},
       compliance:{organiser:'PollSlide self-test',contact:'help@pollslide.com',rulesUrl:'https://pollslide.com/terms'},
       sets:[{id:'s1',title:'Round 1',items:[{id:'q1',type:'q',text:'Which planet is red? 🪐',options:['Venus','Mars'],correct:1},{id:'a1',type:'ad',sponsored:false,headline:'Did you know?',body:'Mars has two moons.'}]}] });
     try{ await db.ref().update({ ['loop_slots/'+uid+'/'+slot]:code, ['loops/'+code]:{ownerUid:uid,def,updatedAt:Date.now(),slot:String(slot),cap:paid?null:25} });
       add(true,'Publish a loop (plan slot '+slot+')','Code '+code+'.'); }
-    catch(e){ add(false,'Publish a loop','Refused: '+e.message+'. This admin account is on "'+tier+'"; if its loop slots are full, delete a loop or use a paid plan.'); throw e; }
-    // TV pairing
-    await db.ref('tv_pair/'+pair).set({device:dev,createdAt:firebase.database.ServerValue.TIMESTAMP}); add(true,'A TV can post a pairing code','Code '+pair+'.');
-    const tu=(await db.ref('tv_slots/'+uid).get()).val()||{}; tvSlot=0; while(tu[tvSlot]!==undefined) tvSlot++;
-    await db.ref().update({ ['tv_slots/'+uid+'/'+tvSlot]:dev, ['tv_devices/'+dev]:{ownerUid:uid,loop:code,name:'Self-test TV',pair,slot:String(tvSlot),pairedAt:firebase.database.ServerValue.TIMESTAMP}, ['tv_pair/'+pair]:null });
-    const tv=(await db.ref('tv_devices/'+dev).get()).val(); add(!!tv&&tv.loop===code,'Pair the TV to the loop','The TV would now play '+code+'.');
+    catch(e){ add(false,'Publish a loop','Refused: '+e.message+'. This admin account is on "'+tier+'".'); e._shown=true; throw e; }
+    // TV pairing — only if this account has a free TV slot on its plan
+    const tu=(await db.ref('tv_slots/'+uid).get()).val()||{}; let ts=0; while(tu[ts]!==undefined) ts++;
+    if(ts>=plan.screens){
+      add(null,'TV pairing not tested','This admin account is on "'+tier+'", which allows '+plan.screens+' TV(s), and it already has that many paired. Unpair one in the Studio → 📺 Screens to include this check. Everything else still runs.');
+    } else {
+      await step('A TV can post a pairing code', ()=>db.ref('tv_pair/'+pair).set({device:dev,createdAt:firebase.database.ServerValue.TIMESTAMP}));
+      add(true,'A TV can post a pairing code','Code '+pair+'.');
+      tvSlot=ts;
+      await step('Pair the TV to the loop', ()=>db.ref().update({ ['tv_slots/'+uid+'/'+tvSlot]:dev, ['tv_devices/'+dev]:{ownerUid:uid,loop:code,name:'Self-test TV',pair,slot:String(tvSlot),pairedAt:firebase.database.ServerValue.TIMESTAMP}, ['tv_pair/'+pair]:null }),
+        'TV slot '+tvSlot+' on plan "'+tier+'".');
+      const tv=(await db.ref('tv_devices/'+dev).get()).val(); add(!!tv&&tv.loop===code,'Pair the TV to the loop','The TV would now play '+code+'.');
+    }
     rogueDev=rnd(24);
     await expectFail('A TV can\'t be claimed without its live code', ()=>db.ref('tv_devices/'+rogueDev).set({ownerUid:uid,loop:code,name:'x',pair:'ZZZZZZ',slot:'9'}));
     // Phone
-    const L=def, p=E.positionAt(L,Date.now()), per=E.periodKey(L,Date.now()), key=E.answerKey(p.cycle,'q1');
-    await db.ref(`loop_answers/${code}/${per}/${key}/${pid}`).set({n:'Tester',a:'🦊',c:1,ms:1200,pts:1900,t:Date.now(),x:2,tm:0});
-    await db.ref(`loop_scores/${code}/${per}/${pid}`).set({n:'Tester',a:'🦊',pts:1900,ans:1,last:key,tm:0,b:1,d:1});
+    const L=def, p=E.positionAt(L,NOW()), per=E.periodKey(L,NOW()), key=E.answerKey(p.cycle,'q1');
+    await step('A phone can answer', ()=>db.ref(`loop_answers/${code}/${per}/${key}/${pid}`).set({n:'Tester',a:'🦊',c:1,ms:1200,pts:1900,t:NOW(),x:2,tm:0}));
+    await step('A phone can score', ()=>db.ref(`loop_scores/${code}/${per}/${pid}`).set({n:'Tester',a:'🦊',pts:1900,ans:1,last:key,tm:0,b:1,d:1}));
     add(true,'A phone can answer and score (with ⚡2× and a team)','');
-    await expectFail('Points above the per-answer limit are refused', ()=>db.ref(`loop_answers/${code}/${per}/9_q1/${pid}`).set({n:'x',c:1,ms:1,pts:5000,t:Date.now()}));
-    await db.ref(`loop_react/${code}/${pid}`).set({e:1,t:Date.now()}); add(true,'A phone can send a reaction','');
-    await expectFail('A second reaction inside 1.5 s is refused', ()=>db.ref(`loop_react/${code}/${pid}`).set({e:2,t:Date.now()}));
-    await expectFail('Only the six allowed reactions exist', ()=>db.ref(`loop_react/${code}/pother${rnd(3).toLowerCase()}`).set({e:9,t:Date.now()}));
+    await expectFail('Points above the per-answer limit are refused', ()=>db.ref(`loop_answers/${code}/${per}/9_q1/${pid}`).set({n:'x',c:1,ms:1,pts:5000,t:NOW()}));
+    await step('A phone can send a reaction', ()=>db.ref(`loop_react/${code}/${pid}`).set({e:1,t:NOW()})); add(true,'A phone can send a reaction','');
+    await expectFail('A second reaction inside 1.5 s is refused', ()=>db.ref(`loop_react/${code}/${pid}`).set({e:2,t:NOW()}));
+    await expectFail('Only the six allowed reactions exist', ()=>db.ref(`loop_react/${code}/pother${rnd(3).toLowerCase()}`).set({e:9,t:NOW()}));
     // APIs
     const tr=await api('/api/loop-translate',{code});
     if(tr.r.ok&&tr.d.ok){ const es=(await db.ref('loop_i18n/'+code+'/es').get()).val(); const n=es&&es.u?Object.keys(es.u).length:0;
@@ -3905,7 +3922,7 @@ async function runLoopSelfTest(){
     add(gf.r.ok&&Array.isArray(gf.d.results)&&gf.d.results.length>0,'GIF search works', gf.r.ok?(gf.d.results||[]).length+' results':(gf.d.error||'HTTP '+gf.r.status));
     if(document.getElementById('lsTestPolly').checked){ const py=await api('/api/polly',{topic:'the planets',type:'quiz',count:1});
       add(py.r.ok&&Array.isArray(py.d.questions)&&py.d.questions.length>0,'Polly writes questions', py.r.ok?'':(py.d.error||'HTTP '+py.r.status)); }
-  }catch(e){ add(false,'Stopped early',String(e&&e.message||e)); }
+  }catch(e){ if(!(e&&e._shown)) add(false,'Stopped early',String(e&&e.message||e)); }
   // Clean up everything it made
   try{
     /* Only delete what exists: a delete of a missing path can be refused by its rule, and
