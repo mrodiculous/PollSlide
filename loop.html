@@ -82,8 +82,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 <script src="/gifs.js?v=ed7add18"></script>
-<script src="/loop-i18n.js?v=28a90cfa"></script>
-<script src="/loop-engine.js?v=0f37af28"></script>
+<script src="/loop-i18n.js?v=659ae400"></script>
+<script src="/loop-engine.js?v=8cbfc46c"></script>
 <script>
 /* LoopSlide Studio — build, publish and run loops for public screens.
  * Data:  users/<uid>/loops/<CODE>   { name, def (draft), publishedAt, updatedAt }  — private
@@ -204,6 +204,7 @@ async function newLoop() {
     board: { reset: 'days', days: 1, size: 5, speed: true, streak: true, rejoin: false },
     tzOffsetMin: -new Date().getTimezoneOffset(),
     lang: I.get(), screenLang: 'auto', autoTranslate: true,
+    extras: { reactions: true, double: true, badges: true, teams: false, teamNames: [1, 2, 3, 4, 5, 6].map(n => T('Table {n}', { n })) },
     compliance: { organiser: '', contact: user.email || '', minAge: 0, prize: '', rulesUrl: '', aiNote: false },
     sets: [{ id: 's' + uid6(), title: T('Round {n}', { n: 1 }), items: [] }] };
   await db.ref('users/' + user.uid + '/loops/' + code).set({ name: def.name, def, updatedAt: Date.now() });
@@ -224,6 +225,7 @@ function openLoop(code) {
 function draftShape(d) {
   d = d && typeof d === 'object' ? d : {};
   d.brand = d.brand || {}; d.timing = d.timing || {}; d.board = d.board || {}; d.compliance = d.compliance || {};
+  d.extras = d.extras || {}; d.extras.teamNames = Array.isArray(d.extras.teamNames) ? d.extras.teamNames.filter(Boolean) : Object.values(d.extras.teamNames || {});
   d.sets = Array.isArray(d.sets) ? d.sets.filter(Boolean) : Object.values(d.sets || {});
   d.sets.forEach(s => {
     s.items = Array.isArray(s.items) ? s.items.filter(Boolean) : Object.values(s.items || {});
@@ -303,6 +305,22 @@ function editorView() {
     </div>
 
 
+    <div class="card"><h2>🎮 Game extras</h2>
+      <p class="note" style="margin-bottom:6px;">The things that keep a room playing. Switch off anything that doesn't suit your venue.</p>
+      <label class="row" style="margin-top:8px;font-size:14px;"><input type="checkbox" ${cur.extras.reactions !== false ? 'checked' : ''} onchange="cur.extras.reactions=this.checked"> Live emoji reactions — players send 👏 🔥 😂 to the TV</label>
+      <label class="row" style="margin-top:8px;font-size:14px;"><input type="checkbox" ${cur.extras.double !== false ? 'checked' : ''} onchange="cur.extras.double=this.checked"> ⚡ Double points — each player can use it once per round</label>
+      <label class="row" style="margin-top:8px;font-size:14px;"><input type="checkbox" ${cur.extras.badges !== false ? 'checked' : ''} onchange="cur.extras.badges=this.checked"> 🏅 Badges — hot streaks, perfect rounds, fastest finger and more</label>
+      <label class="row" style="margin-top:8px;font-size:14px;"><input type="checkbox" ${cur.extras.teams ? 'checked' : ''} onchange="cur.extras.teams=this.checked;editorView()"> 👥 Table vs table — players join a team and teams get their own leaderboard</label>
+      ${cur.extras.teams ? `<label class="f">Team names (one per line, up to 12)</label><textarea rows="4" oninput="setTeamNames(this.value)">${esc((cur.extras.teamNames || []).join('\n'))}</textarea>` : ''}
+      <label class="f" style="margin-top:14px;">🎁 Reward for the top players (optional)</label>
+      <div class="cols3">
+        <div style="grid-column:span 2;"><input value="${esc((cur.reward && cur.reward.text) || '')}" placeholder="e.g. 10% off your next round" oninput="cur.reward=Object.assign(cur.reward||{},{text:this.value})"></div>
+        <div><input value="${esc((cur.reward && cur.reward.code) || '')}" placeholder="Code to show staff, e.g. WIN10" oninput="cur.reward=Object.assign(cur.reward||{},{code:this.value})"></div>
+        <div><select onchange="cur.reward=Object.assign(cur.reward||{},{top:+this.value})">${[1, 2, 3, 5, 10].map(n => `<option value="${n}" ${((cur.reward && cur.reward.top) || 3) == n ? 'selected' : ''}>${esc(T('Top {n}', { n }))}</option>`).join('')}</select></div>
+      </div>
+      <p class="note" style="margin-top:6px;">Players in the top places see the reward, the code, their name and a live clock on their phone, so staff can tell it's real. A reward is a prize: add your official rules below.</p>
+    </div>
+
     <div class="card"><h2>Rules &amp; compliance</h2>
       <p class="note" style="margin-bottom:6px;">Shown to players before they play. You're the organiser — the business running this at your venue — so players need to know who you are and how to reach you. These are the basics most countries require; they're not legal advice.</p>
       <div class="cols">
@@ -376,6 +394,7 @@ function adHtml(it, si, ii) {
 function addSet() { cur.sets.push({ id: 's' + uid6(), title: T('Round {n}', { n: cur.sets.length + 1 }), items: [] }); editorView(); }
 function delSet(si) { if (confirm(T('Delete this round and its questions?'))) { cur.sets.splice(si, 1); editorView(); } }
 function moveSet(si, d) { const j = si + d; if (j < 0 || j >= cur.sets.length) return; [cur.sets[si], cur.sets[j]] = [cur.sets[j], cur.sets[si]]; editorView(); }
+function setTeamNames(v) { cur.extras.teamNames = String(v || '').split(/\r?\n/).map(x => x.trim()).filter(Boolean).slice(0, 12); }
 function atSlideLimit() { const p = planOf(); if (slideCount(cur) < p.slides) return false; limitNote(T('{plan} includes {n} slides (questions and cards) per loop.', { plan: p.name, n: p.slides })); return true; }
 function addQ(si) { if (atSlideLimit()) return; cur.sets[si].items.push({ id: 'i' + uid6(), type: 'q', text: '', options: ['', ''], correct: 0 }); editorView(); }
 function addAd(si, sponsored) { if (atSlideLimit()) return; cur.sets[si].items.push({ id: 'i' + uid6(), type: 'ad', sponsored: sponsored !== false, headline: '', body: '', img: '', link: '' }); editorView(); }
@@ -457,6 +476,7 @@ async function deleteLoop() {
     upd['loop_answers/' + code] = null;
     upd['loop_scores/' + code] = null;
     upd['loop_i18n/' + code] = null;
+    upd['loop_react/' + code] = null;
     if (pub.slot != null) upd['loop_slots/' + user.uid + '/' + pub.slot] = null;
   }
   Object.entries(myTvs).forEach(([id, tv]) => {
@@ -472,7 +492,7 @@ function complianceGaps(L) {
   const c = L.compliance, out = [];
   if (!c.organiser) out.push(T('Organiser — the business running this loop.'));
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.contact)) out.push(T('A contact email players can reach you on.'));
-  if (c.prize && !c.rulesUrl) out.push(T('An official rules link (https) — you’ve offered a prize.'));
+  if ((c.prize || L.reward) && !c.rulesUrl) out.push(T('An official rules link (https) — you’ve offered a prize.'));
   L.sets.forEach(s => s.items.forEach(it => { if (it.type === 'ad' && it.sponsored && !it.sponsor) out.push(T('Who the ad “{x}” is from (sponsor name).', { x: it.headline || T('untitled') })); }));
   return out;
 }

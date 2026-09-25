@@ -30,7 +30,7 @@ module.exports = async function handler(req, res) {
   if (!configured()) return res.status(503).json({ error: 'Firebase Admin not configured' });
 
   const app = getApp(), db = admin.database(app), now = Date.now();
-  const report = { loops: 0, periodsDeleted: 0, cyclesPruned: 0, orphans: 0, pairCodes: 0 };
+  const report = { loops: 0, periodsDeleted: 0, cyclesPruned: 0, orphans: 0, pairCodes: 0, reactions: 0 };
   try {
     const loops = (await db.ref('loops').get()).val() || {};
     for (const node of ['loop_answers', 'loop_scores']) {
@@ -55,6 +55,15 @@ module.exports = async function handler(req, res) {
         if (Object.keys(upd).length) await db.ref().update(upd);
       }
     }
+    /* Reactions are only ever shown for a few seconds; anything older than an hour is noise. */
+    const reacts = (await db.ref('loop_react').get()).val() || {};
+    const oldR = {};
+    Object.keys(reacts).forEach(code => {
+      if (!loops[code]) { oldR['loop_react/' + code] = null; return; }
+      Object.keys(reacts[code] || {}).forEach(pid => { const v = reacts[code][pid]; if (!(v && v.t > now - 3600 * 1000)) oldR['loop_react/' + code + '/' + pid] = null; });
+    });
+    report.reactions = Object.keys(oldR).length;
+    if (report.reactions) await db.ref().update(oldR);
     /* TV pairing codes (tv.html) live 15 minutes; a TV that was switched off mid-pairing
        leaves its last one behind. Nothing reads an expired code, so it is only clutter. */
     const pairs = (await db.ref('tv_pair').get()).val() || {};

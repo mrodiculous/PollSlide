@@ -59,6 +59,24 @@
   .tag { align-self:flex-start; display:inline-block; background:var(--panel2); color:var(--muted); border-radius:10vmin; padding:.6vmin 1.8vmin; font-size:1.9vmin; font-weight:700; margin-bottom:1.6vmin; }
   .ai { display:inline-block; background:rgba(108,99,255,.18); color:#c9c5ff; border:.2vmin solid rgba(108,99,255,.5); border-radius:10vmin; padding:.4vmin 1.4vmin; font-size:1.7vmin; font-weight:700; letter-spacing:.02em; vertical-align:middle; margin-left:1vmin; text-transform:none; }
   .prize { font-size:2.1vmin; line-height:1.4; }
+  /* Game extras: floating reactions, podium, team boards, confetti */
+  #rxLayer { position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:9; }
+  .rxf { position:absolute; bottom:-8vmin; font-size:6vmin; animation:rxUp 3.6s ease-out forwards; }
+  @keyframes rxUp { 0% { transform:translateY(0) scale(.6); opacity:0; } 12% { opacity:1; transform:translateY(-8vmin) scale(1.1); } 100% { transform:translateY(-78vh) translateX(var(--dx,0)) scale(1); opacity:0; } }
+  .two { display:grid; grid-template-columns:1.35fr 1fr; gap:3vmin; align-items:start; }
+  .two h3 { font-size:2.2vmin; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin-bottom:1.2vmin; }
+  .podium { display:flex; align-items:flex-end; justify-content:center; gap:2vmin; height:32vmin; margin:1vmin 0 2.4vmin; }
+  .pcol { width:22%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:.8vmin; }
+  .pcol .pav { font-size:6vmin; }
+  .pcol .pnm { font-weight:800; font-size:2.8vmin; max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pcol .ppt { font-family:'Syne',sans-serif; color:var(--gold); font-size:2.6vmin; }
+  .pcol .pblk { width:100%; border-radius:1.4vmin 1.4vmin 0 0; display:flex; justify-content:center; padding-top:1vmin; font-size:4.4vmin; transform-origin:bottom; animation:rise .9s cubic-bezier(.2,.8,.2,1.15) both; }
+  @keyframes rise { from { transform:scaleY(0); } }
+  .conf { position:fixed; top:-3vmin; width:1.2vmin; height:1.8vmin; z-index:8; animation:cfall 2.6s ease-in forwards; }
+  @keyframes cfall { to { transform:translateY(110vh) rotate(720deg); opacity:.2; } }
+  .mini { font-size:.62em; color:var(--muted); margin-left:.8vmin; font-weight:700; }
+  .x2 { color:var(--gold); font-weight:800; margin-left:.8vmin; font-size:.8em; }
+  @media (prefers-reduced-motion: reduce) { .rxf, .pcol .pblk, .conf { animation:none !important; } .conf, .rxf { display:none; } }
   #fs { position:fixed; right:2vmin; bottom:2vmin; background:rgba(255,255,255,.1); color:#fff; border:0; border-radius:1vmin; padding:1.2vmin 2vmin; font:700 1.8vmin 'DM Sans',sans-serif; cursor:pointer; opacity:.8; }
   .foot { margin-top:auto; font-size:1.7vmin; color:#5b5b80; text-align:center; }
   @media (orientation: portrait) {
@@ -76,13 +94,14 @@
   <div id="side"></div>
 </div>
 <button id="fs" onclick="goFull()">⛶ Full screen</button>
+<div id="rxLayer" aria-hidden="true"></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="/loop-i18n.js?v=28a90cfa"></script>
-<script src="/loop-engine.js?v=0f37af28"></script>
+<script src="/loop-i18n.js?v=659ae400"></script>
+<script src="/loop-engine.js?v=8cbfc46c"></script>
 <script>
 /* LoopSlide TV screen — screen#<CODE>
  * Reads only. What to show is computed from the clock (LoopEngine.positionAt), so this
@@ -148,6 +167,7 @@ if (!CODE) {
     slotKey = '';                    // force a redraw with the new definition
   });
   setInterval(tick, 250);
+  watchReactions();
 }
 
 function playUrl() { return APP + '/play#' + CODE; }
@@ -269,7 +289,10 @@ function drawReveal(p) {
       return `<div class="opt ${cls}"><span class="fill" style="width:${pc}%"></span><span class="L">${hasC && i === it.correct ? '✓' : LETTERS[i]}</span>${optMedia(it, i)}<span>${esc(o)}</span><span class="pct">${pc}%</span></div>`;
     }).join('')}</div>
     ${fastest.length ? `<div class="kicker" style="margin-top:3vmin;">${esc(hasC ? t('⚡ Fastest right') : t('🙌 First in'))}</div>
-      <div class="board">${fastest.map((a, i) => `<div class="row ${i === 0 ? 'first' : ''}"><span class="rk">${['🥇','🥈','🥉'][i]}</span><span class="av">${esc(a.a || '')}</span><span class="nm">${esc(a.n)}</span><span class="pt">${a.ms ? (a.ms / 1000).toFixed(1) + 's' : ''}</span></div>`).join('')}</div>` : ''}`);
+      <div class="board">${fastest.map((a, i) => `<div class="row ${i === 0 ? 'first' : ''}"><span class="rk">${['🥇','🥈','🥉'][i]}</span><span class="av">${esc(a.a || '')}</span><span class="nm">${esc(a.n)}${a.x === 2 ? '<span class="x2">⚡2×</span>' : ''}</span><span class="pt">${a.ms ? (a.ms / 1000).toFixed(1) + 's' : ''}</span></div>`).join('')}</div>` : ''}`);
+  // Celebrate once per question, when anyone got it right.
+  const ck = p.cycle + ':' + p.index;
+  if (hasC && right > 0 && _confettiFor !== ck) { _confettiFor = ck; confetti(); }
 }
 
 function drawAd(p) {
@@ -285,8 +308,10 @@ function drawAd(p) {
   if (b && window.QRCode) { try { new QRCode(b, { text: it.link, width: 160, height: 160 }); b.querySelectorAll('canvas,img').forEach(x => { x.style.cssText = 'width:15vmin!important;height:15vmin!important'; }); } catch (e) {} }
 }
 
-function boardHtml(rows, empty) {
-  return rows.length ? `<div class="board">${rows.map((r, i) => `<div class="row ${i === 0 ? 'first' : ''}"><span class="rk">${i < 3 ? ['🥇','🥈','🥉'][i] : '#' + (i + 1)}</span><span class="av">${esc(r.a || '')}</span><span class="nm">${esc(r.n)}</span><span class="pt">${num(r.pts)}</span></div>`).join('')}</div>`
+// `from` = the rank of the first row, so a list that continues below the podium starts at #4.
+function boardHtml(rows, empty, from) {
+  const o = from || 0;
+  return rows.length ? `<div class="board">${rows.map((r, j) => { const i = j + o; return `<div class="row ${i === 0 ? 'first' : ''}"><span class="rk">${i < 3 ? ['🥇','🥈','🥉'][i] : '#' + (i + 1)}</span><span class="av">${esc(r.a || '')}</span><span class="nm">${esc(r.n)}${nameExtras(r)}</span><span class="pt">${num(r.pts)}</span></div>`; }).join('')}</div>`
     : `<div class="empty" style="flex:0;padding:4vmin 0;">${empty}</div>`;
 }
 
@@ -301,19 +326,69 @@ async function drawSetBoard(p) {
       const s = await db.ref(`loop_answers/${CODE}/${period}/${E.answerKey(p.cycle, it.id)}`).get();
       Object.entries(s.val() || {}).forEach(([pid, a]) => {
         if (banned[pid]) return;
-        const t = totals[pid] || (totals[pid] = { n: a.n, a: a.a, pts: 0 });
-        t.pts += a.pts || 0;
+        const tot = totals[pid] || (totals[pid] = { n: a.n, a: a.a, pts: 0, tm: a.tm });
+        tot.pts += a.pts || 0;
       });
     } catch (e) {}
   }));
-  const rows = Object.values(totals).sort((a, b) => b.pts - a.pts).slice(0, loop.board.size);
-  const el = document.getElementById('sb'); if (el) el.innerHTML = boardHtml(rows, esc(t('Nobody played this round — scan the code and be first next time!')));
+  const all = Object.values(totals).sort((a, b) => b.pts - a.pts);
+  const players = boardHtml(all.slice(0, loop.board.size), esc(t('Nobody played this round — scan the code and be first next time!')));
+  const el = document.getElementById('sb'); if (el) el.innerHTML = withTeams(players, all);
+}
+/* Table vs table: the team board sits beside the player board when teams are on. */
+function withTeams(playersHtml, rows) {
+  if (!loop.extras.teams) return playersHtml;
+  const teams = E.teamStandings(rows, loop.extras.teamNames).slice(0, loop.board.size);
+  const tHtml = teams.length ? `<div class="board">${teams.map((x, i) => `<div class="row ${i === 0 ? 'first' : ''}"><span class="rk">${i < 3 ? ['🥇','🥈','🥉'][i] : '#' + (i + 1)}</span><span class="nm">${esc(x.name)}<span class="mini">👥 ${x.players}</span></span><span class="pt">${num(x.pts)}</span></div>`).join('')}</div>` : `<div class="empty" style="flex:0;padding:4vmin 0;">…</div>`;
+  return `<div class="two"><div><h3>${esc(t('Players'))}</h3>${playersHtml}</div><div><h3>${esc(t('Teams'))}</h3>${tHtml}</div></div>`;
+}
+function nameExtras(r) {
+  let s = '';
+  if (r.d >= 2) s += `<span class="mini">🔥${Math.min(999, Math.round(r.d))}</span>`;
+  if (loop.extras.badges && r.b > 0) s += `<span class="mini">🏅${Math.min(50, Math.round(r.b))}</span>`;
+  return s;
+}
+/* The overall board opens on a podium for the top three. */
+function podiumHtml(rows) {
+  if (rows.length < 2) return '';
+  const order = [1, 0, 2], h = ['100%', '72%', '52%'], col = ['#f7b731', '#c9c5ff', '#e8965a'];
+  return `<div class="podium">${order.map(i => { const r = rows[i]; if (!r) return '<div class="pcol"></div>';
+    return `<div class="pcol"><div class="pav">${esc(r.a || '')}</div><div class="pnm">${esc(r.n)}${nameExtras(r)}</div><div class="ppt">${num(r.pts)}</div>
+      <div class="pblk" style="height:${['17vmin', '12vmin', '8vmin'][i]};background:${col[i]};animation-delay:${i === 0 ? .5 : i === 1 ? .25 : 0}s">${['🥇','🥈','🥉'][i]}</div></div>`; }).join('')}</div>`;
+}
+let _confettiFor = null;
+function confetti() {
+  if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const cols = ['#6c63ff', '#ff6584', '#43e97b', '#f7b731', '#4facfe'];
+  for (let k = 0; k < 60; k++) {
+    const c = document.createElement('i'); c.className = 'conf';
+    c.style.left = Math.random() * 100 + 'vw'; c.style.background = cols[k % cols.length]; c.style.animationDelay = (Math.random() * .6) + 's';
+    document.body.appendChild(c); setTimeout(() => c.remove(), 3400);
+  }
+}
+/* Live reactions from phones. Only the six fixed emoji, only from the last few seconds, never
+   from a removed player, and never more than 30 on screen at once. */
+function watchReactions() {
+  const ref = db.ref('loop_react/' + CODE);
+  const show = snap => {
+    const v = snap.val(); if (!v || !loop || !loop.extras.reactions || banned[snap.key]) return;
+    if (!(v.t > now() - 8000)) return;
+    const e = E.REACTIONS[v.e]; if (!e) return;
+    const layer = document.getElementById('rxLayer'); if (!layer || layer.childElementCount >= 30) return;
+    const f = document.createElement('div'); f.className = 'rxf'; f.textContent = e;
+    f.style.left = (8 + Math.random() * 60) + 'vw'; f.style.setProperty('--dx', ((Math.random() - .5) * 20) + 'vw');
+    layer.appendChild(f); setTimeout(() => f.remove(), 3700);
+  };
+  ref.on('child_added', show); ref.on('child_changed', show);
 }
 
 function drawGrand() {
   const label = loop.board.reset === 'never' ? t('All-time leaders') : loop.board.reset === 'cycle' ? t('Leaders this loop')
     : loop.board.days === 1 ? t('Today’s leaders') : t('Leaders — {n}-day board', { n: loop.board.days });
-  main(`${brandHtml()}<div class="bar"><i></i></div><div class="kicker">🏆 ${esc(label)}</div>${boardHtml(topScores(loop.board.size), esc(t('The board is empty — scan the code and claim the top spot!')))}`);
+  const top = topScores(loop.board.size), all = topScores(1000);
+  const podium = top.length >= 2;
+  const players = podiumHtml(top) + (podium ? (top.length > 3 ? boardHtml(top.slice(3), '', 3) : '') : boardHtml(top, esc(t('The board is empty — scan the code and claim the top spot!'))));
+  main(`${brandHtml()}<div class="bar"><i></i></div><div class="kicker">🏆 ${esc(label)}</div>${withTeams(players, all)}`);
 }
 
 // ── Kiosk behaviour: full screen, keep the display awake, and a nightly refresh so a

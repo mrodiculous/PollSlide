@@ -32,6 +32,9 @@
      TV browser's own language). Question content in other languages comes from the
      auto-translation stored at loop_i18n/<CODE>/<lang> (api/loop-translate.js). */
   const LANGS = ['en', 'es', 'de', 'fr', 'pt', 'it'];
+  const TEAM_MAX = 12;
+  // The only reactions a phone can send to a public screen — fixed, so nothing can be abused.
+  const REACTIONS = ['👏', '🔥', '😂', '😮', '❤️', '🎉'];
 
   const clampInt = (v, lo, hi, dflt) => {
     const n = Math.round(Number(v));
@@ -104,6 +107,21 @@
       /* Who runs this, and on what terms. Shown on the phone before anyone plays and on the
          screen where relevant — the organiser is the data controller for what players enter,
          and a prize makes it a promotion with its own rules. */
+      /* Game extras — each one can be switched off by the organiser. */
+      extras: (function (e) {
+        e = e || {};
+        let names = (Array.isArray(e.teamNames) ? e.teamNames : []).map(x => str(x, 24).trim()).filter(Boolean).slice(0, TEAM_MAX);
+        if (e.teams === true && names.length < 2) names = [1, 2, 3, 4, 5, 6].map(n => 'Table ' + n);
+        return { reactions: e.reactions !== false, double: e.double !== false, badges: e.badges !== false,
+                 teams: e.teams === true, teamNames: names };
+      })(L.extras),
+      /* A reward revealed to the top players' phones (e.g. a coupon code shown to staff).
+         It is a prize, so publishing asks for official rules like any other prize. */
+      reward: (function (r) {
+        r = r || {};
+        const text = str(r.text, 80).trim();
+        return text ? { text, code: str(r.code, 24).trim(), top: clampInt(r.top, 1, 10, 3) } : null;
+      })(L.reward),
       compliance: (function (c) {
         c = c || {};
         const age = [0, 13, 16, 18, 21].includes(Number(c.minAge)) ? Number(c.minAge) : 0;
@@ -182,6 +200,7 @@
       pts += Math.round(500 * (1 - frac));
     }
     if (o.streakOn !== false && o.streak > 1) pts = Math.round(pts * Math.min(2, 1 + 0.2 * (o.streak - 1)));
+    if (o.double) pts *= 2;                 // the once-a-round power-up — still capped below
     return Math.min(MAX_POINTS, pts);
   }
 
@@ -272,6 +291,47 @@
     return C;
   }
 
-  return { DEFAULT_TIMING, LIMITS, MAX_POINTS, AVATARS, LANGS, hashUnit, translationUnits, localize, normalizeLoop, timeline, positionAt,
+  /* ── Badges ──────────────────────────────────────────────────────────────
+     Earned on the phone from what the player just did; kept on the phone, and the COUNT
+     is shown next to their name on the screen. Harmless to fake, so no server needed. */
+  const BADGES = [
+    { id: 'first',    e: '🎯', name: 'First answer' },
+    { id: 'streak3',  e: '🔥', name: 'Hot streak — 3 in a row' },
+    { id: 'streak5',  e: '⚡', name: 'On fire — 5 in a row' },
+    { id: 'streak10', e: '🌋', name: 'Unstoppable — 10 in a row' },
+    { id: 'perfect',  e: '💯', name: 'Perfect round' },
+    { id: 'fastest',  e: '🏎️', name: 'Fastest finger' },
+    { id: 'podium',   e: '🥉', name: 'Made the podium' },
+    { id: 'crown',    e: '👑', name: 'Took the crown' },
+    { id: 'days3',    e: '📅', name: '3 days in a row' },
+    { id: 'days7',    e: '🗓️', name: '7 days in a row' },
+  ];
+  function earnBadges(have, st) {
+    const h = have || {}, s = st || {}, out = [];
+    const give = (id, ok) => { if (ok && !h[id]) out.push(id); };
+    give('first', s.answered >= 1);
+    give('streak3', s.streak >= 3); give('streak5', s.streak >= 5); give('streak10', s.streak >= 10);
+    give('perfect', !!s.perfect); give('fastest', !!s.fastest);
+    give('podium', s.rank >= 1 && s.rank <= 3); give('crown', s.rank === 1);
+    give('days3', s.days >= 3); give('days7', s.days >= 7);
+    return out;
+  }
+  /* ── Come back tomorrow ───────────────────────────────────────────────────
+     A day is the venue's day (the loop's timezone), so "tonight" doesn't split at UTC midnight. */
+  function dayKey(t, tzOffsetMin) { return new Date(t + (tzOffsetMin || 0) * 60000).toISOString().slice(0, 10); }
+  function dayStreak(prev, today) {
+    const p = prev && prev.last ? prev : null;
+    if (p && p.last === today) return p;
+    const y = new Date(Date.parse(today + 'T00:00:00Z') - 86400000).toISOString().slice(0, 10);
+    return { last: today, n: p && p.last === y ? (p.n || 1) + 1 : 1 };
+  }
+  /* ── Table vs table ─────────────────────────────────────────────────────── */
+  function teamStandings(rows, names) {
+    const T = (names || []).map((name, i) => ({ i, name, pts: 0, players: 0 }));
+    (rows || []).forEach(r => { const t = T[r && r.tm]; if (t) { t.pts += Number(r.pts) || 0; t.players++; } });
+    return T.filter(t => t.players).sort((a, b) => b.pts - a.pts || b.players - a.players);
+  }
+
+  return { DEFAULT_TIMING, LIMITS, MAX_POINTS, AVATARS, LANGS, REACTIONS, BADGES, TEAM_MAX, earnBadges, dayKey, dayStreak, teamStandings, hashUnit, translationUnits, localize, normalizeLoop, timeline, positionAt,
            periodKey, score, cleanName, safeUrl, genCode, answerKey, isVideo };
 });

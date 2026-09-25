@@ -102,7 +102,9 @@ console.log('\nIsolated from the existing products');
     ok(f + ' never touches sessions/, quiz_builder/ or currentQuestion', !/ref\([`'"](sessions|quiz_builder)\//.test(h) && !/currentQuestion/.test(h));
     ok(f + ' loads the sandbox switch before Firebase starts', h.indexOf('/ps-env.js') > h.indexOf('firebase-app-compat') && h.indexOf('/ps-env.js') < h.indexOf('initializeApp('));
   }
-  ok('the TV screen writes nothing at all', !/\.(set|update|push|transaction|remove)\(/.test(read('screen.html').split('<script>').pop().replace(/\bI\.set\(/g, '')));
+  { const js = read('screen.html').split('<script>').pop().replace(/\bI\.set\(/g, '');
+    // database writes only — removing an old emoji from the page (el.remove()) is not one
+    ok('the TV screen writes nothing at all', !/\.(set|update|push|transaction)\(/.test(js) && !/ref\([^)]*\)\s*\.remove\(/.test(js) && !/Ref\.remove\(/.test(js)); }
   const p = read('presenter.html');
   ok('presenter only gains a link to the studio', /href="\/loop"/.test(p));
 }
@@ -308,6 +310,51 @@ console.log('\nThe same Polly, GIF and upload services as the rest of PollSlide'
   ok('Polly use from LoopSlide counts against the user\'s plan (server checks, then counts)', /checkQuota\(req\)/.test(read('api/polly.js')) && /consumeQuota\(quota\)/.test(read('api/polly.js')) && /if \(!tok\) throw \{ code: 401/.test(quota));
   ok('…Polly images count too', /checkQuota\(req\)/.test(read('api/polly-image.js')) && /consumeQuota\(quota\)/.test(read('api/polly-image.js')));
   ok('…and the plan it reads can no longer be self-edited', !!JSON.parse(read('database-rules.json')).rules.users.$uid.tier);
+}
+
+console.log('\nGame extras: the things that keep a room playing');
+{
+  const L0 = E.normalizeLoop({});
+  ok('reactions, double points and badges are on by default; teams are opt-in', L0.extras.reactions && L0.extras.double && L0.extras.badges && !L0.extras.teams);
+  ok('teams need at least two names, up to twelve', E.normalizeLoop({ extras: { teams: true } }).extras.teamNames.length === 6 && E.normalizeLoop({ extras: { teams: true, teamNames: Array.from({ length: 20 }, (_, i) => 'T' + i) } }).extras.teamNames.length === 12);
+  ok('a reward needs text; top is 1–10', E.normalizeLoop({ reward: { code: 'X' } }).reward === null && E.normalizeLoop({ reward: { text: 'Pint', top: 99 } }).reward.top === 10);
+  ok('double points doubles, but never past the per-answer cap the rules enforce', E.score({ correct: true, ms: 5000, windowMs: 10000, streak: 1, double: true }) === 1500 && E.score({ correct: true, ms: 0, windowMs: 10, streak: 9, double: true }) === E.MAX_POINTS);
+  ok('badges: each is earned once', E.earnBadges({ streak3: 1 }, { streak: 3, answered: 1 }).join() === 'first');
+  ok('badges: podium, crown, perfect round, fastest finger, day streaks', E.earnBadges({}, { rank: 1, perfect: true, fastest: true, days: 7 }).sort().join() === ['crown', 'days3', 'days7', 'fastest', 'perfect', 'podium'].join());
+  ok('day streak continues from yesterday, restarts after a gap, holds within a day', E.dayStreak({ last: '2026-09-25', n: 4 }, '2026-09-26').n === 5 && E.dayStreak({ last: '2026-09-20', n: 4 }, '2026-09-26').n === 1 && E.dayStreak({ last: '2026-09-26', n: 4 }, '2026-09-26').n === 4);
+  ok('a day is the venue\'s day, not UTC', E.dayKey(Date.parse('2026-09-26T23:30:00Z'), 120) === '2026-09-27' && E.dayKey(Date.parse('2026-09-26T23:30:00Z'), -300) === '2026-09-26');
+  const ts = E.teamStandings([{ tm: 0, pts: 5 }, { tm: 1, pts: 9 }, { tm: 0, pts: 6 }, { tm: 7, pts: 99 }, { pts: 50 }], ['A', 'B']);
+  ok('team standings add members up and ignore unknown teams', ts.length === 2 && ts[0].name === 'A' && ts[0].pts === 11 && ts[0].players === 2);
+  ok('only six fixed reactions exist', E.REACTIONS.length === 6);
+
+  const R = JSON.parse(read('database-rules.json')).rules;
+  const rx = R.loop_react.$code.$pid;
+  ok('reactions: one node per player, only the six emoji, server time', /e'\)\.val\(\) >= 0 && newData\.child\('e'\)\.val\(\) <= 5/.test(rx['.validate']) && /t'\)\.val\(\) <= now \+ 5000/.test(rx['.validate']));
+  ok('reactions: a 1.5 s cooldown the database enforces', /data\.child\('t'\)\.val\(\) \+ 1500/.test(rx['.validate']));
+  ok('reactions: removed players can\'t react; nothing else can be written', /banned/.test(rx['.write']) && rx.$other['.validate'] === false);
+  ok('reactions: only the owner clears them', /ownerUid'\)\.val\(\) === auth\.uid && !newData\.exists\(\)/.test(R.loop_react.$code['.write']));
+  ok('answers may carry ⚡2× and a team, nothing looser', /=== 1 \|\| newData\.val\(\) === 2/.test(R.loop_answers.$code.$period.$key.$pid.x['.validate']) && /< 12/.test(R.loop_answers.$code.$period.$key.$pid.tm['.validate']));
+  ok('scores may carry team, badge count and day streak, bounded', ['tm', 'b', 'd'].every(k => R.loop_scores.$code.$period.$pid[k]));
+  ok('old reactions are swept nightly', /loop_react/.test(read('api/loop-sweep.js')));
+
+  const ply = read('play.html'), scr = read('screen.html'), st = read('loop.html');
+  ok('phone: team picked before playing when teams are on', /t\('Pick your team'\)/.test(ply) && /loop\.extras\.teams && tm === null/.test(ply));
+  ok('phone: double points once per round, only on questions with a right answer', /roundKey\(p\)/.test(ply) && /it\.correct !== null && !\(me\.dbl/.test(ply));
+  ok('phone: reactions go to loop_react with a local cooldown too', /loop_react\/\$\{CODE\}\/\$\{me\.pid\}/.test(ply) && /tNow - _rxAt < 1600/.test(ply));
+  ok('phone: buzz and confetti on a right answer, none if reduced motion is asked for', /navigator\.vibrate/.test(ply) && /prefers-reduced-motion/.test(ply));
+  ok('phone: the reward shows name and a live clock (a screenshot can\'t fake it)', /rwClock/.test(ply) && /Show this screen to the staff\./.test(ply));
+  ok('phone: share card uses native sharing, with a save-image fallback', /navigator\.canShare/.test(ply) && /Save the image/.test(ply));
+  ok('TV: reactions only if fresh, allowed and not from a removed player; max 30 on screen', /v\.t > now\(\) - 8000/.test(scr) && /banned\[snap\.key\]/.test(scr) && /childElementCount >= 30/.test(scr));
+  ok('TV: podium, team board, confetti once per question', /podiumHtml/.test(scr) && /withTeams/.test(scr) && /_confettiFor !== ck/.test(scr));
+  ok('TV: the list under the podium continues at #4', /boardHtml\(top\.slice\(3\), '', 3\)/.test(scr));
+  ok('Studio: every extra can be switched off', /cur\.extras\.reactions=this\.checked/.test(st) && /cur\.extras\.double=this\.checked/.test(st) && /cur\.extras\.badges=this\.checked/.test(st) && /cur\.extras\.teams=this\.checked/.test(st));
+  ok('Studio: a reward needs official rules, like any prize', /\(c\.prize \|\| L\.reward\) && !c\.rulesUrl/.test(st));
+  ok('Studio: deleting a loop clears its reactions', /upd\['loop_react\/' \+ code\] = null/.test(st));
+  // An escape like \n inside an inline handler in a template literal becomes a real line
+  // break in the rendered attribute and silently kills the handler (found 2026-09-26 in the
+  // team-names box). Handlers must call a function instead.
+  const badHandlers = ['loop.html', 'play.html', 'screen.html'].flatMap(f => (read(f).match(/\son[a-z]+="[^"]*\\[nrt][^"]*"/g) || []).map(m => f + ': ' + m.slice(0, 60)));
+  ok('no inline handler carries an escape sequence that breaks when rendered', !badHandlers.length, badHandlers);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

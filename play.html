@@ -49,6 +49,23 @@
   .fine a { color:#7a7aa8; }
   .lang { display:flex; justify-content:center; margin-top:10px; }
   .lang select { background:var(--panel); color:var(--muted); border:1px solid var(--panel2); border-radius:10px; padding:6px 10px; font:600 13px 'DM Sans',sans-serif; }
+  #rx { position:fixed; left:0; right:0; bottom:0; display:flex; justify-content:center; gap:6px; padding:10px 10px calc(10px + env(safe-area-inset-bottom,0px)); background:linear-gradient(180deg,rgba(7,7,15,0),rgba(7,7,15,.96) 40%); z-index:8; }
+  #rx button { font-size:24px; background:var(--panel); border:1px solid var(--panel2); border-radius:14px; width:48px; height:46px; cursor:pointer; transition:transform .12s; }
+  #rx button:active { transform:scale(.88); }
+  #rx button:disabled { opacity:.45; }
+  body.hasrx #app { padding-bottom:96px; }
+  .pw { display:flex; align-items:center; justify-content:center; gap:8px; background:rgba(247,183,49,.1); border:2px dashed rgba(247,183,49,.55); color:var(--gold); border-radius:12px; padding:11px 12px; font:800 15px 'DM Sans',sans-serif; width:100%; margin-bottom:12px; cursor:pointer; }
+  .pw.on { background:var(--gold); color:#1a1300; border-style:solid; }
+  .badges { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .badges span { background:var(--panel2); border-radius:100px; padding:4px 10px; font-size:13px; font-weight:700; }
+  .teams { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:14px; }
+  .teams button { background:var(--panel); color:var(--text); border:2px solid var(--panel2); border-radius:12px; padding:12px 8px; font:700 15px 'DM Sans',sans-serif; cursor:pointer; }
+  .teams button.on { border-color:var(--accent); background:var(--panel2); }
+  .reward { background:linear-gradient(135deg,#f7b731,#ff6584); color:#1a0f00; border-radius:18px; padding:18px; margin-bottom:12px; text-align:center; }
+  .reward .code { font-family:'Syne',sans-serif; font-size:32px; font-weight:800; letter-spacing:.08em; background:#fff; border-radius:12px; padding:8px; margin:10px 0; word-break:break-all; }
+  .reward .clock { font-family:'Syne',sans-serif; font-weight:800; font-size:22px; }
+  .shareprev { width:100%; border-radius:14px; margin:10px 0; }
+  #fx { position:fixed; inset:0; pointer-events:none; z-index:20; }
   .tr { display:inline-block; background:rgba(67,233,123,.12); color:#9ff0bd; border:1px solid rgba(67,233,123,.4); border-radius:100px; padding:2px 9px; font-size:11px; font-weight:700; margin-left:6px; text-transform:none; letter-spacing:0; }
 </style>
 </head>
@@ -58,8 +75,9 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-<script src="/loop-engine.js?v=0f37af28"></script>
-<script src="/loop-i18n.js?v=28a90cfa"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="/loop-engine.js?v=8cbfc46c"></script>
+<script src="/loop-i18n.js?v=659ae400"></script>
 <script>
 /* LoopSlide phone — play#<CODE>[/<cycle>]
  * The phone computes what is on screen from the clock, exactly like the TV, so it can
@@ -153,13 +171,18 @@ function joinScreen(msg) {
     <input id="nm" maxlength="18" placeholder="${esc(t('Nickname'))}" value="${esc(me && me.n || '')}" autocomplete="off">
     <div class="err" id="err">${esc(msg || '')}</div>
     <div class="avs">${E.AVATARS.map(a => `<button type="button" data-a="${a}" class="${a === pick ? 'on' : ''}">${a}</button>`).join('')}</div>
+    ${loop.extras.teams ? `<div class="kicker">${esc(t('Pick your team'))}</div><div class="teams">${loop.extras.teamNames.map((nm, i) => `<button type="button" data-tm="${i}" class="${me && me.tm === i ? 'on' : ''}">${esc(nm)}</button>`).join('')}</div>` : ''}
     ${c.minAge ? `<label class="chk"><input type="checkbox" id="age"> <span>${esc(t('I am {n} or older.', { n: c.minAge }))}</span></label>` : ''}
     <button class="btn" id="go">${esc(t('Play →'))}</button>
     <div class="fine">${esc(t('No sign-up and no real name needed.'))} ${c.organiser ? esc(t('Run by {name}.', { name: c.organiser })) + ' ' : ''}${esc(t('Your nickname and answers are shown on the screen here and kept only while this leaderboard runs, then deleted.'))}
       ${c.prize ? `<br>🎁 ${esc(VC().prize)} — ${esc(t('no purchase necessary'))}${c.rulesUrl ? ` · <a href="${esc(c.rulesUrl)}" target="_blank" rel="noopener">${esc(t('Official rules'))}</a>` : ''}.` : ''}
+      ${loop.reward ? `<br>🎁 ${esc(t('Top {n} win: {x}', { n: loop.reward.top, x: loop.reward.text }))} — ${esc(t('no purchase necessary'))}${c.rulesUrl ? ` · <a href="${esc(c.rulesUrl)}" target="_blank" rel="noopener">${esc(t('Official rules'))}</a>` : ''}.` : ''}
       <br><a href="https://pollslide.com/privacy" target="_blank" rel="noopener">${esc(t('Privacy'))}</a> · ${reportLink()}</div>`);
   document.getElementById('app').appendChild(langPicker());
-  let av = pick;
+  let av = pick, tm = me && Number.isInteger(me.tm) && me.tm < loop.extras.teamNames.length ? me.tm : null;
+  document.querySelectorAll('.teams button').forEach(b => b.onclick = () => {
+    document.querySelectorAll('.teams button').forEach(x => x.classList.remove('on')); b.classList.add('on'); tm = +b.dataset.tm;
+  });
   document.querySelectorAll('.avs button').forEach(b => b.onclick = () => {
     document.querySelectorAll('.avs button').forEach(x => x.classList.remove('on')); b.classList.add('on'); av = b.dataset.a;
   });
@@ -168,13 +191,15 @@ function joinScreen(msg) {
     if (ageBox && !ageBox.checked) { document.getElementById('err').textContent = t('This game is for ages {n}+.', { n: c.minAge }); return; }
     const n = E.cleanName(document.getElementById('nm').value);
     if (!n) { document.getElementById('err').textContent = t('Pick a different nickname.'); return; }
-    me = Object.assign(me || { pid: 'p' + Math.random().toString(36).slice(2, 12) }, { n, a: av, streak: 0, best: (me && me.best) || 0 });
+    if (loop.extras.teams && tm === null) { document.getElementById('err').textContent = t('Pick your team'); return; }
+    me = Object.assign(me || { pid: 'p' + Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 6) }, { n, a: av, streak: 0, best: (me && me.best) || 0, tm: loop.extras.teams ? tm : null });
     save(); drawn = ''; tick();
   };
 }
 
 function tick() {
   if (!loop || !V) return;
+  reactBar();
   if (!me || !me.n) { if (drawn !== 'join') { drawn = 'join'; joinScreen(); } return; }
   if (banned[me.pid]) { if (drawn !== 'banned') { drawn = 'banned'; app(`<h1>${esc(t('You can’t play this game'))}</h1><div class="sub">${esc(t('The venue has removed this player.'))}</div>`); } return; }
   if (fullFor && fullFor === E.periodKey(loop, now())) { if (drawn !== 'full') { drawn = 'full'; drawFull(); } return; }
@@ -224,10 +249,15 @@ function draw(p) {
 function drawQuestion(p) {
   const it = itemOf(p.slot);
   let mine = null; try { mine = localStorage.getItem(answeredKey(p, it)); } catch (e) {}
+  const canDouble = mine === null && loop.extras.double && it.correct !== null && !(me.dbl || {})[roundKey(p)];
+  dblArmed = false;
   app(`${topBar()}<div class="kicker">${esc(V.sets[p.slot.set].title || t('Question'))}${tags(it)}</div>${media(it.img)}<h1>${esc(it.text)}</h1>
+    ${canDouble ? `<button class="pw" id="pw" type="button">⚡ <span>${esc(t('Double points — once per round'))}</span></button>` : ''}
     ${it.options.map((o, i) => `<button class="opt ${mine == i ? 'picked' : ''}" data-i="${i}" ${mine !== null ? 'disabled' : ''}><span class="L">${LETTERS[i]}</span>${it.optImgs && it.optImgs[i] ? `<img class="oimg" src="${esc(it.optImgs[i])}" alt="">` : ''}<span>${esc(o)}</span></button>`).join('')}
     <div class="sub" id="st">${esc(mine !== null ? t('Locked in — watch the screen for the answer.') : t('Faster right answers score more.'))}</div>`);
   if (mine !== null) return;
+  const pw = document.getElementById('pw');
+  if (pw) pw.onclick = () => { dblArmed = !dblArmed; pw.classList.toggle('on', dblArmed); buzz(15); };
   document.querySelectorAll('.opt').forEach(b => b.onclick = () => submit(p, realItem(p.slot), +b.dataset.i, b));
 }
 
@@ -258,14 +288,27 @@ async function submit(p, it, choice, btn) {
   const ms = Math.max(0, tm - p.start);
   const correct = it.correct === null ? null : choice === it.correct;
   const streak = correct === true ? (me.streak || 0) + 1 : (correct === false ? 0 : (me.streak || 0));
-  const pts = E.score({ correct, ms, windowMs: p.slot.dur * 1000, streak, speed: loop.board.speed, streakOn: loop.board.streak });
+  const double = dblArmed && loop.extras.double && correct !== null && !(me.dbl || {})[roundKey(p)];
+  const pts = E.score({ correct, ms, windowMs: p.slot.dur * 1000, streak, speed: loop.board.speed, streakOn: loop.board.streak, double });
   const rec = { n: me.n, a: me.a, c: choice, ms, pts, t: tm };
+  if (double) rec.x = 2;
+  if (loop.extras.teams && Number.isInteger(me.tm)) rec.tm = me.tm;
+  // "Come back tomorrow": a streak of days played, in the venue's own day.
+  me.days = E.dayStreak(me.days, E.dayKey(tm, loop.tzOffsetMin));
   try {
     await db.ref(`loop_answers/${CODE}/${period}/${key}/${me.pid}`).set(rec);
-    await db.ref(`loop_scores/${CODE}/${period}/${me.pid}`).transaction(cur => ({
-      n: me.n, a: me.a, pts: (cur ? cur.pts : 0) + pts, ans: (cur ? cur.ans : 0) + 1, last: key,
-    }));
-    me.streak = streak; save();
+    me.streak = streak;
+    me.hist = me.hist || {}; me.hist[key] = correct;
+    if (double) { me.dbl = me.dbl || {}; me.dbl[roundKey(p)] = 1; }
+    me.answered = (me.answered || 0) + 1;
+    award({ answered: me.answered, streak, days: me.days.n });
+    await db.ref(`loop_scores/${CODE}/${period}/${me.pid}`).transaction(cur => {
+      const out = { n: me.n, a: me.a, pts: (cur ? cur.pts : 0) + pts, ans: (cur ? cur.ans : 0) + 1, last: key,
+                    b: badgeCount(), d: Math.min(3650, me.days.n || 1) };
+      if (loop.extras.teams && Number.isInteger(me.tm)) out.tm = me.tm;
+      return out;
+    });
+    save();
     try { localStorage.setItem(answeredKey(p, it), String(choice)); } catch (e) {}
     document.getElementById('st').textContent = t('Locked in — watch the screen for the answer.');
     refreshScore();
@@ -283,7 +326,7 @@ async function drawReveal(p) {
   let head;
   if (mine === null) head = `<h1>${esc(t('You missed this one'))}</h1><div class="sub">${t('Answer: {x}', { x: hasC ? b(it.options[it.correct]) : '—' })}</div>`;
   else if (!hasC) head = `<h1>${esc(t('Thanks for voting!'))}</h1><div class="sub">${t('You picked {x}.', { x: b(it.options[+mine]) })}</div>`;
-  else if (+mine === it.correct) head = `<div class="big good">${esc(t('Correct!'))}</div><div class="sub">${esc(me.streak > 1 ? t('🔥 {n} in a row — bonus points!', { n: me.streak }) : t('Keep it going.'))}</div>`;
+  else if (+mine === it.correct) { head = `<div class="big good">${esc(t('Correct!'))}</div><div class="sub">${esc(me.streak > 1 ? t('🔥 {n} in a row — bonus points!', { n: me.streak }) : t('Keep it going.'))}</div>`; celebrate(); checkFastest(p, it); }
   else head = `<div class="big bad">${esc(t('Not this time'))}</div><div class="sub">${t('It was {x}.', { x: b(it.options[it.correct]) })}</div>`;
   app(`${topBar()}${head}<div id="standing"></div>`);
   drawStandingInto(document.getElementById('standing'));
@@ -299,6 +342,7 @@ async function refreshScore() {
 }
 
 function drawStanding(p) {
+  if (p.slot.kind === 'setboard') checkPerfect(p);
   const label = p.slot.kind === 'setboard' ? t('🏁 Round over') : t('🏆 Leaderboard');
   app(`${topBar()}<div class="kicker">${esc(label)}</div><div id="standing"></div>`);
   drawStandingInto(document.getElementById('standing'));
@@ -314,21 +358,155 @@ async function drawStandingInto(el) {
   } catch (e) {}
   const i = rows.findIndex(r => r.pid === me.pid);
   const rank = i >= 0 ? i + 1 : null;
-  if (rank && lastRank && rank < lastRank) toast(t('⬆️ You moved up to #{n}!', { n: rank }));
-  if (rank === 1 && lastRank !== 1) toast(t('👑 You’re on top of the leaderboard!'));
-  if (rank) lastRank = rank;
+  if (rank && lastRank && rank < lastRank) { toast(t('⬆️ You moved up to #{n}!', { n: rank })); buzz([30, 40, 30]); }
+  if (rank === 1 && lastRank !== 1) { toast(t('👑 You’re on top of the leaderboard!')); celebrate(); }
+  if (rank) { lastRank = rank; award({ rank }); }
+  const teams = loop.extras.teams ? E.teamStandings(rows, loop.extras.teamNames) : [];
+  const myTeam = loop.extras.teams && Number.isInteger(me.tm) ? teams.findIndex(x => x.i === me.tm) : -1;
+  const rw = loop.reward && rank && rank <= loop.reward.top && myScore ? loop.reward : null;
   const lead = rows[0];
   const c = C(), vc = VC();
-  el.innerHTML = `<div class="card">
+  el.innerHTML = `${rw ? rewardHtml(rw, rank) : ''}<div class="card">
       ${rank ? `<div class="sub" style="margin:0">${esc(t('Your rank'))}</div><div class="big gold">#${rank}<span style="font-size:18px;color:var(--muted)"> ${esc(t('of {n}', { n: rows.length }))}</span></div>` : `<div class="sub" style="margin:0">${esc(t('Answer a question to get on the board.'))}</div>`}
       ${lead && rank !== 1 && myScore ? `<div class="sub" style="margin:8px 0 0">${esc(t('{n} points to take the crown from {x}.', { n: num(lead.pts - myScore.pts + 1), x: (lead.a || '') + ' ' + lead.n }))}</div>` : ''}
       ${me.best ? `<div class="sub" style="margin:8px 0 0">${t('Personal best: {n}', { n: '<b>' + num(me.best) + '</b>' })}</div>` : ''}
+      ${me.days && me.days.n > 1 ? `<div class="sub" style="margin:8px 0 0">${esc(t('🔥 {n} days in a row — come back tomorrow to keep it going!', { n: me.days.n }))}</div>` : ''}
+      ${myTeam >= 0 ? `<div class="sub" style="margin:8px 0 0">${esc(t('Your team {x} is #{n} of {m}.', { x: teams[myTeam].name, n: myTeam + 1, m: teams.length }))}</div>` : ''}
+      ${badgeShelf()}
+      ${rank ? `<button class="btn" id="share" style="margin-top:12px;" type="button">📣 ${esc(t('Share my rank'))}</button>` : ''}
     </div>
     <div class="card">${rows.slice(0, 5).map((r, j) => `<div class="row ${r.pid === me.pid ? 'me' : ''}"><span>${j < 3 ? ['🥇','🥈','🥉'][j] : '#' + (j + 1)}</span><span>${esc(r.a || '')}</span><span class="nm">${esc(r.n)}</span><span>${num(r.pts)}</span></div>`).join('') || `<div class="sub" style="margin:0">${esc(t('No scores yet.'))}</div>`}</div>
     ${c.prize ? `<div class="card">🎁 <b>${esc(vc.prize)}</b><div class="sub" style="margin:6px 0 0">${esc(t('No purchase necessary.'))}${c.rulesUrl ? ` <a style="color:var(--accent)" href="${esc(c.rulesUrl)}" target="_blank" rel="noopener">${esc(t('Official rules'))}</a>` : ''}</div></div>` : ''}
     <button class="btn ghost" onclick="joinScreen()">${esc(t('Change nickname'))}</button>
     <div class="fine">${reportLink()}</div>`;
   el.appendChild(langPicker());
+  const sb = document.getElementById('share'); if (sb) sb.onclick = () => shareRank(rank, rows.length, myScore ? myScore.pts : 0);
+  startClock();
+}
+
+/* ═══ Game extras ═════════════════════════════════════════════════════════ */
+let dblArmed = false;
+const roundKey = p => E.periodKey(loop, now()) + ':' + p.cycle + ':' + p.slot.set;
+function buzz(pattern) { try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {} }
+
+// Badges: earned here, remembered on this phone, the count shown by the player's name on the TV.
+function badgeCount() { return Object.keys(me.badges || {}).length; }
+function award(st) {
+  if (!loop || !loop.extras.badges || !me) return;
+  const got = E.earnBadges(me.badges, Object.assign({ answered: me.answered || 0, streak: me.streak || 0, days: (me.days && me.days.n) || 0 }, st));
+  if (!got.length) return;
+  me.badges = me.badges || {}; got.forEach(id => { me.badges[id] = Date.now(); }); save();
+  const b = E.BADGES.find(x => x.id === got[got.length - 1]);
+  setTimeout(() => { toast(t('🏅 New badge: {x}', { x: b.e + ' ' + t(b.name) })); buzz([20, 30, 20, 30, 60]); }, 900);
+}
+function badgeShelf() {
+  if (!loop.extras.badges || !badgeCount()) return '';
+  return `<div class="badges">${E.BADGES.filter(b => me.badges[b.id]).map(b => `<span title="${esc(t(b.name))}">${b.e} ${esc(t(b.name))}</span>`).join('')}</div>`;
+}
+async function checkFastest(p, it) {
+  try {
+    const s = await db.ref(`loop_answers/${CODE}/${E.periodKey(loop, now())}/${E.answerKey(p.cycle, it.id)}`).get();
+    const right = Object.entries(s.val() || {}).filter(([pid, a]) => a && a.c === it.correct && !banned[pid]).sort((a, b) => (a[1].ms || 0) - (b[1].ms || 0));
+    if (right.length > 1 && right[0][0] === me.pid) award({ fastest: true });
+  } catch (e) {}
+}
+function checkPerfect(p) {
+  const set = loop.sets[p.slot.set]; if (!set || !me.hist) return;
+  const qs = set.items.filter(it => it.type !== 'ad' && it.correct !== null);
+  if (qs.length >= 2 && qs.every(it => me.hist[E.answerKey(p.cycle, it.id)] === true)) award({ perfect: true });
+}
+
+// A little celebration on the phone: a buzz and a burst of confetti. Nothing if the player asked for less motion.
+function celebrate() {
+  buzz([40, 30, 40]);
+  if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  let c = document.getElementById('fx');
+  if (!c) { c = document.createElement('canvas'); c.id = 'fx'; document.body.appendChild(c); }
+  const W = c.width = innerWidth, H = c.height = innerHeight, x = c.getContext('2d');
+  const cols = ['#6c63ff', '#ff6584', '#43e97b', '#f7b731', '#4facfe'];
+  const ps = Array.from({ length: 90 }, () => ({ x: Math.random() * W, y: -20 - Math.random() * H * .3, vx: (Math.random() - .5) * 4, vy: 2 + Math.random() * 4, s: 5 + Math.random() * 6, r: Math.random() * 6, c: cols[Math.random() * cols.length | 0] }));
+  const t0 = performance.now();
+  (function f(tm) {
+    x.clearRect(0, 0, W, H);
+    ps.forEach(q => { q.x += q.vx; q.y += q.vy; q.vy += .08; q.r += .1; x.save(); x.translate(q.x, q.y); x.rotate(q.r); x.fillStyle = q.c; x.fillRect(-q.s / 2, -q.s / 3, q.s, q.s * .6); x.restore(); });
+    if (tm - t0 < 2200) requestAnimationFrame(f); else x.clearRect(0, 0, W, H);
+  })(t0);
+}
+
+// Live reactions: six fixed emoji, one node per player, a 1.5 s cooldown the database enforces.
+let _rxAt = 0;
+function reactBar() {
+  let bar = document.getElementById('rx');
+  const on = loop && loop.extras.reactions && me && me.n && !banned[me.pid];
+  if (!on) { if (bar) { bar.remove(); document.body.classList.remove('hasrx'); } return; }
+  if (bar) return;
+  bar = document.createElement('div'); bar.id = 'rx'; bar.setAttribute('role', 'group'); bar.setAttribute('aria-label', t('Send a reaction to the screen'));
+  E.REACTIONS.forEach((e, i) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = e; b.onclick = () => react(i, b); bar.appendChild(b); });
+  document.body.appendChild(bar); document.body.classList.add('hasrx');
+}
+function react(i, btn) {
+  const tNow = Date.now(); if (tNow - _rxAt < 1600) return; _rxAt = tNow;
+  buzz(10);
+  db.ref(`loop_react/${CODE}/${me.pid}`).set({ e: i, t: now() }).catch(() => {});
+  const all = document.querySelectorAll('#rx button'); all.forEach(b => { b.disabled = true; }); setTimeout(() => all.forEach(b => { b.disabled = false; }), 1600);
+}
+
+// The prize for the top players: shown with their name and a running clock, so staff can
+// tell a live screen from a screenshot.
+function rewardHtml(rw, rank) {
+  return `<div class="reward"><div style="font-size:30px">🎁</div><div style="font-weight:800;font-size:18px;">${esc(t('You’re in the top {n}!', { n: rw.top }))}</div>
+    <div style="margin-top:6px;font-weight:700;">${esc(rw.text)}</div>
+    ${rw.code ? `<div class="code">${esc(rw.code)}</div>` : ''}
+    <div style="font-weight:700;">${esc(me.a)} ${esc(me.n)} · #${rank}</div>
+    <div class="clock" id="rwClock"></div>
+    <div style="font-size:13px;margin-top:6px;">${esc(t('Show this screen to the staff.'))}</div></div>`;
+}
+let _clockT = null;
+function startClock() {
+  clearInterval(_clockT);
+  const el = document.getElementById('rwClock'); if (!el) return;
+  const f = () => { const c = document.getElementById('rwClock'); if (!c) return clearInterval(_clockT); c.textContent = new Date().toLocaleTimeString(I.get(), { hour: '2-digit', minute: '2-digit', second: '2-digit' }); };
+  f(); _clockT = setInterval(f, 1000);
+}
+
+/* Share my rank: a branded image for stories and chats, with the QR that brings friends in. */
+async function shareRank(rank, of, pts) {
+  const W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#12103a'); g.addColorStop(.55, '#07070f'); g.addColorStop(1, '#3a0f2a');
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  x.fillStyle = loop.brand.accent || '#6c63ff'; x.fillRect(0, 0, W, 14);
+  x.textAlign = 'center'; x.fillStyle = '#c9c5ff'; x.font = '700 44px "DM Sans", sans-serif';
+  x.fillText((V.brand.title || loop.name).slice(0, 40), W / 2, 120);
+  x.font = '180px serif'; x.fillText(me.a, W / 2, 360);
+  x.fillStyle = '#fff'; x.font = '800 76px "Syne", "DM Sans", sans-serif'; x.fillText(me.n, W / 2, 470);
+  x.fillStyle = '#f7b731'; x.font = '800 190px "Syne", "DM Sans", sans-serif'; x.fillText('#' + rank, W / 2, 680);
+  x.fillStyle = '#c9c5ff'; x.font = '700 46px "DM Sans", sans-serif';
+  x.fillText(t('of {n} players · {p} points', { n: of, p: num(pts) }), W / 2, 755);
+  const extra = [];
+  if (me.days && me.days.n > 1) extra.push('🔥 ' + t('{n} days in a row', { n: me.days.n }));
+  if (badgeCount()) extra.push(E.BADGES.filter(b => me.badges[b.id]).map(b => b.e).join(' '));
+  x.font = '600 44px "DM Sans", sans-serif'; extra.forEach((l, i) => x.fillText(l, W / 2, 840 + i * 64));
+  // QR to this game
+  try {
+    const box = document.createElement('div');
+    new QRCode(box, { text: location.origin + '/play#' + CODE, width: 280, height: 280, correctLevel: QRCode.CorrectLevel.M });
+    const q = box.querySelector('canvas');
+    if (q) { x.fillStyle = '#fff'; x.fillRect(W / 2 - 170, 960, 340, 340); x.drawImage(q, W / 2 - 140, 990, 280, 280); }
+  } catch (e) {}
+  x.fillStyle = '#9a9ac0'; x.font = '600 34px "DM Sans", sans-serif'; x.fillText(t('Scan to play · LoopSlide by PollSlide'), W / 2, H - 20);
+  const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+  const text = t('I’m #{n} at {x}! Can you beat me?', { n: rank, x: V.brand.title || loop.name });
+  try {
+    const file = new File([blob], 'loopslide-rank.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text }); return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  // No native sharing: show the image to save, and a link to send.
+  const url = URL.createObjectURL(blob);
+  const d = document.createElement('div'); d.className = 'card';
+  d.innerHTML = `<div class="kicker">${esc(t('Share my rank'))}</div><img class="shareprev" src="${url}" alt="">
+    <a class="btn" style="display:block;text-align:center;text-decoration:none;" href="${url}" download="loopslide-rank.png">${esc(t('Save the image'))}</a>`;
+  const st = document.getElementById('standing'); if (st) { st.insertBefore(d, st.firstChild); d.scrollIntoView({ behavior: 'smooth' }); }
 }
 
 let _toastT = null;
