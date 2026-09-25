@@ -106,7 +106,7 @@ const PRODUCTS = [
   { id: 'polly',        name: 'Polly AI',              deps: ['ai_text'], soft: ['ai_images'] },
   { id: 'companion',    name: 'Mac Companion',         deps: ['realtime'] },
   { id: 'ppt',          name: 'PowerPoint Add-in',     deps: ['hosting', 'realtime'] },
-  { id: 'gslides',      name: 'Google Slides Add-on',  deps: ['hosting', 'realtime'] },
+  { id: 'loops',        name: 'LoopSlide',             deps: ['hosting', 'realtime'] },
 ];
 
 const PLATFORM_NAMES = {

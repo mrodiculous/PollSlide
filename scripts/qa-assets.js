@@ -26,7 +26,7 @@ const WRITE = process.argv.includes('--write');
 // Pages that load shared scripts, and the scripts they may load.
 const PAGES = ['presenter.html', 'answer.html', 'present.html', 'live.html', 'report.html',
                'admin.html', 'recap.html', 'results.html', 'overlay.html', 'companion.html',
-               'powerpoint.html', 'loop.html', 'screen.html', 'play.html'];
+               'powerpoint.html', 'loop.html', 'screen.html', 'play.html', 'tv.html'];
 
 const hashOf = (file) => {
   try {

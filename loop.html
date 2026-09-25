@@ -100,9 +100,31 @@ const $ = id => document.getElementById(id);
 const uid6 = () => Math.random().toString(36).slice(2, 8);
 const PRODUCT_ICON = { poll:'🗳️', survey:'📋', quiz:'🏆', study:'📚', present:'🎬' };
 const PRODUCT_NAME = { poll:'PollSlide', survey:'SurveySlide', quiz:'QuizSlide', study:'StudySlide' };
-const LOOP_LIMIT = { free: 1 };   // loops a Free account may keep; paid plans are unlimited
+/* What each plan includes. loops = loops you can keep; slides = questions + cards in ONE loop;
+   screens = TVs paired at once. Enterprise is set per deal, so it is unlimited here.
+   Client-side, like every other plan limit in PollSlide (see presenter.html TIERS). */
+const LOOP_PLANS = {
+  free:       { name: 'Free',       loops: 1,        slides: 5,        screens: 1 },
+  pro:        { name: 'Pro',        loops: 5,        slides: 20,       screens: 3 },
+  team_small: { name: 'Team Small', loops: 20,       slides: 40,       screens: 10 },
+  team_large: { name: 'Team Large', loops: 80,       slides: 150,      screens: 40 },
+  enterprise: { name: 'Enterprise', loops: Infinity, slides: Infinity, screens: Infinity },
+};
+function planOf() {
+  const t = tier === 'team' ? 'team_small' : tier === 'white' ? 'team_large' : tier;
+  return LOOP_PLANS[t] || LOOP_PLANS.free;
+}
+function slideCount(def) { try { return (def.sets || []).reduce((n, s) => n + (s.items || []).length, 0); } catch (e) { return 0; } }
+function limitNote(what) {
+  const p = planOf();
+  modal(`<h2>That's the limit on ${esc(p.name)}</h2><p class="sub" style="margin-bottom:14px;">${what}</p>
+    <div class="row"><a class="btn primary" href="https://pollslide.com/pricing" target="_blank" rel="noopener">See plans</a><button class="btn" onclick="closeModal()">OK</button></div>`);
+}
 
-let user = null, tier = 'free', myLoops = {}, cur = null, curCode = null;
+let user = null, tier = 'free', myLoops = {}, cur = null, curCode = null, myTvs = {};
+/* A TV shows a QR that opens loop#pair=CODE — remembered here until the user is signed in. */
+let pendingPair = (location.hash.match(/pair=([A-Za-z0-9]{6})/) || [])[1] || '';
+if (pendingPair) pendingPair = pendingPair.toUpperCase();
 
 function toast(m) { document.querySelectorAll('.toast').forEach(t => t.remove()); const t = document.createElement('div'); t.className = 'toast'; t.textContent = m; document.body.appendChild(t); setTimeout(() => t.remove(), 4200); }
 function root(h) { $('root').innerHTML = h; }
@@ -111,7 +133,12 @@ auth.onAuthStateChanged(async u => {
   user = u;
   if (!u) return signInView();
   try { const t = await db.ref('users/' + u.uid + '/tier').get(); tier = t.val() || 'free'; } catch (e) {}
-  db.ref('users/' + u.uid + '/loops').on('value', s => { myLoops = s.val() || {}; if (!cur) listView(); });
+  db.ref('users/' + u.uid + '/tvs').on('value', s => { myTvs = s.val() || {}; if (onScreens) screensView(); });
+  db.ref('users/' + u.uid + '/loops').on('value', s => {
+    myLoops = s.val() || {};
+    if (pendingPair) { const c = pendingPair; pendingPair = ''; history.replaceState(null, '', location.pathname); screensView(c); return; }
+    if (!cur && !onScreens) listView();
+  });
 });
 
 function signInView(err) {
@@ -127,11 +154,12 @@ function doSignIn() { auth.signInWithEmailAndPassword($('em').value.trim(), $('p
 
 // ── LIST ─────────────────────────────────────────────────────────────────────
 function listView() {
-  cur = null; curCode = null;
+  cur = null; curCode = null; onScreens = false;
   const entries = Object.entries(myLoops).sort((a, b) => (b[1].updatedAt || 0) - (a[1].updatedAt || 0));
   root(`<div class="row" style="margin-bottom:18px;"><div><h1>Your loops</h1>
       <p class="sub">A loop plays your questions on a screen, over and over. People scan the QR, play on their phones, and climb the leaderboard.</p></div>
-      <button class="btn primary" style="margin-left:auto;" onclick="newLoop()">+ New loop</button></div>
+      <span class="row" style="margin-left:auto;"><button class="btn" onclick="screensView()">📺 Screens${Object.keys(myTvs).length ? ' (' + Object.keys(myTvs).length + ')' : ''}</button>
+      <button class="btn primary" onclick="newLoop()">+ New loop</button></span></div>
     ${entries.length ? `<div class="grid">${entries.map(([code, l]) => `
       <div class="card loopcard" onclick="openLoop('${esc(code)}')">
         <div class="row" style="margin-bottom:6px;"><b style="font-size:16px;">${esc(l.name || 'Untitled loop')}</b>
@@ -142,13 +170,14 @@ function listView() {
         <h2>Make your first loop</h2><p class="sub" style="max-width:460px;margin:0 auto 16px;">Start from scratch, or import any deck you already have in PollSlide — polls, quizzes, surveys or study sets.</p>
         <button class="btn primary" onclick="newLoop()">+ New loop</button></div>`}
     <div class="card" style="margin-top:18px;"><h2>📺 Putting a loop on a TV</h2>
-      <p class="sub">Any screen with a web browser works: a smart TV's built-in browser, a Fire TV / Chromecast with a browser, or a small computer plugged into the screen. Open the screen link, press <b>Full screen</b>, and leave it — it keeps itself awake, refreshes itself overnight, and picks up where it should after a power cut.</p></div>`);
+      <p class="sub">On the TV's web browser, go to <b>pollslide.com/tv</b>. It shows a code and a QR. Scan the QR with your phone (or click <b>📺 Screens → Add a screen</b> here and type the code), pick a loop, and the TV starts playing. After that you never touch the TV again — switch loops from here.</p>
+      <p class="note" style="margin-top:8px;">No browser on your TV? A Fire TV Stick has one built in. <a href="https://pollslide.com/help#loopslide-tv" target="_blank" rel="noopener" style="color:var(--accent)">Which TVs work →</a></p></div>`);
 }
 function countQs(def) { try { return (def.sets || []).reduce((n, s) => n + (s.items || []).filter(i => i.type !== 'ad').length, 0); } catch (e) { return 0; } }
 
 async function newLoop() {
-  const paid = tier && tier !== 'free';
-  if (!paid && Object.keys(myLoops).length >= LOOP_LIMIT.free) { toast('Free accounts include 1 loop. Upgrade in PollSlide for unlimited loops.'); return; }
+  const p = planOf();
+  if (Object.keys(myLoops).length >= p.loops) { limitNote(`${esc(p.name)} includes ${p.loops} loop${p.loops === 1 ? '' : 's'}. Delete one you no longer use, or upgrade for more.`); return; }
   let code = E.genCode();
   for (let i = 0; i < 5; i++) { const s = await db.ref('loops/' + code).get(); if (!s.exists() && !myLoops[code]) break; code = E.genCode(); }
   const def = { name: 'New loop', brand: { accent: '#6c63ff', title: '' }, timing: Object.assign({}, E.DEFAULT_TIMING),
@@ -176,7 +205,7 @@ function editorView() {
   root(`<div class="sticky row">
       <button class="btn" onclick="saveDraft().then(listView)">← Loops</button>
       <b style="font-size:16px;">${esc(cur.name || 'Untitled')}</b><span class="pill ${l.publishedAt ? 'live' : ''}">${l.publishedAt ? '● Live' : 'Draft'}</span>
-      <span class="note">One full loop ≈ ${Math.round(tl.length / 60000)} min</span>
+      <span class="note">One full loop ≈ ${Math.round(tl.length / 60000)} min · ${slideCount(cur)} / ${planOf().slides === Infinity ? '∞' : planOf().slides} slides</span>
       <span style="margin-left:auto;" class="row">
         <button class="btn" onclick="saveDraft().then(()=>toast('Saved.'))">Save</button>
         <button class="btn primary" onclick="publish()">${l.publishedAt ? 'Publish changes' : 'Publish'}</button>
@@ -184,7 +213,8 @@ function editorView() {
 
     ${l.publishedAt ? `<div class="card"><div class="row"><div><h2 style="margin:0;">It's live</h2><div class="note">Code <b>${esc(curCode)}</b></div></div>
       <span style="margin-left:auto;" class="row">
-        <a class="btn green" href="${esc(APP)}/screen#${esc(curCode)}" target="_blank" rel="noopener">📺 Open screen</a>
+        <button class="btn green" onclick="screensView('', '${esc(curCode)}')">📺 Put on a TV</button>
+        <a class="btn" href="${esc(APP)}/screen#${esc(curCode)}" target="_blank" rel="noopener">Open screen here</a>
         <button class="btn" onclick="copy('${esc(APP)}/screen#${esc(curCode)}')">Copy screen link</button>
         <a class="btn" href="${esc(APP)}/play#${esc(curCode)}" target="_blank" rel="noopener">📱 Try it on this device</a>
       </span></div>
@@ -300,8 +330,9 @@ function adHtml(it, si, ii) {
 function addSet() { cur.sets.push({ id: 's' + uid6(), title: 'Round ' + (cur.sets.length + 1), items: [] }); editorView(); }
 function delSet(si) { if (confirm('Delete this round and its questions?')) { cur.sets.splice(si, 1); editorView(); } }
 function moveSet(si, d) { const j = si + d; if (j < 0 || j >= cur.sets.length) return; [cur.sets[si], cur.sets[j]] = [cur.sets[j], cur.sets[si]]; editorView(); }
-function addQ(si) { cur.sets[si].items.push({ id: 'i' + uid6(), type: 'q', text: '', options: ['', ''], correct: 0 }); editorView(); }
-function addAd(si, sponsored) { cur.sets[si].items.push({ id: 'i' + uid6(), type: 'ad', sponsored: sponsored !== false, headline: '', body: '', img: '', link: '' }); editorView(); }
+function atSlideLimit() { const p = planOf(); if (slideCount(cur) < p.slides) return false; limitNote(`${esc(p.name)} includes ${p.slides} slides (questions and cards) per loop.`); return true; }
+function addQ(si) { if (atSlideLimit()) return; cur.sets[si].items.push({ id: 'i' + uid6(), type: 'q', text: '', options: ['', ''], correct: 0 }); editorView(); }
+function addAd(si, sponsored) { if (atSlideLimit()) return; cur.sets[si].items.push({ id: 'i' + uid6(), type: 'ad', sponsored: sponsored !== false, headline: '', body: '', img: '', link: '' }); editorView(); }
 function setOptImg(si, ii, oi, v) { const it = cur.sets[si].items[ii]; it.optImgs = it.optImgs || []; it.optImgs[oi] = v; }
 function delItem(si, ii) { cur.sets[si].items.splice(ii, 1); editorView(); }
 function moveItem(si, ii, d) { const a = cur.sets[si].items, j = ii + d; if (j < 0 || j >= a.length) return; [a[ii], a[j]] = [a[j], a[ii]]; editorView(); }
@@ -318,6 +349,8 @@ async function publish() {
   if (!norm.sets.length) { toast('Add at least one question with two or more options first.'); return; }
   const miss = complianceGaps(norm);
   if (miss.length) { modal(`<h2>Before this goes on a public screen</h2><p class="note" style="margin-bottom:10px;">Fill these in under “Rules &amp; compliance” or on the card:</p><ul style="margin:0 0 14px 18px;line-height:1.7;">${miss.map(m => '<li>' + esc(m) + '</li>').join('')}</ul><button class="btn" onclick="closeModal()">OK</button>`); return; }
+  const lim = planOf().slides, n = slideCount(norm);
+  if (n > lim) { limitNote(`This loop has ${n} slides; ${esc(planOf().name)} includes ${lim} per loop. Remove ${n - lim}, or upgrade.`); return; }
   const skipped = countQs(cur) - countQs(norm);
   await saveDraft();
   const pub = await db.ref('loops/' + curCode).get();
@@ -347,6 +380,114 @@ async function resetBoard() {
   toast('Leaderboard cleared.');
 }
 function copy(t) { (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast('Copied.')).catch(() => prompt('Copy this link:', t)); }
+
+// ── SCREENS (TV pairing) ─────────────────────────────────────────────────────
+/* A TV opens pollslide.com/tv, which shows a 6-letter code and a QR for loop#pair=CODE.
+ * Pairing = look the code up in tv_pair/<CODE> (the TV wrote it, with its device id), then
+ * write tv_devices/<device> { ownerUid, loop, name } — the TV is listening there and starts
+ * playing. The rules only let that first write happen while the TV's code is live, and only
+ * for a loop the signed-in user owns. users/<uid>/tvs mirrors it so the list is ours to read. */
+let onScreens = false;
+const TS = () => firebase.database.ServerValue.TIMESTAMP;
+function publishedLoops() { return Object.entries(myLoops).filter(([, l]) => l.publishedAt); }
+function loopOptions(sel) {
+  return publishedLoops().map(([c, l]) => `<option value="${esc(c)}" ${c === sel ? 'selected' : ''}>${esc(l.name || 'Untitled loop')} (${esc(c)})</option>`).join('');
+}
+function screensView(pairCode, loopCode) {
+  onScreens = true; cur = null; curCode = null;
+  if (pairCode !== undefined) screensView._code = pairCode || '';
+  if (loopCode !== undefined) screensView._loop = loopCode || '';
+  const tvs = Object.entries(myTvs).sort((a, b) => (a[1].pairedAt || 0) - (b[1].pairedAt || 0));
+  const pub = publishedLoops(), p = planOf();
+  const full = tvs.length >= p.screens;
+  root(`<div class="row" style="margin-bottom:18px;"><button class="btn" onclick="listView()">← Loops</button>
+      <div><h1 style="margin:0;">Screens</h1><p class="sub">TVs showing your loops · ${tvs.length} of ${p.screens === Infinity ? 'unlimited' : p.screens} on ${esc(p.name)}</p></div></div>
+
+    <div class="card"><h2>➕ Add a screen</h2>
+      <ol class="sub" style="margin:0 0 14px 18px;line-height:1.7;">
+        <li>On the TV's web browser, go to <b>pollslide.com/tv</b></li>
+        <li>Type the 6-letter code the TV shows — or just scan the QR on the TV with your phone</li>
+        <li>Pick a loop and press <b>Pair</b>. The TV starts playing in a few seconds.</li></ol>
+      ${!pub.length ? `<p class="note" style="color:var(--accent2);">Publish a loop first — a TV can only play a published loop.</p>`
+      : full ? `<p class="note">${p.screens === 1 ? `Your ${esc(p.name)} plan includes one screen, and it's in use.` : `You're using all ${p.screens} screens on ${esc(p.name)}.`} Unpair one below, or <a href="https://pollslide.com/pricing" target="_blank" rel="noopener" style="color:var(--accent)">upgrade</a>.</p>`
+      : `<div class="cols3">
+          <div><label class="f">Code on the TV</label><input id="pc" maxlength="7" autocapitalize="characters" autocomplete="off" placeholder="e.g. K7P4QX" value="${esc(screensView._code || '')}" style="font-size:20px;letter-spacing:.18em;text-transform:uppercase;"></div>
+          <div><label class="f">Loop to play</label><select id="pl">${loopOptions(screensView._loop || (pub[0] && pub[0][0]))}</select></div>
+          <div><label class="f">Name this screen</label><input id="pn" maxlength="40" placeholder="e.g. Bar TV"></div>
+        </div>
+        <button class="btn primary" style="margin-top:12px;" id="pairBtn" onclick="pairScreen()">Pair</button>`}
+    </div>
+
+    ${tvs.length ? `<div class="card"><h2>Your screens</h2>${tvs.map(([id, t]) => `
+      <div class="row" style="padding:10px 0;border-top:1px solid var(--border);flex-wrap:wrap;">
+        <b style="min-width:140px;">📺 ${esc(t.name || 'TV')}</b>
+        <select onchange="setTvLoop('${esc(id)}', this.value)" style="max-width:280px;">${loopOptions(t.loop)}${myLoops[t.loop] && myLoops[t.loop].publishedAt ? '' : `<option selected disabled>— loop no longer published —</option>`}</select>
+        <span style="margin-left:auto;" class="row"><button class="btn sm" onclick="renameTv('${esc(id)}')">Rename</button>
+        <button class="btn sm danger" onclick="unpairTv('${esc(id)}')">Unpair</button></span>
+      </div>`).join('')}
+      <p class="note" style="margin-top:8px;">Switching the loop here changes the TV within seconds. Unpairing sends the TV back to its code screen.</p></div>` : ''}
+
+    <div class="card"><h2>Getting it onto the TV</h2>
+      <p class="sub" style="margin-bottom:8px;">Any TV with a web browser works. The easiest options:</p>
+      <ul class="sub" style="margin:0 0 0 18px;line-height:1.7;">
+        <li><b>Smart TV</b> (Samsung, LG, most others) — open the TV's <b>Internet</b> or <b>Web Browser</b> app</li>
+        <li><b>No browser?</b> Plug in an Amazon Fire TV Stick (about $30) and open its <b>Silk</b> browser</li>
+        <li><b>Signage player</b> (Yodeck, ScreenCloud, OptiSigns, BrightSign…) — add a web page / URL app pointing at the screen link</li>
+        <li>Then turn off the TV's <b>sleep timer</b> / <b>auto power off</b> so it stays on</li>
+      </ul>
+      <p class="note" style="margin-top:8px;"><a href="https://pollslide.com/help#loopslide-tv" target="_blank" rel="noopener" style="color:var(--accent)">Step-by-step for each TV →</a></p></div>`);
+  const pc = $('pc');
+  if (pc) { pc.oninput = () => { pc.value = pc.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6); }; if (!pc.value) pc.focus(); }
+}
+
+async function pairScreen() {
+  const code = ($('pc').value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const loop = $('pl').value;
+  const name = ($('pn').value || '').trim().slice(0, 40) || 'TV ' + (Object.keys(myTvs).length + 1);
+  if (code.length !== 6) { toast('The code on the TV has 6 letters and numbers.'); return; }
+  if (!loop) { toast('Pick a loop to play.'); return; }
+  const p = planOf();
+  if (Object.keys(myTvs).length >= p.screens) { limitNote(`${esc(p.name)} includes ${p.screens} screen${p.screens === 1 ? '' : 's'}.`); return; }
+  const btn = $('pairBtn'); if (btn) { btn.disabled = true; btn.textContent = 'Pairing…'; }
+  try {
+    const v = (await db.ref('tv_pair/' + code).get()).val();
+    if (!v || !v.device || !(v.createdAt > Date.now() - 15 * 60000)) {
+      toast('No TV is showing that code right now. Check the code on the TV — it changes every 10 minutes.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Pair'; }
+      return;
+    }
+    const id = String(v.device);
+    const upd = {};
+    upd['tv_devices/' + id] = { ownerUid: user.uid, loop, name, pair: code, pairedAt: TS() };
+    upd['users/' + user.uid + '/tvs/' + id] = { loop, name, pairedAt: TS() };
+    upd['tv_pair/' + code] = null;
+    await db.ref().update(upd);
+    screensView._code = ''; screensView._loop = '';
+    toast('Paired — the TV is starting now.');
+    screensView();
+  } catch (e) {
+    toast('Could not pair that TV. Ask it for a new code (it refreshes on its own) and try again.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Pair'; }
+  }
+}
+async function setTvLoop(id, loop) {
+  try {
+    await db.ref().update({ ['tv_devices/' + id + '/loop']: loop, ['users/' + user.uid + '/tvs/' + id + '/loop']: loop });
+    toast('Switched — the TV changes within seconds.');
+  } catch (e) { toast('Could not switch that screen.'); screensView(); }
+}
+async function renameTv(id) {
+  const n = prompt('Name this screen', (myTvs[id] && myTvs[id].name) || '');
+  if (n == null) return;
+  const name = n.trim().slice(0, 40) || 'TV';
+  try { await db.ref().update({ ['tv_devices/' + id + '/name']: name, ['users/' + user.uid + '/tvs/' + id + '/name']: name }); }
+  catch (e) { toast('Could not rename that screen.'); }
+}
+async function unpairTv(id) {
+  if (!confirm('Unpair this screen? It goes back to showing a pairing code.')) return;
+  try { await db.ref().update({ ['tv_devices/' + id]: null, ['users/' + user.uid + '/tvs/' + id]: null }); toast('Unpaired.'); }
+  catch (e) { toast('Could not unpair that screen.'); }
+}
 
 // ── PLAYERS & MODERATION ────────────────────────────────────────────────────
 async function playersView() {

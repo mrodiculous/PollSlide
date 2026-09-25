@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>LoopSlide TV</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  html, body { margin:0; height:100%; background:#07070f; color:#f3f3ff; font-family:'DM Sans',system-ui,sans-serif; overflow:hidden; }
+  /* Sized in vmin, like screen.html, so it reads the same from across a bar on a 32" or an 85" TV. */
+  #pair { position:fixed; top:0; left:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; padding:6vmin; box-sizing:border-box; }
+  .wrapP { display:flex; align-items:center; gap:7vmin; max-width:100%; }
+  .left { max-width:62vw; }
+  .logo { font-family:'Syne',sans-serif; font-weight:800; font-size:3.4vmin; margin-bottom:3vmin; color:#c9c5ff; }
+  h1 { font-family:'Syne',sans-serif; font-weight:800; font-size:5.2vmin; line-height:1.1; margin:0 0 1.5vmin; }
+  .code { font-family:'Syne',sans-serif; font-weight:800; font-size:12vmin; line-height:1; margin:2.4vmin 0 3vmin; white-space:nowrap; }
+  .code span { display:inline-block; background:#11111f; border:.3vmin solid #2a2a4a; border-radius:1.6vmin; padding:.14em .1em; margin-right:.12em; min-width:.78em; text-align:center; }
+  .code span.gap { background:none; border:0; min-width:.3em; }
+  .steps { font-size:3vmin; line-height:1.55; color:#c8c8e6; margin:0; padding-left:1.2em; }
+  .steps b { color:#fff; }
+  .qrbox { text-align:center; }
+  .qr { background:#fff; padding:2vmin; border-radius:2vmin; display:inline-block; }
+  .qr canvas, .qr img { width:34vmin !important; height:34vmin !important; display:block; }
+  .qrcap { font-size:2.4vmin; font-weight:700; margin-top:1.6vmin; }
+  .small { font-size:2.1vmin; color:#8a8ab0; margin-top:3vmin; line-height:1.5; }
+  .status { font-size:2.3vmin; color:#f7b731; min-height:3vmin; margin-top:1.5vmin; }
+  button { font:700 2.4vmin 'DM Sans',sans-serif; background:#6c63ff; color:#fff; border:0; border-radius:1.2vmin; padding:1.4vmin 2.6vmin; cursor:pointer; margin-top:2.4vmin; }
+  button:focus { outline:.5vmin solid #f7b731; outline-offset:.4vmin; }
+  #play { position:fixed; top:0; left:0; width:100%; height:100%; border:0; display:none; background:#000; }
+  @media (orientation: portrait) {
+    .wrapP { flex-direction:column; gap:5vmin; text-align:center; }
+    .left { max-width:90vw; }
+    .steps { text-align:left; display:inline-block; }
+  }
+</style>
+</head>
+<body>
+<div id="pair">
+  <div class="wrapP">
+    <div class="left">
+      <div class="logo">🔁 LoopSlide</div>
+      <h1>Pair this TV</h1>
+      <div class="code" id="code" aria-live="polite"><span>·</span><span>·</span><span>·</span><span class="gap"></span><span>·</span><span>·</span><span>·</span></div>
+      <ol class="steps">
+        <li><b>Scan the QR</b> with your phone, or go to <b>pollslide.com/loop</b> → <b>Screens</b></li>
+        <li>Sign in, enter the code above and pick a loop</li>
+        <li>This TV starts playing on its own</li>
+      </ol>
+      <div class="status" id="status"></div>
+      <button id="fs" autofocus>⛶ Full screen</button>
+      <div class="small">Turn off the TV's sleep timer so it stays on. The code changes every 10 minutes.</div>
+    </div>
+    <div class="qrbox"><div class="qr" id="qr"></div><div class="qrcap">Scan to pair</div></div>
+  </div>
+</div>
+<iframe id="play" title="LoopSlide" allow="fullscreen; screen-wake-lock; autoplay"></iframe>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="/ps-env.js?v=717fca7b"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+/* LoopSlide TV — pollslide.com/tv (redirects here, app.pollslide.com/tv).
+ *
+ * The one page a venue ever opens on the TV. It needs no typing beyond that address:
+ *   1. This TV gets a permanent random device id (localStorage).
+ *   2. It shows a 6-letter pairing code, written to tv_pair/<CODE> = { device, createdAt }.
+ *   3. The owner scans the QR (loop#pair=CODE) or types the code in the Studio. The Studio
+ *      writes tv_devices/<device> = { ownerUid, loop, name }.
+ *   4. This page is listening there: it plays screen#<loop> full-window in an iframe, and
+ *      swaps it the moment the owner picks a different loop. Unpairing (the record deleted)
+ *      brings the code back.
+ * The TV never signs in and writes nothing but its own short-lived pairing code.
+ *
+ * Deliberately old-fashioned JavaScript (var, no ?. / ??): smart-TV browsers lag years
+ * behind, and a syntax error here is a black screen in a bar. */
+var FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME",
+  authDomain: "echonest-live-survey.firebaseapp.com",
+  databaseURL: "https://echonest-live-survey-default-rtdb.firebaseio.com",
+  projectId: "echonest-live-survey",
+  storageBucket: "echonest-live-survey.firebasestorage.app",
+  messagingSenderId: "285529140046",
+  appId: "1:285529140046:web:983c1ee8000a2ca8f80c1f",
+  measurementId: "G-NWQY4YLNRC"
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+var db = firebase.database();
+var APP = (window.PS_ENV && PS_ENV.appOrigin) || location.origin;
+var ALPH = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // no 0/O, 1/I — read from across a room
+var CODE_MS = 10 * 60 * 1000;                     // show a fresh code every 10 min (valid 15)
+
+function rnd(n) {
+  var s = '', i, a;
+  try { a = new Uint8Array(n); (window.crypto || window.msCrypto).getRandomValues(a); }
+  catch (e) { a = []; for (i = 0; i < n; i++) a.push(Math.floor(Math.random() * 256)); }
+  for (i = 0; i < n; i++) s += ALPH.charAt(a[i] % ALPH.length);
+  return s;
+}
+function $(id) { return document.getElementById(id); }
+function status(t) { $('status').textContent = t || ''; }
+
+/* The device id is what keeps a TV paired across power cuts. If the browser will not keep
+   localStorage we still work until the next reload — and say so, rather than silently
+   asking to be paired again every morning. */
+var store = null;
+try { localStorage.setItem('ps_tv_probe', '1'); localStorage.removeItem('ps_tv_probe'); store = localStorage; } catch (e) {}
+if (/[#&]reset\b/.test(location.hash) && store) { store.removeItem('ps_tv_device'); history.replaceState(null, '', location.pathname); }
+var DEV = store ? (store.getItem('ps_tv_device') || '') : '';
+if (!/^[A-Z0-9]{24}$/.test(DEV)) { DEV = rnd(24); if (store) store.setItem('ps_tv_device', DEV); }
+
+var code = '', codeAt = 0, paired = null, connected = true;
+
+function showCode(c) {
+  var h = '', i;
+  for (i = 0; i < c.length; i++) { if (i === 3) h += '<span class="gap"></span>'; h += '<span>' + c.charAt(i) + '</span>'; }
+  $('code').innerHTML = h;
+  var box = $('qr'); box.innerHTML = '';
+  try { new QRCode(box, { text: APP + '/loop#pair=' + c, width: 320, height: 320, correctLevel: QRCode.CorrectLevel.M }); } catch (e) {}
+}
+
+function newCode(tries) {
+  tries = tries || 0;
+  var c = rnd(6);
+  db.ref('tv_pair/' + c).set({ device: DEV, createdAt: firebase.database.ServerValue.TIMESTAMP }).then(function () {
+    code = c; codeAt = Date.now(); showCode(c); status(store ? '' : 'This TV browser does not keep settings, so it may ask to be paired again after it restarts.');
+  }).catch(function () {
+    // Taken by another TV right now (vanishingly rare) or offline — try again shortly.
+    if (tries < 5) setTimeout(function () { newCode(tries + 1); }, 1500);
+    else status('Could not get a pairing code. Check this TV is connected to the internet.');
+  });
+}
+
+function showPair() {
+  $('play').style.display = 'none';
+  if ($('play').src) $('play').src = 'about:blank';
+  $('pair').style.display = 'flex';
+  if (!code || Date.now() - codeAt > CODE_MS) newCode();
+  try { $('fs').focus(); } catch (e) {}
+}
+
+function showLoop(loopCode) {
+  var url = '/screen#' + encodeURIComponent(loopCode);
+  var f = $('play');
+  if (f.getAttribute('data-loop') !== loopCode) { f.setAttribute('data-loop', loopCode); f.src = url; }
+  f.style.display = 'block';
+  $('pair').style.display = 'none';
+}
+
+db.ref('tv_devices/' + DEV).on('value', function (s) {
+  var v = s.val();
+  paired = (v && typeof v.loop === 'string' && v.loop) ? v.loop : null;
+  if (paired) showLoop(paired); else { $('play').removeAttribute('data-loop'); showPair(); }
+}, function () { showPair(); });
+
+// Keep the code fresh while waiting; a stale one would be refused by the Studio.
+setInterval(function () { if (!paired && connected && Date.now() - codeAt > CODE_MS) newCode(); }, 15000);
+
+var offlineSince = 0;
+db.ref('.info/connected').on('value', function (s) {
+  connected = !!s.val();
+  if (connected) { offlineSince = 0; if (!paired) status(store ? '' : $('status').textContent); if (!paired && !code) newCode(); }
+  else offlineSince = Date.now();
+});
+setInterval(function () { if (!paired && offlineSince && Date.now() - offlineSince > 8000) status('Waiting for the internet connection…'); }, 2000);
+
+// Full screen needs a button press — the remote's OK button on the focused button does it.
+$('fs').onclick = function () {
+  var el = document.documentElement, fn = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+  if (fn) { try { var r = fn.call(el); if (r && r.catch) r.catch(function () {}); } catch (e) {} }
+};
+
+// Stay awake where the browser allows it; re-ask after the page is shown again.
+var wake = null;
+function keepAwake() { try { if (navigator.wakeLock && document.visibilityState === 'visible') navigator.wakeLock.request('screen').then(function (w) { wake = w; }).catch(function () {}); } catch (e) {} }
+document.addEventListener('visibilitychange', keepAwake);
+keepAwake();
+
+// A fresh start every night picks up new versions of the page and clears any memory leak
+// a TV browser may have — the pairing survives because it lives in the database.
+var bootAt = Date.now();
+setInterval(function () { var d = new Date(); if (d.getHours() === 4 && Date.now() - bootAt > 2 * 3600 * 1000) location.reload(); }, 60000);
+</script>
+</body>
+</html>

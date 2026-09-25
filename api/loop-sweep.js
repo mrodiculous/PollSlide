@@ -30,7 +30,7 @@ module.exports = async function handler(req, res) {
   if (!configured()) return res.status(503).json({ error: 'Firebase Admin not configured' });
 
   const app = getApp(), db = admin.database(app), now = Date.now();
-  const report = { loops: 0, periodsDeleted: 0, cyclesPruned: 0, orphans: 0 };
+  const report = { loops: 0, periodsDeleted: 0, cyclesPruned: 0, orphans: 0, pairCodes: 0 };
   try {
     const loops = (await db.ref('loops').get()).val() || {};
     for (const node of ['loop_answers', 'loop_scores']) {
@@ -55,6 +55,13 @@ module.exports = async function handler(req, res) {
         if (Object.keys(upd).length) await db.ref().update(upd);
       }
     }
+    /* TV pairing codes (tv.html) live 15 minutes; a TV that was switched off mid-pairing
+       leaves its last one behind. Nothing reads an expired code, so it is only clutter. */
+    const pairs = (await db.ref('tv_pair').get()).val() || {};
+    const stale = {};
+    Object.keys(pairs).forEach(c => { if (!(pairs[c] && pairs[c].createdAt > now - 3600 * 1000)) stale['tv_pair/' + c] = null; });
+    report.pairCodes = Object.keys(stale).length;
+    if (report.pairCodes) await db.ref().update(stale);
     report.loops = Object.keys(loops).length;
     return res.status(200).json(Object.assign({ ok: true }, report));
   } catch (e) {

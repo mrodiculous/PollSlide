@@ -48,7 +48,7 @@
       ]
     },
     {
-      "source": "/(presenter|present|companion|answer|live|admin|setup|report|results|recap|overlay|powerpoint|powerpoint-functions|powerpoint-content|loop|screen|play)",
+      "source": "/(presenter|present|companion|answer|live|admin|setup|report|results|recap|overlay|powerpoint|powerpoint-functions|powerpoint-content|loop|screen|play|tv)",
       "headers": [
         {
           "key": "Cache-Control",

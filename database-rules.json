@@ -238,6 +238,47 @@
         },
         ".write": "auth != null && root.child('loops').child($code).child('ownerUid').val() === auth.uid && !newData.exists()"
       }
+    },
+    "tv_pair": {
+      "$code": {
+        ".read": true,
+        ".write": "(newData.exists() && (!data.exists() || data.child('createdAt').val() < now - 900000)) || (!newData.exists() && auth != null && newData.parent().parent().child('tv_devices').child(data.child('device').val()).child('pair').val() === $code)",
+        ".validate": "$code.matches(/^[A-HJ-NP-Z2-9]{6}$/) && newData.hasChildren(['device','createdAt']) && newData.child('device').isString() && newData.child('device').val().matches(/^[A-Z0-9]{24}$/) && newData.child('createdAt').val() === now",
+        "device": {
+          ".validate": true
+        },
+        "createdAt": {
+          ".validate": true
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "tv_devices": {
+      "$device": {
+        ".read": true,
+        ".write": "auth != null && ((data.exists() && data.child('ownerUid').val() === auth.uid && (!newData.exists() || newData.child('ownerUid').val() === auth.uid)) || (!data.exists() && newData.child('ownerUid').val() === auth.uid && root.child('tv_pair').child(newData.child('pair').val() + '').child('device').val() === $device && root.child('tv_pair').child(newData.child('pair').val() + '').child('createdAt').val() > now - 900000))",
+        ".validate": "newData.hasChildren(['ownerUid','loop','name'])",
+        "ownerUid": {
+          ".validate": "newData.isString()"
+        },
+        "loop": {
+          ".validate": "newData.isString() && root.child('loops').child(newData.val()).child('ownerUid').val() === auth.uid"
+        },
+        "name": {
+          ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 40"
+        },
+        "pair": {
+          ".validate": "newData.isString() && newData.val().length === 6"
+        },
+        "pairedAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
     }
   }
 }

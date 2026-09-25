@@ -53,7 +53,7 @@ console.log('\nEvery app page loads the switch before Firebase starts');
   /* The PowerPoint add-in pages (powerpoint.html, powerpoint-content/index.html) are left out
      on purpose: they are frozen as submitted to Microsoft AppSource and must not change.
      On a sandbox host they still talk to the LIVE project — see docs/SANDBOX.md, Known limits. */
-  const pages = ['companion.html','answer.html','admin.html','live.html','overlay.html','report.html','present.html','presenter.html','results.html','recap.html'];
+  const pages = ['companion.html','answer.html','admin.html','live.html','overlay.html','report.html','present.html','presenter.html','results.html','recap.html','loop.html','screen.html','play.html','tv.html'];
   for (const p of pages) {
     const h = fs.readFileSync(path.join(ROOT, p), 'utf8');
     const sdk = h.search(/firebase-app-compat\.js/), env = h.search(/\/ps-env\.js\?v=/), init = h.search(/initializeApp\(/);

@@ -173,5 +173,50 @@ console.log('\nRetention sweep');
   ok('LoopSlide pages are never cached stale', v.headers.some(h => /loop\|screen\|play/.test(h.source)));
 }
 
+console.log('\nTV pairing (tv.html ↔ Studio Screens)');
+{
+  const tv = read('tv.html'), studio = read('loop.html');
+  const rules = JSON.parse(read('database-rules.json')).rules;
+  const js = tv.split('<script>').pop().split('</script>')[0];
+  const code = js.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:'])\/\/.*$/gm, '$1');   // comments may name what they avoid
+  // Smart-TV browsers lag years behind; one modern token is a black screen in a bar.
+  ok('tv.html uses no syntax old TV browsers choke on (?. ?? let const => async class)',
+     !/\?\.|\?\?|\blet\s|\bconst\s|=>|\basync\b|\bclass\s|`/.test(code), (code.match(/\?\.|\?\?|\blet\s|\bconst\s|=>|\basync\b|\bclass\s|`/) || [])[0]);
+  ok('tv.html parses', (() => { try { new Function(js); return true; } catch (e) { return false; } })());
+  const alph = (js.match(/var ALPH = '([^']+)'/) || [])[1] || '';
+  ok('pairing alphabet has no look-alikes (0/O, 1/I)', alph && !/[01OI]/.test(alph));
+  const codeRe = /^[A-HJ-NP-Z2-9]{6}$/;
+  ok('every code the TV can make passes the rule that stores it', [...alph].every(ch => codeRe.test(ch.repeat(6))));
+  ok('the device id the TV makes matches the rule', /\[A-Z0-9\]\{24\}/.test(js) && /rnd\(24\)/.test(js));
+  ok('tv_pair: anyone may post a code, but not over a live one', /data\.child\('createdAt'\)\.val\(\) < now - 900000/.test(rules.tv_pair.$code['.write']));
+  ok('tv_pair: a code is only deleted by the pairing that claims it', /tv_devices.*pair.*=== \$code/.test(rules.tv_pair.$code['.write']));
+  ok('tv_pair: createdAt must be the server clock', /createdAt'\)\.val\(\) === now/.test(rules.tv_pair.$code['.validate']));
+  const dw = rules.tv_devices.$device['.write'];
+  ok('tv_devices: claiming needs the TV\'s live code', /tv_pair.*=== \$device/.test(dw) && /> now - 900000/.test(dw));
+  ok('tv_devices: only the owner may switch, rename or unpair', /data\.child\('ownerUid'\)\.val\(\) === auth\.uid/.test(dw));
+  ok('tv_devices: a TV can only be pointed at your own loop', /loops.*ownerUid.*=== auth\.uid/.test(rules.tv_devices.$device.loop['.validate']));
+  ok('the TV only reads its own record and writes only its code', /tv_devices\/' \+ DEV/.test(js) && !/tv_devices\/[^']*'\)\.(set|update|remove)/.test(js));
+  ok('the TV QR opens the Studio pairing screen', /\/loop#pair=/.test(js) && /pair=\(\[A-Za-z0-9\]\{6\}\)/.test(studio));
+  ok('Studio pairing writes the TV, the owner\'s list and retires the code in one update', /tv_devices\/' \+ id/.test(studio) && /\/tvs\/' \+ id/.test(studio) && /tv_pair\/' \+ code\] = null/.test(studio));
+  ok('the TV plays the loop through screen.html, not a copy of it', /'\/screen#'/.test(js));
+  ok('pollslide.com/tv reaches the TV page', (() => { try { return JSON.parse(fs.readFileSync(path.join(ROOT, '..', 'pollslide-website', 'vercel.json'), 'utf8')).redirects.some(r => r.source === '/tv' && /app\.pollslide\.com\/tv$/.test(r.destination)); } catch (e) { return true; } })());
+  ok('expired pairing codes are swept nightly', /tv_pair/.test(read('api/loop-sweep.js')));
+}
+
+console.log('\nPlan limits');
+{
+  const studio = read('loop.html');
+  const m = studio.match(/const LOOP_PLANS = (\{[\s\S]*?\n\});/);
+  const P = m ? Function('return ' + m[1])() : {};
+  const want = { free: [1, 5], pro: [5, 20], team_small: [20, 40], team_large: [80, 150] };
+  ok('loops and slides per plan are as decided', Object.keys(want).every(k => P[k] && P[k].loops === want[k][0] && P[k].slides === want[k][1]), P);
+  ok('enterprise is unlimited (set per deal)', P.enterprise && P.enterprise.loops === Infinity && P.enterprise.slides === Infinity);
+  ok('every plan has a screen limit', Object.values(P).every(p => typeof p.screens === 'number'));
+  ok('limits are checked when adding, publishing, making a loop and pairing',
+     /function addQ\(si\) \{ if \(atSlideLimit\(\)\)/.test(studio) && /function addAd\(si, sponsored\) \{ if \(atSlideLimit\(\)\)/.test(studio)
+     && /n > lim/.test(studio) && /length >= p\.loops/.test(studio) && /length >= p\.screens/.test(studio));
+  ok('legacy tier names map to today\'s plans', /'team' \? 'team_small'/.test(studio) && /'white' \? 'team_large'/.test(studio));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
