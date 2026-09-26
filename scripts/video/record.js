@@ -73,7 +73,14 @@ async function cdpConnect() {
 
   await send('Page.enable'); await send('Runtime.enable');
   await send('Emulation.setDeviceMetricsOverride', { width: 1920, height: 1080, deviceScaleFactor: 1, mobile: false });
-  handlers['Runtime.consoleAPICalled'] = (p) => { if (p.type === 'error') console.log('  [page error]', p.args.map(a => a.value || a.description).join(' ').slice(0, 200)); };
+  handlers['Runtime.consoleAPICalled'] = (p) => {
+    const text = p.args.map(a => a.value || a.description).join(' ');
+    if (p.type === 'error') console.log('  [page error]', text.slice(0, 200));
+    const m = /^SNAP:([\w-]+)$/.exec(text);          // D.snap('name') → a full-quality still
+    if (m) send('Page.captureScreenshot', { format: 'png' }).then(r => {
+      const f = path.join(OUT, ID + '-' + m[1] + '.png'); fs.writeFileSync(f, Buffer.from(r.data, 'base64')); console.log('  still →', path.basename(f));
+    }).catch(() => {});
+  };
   const loaded = new Promise(r => { handlers['Page.loadEventFired'] = r; });
   await send('Page.navigate', { url: `http://localhost:${PORT}/__video/stage.html` });
   await loaded; await sleep(1200);
@@ -128,5 +135,6 @@ async function cdpConnect() {
   // ── 3. assemble ──
   execFileSync('swift', [path.join(HERE, 'assemble.swift'), path.join(WORK, 'manifest.json')], { stdio: 'inherit' });
   execFileSync('python3', [path.join(HERE, 'make-preview.py'), path.join(WORK, 'manifest.json'), path.join(OUT, ID)], { stdio: 'inherit' });
+  if (fs.existsSync(path.join(HERE, ID + '.captions.json'))) execFileSync('python3', [path.join(HERE, 'captions.py'), ID], { stdio: 'inherit' });
   console.log('done →', OUT);
 })().catch(e => { console.error(e); cleanup(); process.exit(1); });

@@ -201,9 +201,16 @@ const TEMPLATES = {
     html: baseLayout('Welcome to PollSlide', `
       <h1 style="font-size:24px;font-weight:800;margin:0 0 12px;color:#15152a;">Welcome to PollSlide!</h1>
       <p style="font-size:16px;color:#5a5a78;margin:0 0 18px;">Your account is ready. Here's how to get started:</p>
+      <!-- The getting-started video. Email can't play video, so this is an animated preview
+           (its first frame is a complete title card, which is all Outlook on Windows shows)
+           linking to the page with the real player, captions and chapters. -->
+      <a href="https://pollslide.com/getting-started?utm_source=welcome_email" style="display:block;text-decoration:none;margin:0 0 10px;">
+        <img src="https://pollslide.com/videos/getting-started-email.gif" width="496" alt="Watch: your first quiz in 2 minutes" style="display:block;width:100%;max-width:496px;height:auto;border:0;border-radius:12px;">
+      </a>
+      <p style="font-size:14px;color:#5a5a78;margin:0 0 22px;text-align:center;"><a href="https://pollslide.com/getting-started?utm_source=welcome_email" style="color:${BRAND_COLOR};font-weight:700;text-decoration:none;">▶ Watch the 2-minute video</a> — make a quiz or poll, let Polly write the questions, and add GIFs to questions and answers.</p>
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
         <tr><td style="padding:12px 14px;background:#f4f4fc;border-radius:10px;border-left:3px solid ${BRAND_COLOR};margin-bottom:8px;">
-          <strong style="color:${BRAND_COLOR};">Step 1:</strong> Create a presentation and add your poll questions
+          <strong style="color:${BRAND_COLOR};">Step 1:</strong> Create a quiz or poll — type your questions or let ✨ Polly write them, then add GIFs
         </td></tr>
         <tr><td style="height:8px;"></td></tr>
         <tr><td style="padding:12px 14px;background:#f4f4fc;border-radius:10px;border-left:3px solid ${BRAND_PINK};">

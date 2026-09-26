@@ -1,0 +1,69 @@
+{
+  "_note": "One entry per scene, in order. 'en' overrides the spoken text where reading differs from hearing (an email address). Register: es tú, de du, fr tu, pt European (você), it tu. 'deck' is a presentation, never a pack of cards.",
+  "cues": [
+    {
+      "es": "¡Bienvenido a PollSlide! En los próximos dos minutos vas a crear tu primer quiz, dejar que Polly escriba preguntas por ti, añadir GIFs y presentarlo en directo a tu público.",
+      "de": "Willkommen bei PollSlide! In den nächsten zwei Minuten erstellst du dein erstes Quiz, lässt Polly Fragen für dich schreiben, fügst GIFs hinzu und spielst es live mit deinem Publikum.",
+      "fr": "Bienvenue sur PollSlide ! Dans les deux prochaines minutes, tu vas créer ton premier quiz, laisser Polly écrire des questions pour toi, ajouter des GIF et le lancer en direct avec ton public.",
+      "pt": "Bem-vindo ao PollSlide! Nos próximos dois minutos, vai criar o seu primeiro quiz, deixar a Polly escrever perguntas por si, adicionar GIFs e apresentá-lo em direto ao seu público.",
+      "it": "Benvenuto su PollSlide! Nei prossimi due minuti creerai il tuo primo quiz, lascerai che Polly scriva le domande per te, aggiungerai GIF e lo farai dal vivo con il tuo pubblico."
+    },
+    {
+      "es": "Empieza eligiendo qué quieres crear. Las encuestas preguntan qué opina la sala. Los quizzes tienen respuestas correctas y una clasificación. Vamos a crear un quiz.",
+      "de": "Wähle zuerst, was du erstellen willst. Umfragen fragen den Raum nach seiner Meinung. Quizze haben richtige Antworten und eine Rangliste. Lass uns ein Quiz erstellen.",
+      "fr": "Commence par choisir ce que tu veux créer. Les sondages demandent à la salle ce qu'elle pense. Les quiz ont des bonnes réponses et un classement. Créons un quiz.",
+      "pt": "Comece por escolher o que quer criar. As sondagens perguntam à sala o que pensa. Os quizzes têm respostas certas e uma classificação. Vamos criar um quiz.",
+      "it": "Inizia scegliendo cosa creare. I sondaggi chiedono alla sala cosa ne pensa. I quiz hanno risposte giuste e una classifica. Creiamo un quiz."
+    },
+    {
+      "es": "Haz clic en «Blank Quiz» y ponle un nombre. Todo lo que haces se guarda automáticamente.",
+      "de": "Klicke auf „Blank Quiz“ und gib ihm einen Namen. Alles, was du tust, wird automatisch gespeichert.",
+      "fr": "Clique sur « Blank Quiz » et donne-lui un nom. Tout ce que tu fais est enregistré automatiquement.",
+      "pt": "Clique em «Blank Quiz» e dê-lhe um nome. Tudo o que faz é guardado automaticamente.",
+      "it": "Fai clic su «Blank Quiz» e dagli un nome. Tutto ciò che fai viene salvato automaticamente."
+    },
+    {
+      "es": "Ahora añade tu primera pregunta. Escríbela, completa las respuestas y marca la correcta. Las encuestas funcionan igual, solo que sin respuesta correcta.",
+      "de": "Füge jetzt deine erste Frage hinzu. Tippe sie ein, fülle die Antworten aus und hake die richtige an. Umfragen funktionieren genauso, nur ohne richtige Antwort.",
+      "fr": "Ajoute maintenant ta première question. Tape-la, remplis les réponses, puis coche la bonne. Les sondages fonctionnent exactement pareil, simplement sans bonne réponse.",
+      "pt": "Agora adicione a sua primeira pergunta. Escreva-a, preencha as respostas e marque a certa. As sondagens funcionam da mesma forma, só que sem resposta certa.",
+      "it": "Ora aggiungi la tua prima domanda. Scrivila, compila le risposte e spunta quella giusta. I sondaggi funzionano allo stesso modo, solo senza una risposta giusta."
+    },
+    {
+      "es": "Ahora hazlo divertido. Toca GIF, busca lo que quieras y elige uno para tu pregunta. Cada respuesta también puede tener su propio GIF. Quedan geniales en la pantalla grande y en el móvil de todos.",
+      "de": "Jetzt wird es lustig. Tippe auf GIF, suche nach allem, was dir gefällt, und wähle eins für deine Frage. Jede Antwort kann auch ihr eigenes GIF haben. Auf der großen Leinwand und auf jedem Handy sehen sie super aus.",
+      "fr": "Maintenant, rends-le amusant. Touche GIF, cherche ce que tu veux et choisis-en un pour ta question. Chaque réponse peut aussi avoir son propre GIF. Ils rendent super bien sur grand écran et sur le téléphone de chacun.",
+      "pt": "Agora torne-o divertido. Toque em GIF, pesquise o que quiser e escolha um para a sua pergunta. Cada resposta também pode ter o seu próprio GIF. Ficam ótimos no ecrã grande e no telemóvel de todos.",
+      "it": "Ora rendilo divertente. Tocca GIF, cerca quello che vuoi e scegline uno per la tua domanda. Anche ogni risposta può avere la sua GIF. Stanno benissimo sul grande schermo e sul telefono di tutti."
+    },
+    {
+      "es": "¿Vas justo de tiempo? Pídeselo a Polly. Describe tu tema, elige cuántas preguntas quieres y Polly las escribe por ti, con las respuestas correctas ya marcadas. Las cuentas gratuitas tienen cinco borradores de Polly al mes.",
+      "de": "Wenig Zeit? Frag Polly. Beschreibe dein Thema, wähle, wie viele Fragen du willst, und Polly schreibt sie für dich – die richtigen Antworten sind schon markiert. Kostenlose Konten bekommen fünf Polly-Entwürfe pro Monat.",
+      "fr": "Pas beaucoup de temps ? Demande à Polly. Décris ton sujet, choisis le nombre de questions, et Polly les écrit pour toi, avec les bonnes réponses déjà cochées. Les comptes gratuits ont droit à cinq brouillons Polly par mois.",
+      "pt": "Com pouco tempo? Peça à Polly. Descreva o seu tema, escolha quantas perguntas quer e a Polly escreve-as por si, com as respostas certas já assinaladas. As contas gratuitas têm cinco rascunhos da Polly por mês.",
+      "it": "Poco tempo? Chiedi a Polly. Descrivi il tuo argomento, scegli quante domande vuoi e Polly le scrive per te, con le risposte giuste già segnate. Gli account gratuiti hanno cinque bozze di Polly al mese."
+    },
+    {
+      "es": "¿Quieres imágenes en todas partes? Abre el menú de la presentación, elige GIFs y PollSlide encuentra uno para cada pregunta y cada respuesta. La búsqueda segura siempre está activada y tú los revisas antes de que nadie los vea.",
+      "de": "Du willst überall Bilder? Öffne das Menü der Präsentation, wähle GIFs, und PollSlide findet eins für jede Frage und jede Antwort. Die sichere Suche ist immer an, und du prüfst sie, bevor jemand sie sieht.",
+      "fr": "Envie d'images partout ? Ouvre le menu de la présentation, choisis GIF, et PollSlide en trouve un pour chaque question et chaque réponse. La recherche sécurisée est toujours activée, et tu les vérifies avant que quiconque les voie.",
+      "pt": "Quer imagens em todo o lado? Abra o menu da apresentação, escolha GIFs e o PollSlide encontra um para cada pergunta e cada resposta. A pesquisa segura está sempre ativa e revê-os antes de alguém os ver.",
+      "it": "Vuoi immagini ovunque? Apri il menu della presentazione, scegli GIF e PollSlide ne trova una per ogni domanda e ogni risposta. La ricerca sicura è sempre attiva e le controlli tu prima che qualcuno le veda."
+    },
+    {
+      "es": "Cuando estés listo, pulsa Presentar. Tu público escanea el código QR con el móvil. Sin app y sin registrarse. Las respuestas aparecen en directo a medida que llegan. Después revela la respuesta y mira quién acertó.",
+      "de": "Wenn du bereit bist, klicke auf Präsentieren. Dein Publikum scannt den QR-Code mit dem Handy. Keine App, keine Anmeldung. Die Antworten erscheinen live, sobald sie eintreffen. Dann deckst du die Lösung auf und siehst, wer richtig lag.",
+      "fr": "Quand tu es prêt, appuie sur Présenter. Ton public scanne le QR code avec son téléphone. Pas d'appli, pas d'inscription. Les réponses s'affichent en direct au fur et à mesure. Ensuite, révèle la réponse et regarde qui a trouvé !",
+      "pt": "Quando estiver pronto, carregue em Apresentar. O seu público lê o código QR com o telemóvel. Sem app e sem registo. As respostas aparecem em direto à medida que chegam. Depois revele a resposta e veja quem acertou!",
+      "it": "Quando sei pronto, premi Presenta. Il tuo pubblico scansiona il codice QR con il telefono. Nessuna app, nessuna registrazione. Le risposte compaiono dal vivo man mano che arrivano. Poi rivela la risposta e scopri chi ha indovinato!"
+    },
+    {
+      "en": "That's it! Open PollSlide and make your first quiz today. And if you ever need a hand, just email help@pollslide.com.",
+      "es": "¡Y ya está! Abre PollSlide y crea tu primer quiz hoy mismo. Y si alguna vez necesitas ayuda, escribe a help@pollslide.com.",
+      "de": "Das war's! Öffne PollSlide und erstelle noch heute dein erstes Quiz. Und wenn du mal Hilfe brauchst, schreib einfach an help@pollslide.com.",
+      "fr": "C'est tout ! Ouvre PollSlide et crée ton premier quiz dès aujourd'hui. Et si tu as besoin d'un coup de main, écris simplement à help@pollslide.com.",
+      "pt": "E está feito! Abra o PollSlide e crie hoje o seu primeiro quiz. E se alguma vez precisar de ajuda, basta escrever para help@pollslide.com.",
+      "it": "Ecco fatto! Apri PollSlide e crea oggi stesso il tuo primo quiz. E se ti serve una mano, scrivi a help@pollslide.com."
+    }
+  ]
+}

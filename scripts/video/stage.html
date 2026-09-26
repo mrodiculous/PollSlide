@@ -142,7 +142,17 @@ const D = (() => {
     if (instant) { c.style.transition = 'none'; c.classList.add('on'); c.offsetHeight; c.style.transition = ''; } else c.classList.add('on'); }
   function layout(mode) { $('appWrap').classList.toggle('split', mode === 'split'); $('phone').classList.toggle('in', mode === 'split'); }
   const js = (fn, f = 'app') => fn(win(f), doc(f));
-  return { sleep, load, find, waitFor, point, click, type, scroll, hideCursor, chip, card, layout, js, move, stagePos, frames };
+  /* Zoom the app in on one element (e.g. an attribution mark) so it reads on video, then back. */
+  async function focus(q, scale = 2.2, f = 'app') {
+    const el = await waitFor(q, f); const r = el.getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    const w = $('appWrap'); w.style.transform = `translate(${960 - cx * scale}px, ${540 - cy * scale}px) scale(${scale})`;
+    await sleep(1200); return el;
+  }
+  async function unfocus() { $('appWrap').style.transform = ''; await sleep(1200); }
+  /* Ask the recorder for a full-quality still of this exact moment (saved as out/<id>-<name>.png). */
+  async function snap(name) { console.log('SNAP:' + name); await sleep(700); }
+  return { sleep, load, find, waitFor, point, click, type, scroll, hideCursor, chip, card, layout, js, move, stagePos, frames, focus, unfocus, snap };
 })();
 window.D = D;
 setInterval(() => { if (window.scrollY || document.documentElement.scrollTop) window.scrollTo(0, 0); }, 50);   // belt and braces
