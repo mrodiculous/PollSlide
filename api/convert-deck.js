@@ -204,13 +204,13 @@ module.exports = async function handler(req, res) {
     const msg = String((lastErr && lastErr.message) || lastErr || '');
     const m = msg.match(/^(provider-failed|provider-no-pdf):([^:]*):(.*)$/s);
     if (m) {
-      return res.status(502).json({
+      return res.status(503).json({
         ok: false, code: m[1],
         ...(m[2] ? { status: Number(m[2]) } : {}),
         ...(m[3] ? { detail: m[3] } : {})
       });
     }
-    return res.status(502).json({ ok: false, code: 'provider-failed', detail: msg.slice(0, 200) });
+    return res.status(503).json({ ok: false, code: 'provider-failed', detail: msg.slice(0, 200) });
   } catch (e) {
     return res.status(500).json({ ok: false, code: 'error', error: String((e && e.message) || e) });
   }

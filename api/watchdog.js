@@ -15,7 +15,7 @@ const admin = require('firebase-admin');
 const {
   evalBackupAge, evalErrorSpike, evalTierDrift, evalProbe, evalAiReachable,
   decideNotification, isStoredBackup,
-  evalShareHygiene, evalQidBackfill, evalOrphanGrants,
+  evalShareHygiene, evalQidBackfill, evalOrphanGrants, evalFeatureHealth,
 } = require('../lib/watchdog');
 const {
   urlsToCheck, planMediaRepair, evalStarterMedia, describeRepair,
@@ -372,6 +372,36 @@ const CHECKS = [
   },
 
   {
+    id: 'feature_health',
+    title: 'GIF search or Polly is failing for users',
+    severity: 'high',
+    autoFix: false,
+    async gather(ctx) {
+      const day = new Date().toISOString().slice(0, 10);
+      const [g, p] = await Promise.all([
+        ctx.db.ref('admin/feature_health/gif_search/' + day).get(),
+        ctx.db.ref('admin/feature_health/polly/' + day).get(),
+      ]);
+      /* A direct GIPHY probe once an hour, so an exhausted key or an outage is caught even
+       * when nobody is searching. One search an hour is ~1% of a beta key's allowance. */
+      const probeRef = ctx.db.ref('admin/feature_health/gif_probe');
+      let probe = (await probeRef.get()).val();
+      const key = process.env.GIPHY_API_KEY;
+      if (key && (!probe || Date.now() - (probe.at || 0) > 55 * 60000)) {
+        try {
+          const u = 'https://api.giphy.com/v1/gifs/search?limit=1&rating=g&q=hello&api_key=' + encodeURIComponent(key);
+          const r = await fetchWithTimeout(u, {}, 7000);
+          probe = { at: Date.now(), ok: r.ok, status: r.status };
+        } catch (e) { probe = { at: Date.now(), ok: false, status: 'no response' }; }
+        await probeRef.set(probe).catch(() => {});
+      }
+      return { gif: g.val() || {}, polly: p.val() || {}, probe: key ? probe : null };
+    },
+    evaluate: evalFeatureHealth,
+    hint: 'GIF search over its limit: GIPHY beta keys allow ~100 searches an hour — apply for a free Production key at developers.giphy.com/dashboard (Upgrade to Production), then replace GIPHY_API_KEY in Vercel. Polly failing or short: open Admin → Polly log for the topics, and check the local model / OPENAI_API_KEY.',
+  },
+
+  {
     id: 'ai_unavailable',
     title: 'Polly has no working model',
     severity: 'high',
@@ -532,13 +562,30 @@ async function runAll(db, trigger) {
     out.push(row);
   }
 
+  /* The daily health email. Alerts only fire when something changes, which means a quiet
+   * inbox can't tell "all fine" from "nothing is checking". Once a day, after 14:00 UTC
+   * (morning in the US), say so either way — with what was checked and today's numbers. */
+  try {
+    const today = new Date(now).toISOString().slice(0, 10);
+    if (state.lastDigestDay !== today && new Date(now).getUTCHours() >= 14) {
+      const open = out.filter(r => r.ok === false);
+      const crashed = out.filter(r => r.ok === null);
+      const rows = out.map(r => `<tr><td style="padding:4px 10px 4px 0;">${r.ok === true ? '✅' : r.ok === false ? '🔴' : '⚠️'}</td><td style="padding:4px 10px 4px 0;"><b>${esc(r.title)}</b></td><td style="padding:4px 0;color:#555;font-size:13px;">${esc(r.detail || '')}</td></tr>`).join('');
+      const subj = open.length ? `🔴 Daily health: ${open.length} problem${open.length === 1 ? '' : 's'} open` : crashed.length ? `⚠️ Daily health: ${crashed.length} check(s) couldn't run` : '✅ Daily health: everything is working';
+      const sent = await sendAlert(subj, 'PollSlide daily health',
+        `<p>${open.length ? 'These need you:' : 'Every automatic check passed in the last run.'}</p><table>${rows}</table>` +
+        `<p style="color:#666;font-size:13px;">Checked every 15 minutes; you only get other emails when something breaks or recovers. <a href="${APP_URL}/admin.html">Admin → Auto-pilot</a></p>`);
+      if (sent) state.lastDigestDay = today;
+    }
+  } catch (e) { /* the digest is a courtesy; never fail the run over it */ }
+
   let newTickets = 0;
   try { newTickets = await notifyNewTickets(db, state.lastRunAt || (now - 3600000)); } catch (e) {}
   let followUps = 0;
   try { followUps = await notifyFollowUps(db, state.lastRunAt || (now - 3600000)); } catch (e) {}
 
   await db.ref('admin/watchdog/state').set({
-    lastRunAt: now, trigger,
+    lastRunAt: now, trigger, lastDigestDay: state.lastDigestDay || null,
     open: out.filter(r => r.status === 'open').map(r => r.id),
     healed: out.filter(r => r.selfHealed).map(r => r.id),
   });

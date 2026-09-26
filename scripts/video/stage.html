@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PollSlide video stage</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  /* 1920×1080 stage. The app runs at 1280×720 and is scaled 1.5× so its text reads on a
+     phone-sized video player; the phone is a real answer page in a bezel. */
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: clip; background: #07070d; font-family: 'DM Sans', sans-serif; }
+  #bg { position: absolute; inset: 0; background:
+        radial-gradient(900px 600px at 15% 20%, rgba(108,99,255,.28), transparent 60%),
+        radial-gradient(800px 600px at 90% 85%, rgba(255,101,132,.18), transparent 60%), #07070d; }
+  #appWrap { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0;
+             transform: translate(0px, 0px) scale(1.5); transition: transform 1.1s cubic-bezier(.65,0,.35,1), border-radius 1.1s, box-shadow 1.1s;
+             overflow: hidden; background: #0d0d16; }
+  #appWrap.split { transform: translate(70px, 150px) scale(1.02); border-radius: 14px; box-shadow: 0 30px 80px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.08); }
+  #app { width: 1280px; height: 720px; border: 0; display: block; }
+  #phone { position: absolute; left: 1440px; top: 1200px; width: 400px; height: 830px; border-radius: 54px; background: #111;
+           box-shadow: 0 0 0 10px #22222e, 0 0 0 12px #3a3a4a, 0 40px 90px rgba(0,0,0,.7); overflow: hidden;
+           transition: top 1.1s cubic-bezier(.65,0,.35,1); }
+  #phone.in { top: 125px; }
+  #phone iframe { width: 390px; height: 820px; border: 0; margin: 5px; border-radius: 48px; background: #0b0b12; }
+  #notch { position: absolute; left: 50%; top: 14px; width: 120px; height: 30px; margin-left: -60px; background: #000; border-radius: 20px; z-index: 2; }
+  #cursor { position: absolute; left: 960px; top: 620px; width: 40px; height: 40px; z-index: 50; pointer-events: none;
+            transition: left var(--mv, .7s) cubic-bezier(.45,0,.2,1), top var(--mv, .7s) cubic-bezier(.45,0,.2,1), opacity .3s; filter: drop-shadow(0 3px 6px rgba(0,0,0,.5)); }
+  #cursor.hide { opacity: 0; }
+  .ripple { position: absolute; width: 20px; height: 20px; margin: -10px 0 0 -10px; border-radius: 50%; border: 4px solid rgba(108,99,255,.95);
+            z-index: 49; pointer-events: none; animation: rip .55s ease-out forwards; }
+  @keyframes rip { to { transform: scale(3.4); opacity: 0; } }
+  #chip { position: absolute; left: 40px; bottom: 40px; z-index: 40; padding: 16px 26px 16px 18px; border-radius: 18px;
+          background: rgba(14,14,26,.92); border: 1px solid rgba(255,255,255,.12); color: #fff; font: 700 30px 'Syne', sans-serif;
+          display: flex; align-items: center; gap: 16px; box-shadow: 0 16px 40px rgba(0,0,0,.5);
+          transform: translateY(160px); opacity: 0; transition: transform .6s cubic-bezier(.2,.8,.2,1), opacity .4s; }
+  #chip.on { transform: none; opacity: 1; }
+  #chip b { display: grid; place-items: center; width: 46px; height: 46px; border-radius: 12px; background: linear-gradient(135deg,#6c63ff,#ff6584); font-size: 26px; }
+  #card { position: absolute; inset: 0; z-index: 60; display: grid; place-items: center; text-align: center; color: #fff;
+          background: radial-gradient(1000px 700px at 50% 40%, #1c1640, #07070d 70%); opacity: 0; pointer-events: none; transition: opacity .8s; }
+  #card.on { opacity: 1; }
+  #card .logo { display: inline-flex; align-items: center; gap: 18px; font: 800 44px 'Syne', sans-serif; letter-spacing: -.01em; margin-bottom: 40px; }
+  #card .logo i { width: 58px; height: 58px; border-radius: 15px; background: linear-gradient(135deg,#6c63ff,#ff6584); display: inline-block; }
+  #card h1 { font: 800 92px/1.02 'Syne', sans-serif; margin: 0 0 26px; letter-spacing: -.02em; }
+  #card h1 em { font-style: normal; background: linear-gradient(90deg,#8f88ff,#ff6584); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  #card p { font-size: 36px; color: #b9b6d8; margin: 0; }
+  #card .steps { display: flex; gap: 18px; justify-content: center; margin-top: 46px; }
+  #card .steps span { padding: 14px 24px; border-radius: 14px; background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.12); font: 700 26px 'DM Sans'; color: #e6e4ff; }
+  #card .url { margin-top: 44px; display: inline-block; padding: 20px 40px; border-radius: 18px; background: linear-gradient(135deg,#6c63ff,#8a5cff); font: 800 40px 'Syne', sans-serif; color: #fff; }
+</style>
+</head>
+<body>
+<div id="bg"></div>
+<div id="appWrap"><iframe id="app" src="about:blank"></iframe></div>
+<div id="phone"><div id="notch"></div><iframe id="phoneFrame" src="about:blank"></iframe></div>
+<div id="chip"><b>1</b><span>Step</span></div>
+<div id="card"></div>
+<svg id="cursor" viewBox="0 0 28 28"><path d="M5 2.5 L5 22 L10 17.5 L13.4 25 L17 23.4 L13.7 16.2 L20.5 16.2 Z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/></svg>
+<script>
+/* The director. record.js calls these from each scene. Everything is done with the app's
+   own controls — real clicks on real buttons, real typing into real fields — so the video
+   shows exactly what a new user will see. */
+const D = (() => {
+  const $ = (id) => document.getElementById(id);
+  const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+  const frames = { app: $('app'), phone: $('phoneFrame') };
+  const doc = (f = 'app') => frames[f].contentDocument;
+  const win = (f = 'app') => frames[f].contentWindow;
+  let cur = { x: 960, y: 620 };
+
+  function load(f, url) { return new Promise(res => { frames[f].onload = () => res(); frames[f].src = url; }); }
+  /* Find an element in a frame: a CSS selector, or [selector, /text/] to match visible text. */
+  function find(q, f = 'app') {
+    const d = doc(f); if (!d) return null;
+    if (typeof q === 'function') return q(d, win(f));
+    if (Array.isArray(q)) { const [sel, re] = q; return [...d.querySelectorAll(sel)].find(e => re.test(e.textContent || e.value || e.placeholder || '') && visible(e)) || null; }
+    return [...d.querySelectorAll(q)].find(visible) || null;
+  }
+  function visible(e) { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; }
+  async function waitFor(q, f = 'app', ms = 8000) { const t = Date.now(); while (Date.now() - t < ms) { const e = find(q, f); if (e) return e; await sleep(80); } throw new Error('not found: ' + String(q)); }
+  /* Stage coordinates of an element's centre, through the frame's position and scale. */
+  function stagePos(el, f = 'app', dx = 0, dy = 0) {
+    const fr = frames[f].getBoundingClientRect(); const r = el.getBoundingClientRect();
+    const sx = fr.width / frames[f].clientWidth, sy = fr.height / frames[f].clientHeight;
+    return { x: fr.left + (r.left + r.width / 2 + dx) * sx, y: fr.top + (r.top + r.height / 2 + dy) * sy };
+  }
+  async function move(p, ms = 700) {
+    const c = $('cursor'); c.classList.remove('hide');
+    const d = Math.hypot(p.x - cur.x, p.y - cur.y); ms = Math.max(250, Math.min(ms, 250 + d * 0.9));
+    c.style.setProperty('--mv', ms + 'ms'); c.style.left = (p.x - 6) + 'px'; c.style.top = (p.y - 4) + 'px'; cur = p;
+    await sleep(ms + 60);
+  }
+  function ripple(p) { const r = document.createElement('div'); r.className = 'ripple'; r.style.left = p.x + 'px'; r.style.top = p.y + 'px'; document.body.appendChild(r); setTimeout(() => r.remove(), 700); }
+  /* Scroll the element's own scroll box inside the frame. scrollIntoView() also scrolls every
+     ancestor — including this stage — which slid the phone into view mid-scene. */
+  function scrollBox(el) {
+    for (let p = el.parentElement; p; p = p.parentElement) {
+      const cs = p.ownerDocument.defaultView.getComputedStyle(p);
+      if (/(auto|scroll)/.test(cs.overflowY) && p.scrollHeight > p.clientHeight + 2) return p;
+    }
+    return el.ownerDocument.scrollingElement;
+  }
+  async function reveal(el) {
+    const box = scrollBox(el); if (!box) return;
+    const br = box === el.ownerDocument.scrollingElement ? { top: 0, height: box.clientHeight } : box.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    if (r.top >= br.top + 40 && r.bottom <= br.top + br.height - 40) return;   // already comfortably visible
+    const target = Math.max(0, box.scrollTop + (r.top + r.height / 2) - (br.top + br.height / 2));
+    const from = box.scrollTop, t0 = performance.now(), ms = 450;
+    await new Promise(res => { const step = (now) => { const k = Math.min(1, (now - t0) / ms), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      box.scrollTop = from + (target - from) * e; k < 1 ? requestAnimationFrame(step) : res(); }; requestAnimationFrame(step); });
+    pin();
+  }
+  function pin() { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; }
+  async function point(q, f = 'app', opts = {}) {
+    const el = await waitFor(q, f); if (opts.scroll !== false) { await reveal(el); await sleep(120); }
+    await move(stagePos(el, f, opts.dx || 0, opts.dy || 0), opts.ms); return el;
+  }
+  async function click(q, f = 'app', opts = {}) {
+    const el = await point(q, f, opts); ripple(cur);
+    const w = win(f), o = { bubbles: true, cancelable: true, view: w };
+    el.dispatchEvent(new w.MouseEvent('mousedown', o)); el.dispatchEvent(new w.MouseEvent('mouseup', o));
+    if (typeof el.focus === 'function') el.focus({ preventScroll: true });
+    el.click(); pin(); await sleep(opts.after == null ? 350 : opts.after); return el;
+  }
+  /* Type like a person. Some fields re-render the editor on every keystroke, which swaps the
+     element out; the locator is re-run whenever that happens so typing carries on. */
+  async function type(q, text, f = 'app', opts = {}) {
+    let el = await click(q, f, Object.assign({ after: 120 }, opts));
+    const w = win(f);
+    if (opts.clear) { el.value = ''; el.dispatchEvent(new w.Event('input', { bubbles: true })); }
+    for (const ch of text) {
+      if (!el.isConnected) { el = find(q, f); if (!el) break; el.focus({ preventScroll: true }); }
+      el.value += ch; el.dispatchEvent(new w.Event('input', { bubbles: true }));
+      await sleep((opts.cps ? 1000 / opts.cps : 55) + (ch === ' ' ? 40 : 0));
+    }
+    if (el && el.isConnected) { el.dispatchEvent(new w.Event('change', { bubbles: true })); }
+    await sleep(200); return el;
+  }
+  async function scroll(q, f = 'app') { const el = await waitFor(q, f); await reveal(el); await sleep(300); return el; }
+  function hideCursor() { $('cursor').classList.add('hide'); }
+  function chip(n, text) { const c = $('chip'); if (!text) { c.classList.remove('on'); return; } c.innerHTML = `<b>${n}</b><span>${text}</span>`; c.classList.add('on'); }
+  function card(html, instant) { const c = $('card'); if (!html) { c.classList.remove('on'); return; } c.innerHTML = `<div>${html}</div>`;
+    if (instant) { c.style.transition = 'none'; c.classList.add('on'); c.offsetHeight; c.style.transition = ''; } else c.classList.add('on'); }
+  function layout(mode) { $('appWrap').classList.toggle('split', mode === 'split'); $('phone').classList.toggle('in', mode === 'split'); }
+  const js = (fn, f = 'app') => fn(win(f), doc(f));
+  return { sleep, load, find, waitFor, point, click, type, scroll, hideCursor, chip, card, layout, js, move, stagePos, frames };
+})();
+window.D = D;
+setInterval(() => { if (window.scrollY || document.documentElement.scrollTop) window.scrollTo(0, 0); }, 50);   // belt and braces
+</script>
+</body>
+</html>

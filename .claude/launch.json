@@ -4,14 +4,35 @@
     {
       "name": "app",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8138", "--directory", "/Users/Rod/Documents/GitHub/PollSlide"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8138",
+        "--directory",
+        "/Users/Rod/Documents/GitHub/PollSlide"
+      ],
       "port": 8138
     },
     {
       "name": "website",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8140", "--directory", "/Users/Rod/Documents/GitHub/pollslide-website"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8140",
+        "--directory",
+        "/Users/Rod/Documents/GitHub/pollslide-website"
+      ],
       "port": 8140
+    },
+    {
+      "name": "video",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "/Users/Rod/Documents/GitHub/PollSlide/scripts/video/server.js",
+        "8150"
+      ],
+      "port": 8150
     }
   ]
 }

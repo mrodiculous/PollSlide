@@ -146,13 +146,13 @@ module.exports = async function handler(req, res) {
     }
     // 2) OpenAI fallback.
     if (!raw) {
-      if (!OPENAI_API_KEY) return res.status(502).json({ error: 'Local LLM unreachable and no OpenAI key set.' });
+      if (!OPENAI_API_KEY) return res.status(503).json({ error: 'Local LLM unreachable and no OpenAI key set.' });
       try { raw = await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS }); source = 'openai'; }
-      catch (err) { return res.status(502).json({ error: 'Insights failed', detail: err.message }); }
+      catch (err) { return res.status(503).json({ error: 'Insights failed', detail: err.message }); }
     }
 
     const insights = parseInsights(raw, texts);
-    if (!insights) return res.status(502).json({ error: 'Could not parse insights.' });
+    if (!insights) return res.status(503).json({ error: 'Could not parse insights.' });
     return res.status(200).json({ source, count: texts.length, ...insights });
   } catch (e) {
     return res.status(500).json({ error: String((e && e.message) || e) });

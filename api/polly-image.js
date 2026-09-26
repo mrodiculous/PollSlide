@@ -163,7 +163,7 @@ module.exports = async function handler(req, res) {
   }
 
   // 3) Fall back to OpenAI.
-  if (!OPENAI_API_KEY) return res.status(502).json({ error: 'No working image provider (local + fal unavailable and no OpenAI key set).', fellBack });
+  if (!OPENAI_API_KEY) return res.status(503).json({ error: 'No working image provider (local + fal unavailable and no OpenAI key set).', fellBack });
   try {
     const image = await openaiImage(prompt, size);
     await consumeQuota(quota).catch(()=>{});
@@ -171,6 +171,6 @@ module.exports = async function handler(req, res) {
     return res.status(200).json({ source: 'openai', image, ...(Object.keys(fellBack).length ? { fellBack } : {}) });
   } catch (err) {
     console.error('Polly image: OpenAI error:', err.message);
-    return res.status(502).json({ error: 'Image generation failed', detail: err.message, fellBack });
+    return res.status(503).json({ error: 'Image generation failed', detail: err.message, fellBack });
   }
 };

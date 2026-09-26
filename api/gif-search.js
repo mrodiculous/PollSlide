@@ -74,6 +74,17 @@ const PROVIDERS = [
 
 const activeProvider = () => PROVIDERS.find(p => !!process.env[p.env]) || null;
 
+/* A running count of failures per day, read by the watchdog (feature_failures check), so a
+ * provider outage or an exhausted quota reaches an inbox instead of waiting for a customer. */
+function noteFailure(db, code, detail) {
+  try {
+    const day = new Date().toISOString().slice(0, 10);
+    const ref = db.ref(`admin/feature_health/gif_search/${day}`);
+    ref.child('fail').transaction(n => (n || 0) + 1).catch(() => {});
+    ref.child('last').set({ at: Date.now(), code, detail: String(detail || '').slice(0, 160) }).catch(() => {});
+  } catch (e) { /* never break the response over bookkeeping */ }
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -120,9 +131,22 @@ module.exports = async function handler(req, res) {
     const url = provider.build(process.env[provider.env], term, limit);
     const r = await fetch(url, { signal: ctl.signal });
     if (!r.ok) {
+      /* The provider said no. Most often this is its hourly limit: a GIPHY *beta* key allows
+       * about 100 searches an hour, and "GIFs for every question and answer" on a 30-question
+       * deck is ~150 searches on its own (2026-09-26: 145 succeeded, then every search failed).
+       * Never answer 502 here — the platform may put its own page in front of a 502, which
+       * the browser can't read ("The string did not match the expected pattern" in Safari).
+       * Say what happened in words, and record it so the watchdog notices. */
       const body = await r.text().catch(() => '');
-      return res.status(502).json({ error: `GIF search failed (${provider.name} returned ${r.status}).`,
-                                    detail: body.slice(0, 200) });
+      const quota = r.status === 429;
+      console.warn(`gif-search: ${provider.name} ${r.status} for "${term}" — ${body.slice(0, 160)}`);
+      noteFailure(db, quota ? 'provider_quota' : 'provider_error', `${provider.name} ${r.status}`);
+      return res.status(quota ? 429 : 503).json({
+        code: quota ? 'provider_quota' : 'provider_error',
+        error: quota
+          ? 'GIF search is taking a short break — we hit our GIF provider\'s hourly limit. Please try again in a few minutes.'
+          : `GIF search is having trouble right now (${provider.name} ${r.status}). Please try again shortly.`,
+      });
     }
     const data = await r.json();
     /* Normalised HERE, because only the server knows which provider answered. The
@@ -139,7 +163,9 @@ module.exports = async function handler(req, res) {
                                   attribution: provider.attribution });
   } catch (e) {
     const aborted = e && e.name === 'AbortError';
-    return res.status(aborted ? 504 : 500).json({ error: aborted ? 'GIF search timed out.' : 'GIF search failed.' });
+    noteFailure(db, aborted ? 'timeout' : 'exception', String((e && e.message) || e).slice(0, 120));
+    return res.status(503).json({ code: aborted ? 'timeout' : 'exception',
+      error: aborted ? 'GIF search timed out. Please try again.' : 'GIF search failed. Please try again.' });
   } finally { clearTimeout(timer); }
 };
 

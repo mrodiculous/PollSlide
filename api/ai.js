@@ -88,7 +88,7 @@ module.exports = async function handler(req, res) {
         `Return JSON exactly: {"summary":"2-3 sentence overview of what people said","themes":[{"label":"short theme name","count":<approx number of responses in this theme>}],"sentiment":{"positive":<count>,"neutral":<count>,"negative":<count>},"standout":"one short representative or notable quote"}. Use at most 6 themes. Counts should roughly add up to the total.`;
       const { text, source } = await callLLM(system, user, 900);
       const parsed = extractJSON(text);
-      if (!parsed) return res.status(502).json({ error: 'AI returned an unreadable result. Try again.' });
+      if (!parsed) return res.status(503).json({ error: 'AI returned an unreadable result. Try again.' });
       return res.status(200).json({ ok:true, source, ...parsed });
     }
 
@@ -105,7 +105,7 @@ module.exports = async function handler(req, res) {
         `\n\nReturn JSON exactly: {"grades":[{"id":"<id>","score":<0..1>,"correct":<true|false>,"feedback":"one short sentence"}]}. score is a fraction 0-1; correct is score>=0.6.`;
       const { text, source } = await callLLM(system, user, 1500);
       const parsed = extractJSON(text);
-      if (!parsed || !Array.isArray(parsed.grades)) return res.status(502).json({ error: 'AI returned an unreadable result. Try again.' });
+      if (!parsed || !Array.isArray(parsed.grades)) return res.status(503).json({ error: 'AI returned an unreadable result. Try again.' });
       return res.status(200).json({ ok:true, source, grades: parsed.grades });
     }
 

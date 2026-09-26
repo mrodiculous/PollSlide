@@ -163,6 +163,10 @@ function normalizeDeck(raw) {
 // toward a RANDOM handful of domains + lenses spreads successive runs across the space.
 // Only for open-ended generation — grounded (source material) and surveys are left
 // alone, since there the phrasing is meant to stay faithful.
+// "Pub quiz, all genres" is MEANT to roam; "the French Revolution" is not. One definition,
+// used by the variety nudge, the diversity rule and the on-topic check.
+const isBroadTopic = (topic) => !topic || /general|mixed|misc|any|all\s*genres?|pub\s*quiz|trivia|random|variety/i.test(topic);
+
 function varietyNudge(topic) {
   const pick = (arr, n) => {
     const a = arr.slice();
@@ -173,7 +177,7 @@ function varietyNudge(topic) {
     'unexpected connections between fields', 'everyday things seen closely', 'numbers & measurements',
     'the very recent', 'the distant past', 'beyond the Western world'];
   const lenses = pick(LENSES, 2).join(' and ');
-  const broad = !topic || /general|mixed|misc|any|all\s*genres?|pub\s*quiz|trivia|random|variety/i.test(topic);
+  const broad = isBroadTopic(topic);
   if (broad) {
     const GENRES = ['history', 'world geography', 'physics & chemistry', 'biology & nature', 'sport',
       'music', 'film & television', 'literature', 'visual art', 'food & drink', 'technology & computing',
@@ -181,7 +185,9 @@ function varietyNudge(topic) {
       'architecture', 'games & toys', 'economics & money', 'the human body', 'notable people'];
     return ` For freshness on THIS run (do not mention this instruction): draw especially from ${pick(GENRES, 5).join(', ')}, through the lens of ${lenses}. Prefer specific, concrete facts over the most famous textbook examples.`;
   }
-  return ` For freshness on THIS run (do not mention this instruction): explore ${topic} through the lens of ${lenses}, favouring specific, less-obvious facts over the most famous textbook examples.`;
+  // A specific topic: the lens only changes WHICH facts about the topic are picked. Lenses
+  // like "unexpected connections between fields" used to walk questions off the topic.
+  return ` For freshness on THIS run (do not mention this instruction): within ${topic} — and only within it — favour ${lenses}, and specific, less-obvious facts over the most famous textbook examples. Never drift into a neighbouring subject to satisfy this.`;
 }
 
 function buildMessages({ topic, type, count, difficulty, audience, source, language, avoid }) {
@@ -229,9 +235,14 @@ function buildMessages({ topic, type, count, difficulty, audience, source, langu
   // so the caller passes the deck's existing questions and they go in verbatim.
   // Without this, "generate 10 more" on the same topic returns the same canonical
   // set every time — the repetition users actually notice.
-  const diversityRule = count > 1
-    ? ` All ${count} questions must be clearly distinct from one another — never test the same fact twice, reuse the same answer, or repeat a phrasing pattern. Spread them across different subject areas.`
-    : '';
+  const broad = isBroadTopic(topic) && !source;
+  const diversityRule = (count > 1
+    ? ` All ${count} questions must be clearly distinct from one another — never test the same fact twice, reuse the same answer, or repeat a phrasing pattern.` +
+      (broad ? ' Spread them across different subject areas.' : ' Spread them across different aspects of the topic.')
+    : '') +
+    // The topic lock. "Different subject areas" was said to EVERY request, including specific
+    // ones — which is an instruction to leave the topic.
+    ((!broad && topic) ? ` Every question must be squarely about: ${topic}. A question that is only loosely connected, or about a neighbouring subject, is wrong — leave it out.` : '');
   const avoidList = (Array.isArray(avoid) ? avoid : [])
     .map(a => (typeof a === 'string' ? a : a && a.text)).filter(Boolean);
   const avoidBlock = avoidList.length
@@ -482,6 +493,16 @@ function normalizeQuestions(raw, type) {
 // didn't generate" by seeing exactly what ran — topic, how many were asked vs delivered,
 // which provider, and success/failure. Never throws and never blocks the response meaningfully.
 async function logGen(quota, entry) {
+  // Daily health counters for the watchdog (feature_health check) — every run, signed in or not.
+  try {
+    const day = new Date().toISOString().slice(0, 10);
+    const h = admin.database(getApp()).ref('admin/feature_health/polly/' + day);
+    const bump = (k, by = 1) => h.child(k).transaction(n => (n || 0) + by).catch(() => {});
+    bump('runs');
+    if (!entry.ok) { bump('fail'); h.child('last').set({ at: Date.now(), code: 'failed', detail: String(entry.error || '').slice(0, 160) }).catch(() => {}); }
+    if (entry.short) { bump('short'); h.child('lastShort').set({ at: Date.now(), requested: entry.requested, delivered: entry.delivered, topic: String(entry.topic || '').slice(0, 80) }).catch(() => {}); }
+    if (entry.offTopicDropped) bump('offTopicDropped', entry.offTopicDropped);
+  } catch (e) { /* bookkeeping must never affect the user */ }
   if (!quota || !quota.uid) return;   // no Firebase / anonymous → nothing to attribute it to
   try {
     await admin.database(getApp()).ref('admin/polly_log/' + quota.uid).push({ t: Date.now(), ...entry });
@@ -545,9 +566,9 @@ module.exports = async function handler(req, res) {
       catch (err) { console.warn('Polly: local deck failed (' + err.message + ') → OpenAI fallback'); }
     }
     if (!slides) {
-      if (!OPENAI_API_KEY) return res.status(502).json({ error: 'Local LLM unavailable and no OpenAI key set.' });
+      if (!OPENAI_API_KEY) return res.status(503).json({ error: 'Local LLM unavailable and no OpenAI key set.' });
       try { slides = normalizeDeck(await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS, seed })); source = 'openai'; }
-      catch (err) { console.error('Polly: OpenAI error:', err.message); return res.status(502).json({ error: 'AI generation failed', detail: err.message }); }
+      catch (err) { console.error('Polly: OpenAI error:', err.message); return res.status(503).json({ error: 'AI generation failed', detail: err.message }); }
     }
     await logGen(quota, { topic: topic.slice(0, 120), type, requested: count, delivered: slides.length, source, ok: true });
     try { await consumeQuota(quota); } catch (e) { /* never fail the response over the counter */ }
@@ -596,35 +617,77 @@ module.exports = async function handler(req, res) {
   let acc = [];
   let source = '';
   let lastErr = null;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS && acc.length < count && Date.now() < DEADLINE; attempt++) {
-    const need = Math.min(count - acc.length, MAX_PER_CALL);
+  let offTopicDropped = 0;
+
+  /* Which of these questions are NOT about the topic? Returns a Set of indices into `qs`.
+     Skipped for broad topics (they're meant to roam), for source-grounded runs (the source
+     is the topic), and for surveys of opinion. Fails OPEN: if the checker is unavailable or
+     flags more than half the batch (more likely a confused checker than a bad batch), keep
+     everything — a missing check must never cost the teacher their questions. */
+  async function offTopic(qs, topicText, kind, src) {
+    if (!qs.length || !topicText || src || isBroadTopic(topicText)) return new Set();
+    const list = qs.map((q, i) => `${i}. ${(q.text || q.front || '').slice(0, 220)}`).join('\n');
+    const messages = [
+      { role: 'system', content: 'You check quiz questions against a topic. Return ONLY JSON: {"offTopic":[indices]} listing questions that are NOT clearly about the topic. A question about a neighbouring or merely related subject is off topic. When unsure, it is on topic.' },
+      { role: 'user', content: `Topic: ${topicText.slice(0, 400)}\n\nQuestions:\n${list}` },
+    ];
+    const tryOne = async (cfg) => {
+      const raw = await callChat(Object.assign({ messages, timeoutMs: Math.min(12000, Math.max(3000, DEADLINE - Date.now() - 2000)) }, cfg));
+      const j = parseJsonLoose(raw);
+      const arr = j && Array.isArray(j.offTopic) ? j.offTopic : null;
+      if (!arr) throw new Error('unreadable');
+      return arr.map(Number).filter(n => Number.isInteger(n) && n >= 0 && n < qs.length);
+    };
+    try {
+      let idx = null;
+      if (OPENAI_API_KEY) { try { idx = await tryOne({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL }); } catch (e) {} }
+      if (!idx && LOCAL_LLM_URL) { try { idx = await tryOne({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_LLM_MODEL, extraHeaders: CF_ACCESS_HEADERS, reasoningEffort: LOCAL_REASONING_EFFORT }); } catch (e) {} }
+      if (!idx || idx.length > qs.length / 2) return new Set();
+      if (idx.length) console.warn(`Polly: dropped ${idx.length} off-topic for "${topicText.slice(0, 60)}":`, idx.map(i => (qs[i].text || qs[i].front || '').slice(0, 80)));
+      return new Set(idx);
+    } catch (e) { return new Set(); }
+  }
+  /* Exactly `count`, all on topic (2026-09-26: asked 30, got 29, two off topic).
+     • Ask for a couple more than are missing: dedupe and the topic check each remove a few,
+       and a batch that comes back one short used to leave the deck one short.
+     • One empty round is not the end — the next asks with everything so far as `avoid`.
+     • Each batch's NEW questions are checked for topic by a second, cheap call and the
+       strays dropped before they count; the loop then tops up the gap. */
+  let emptyRounds = 0;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS + 2 && acc.length < count && Date.now() < DEADLINE; attempt++) {
+    const missing = count - acc.length;
+    const need = Math.min(missing + Math.max(1, Math.ceil(missing * 0.15)), MAX_PER_CALL + 2);
     let batch;
     try {
       const r = await genBatch(need, [...avoid, ...acc.map(asAvoid)]);
       batch = r.qs; source = source || r.src;
     } catch (err) { lastErr = err; break; }              // no provider worked — return what we have
     const before = acc.length;
-    // Dedup the batch against everything so far (dropRepeats seeds from `avoid`), then cap.
-    acc = dropRepeats([...acc, ...batch], avoid, type).slice(0, count);
-    if (acc.length === before) break;                    // nothing new landed — asking again won't help
+    // Dedup the batch against everything so far (dropRepeats seeds from `avoid`).
+    let merged = dropRepeats([...acc, ...batch], avoid, type);
+    const fresh = merged.slice(before);
+    const strays = await offTopic(fresh, topic, type, sourceMaterial);
+    if (strays.size) { offTopicDropped += strays.size; merged = merged.filter((q, i) => i < before || !strays.has(i - before)); }
+    acc = merged.slice(0, count);
+    if (acc.length === before) { if (++emptyRounds >= 2) break; } else emptyRounds = 0;
   }
 
   if (!acc.length) {
     await logGen(quota, { topic: topic.slice(0, 120), type, requested: count, delivered: 0, source: source || '', ok: false, error: (lastErr ? String(lastErr.message) : 'no questions produced').slice(0, 200) });
-    return res.status(502).json({ error: 'AI generation failed', detail: lastErr ? lastErr.message : 'no questions produced' });
+    return res.status(503).json({ error: 'AI generation failed', detail: lastErr ? lastErr.message : 'no questions produced' });
   }
 
   // Bill ONE quota unit for the whole generation, however many calls it took.
-  await logGen(quota, { topic: topic.slice(0, 120), type, requested: count, delivered: acc.length, source, ok: true, short: acc.length < count });
+  await logGen(quota, { topic: topic.slice(0, 120), type, requested: count, delivered: acc.length, source, ok: true, short: acc.length < count, offTopicDropped });
   try { await consumeQuota(quota); } catch (e) { /* never fail the response over the counter */ }
   return res.status(200).json({ source, type, topic, questions: acc, requested: count });
   } catch (fatal) {
     // Anything unhandled (e.g. a provider hang/crash) → JSON, not a non-JSON 502.
     console.error('Polly fatal:', fatal && fatal.message);
-    return res.status(502).json({ error: 'Polly failed', detail: String((fatal && fatal.message) || fatal) });
+    return res.status(503).json({ error: 'Polly failed', detail: String((fatal && fatal.message) || fatal) });
   }
 };
 
 // Exported for scripts/tests/polly-dedupe.test.js. Repeat suppression is judged by
 // thresholds, and thresholds that nobody measures are just someone's guess.
-module.exports.__test = { dropRepeats, wordSet, jaccard, containment, answerKey };
+module.exports.__test = { dropRepeats, wordSet, jaccard, containment, answerKey, buildMessages, varietyNudge, isBroadTopic };
