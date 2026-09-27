@@ -348,7 +348,7 @@ console.log('\nGame extras: the things that keep a room playing');
   ok('TV: podium, team board, confetti once per question', /podiumHtml/.test(scr) && /withTeams/.test(scr) && /_confettiFor !== ck/.test(scr));
   ok('TV: the list under the podium continues at #4', /boardHtml\(top\.slice\(3\), '', 3\)/.test(scr));
   ok('Studio: every extra can be switched off', /cur\.extras\.reactions=this\.checked/.test(st) && /cur\.extras\.double=this\.checked/.test(st) && /cur\.extras\.badges=this\.checked/.test(st) && /cur\.extras\.teams=this\.checked/.test(st));
-  ok('Studio: a reward needs official rules, like any prize', /\(c\.prize \|\| L\.reward\) && !c\.rulesUrl/.test(st));
+  ok('Studio: a reward needs official rules, like any prize (a link, or hosted rules)', /\(c\.prize \|\| L\.reward\) && c\.rulesMode !== 'hosted' && !c\.rulesUrl/.test(st) && /\(c\.prize \|\| L\.reward\) && c\.rulesMode === 'hosted' && String\(c\.rulesText/.test(st));
   ok('Studio: deleting a loop clears its reactions', /upd\['loop_react\/' \+ code\] = null/.test(st));
   // An escape like \n inside an inline handler in a template literal becomes a real line
   // break in the rendered attribute and silently kills the handler (found 2026-09-26 in the

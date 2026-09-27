@@ -92,7 +92,21 @@ function call(providerStatus, providerBody) {
   ok('a broad pub-quiz topic may still roam', /different subject areas/.test(b) && !/squarely about/.test(b));
   const polly = fs.readFileSync(path.join(ROOT, 'api', 'polly.js'), 'utf8');
   ok('the top-up asks for spares and survives one empty round', /missing \* 0\.15/.test(polly) && /emptyRounds >= 2/.test(polly));
-  ok('each batch is checked for off-topic questions', /await offTopic\(fresh, topic, type, sourceMaterial\)/.test(polly));
+  ok('each batch gets a second-opinion review (facts + topic)', /await review\(fresh, topic, type, sourceMaterial\)/.test(polly));
+  console.log('\nPolly writes plain, checked facts (2026-09-27)');
+  ok('markdown and asterisks are stripped, emojis kept', P.plain('**Which** planet is *red*? 🔴 **') === 'Which planet is red? 🔴');
+  const nq = P.normalizeQuestions(JSON.stringify({ questions: [
+    { text: 'Q1', options: ['A1', 'B1', 'C1', 'D1'], answers: ['Not an option'] },
+    { text: '**Q2**', options: ['Mars', 'Venus', 'Earth', 'Jupiter'], answers: ['Mars'], explanation: '*Red* planet' }] }), 'quiz');
+  ok('a question whose answer matches no option is dropped, not marked "A"', nq.length === 1 && nq[0].text === 'Q2' && nq[0].correctAnswers[0] === 0, nq);
+  ok('…and the survivor is plain text', nq[0].explanation === 'Red planet');
+  const qm = P.buildMessages({ topic: 'the planets', type: 'quiz', count: 5 }).map(x => x.content).join('\n');
+  ok('the prompt asks for creative questions and strict facts, and forbids markdown', /BE CREATIVE IN HOW YOU ASK, STRICT ABOUT WHAT IS TRUE/.test(qm) && /no markdown, no asterisks/.test(qm));
+  ok('surveys are not told there is a right answer', !/STRICT ABOUT WHAT IS TRUE/.test(P.buildMessages({ topic: 'lunch', type: 'survey', count: 3 }).map(x => x.content).join('\n')));
+  ok('the writer stays creative (0.7–0.8); the checker is strict (0)', /\(type === 'poll' \|\| type === 'survey'\) \? 0\.8 : 0\.7/.test(polly) && /messages, temperature: 0,/.test(polly));
+  ok('every batch is fact-checked by a separate call at temperature 0', /async function review\(/.test(polly) && /messages, temperature: 0,/.test(polly) && /marked answer is wrong, disputed, out of date/.test(polly));
+  ok('a stronger checker model can be set on its own (POLLY_CHECK_MODEL)', /process\.env\.POLLY_CHECK_MODEL \|\| OPENAI_TEXT_MODEL/.test(polly));
+  ok('an unchecked batch is counted, not hidden', /bump\('unchecked', entry\.unchecked\)/.test(polly));
   ok('a short delivery is told to the teacher', /Polly wrote \$\{added\} of the \$\{data\.requested\}/.test(pres));
 
   console.log(`\n${pass} passed, ${fail} failed`);

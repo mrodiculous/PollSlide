@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Official rules — LoopSlide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#07070f; --panel:#11111f; --line:#24243c; --text:#f3f3ff; --muted:#9a9ac0; --accent:#6c63ff; }
+  html, body { margin:0; background:var(--bg); color:var(--text); font-family:'DM Sans',system-ui,sans-serif; line-height:1.6; }
+  main { max-width:720px; margin:0 auto; padding:28px 18px 60px; }
+  .logo { font-family:'Syne',sans-serif; font-weight:800; font-size:17px; color:#c9c5ff; margin-bottom:22px; }
+  .org { display:flex; align-items:center; gap:12px; margin-bottom:6px; }
+  .org img { width:44px; height:44px; object-fit:contain; border-radius:10px; background:#fff; }
+  .org b { font-size:15px; }
+  h1 { font-family:'Syne',sans-serif; font-weight:800; font-size:26px; line-height:1.2; margin:12px 0 6px; }
+  .meta { color:var(--muted); font-size:13.5px; margin-bottom:22px; }
+  .rules { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:20px 22px; font-size:15.5px; }
+  .rules p { margin:0 0 12px; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .rules p:last-child { margin-bottom:0; }
+  .note { color:var(--muted); font-size:13px; margin-top:18px; }
+  .note a, .meta a { color:#b9b4ff; }
+  .empty { color:var(--muted); padding:40px 0; font-size:16px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="logo">🔁 LoopSlide</div>
+  <div id="out"><p class="empty" id="loading">Loading…</p></div>
+</main>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="/ps-env.js?v=717fca7b"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<script src="/loop-i18n.js?v=481670f3"></script>
+<script src="/loop-engine.js?v=0"></script>
+<script>
+/* Official rules hosted by PollSlide — app.pollslide.com/rules#CODE (2026-09-27).
+ *
+ * The organiser writes their rules in the LoopSlide Studio; publishing the loop puts them in
+ * loops/<CODE>/def.compliance (public, like the rest of a published loop), and this page is
+ * the "Official rules" link players tap. Nothing new in the database, no sign-in.
+ *
+ * The rules are the ORGANISER's words, shown as plain text (escaped, never HTML) and
+ * labelled as theirs: PollSlide hosts them and is not the promoter. Old-fashioned JS so it
+ * opens on any phone. */
+var FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME",
+  authDomain: "echonest-live-survey.firebaseapp.com",
+  databaseURL: "https://echonest-live-survey-default-rtdb.firebaseio.com",
+  projectId: "echonest-live-survey",
+  storageBucket: "echonest-live-survey.firebasestorage.app",
+  messagingSenderId: "285529140046",
+  appId: "1:285529140046:web:983c1ee8000a2ca8f80c1f",
+  measurementId: "G-NWQY4YLNRC"
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+var I = window.LoopI18n, t = I ? I.t : function (s, v) { return String(s).replace(/\{(\w+)\}/g, function (m, k) { return v && v[k] != null ? v[k] : m; }); };
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+var CODE = (location.hash.replace('#', '').split(/[\/?&]/)[0] || '').toUpperCase();
+var out = document.getElementById('out');
+
+function none(msg) { out.innerHTML = '<p class="empty">' + esc(msg) + '</p>'; }
+
+if (!/^[A-Z0-9]{4,12}$/.test(CODE)) none(t('These rules could not be found. Check the link on the screen.'));
+else firebase.database().ref('loops/' + CODE).once('value').then(function (s) {
+  var rec = s.val();
+  var L = rec && rec.def && window.LoopEngine ? window.LoopEngine.normalizeLoop(rec.def) : null;
+  var c = L && L.compliance;
+  if (!c || c.rulesMode !== 'hosted' || !c.rulesText) { none(t('These rules could not be found. Check the link on the screen.')); return; }
+  var paras = String(c.rulesText).split(/\n\s*\n/).map(function (p) { return '<p>' + esc(p.trim()) + '</p>'; }).join('');
+  var logo = L.brand && L.brand.logo ? '<img src="' + esc(L.brand.logo) + '" alt="">' : '';
+  var updated = rec.updatedAt ? new Date(rec.updatedAt).toLocaleDateString(I ? I.get() : undefined) : '';
+  document.title = (c.rulesTitle || t('Official rules')) + ' — ' + (c.organiser || 'LoopSlide');
+  out.innerHTML =
+    '<div class="org">' + logo + '<b>' + esc(c.organiser || L.name) + '</b></div>' +
+    '<h1>' + esc(c.rulesTitle || t('Official rules')) + '</h1>' +
+    '<div class="meta">' + esc(L.name) + (updated ? ' · ' + esc(t('Updated {d}', { d: updated })) : '') +
+      (c.contact ? ' · <a href="mailto:' + esc(c.contact) + '">' + esc(c.contact) + '</a>' : '') + '</div>' +
+    '<div class="rules">' + paras + '</div>' +
+    '<p class="note">' + esc(t('These rules are written by {org}, who runs this game. PollSlide hosts them and provides the LoopSlide software; it is not the organiser.', { org: c.organiser || t('the organiser') })) +
+      ' <a href="mailto:help@pollslide.com?subject=' + encodeURIComponent('Report rules page ' + CODE) + '">' + esc(t('Report this page')) + '</a></p>';
+}, function () { none(t('These rules could not be loaded. Check your connection and try again.')); });
+</script>
+</body>
+</html>

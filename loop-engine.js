@@ -113,7 +113,11 @@
         let names = (Array.isArray(e.teamNames) ? e.teamNames : []).map(x => str(x, 24).trim()).filter(Boolean).slice(0, TEAM_MAX);
         if (e.teams === true && names.length < 2) names = [1, 2, 3, 4, 5, 6].map(n => 'Table ' + n);
         return { reactions: e.reactions !== false, double: e.double !== false, badges: e.badges !== false,
-                 teams: e.teams === true, teamNames: names };
+                 teams: e.teams === true, teamNames: names,
+                 /* 'winners' (2026-09-27): after a question the screen shows WHO got it right and
+                    fastest, not WHAT the answer was — the loop repeats, so the answer stays a
+                    reason to come back and play. Phones say right or wrong, not the answer. */
+                 reveal: e.reveal === 'winners' ? 'winners' : 'answer' };
       })(L.extras),
       /* A reward revealed to the top players' phones (e.g. a coupon code shown to staff).
          It is a prize, so publishing asks for official rules like any other prize. */
@@ -125,9 +129,16 @@
       compliance: (function (c) {
         c = c || {};
         const age = [0, 13, 16, 18, 21].includes(Number(c.minAge)) ? Number(c.minAge) : 0;
+        /* Official rules can be HOSTED by PollSlide (2026-09-27): the organiser writes them in
+           the Studio and they're published with the loop at app.pollslide.com/rules#CODE.
+           Plain text only — rules.html shows it escaped, never as HTML. */
+        const hosted = c.rulesMode === 'hosted';
         return { organiser: str(c.organiser, 80), contact: str(c.contact, 120),
                  prize: str(c.prize, 120), rulesUrl: safeUrl(c.rulesUrl), minAge: age,
-                 aiNote: c.aiNote === true };
+                 aiNote: c.aiNote === true,
+                 rulesMode: hosted ? 'hosted' : 'link',
+                 rulesTitle: hosted ? str(c.rulesTitle, 120) : '',
+                 rulesText: hosted ? str(c.rulesText, 20000) : '' };
       })(L.compliance),
     };
   }

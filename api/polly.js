@@ -136,6 +136,20 @@ function parseJsonLoose(raw) {
 }
 
 // Shape a deck response: content slides (title required) + polls (options resolved).
+/* Plain text only (2026-09-27): models wrap words in **bold**, *italics*, `code` and
+   "- " bullets, and every asterisk ended up on the projector. Emojis are kept. */
+function plain(v) {
+  return String(v == null ? '' : v)
+    .replace(/\*\*([^*]+)\*\*/g, '$1').replace(/__([^_]+)__/g, '$1')
+    .replace(/(^|[\s(])\*([^*\s][^*]*?)\*(?=[\s).,!?:;]|$)/g, '$1$2')
+    .replace(/(^|[\s(])_([^_\s][^_]*?)_(?=[\s).,!?:;]|$)/g, '$1$2')
+    .replace(/`([^`]*)`/g, '$1')
+    .replace(/^\s*(?:#{1,6}\s+|[-*•]\s+)/gm, '')
+    .replace(/\*+/g, '')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
 function normalizeDeck(raw) {
   const parsed = parseJsonLoose(raw);
   if (parsed == null) throw new Error('Model did not return valid JSON');
@@ -147,13 +161,13 @@ function normalizeDeck(raw) {
         .map((o) => (typeof o === 'string' ? o : (o && o.text) || '')).filter(Boolean).slice(0, 6);
       if (options.length < 2) return null;
       const correctAnswers = resolveCorrectIndices(s, options);
-      return { kind: 'poll', text: String(s.text || '').trim(), options, correctAnswers };
+      return { kind: 'poll', text: plain(s.text), options: options.map(plain), correctAnswers };
     }
-    const title = String(s.title || s.text || '').trim();
+    const title = plain(s.title || s.text);
     if (!title) return null;
     return { kind: 'content', title,
-      body:  String(s.body || '').trim(),
-      notes: String(s.notes || s.speakerNotes || '').trim(),
+      body:  plain(s.body),
+      notes: plain(s.notes || s.speakerNotes),
       imagePrompt: String(s.imagePrompt || '').trim() };
   }).filter(Boolean);
 }
@@ -224,9 +238,11 @@ function buildMessages({ topic, type, count, difficulty, audience, source, langu
     : `Mark the correct answer(s): list each correct option (word-for-word) in "answers". Use "kind":"single" when exactly one option is correct, "kind":"multi" when two or more are. Most questions are single. Never leave "answers" empty.`;
 
   const system = isStudy
-    ? `You are Polly, PollSlide's AI study-card designer. Write clear, memorable flashcards: a concise prompt ("front") and its answer ("back"), each with one fitting emoji on the front.${langRule} Return ONLY valid JSON in exactly this shape — no markdown, no commentary:\n${schema}`
+    ? `You are Polly, PollSlide's AI study-card designer. Write clear, memorable flashcards: a concise prompt ("front") and its answer ("back"), each with one fitting emoji on the front. Plain text only — no markdown or asterisks. Make the cards memorable and fun to study, but use only well-established facts you are certain of; if unsure, choose another card.${langRule} Return ONLY valid JSON in exactly this shape — no markdown, no commentary:\n${schema}`
     : `You are Polly, PollSlide's AI question designer. You write lively, audience-friendly ${guide}. ` +
       `Always weave in relevant emojis so the content pops. Every question must have exactly 4 options. ` +
+      `Write plain text only — no markdown, no asterisks, no bold or italics. ` +
+      (isSurvey ? '' : `BE CREATIVE IN HOW YOU ASK, STRICT ABOUT WHAT IS TRUE: surprising angles, vivid wording, playful wrong answers and fun explanations are welcome — invented or doubtful facts are not. Use only well-established facts you are certain of; if you are not sure a fact is true, pick a different question. The marked answer must be unambiguously correct, and every other option must be clearly wrong — never partly true or arguable. Avoid "latest", "current" or record facts that may have changed. `) +
       `${answerRule} Every value in "answers" must match one of the options word-for-word.${langRule} ` +
       `Return ONLY valid JSON in exactly this shape — no markdown, no commentary:\n${schema}`;
 
@@ -277,7 +293,7 @@ function buildMessages({ topic, type, count, difficulty, audience, source, langu
 }
 
 // One helper for BOTH local Ollama and OpenAI — identical request shape.
-async function callChat({ baseURL, apiKey, model, messages, timeoutMs, extraHeaders = {}, seed, reasoningEffort }) {
+async function callChat({ baseURL, apiKey, model, messages, timeoutMs, extraHeaders = {}, seed, reasoningEffort, temperature }) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -287,7 +303,7 @@ async function callChat({ baseURL, apiKey, model, messages, timeoutMs, extraHead
       body: JSON.stringify({
         model,
         messages,
-        temperature: 0.8,
+        temperature: temperature == null ? 0.8 : temperature,
         ...(seed != null ? { seed } : {}),
         ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
         response_format: { type: 'json_object' },
@@ -460,10 +476,10 @@ function normalizeQuestions(raw, type) {
 
   if (type === 'study') {
     return list.map(q => ({
-      front: String(q.front || q.text || '').trim(),
-      back:  String(q.back || q.answer || '').trim(),
+      front: plain(q.front || q.text),
+      back:  plain(q.back || q.answer),
       emoji: String(q.emoji || '').trim(),
-    })).filter(q => q.front);
+    })).filter(q => q.front && q.back);
   }
 
   const isSurvey = type === 'survey';
@@ -474,18 +490,26 @@ function normalizeQuestions(raw, type) {
       .slice(0, 6);
     while (options.length < 2) options.push('');   // never fewer than 2 options
     let correctAnswers = isSurvey ? [] : resolveCorrectIndices(q, options);
-    // Graded products must mark something — fall back to the single-answer resolver.
-    if (!isSurvey && correctAnswers.length === 0) correctAnswers = [resolveCorrect(q, options)];
+    /* Graded products need a marked answer the model actually GAVE. The old fallback marked
+       option A whenever the model's answer didn't match an option word for word, which put
+       "A is correct" on questions where it wasn't. Now such a question is dropped and the
+       top-up loop asks for a replacement. */
+    if (!isSurvey && correctAnswers.length === 0) {
+      const i = resolveCorrect(q, options);
+      const said = String(q.answer != null ? q.answer : (q.correctAnswer != null ? q.correctAnswer : '')).trim();
+      if (!said) return null;
+      correctAnswers = [i];
+    }
     const kind = (!isSurvey && (q.kind === 'multi' || correctAnswers.length > 1)) ? 'multi' : 'single';
     return {
-      text:        String(q.text || '').trim(),
+      text:        plain(q.text),
       emoji:       String(q.emoji || '').trim(),
       kind,
-      options,
+      options:     options.map(plain),
       correctAnswers,
-      explanation: String(q.explanation || '').trim(),
+      explanation: plain(q.explanation),
     };
-  }).filter((q) => q.text);
+  }).filter((q) => q && q.text && q.options.filter(Boolean).length >= 2);
 }
 
 // Best-effort support log: one row per generation under admin/polly_log/<uid> (admin-read
@@ -502,6 +526,7 @@ async function logGen(quota, entry) {
     if (!entry.ok) { bump('fail'); h.child('last').set({ at: Date.now(), code: 'failed', detail: String(entry.error || '').slice(0, 160) }).catch(() => {}); }
     if (entry.short) { bump('short'); h.child('lastShort').set({ at: Date.now(), requested: entry.requested, delivered: entry.delivered, topic: String(entry.topic || '').slice(0, 80) }).catch(() => {}); }
     if (entry.offTopicDropped) bump('offTopicDropped', entry.offTopicDropped);
+    if (entry.unchecked) bump('unchecked', entry.unchecked);
   } catch (e) { /* bookkeeping must never affect the user */ }
   if (!quota || !quota.uid) return;   // no Firebase / anonymous → nothing to attribute it to
   try {
@@ -595,15 +620,19 @@ module.exports = async function handler(req, res) {
   const genBatch = async (need, avoidList) => {
     const messages = buildMessages({ topic, type, count: need, difficulty, audience, source: sourceMaterial, language, avoid: avoidList });
     const seed = newSeed();
+    /* Creative AND factual (Rod, 2026-09-27): the writer stays inventive — only slightly
+       cooler for quizzes and flashcards — because truth is enforced by the separate
+       temperature-0 review below, not by making every question dull. */
+    const temperature = (type === 'poll' || type === 'survey') ? 0.8 : 0.7;
     if (LOCAL_LLM_URL) {
       try {
         const budget = Math.min(LOCAL_TIMEOUT_MS, Math.max(4000, DEADLINE - Date.now() - CLOUD_RESERVE));
-        return { qs: normalizeQuestions(await callChat({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_LLM_MODEL, messages, timeoutMs: budget, extraHeaders: CF_ACCESS_HEADERS, seed, reasoningEffort: LOCAL_REASONING_EFFORT }), type), src: 'local' };
+        return { qs: normalizeQuestions(await callChat({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_LLM_MODEL, messages, timeoutMs: budget, extraHeaders: CF_ACCESS_HEADERS, seed, reasoningEffort: LOCAL_REASONING_EFFORT, temperature }), type), src: 'local' };
       } catch (err) { console.warn('Polly: local batch failed (' + err.message + ') → OpenAI fallback'); }
     }
     if (OPENAI_API_KEY) {
       const budget = Math.min(CLOUD_TIMEOUT_MS, Math.max(4000, DEADLINE - Date.now()));
-      return { qs: normalizeQuestions(await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: budget, seed }), type), src: 'openai' };
+      return { qs: normalizeQuestions(await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: budget, seed, temperature }), type), src: 'openai' };
     }
     throw new Error('Local LLM unavailable and no OpenAI key set.');
   };
@@ -619,33 +648,54 @@ module.exports = async function handler(req, res) {
   let lastErr = null;
   let offTopicDropped = 0;
 
-  /* Which of these questions are NOT about the topic? Returns a Set of indices into `qs`.
-     Skipped for broad topics (they're meant to roam), for source-grounded runs (the source
-     is the topic), and for surveys of opinion. Fails OPEN: if the checker is unavailable or
-     flags more than half the batch (more likely a confused checker than a bad batch), keep
-     everything — a missing check must never cost the teacher their questions. */
-  async function offTopic(qs, topicText, kind, src) {
-    if (!qs.length || !topicText || src || isBroadTopic(topicText)) return new Set();
-    const list = qs.map((q, i) => `${i}. ${(q.text || q.front || '').slice(0, 220)}`).join('\n');
+  /* The second opinion (2026-09-27, replacing a topic-only check).
+     Rod: "lots of questions and answers are false". A model grading its own homework is how
+     that happens, so every batch is reviewed by a SEPARATE call — the OpenAI model first
+     (a different model from the local one that usually writes), temperature 0 — which
+     flags any question that is off topic, whose marked answer is wrong, disputed or out of
+     date, or where another option is also correct. Flagged questions are dropped and the
+     loop writes replacements. With source material, "correct" means "supported by it".
+     Env POLLY_CHECK_MODEL picks a stronger OpenAI model for this job alone.
+     Fails OPEN (a missing checker never costs the teacher their questions) and says so in
+     the log; a verdict against more than 70% of a batch reads as a confused checker. */
+  let factDropped = 0, unchecked = 0;
+  async function review(qs, topicText, kind, src) {
+    if (!qs.length) return new Set();
+    const checkTopic = !!topicText && !src && !isBroadTopic(topicText);
+    const checkFacts = kind !== 'survey';
+    if (!checkTopic && !checkFacts) return new Set();
+    const list = qs.map((q, i) => {
+      if (q.front) return `${i}. Q: ${q.front.slice(0, 240)}\n   A: ${String(q.back || '').slice(0, 240)}`;
+      const opts = (q.options || []).map((o, k) => `${String.fromCharCode(65 + k)}) ${o}${(q.correctAnswers || []).includes(k) ? '  ← marked correct' : ''}`).join('\n   ');
+      return `${i}. ${q.text.slice(0, 240)}\n   ${opts}`;
+    }).join('\n');
+    const tasks = [
+      checkFacts ? (src ? 'the marked answer is NOT supported by the source material, or another option is also supported' : 'the marked answer is wrong, disputed, out of date, or only true under some reading — or another option is also correct') : '',
+      checkTopic ? 'the question is not clearly about the topic (a neighbouring or merely related subject counts as off topic)' : '',
+    ].filter(Boolean);
     const messages = [
-      { role: 'system', content: 'You check quiz questions against a topic. Return ONLY JSON: {"offTopic":[indices]} listing questions that are NOT clearly about the topic. A question about a neighbouring or merely related subject is off topic. When unsure, it is on topic.' },
-      { role: 'user', content: `Topic: ${topicText.slice(0, 400)}\n\nQuestions:\n${list}` },
+      { role: 'system', content: 'You are a meticulous fact-checker for quiz questions shown to live audiences. Flag a question if ANY of these is true: ' + tasks.join('; ') + '. Be strict about facts: if you are not confident the marked answer is right and the others are wrong, flag it. Return ONLY JSON: {"flag":[{"i":index,"why":"short reason"}]}. An empty list means every question passes.' },
+      { role: 'user', content: (checkTopic ? `Topic: ${topicText.slice(0, 400)}\n\n` : '') + (src && checkFacts ? `SOURCE MATERIAL:\n"""\n${String(src).slice(0, 12000)}\n"""\n\n` : '') + `Questions:\n${list}` },
     ];
     const tryOne = async (cfg) => {
-      const raw = await callChat(Object.assign({ messages, timeoutMs: Math.min(12000, Math.max(3000, DEADLINE - Date.now() - 2000)) }, cfg));
+      const raw = await callChat(Object.assign({ messages, temperature: 0, timeoutMs: Math.min(20000, Math.max(4000, DEADLINE - Date.now() - 2000)) }, cfg));
       const j = parseJsonLoose(raw);
-      const arr = j && Array.isArray(j.offTopic) ? j.offTopic : null;
+      const arr = j && Array.isArray(j.flag) ? j.flag : null;
       if (!arr) throw new Error('unreadable');
-      return arr.map(Number).filter(n => Number.isInteger(n) && n >= 0 && n < qs.length);
+      return arr.map(f => ({ i: Number(f && f.i), why: String((f && f.why) || '').slice(0, 120) })).filter(f => Number.isInteger(f.i) && f.i >= 0 && f.i < qs.length);
     };
     try {
-      let idx = null;
-      if (OPENAI_API_KEY) { try { idx = await tryOne({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL }); } catch (e) {} }
-      if (!idx && LOCAL_LLM_URL) { try { idx = await tryOne({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_LLM_MODEL, extraHeaders: CF_ACCESS_HEADERS, reasoningEffort: LOCAL_REASONING_EFFORT }); } catch (e) {} }
-      if (!idx || idx.length > qs.length / 2) return new Set();
-      if (idx.length) console.warn(`Polly: dropped ${idx.length} off-topic for "${topicText.slice(0, 60)}":`, idx.map(i => (qs[i].text || qs[i].front || '').slice(0, 80)));
-      return new Set(idx);
-    } catch (e) { return new Set(); }
+      let flags = null;
+      if (OPENAI_API_KEY) { try { flags = await tryOne({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: process.env.POLLY_CHECK_MODEL || OPENAI_TEXT_MODEL }); } catch (e) {} }
+      // Local fallback: a DIFFERENT model from the one that wrote the batch (it tends to repeat
+      // its own mistakes). POLLY_LOCAL_CHECK_MODEL, e.g. qwen3:32b on the M4 Pro.
+      if (!flags && LOCAL_LLM_URL) { try { flags = await tryOne({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: process.env.POLLY_LOCAL_CHECK_MODEL || LOCAL_LLM_MODEL, extraHeaders: CF_ACCESS_HEADERS, reasoningEffort: LOCAL_REASONING_EFFORT }); } catch (e) {} }
+      if (!flags) { unchecked += qs.length; console.warn('Polly: review unavailable — batch not fact-checked'); return new Set(); }
+      if (flags.length > qs.length * 0.7) { unchecked += qs.length; console.warn(`Polly: review flagged ${flags.length}/${qs.length} — treating as unreliable`); return new Set(); }
+      if (flags.length) console.warn(`Polly: review dropped ${flags.length} for "${String(topicText).slice(0, 60)}":`, flags.map(f => `${(qs[f.i].text || qs[f.i].front || '').slice(0, 70)} — ${f.why}`));
+      factDropped += flags.length;
+      return new Set(flags.map(f => f.i));
+    } catch (e) { unchecked += qs.length; return new Set(); }
   }
   /* Exactly `count`, all on topic (2026-09-26: asked 30, got 29, two off topic).
      • Ask for a couple more than are missing: dedupe and the topic check each remove a few,
@@ -666,7 +716,7 @@ module.exports = async function handler(req, res) {
     // Dedup the batch against everything so far (dropRepeats seeds from `avoid`).
     let merged = dropRepeats([...acc, ...batch], avoid, type);
     const fresh = merged.slice(before);
-    const strays = await offTopic(fresh, topic, type, sourceMaterial);
+    const strays = await review(fresh, topic, type, sourceMaterial);
     if (strays.size) { offTopicDropped += strays.size; merged = merged.filter((q, i) => i < before || !strays.has(i - before)); }
     acc = merged.slice(0, count);
     if (acc.length === before) { if (++emptyRounds >= 2) break; } else emptyRounds = 0;
@@ -678,7 +728,7 @@ module.exports = async function handler(req, res) {
   }
 
   // Bill ONE quota unit for the whole generation, however many calls it took.
-  await logGen(quota, { topic: topic.slice(0, 120), type, requested: count, delivered: acc.length, source, ok: true, short: acc.length < count, offTopicDropped });
+  await logGen(quota, { topic: topic.slice(0, 120), type, requested: count, delivered: acc.length, source, ok: true, short: acc.length < count, offTopicDropped, factDropped, unchecked });
   try { await consumeQuota(quota); } catch (e) { /* never fail the response over the counter */ }
   return res.status(200).json({ source, type, topic, questions: acc, requested: count });
   } catch (fatal) {
@@ -690,4 +740,4 @@ module.exports = async function handler(req, res) {
 
 // Exported for scripts/tests/polly-dedupe.test.js. Repeat suppression is judged by
 // thresholds, and thresholds that nobody measures are just someone's guess.
-module.exports.__test = { dropRepeats, wordSet, jaccard, containment, answerKey, buildMessages, varietyNudge, isBroadTopic };
+module.exports.__test = { dropRepeats, wordSet, jaccard, containment, answerKey, buildMessages, varietyNudge, isBroadTopic, plain, normalizeQuestions };

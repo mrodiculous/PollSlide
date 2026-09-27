@@ -82,8 +82,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 <script src="/gifs.js?v=ed7add18"></script>
-<script src="/loop-i18n.js?v=481670f3"></script>
-<script src="/loop-engine.js?v=8cbfc46c"></script>
+<script src="/loop-i18n.js?v=46d57bef"></script>
+<script src="/loop-engine.js?v=042b75ae"></script>
 <script>
 /* LoopSlide Studio — build, publish and run loops for public screens.
  * Data:  users/<uid>/loops/<CODE>   { name, def (draft), publishedAt, updatedAt }  — private
@@ -183,8 +183,11 @@ function listView() {
     ${entries.length ? `<div class="grid">${entries.map(([code, l]) => `
       <div class="card loopcard" onclick="openLoop('${esc(code)}')">
         <div class="row" style="margin-bottom:6px;"><b style="font-size:16px;" data-noi18n>${esc(l.name || T('Untitled loop'))}</b>
-          <span class="pill ${l.publishedAt ? 'live' : ''}" style="margin-left:auto;">${l.publishedAt ? '● Live' : 'Draft'}</span></div>
+          <span class="pill ${l.publishedAt && !l.stopped ? 'live' : ''}" style="margin-left:auto;">${l.publishedAt ? (l.stopped ? '⏸ Stopped' : '● Live') : 'Draft'}</span></div>
         <div class="note">${esc(T('{n} questions · code {x}', { n: countQs(l.def), x: code }))}</div>
+        ${l.publishedAt ? `<div style="margin-top:8px;">${l.stopped
+          ? `<button class="btn sm primary" onclick="event.stopPropagation();setStopped('${esc(code)}', false)">▶ Start showing</button>`
+          : `<button class="btn sm" onclick="event.stopPropagation();setStopped('${esc(code)}', true)">⏸ Stop showing</button>`}</div>` : ''}
       </div>`).join('')}</div>`
     : `<div class="card" style="text-align:center;padding:40px 20px;"><div style="font-size:42px;margin-bottom:8px;">🔁</div>
         <h2>Make your first loop</h2><p class="sub" style="max-width:460px;margin:0 auto 16px;">Start from scratch, or import any deck you already have in PollSlide — polls, quizzes, surveys or study sets.</p>
@@ -205,7 +208,7 @@ async function newLoop() {
     tzOffsetMin: -new Date().getTimezoneOffset(),
     lang: I.get(), screenLang: 'auto', autoTranslate: true,
     extras: { reactions: true, double: true, badges: true, teams: false, teamNames: [1, 2, 3, 4, 5, 6].map(n => T('Table {n}', { n })) },
-    compliance: { organiser: '', contact: user.email || '', minAge: 0, prize: '', rulesUrl: '', aiNote: false },
+    compliance: { organiser: '', contact: user.email || '', minAge: 0, prize: '', rulesUrl: '', aiNote: false, rulesMode: 'hosted' },
     sets: [{ id: 's' + uid6(), title: T('Round {n}', { n: 1 }), items: [] }] };
   await db.ref('users/' + user.uid + '/loops/' + code).set({ name: def.name, def, updatedAt: Date.now() });
   openLoop(code);
@@ -216,6 +219,7 @@ let curSuspended = null;   // set by PollSlide support (admin → LoopSlide → 
 function openLoop(code) {
   const l = myLoops[code]; if (!l) return;
   curSuspended = null;
+  db.ref('loops/' + code + '/stopped').get().then(s => { const on = !!s.val(); if (!!(myLoops[code] || {}).stopped !== on) { myLoops[code].stopped = on || null; if (curCode === code) editorView(); } }).catch(() => {});
   db.ref('loops/' + code + '/suspended').get().then(s => { if (s.val() && curCode === code) { curSuspended = s.val(); editorView(); } }).catch(() => {});
   curCode = code; cur = draftShape(JSON.parse(JSON.stringify(l.def || {})));
   editorView();
@@ -252,6 +256,9 @@ function editorView() {
       <b style="font-size:16px;" data-noi18n>${esc(cur.name || T('Untitled loop'))}</b><span class="pill ${l.publishedAt ? 'live' : ''}">${l.publishedAt ? '● Live' : 'Draft'}</span>
       <span class="note">${esc(T('One full loop ≈ {n} min · {a} / {b} slides', { n: Math.round(tl.length / 60000), a: slideCount(cur), b: planOf().slides === Infinity ? '∞' : planOf().slides }))}</span>
       <span style="margin-left:auto;" class="row">
+        ${l.publishedAt ? (l.stopped
+          ? `<button class="btn primary" onclick="setStopped('${esc(curCode)}', false)">▶ Start showing</button>`
+          : `<button class="btn" onclick="setStopped('${esc(curCode)}', true)" title="Takes it off every TV and phone straight away. Nothing is deleted.">⏸ Stop showing</button>`) : ''}
         <button class="btn danger" onclick="deleteLoop()">🗑 Delete loop</button>
         <button class="btn" onclick="saveDraft().then(()=>toast('Saved.'))">Save</button>
         <button class="btn primary" onclick="publish()">${l.publishedAt ? 'Publish changes' : 'Publish'}</button>
@@ -275,7 +282,13 @@ function editorView() {
       <div class="cols">
         <div><label class="f">Loop name</label><input value="${esc(cur.name || '')}" oninput="cur.name=this.value"></div>
         <div><label class="f">Title shown on screen</label><input value="${esc(cur.brand.title || '')}" placeholder="e.g. The Crown & Anchor Quiz Loop" oninput="cur.brand.title=this.value"></div>
-        <div><label class="f">Logo (https image link)</label><input value="${esc(cur.brand.logo || '')}" placeholder="https://…/logo.png" oninput="cur.brand.logo=this.value"></div>
+        <div><label class="f">Logo — upload it, or paste a link</label>
+          <div class="row" style="flex-wrap:nowrap;gap:8px;">
+            ${cur.brand.logo ? `<img src="${esc(cur.brand.logo)}" alt="" style="width:40px;height:40px;object-fit:contain;border-radius:8px;background:#fff;flex-shrink:0;">` : ''}
+            <input id="logoIn" value="${esc(cur.brand.logo || '')}" placeholder="https://…/logo.png" oninput="cur.brand.logo=this.value">
+            <button type="button" class="btn sm" style="white-space:nowrap;" onclick="logoUpload()" title="PNG, JPG, SVG or WebP, up to 2 MB">⬆ Upload</button>
+            ${cur.brand.logo ? `<button type="button" class="btn sm" onclick="cur.brand.logo='';editorView()" title="Remove the logo">✕</button>` : ''}
+          </div></div>
         <div><label class="f">Accent colour</label><input type="color" value="${esc(cur.brand.accent || '#6c63ff')}" oninput="cur.brand.accent=this.value"></div>
         <div><label class="f">Questions are written in</label><select onchange="cur.lang=this.value">${LANG_OPTS(cur.lang || 'en')}</select></div>
         <div><label class="f">TV screen language</label><select onchange="cur.screenLang=this.value"><option value="auto" ${!cur.screenLang || cur.screenLang === 'auto' ? 'selected' : ''}>Automatic (the TV's own language)</option>${LANG_OPTS(cur.screenLang)}</select></div>
@@ -316,6 +329,12 @@ function editorView() {
       <label class="row" style="margin-top:8px;font-size:14px;"><input type="checkbox" ${cur.extras.badges !== false ? 'checked' : ''} onchange="cur.extras.badges=this.checked"> 🏅 Badges — hot streaks, perfect rounds, fastest finger and more</label>
       <label class="row" style="margin-top:8px;font-size:14px;"><input type="checkbox" ${cur.extras.teams ? 'checked' : ''} onchange="cur.extras.teams=this.checked;editorView()"> 👥 Table vs table — players join a team and teams get their own leaderboard</label>
       ${cur.extras.teams ? `<label class="f">Team names (one per line, up to 12)</label><textarea rows="4" oninput="setTeamNames(this.value)">${esc((cur.extras.teamNames || []).join('\n'))}</textarea>` : ''}
+      <label class="f" style="margin-top:14px;">After each question, the screen shows…</label>
+      <select onchange="cur.extras.reveal=this.value">
+        <option value="answer" ${cur.extras.reveal !== 'winners' ? 'selected' : ''}>The right answer, how the room voted and the fastest right</option>
+        <option value="winners" ${cur.extras.reveal === 'winners' ? 'selected' : ''}>Only who got it right and the fastest — keep the answer secret</option>
+      </select>
+      <p class="note" style="margin-top:4px;">Keeping the answer secret suits a loop that repeats: newcomers still have something to play for. Each player's phone still says whether they were right.</p>
       <label class="f" style="margin-top:14px;">🎁 Reward for the top players (optional)</label>
       <div class="cols3">
         <div style="grid-column:span 2;"><input value="${esc((cur.reward && cur.reward.text) || '')}" placeholder="e.g. 10% off your next round" oninput="cur.reward=Object.assign(cur.reward||{},{text:this.value})"></div>
@@ -334,8 +353,8 @@ function editorView() {
           ${[[0,'No age limit'],[13,'13+'],[16,'16+'],[18,'18+ (e.g. bars in most countries)'],[21,'21+ (e.g. US bars)']].map(([v,l]) => `<option value="${v}" ${(comp.minAge||0) == v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
         <div></div>
         <div><label class="f">Prize (optional)</label><input value="${esc(comp.prize || '')}" placeholder="e.g. Tonight's winner gets a free pitcher" oninput="cur.compliance.prize=this.value"></div>
-        <div><label class="f">Official rules link (required if there's a prize)</label><input value="${esc(comp.rulesUrl || '')}" placeholder="https://yourvenue.com/quiz-rules" oninput="cur.compliance.rulesUrl=this.value"></div>
       </div>
+      ${rulesEditorHtml(comp)}
       <label class="row" style="margin-top:12px;font-size:14px;"><input type="checkbox" ${comp.aiNote ? 'checked' : ''} onchange="cur.compliance.aiNote=this.checked"> This loop uses AI-generated text, images or video — show “Some content made with AI” on screen</label>
       <p class="note" style="margin-top:10px;">Prizes turn a game into a promotion, which has its own rules in most places (e.g. US sweepstakes and skill-contest laws, UK and Canadian promotion rules, Quebec's registration). Winners here are decided by skill and speed, and no purchase is ever needed to play — keep it that way, and publish your own official rules.</p>
     </div>
@@ -415,6 +434,10 @@ async function saveDraft() {
 
 async function publish() {
   const norm = E.normalizeLoop(cur);
+  // Hosted rules are published with the loop; their public page IS the rules link.
+  if (norm.compliance.rulesMode === 'hosted') {
+    norm.compliance.rulesUrl = norm.compliance.rulesText.trim().length >= 40 ? APP + '/rules#' + curCode : '';
+  }
   if (!norm.sets.length) { toast('Add at least one question with two or more options first.'); return; }
   const miss = complianceGaps(norm);
   if (miss.length) { modal(`<h2>Before this goes on a public screen</h2><p class="note" style="margin-bottom:10px;">Fill these in under “Rules &amp; compliance” or on the card:</p><ul style="margin:0 0 14px 18px;line-height:1.7;">${miss.map(m => '<li>' + esc(m) + '</li>').join('')}</ul><button class="btn" onclick="closeModal()">OK</button>`); return; }
@@ -425,7 +448,8 @@ async function publish() {
   const prev = (await db.ref('loops/' + curCode).get()).val();
   norm.epoch = (prev && prev.def && prev.def.epoch) || Date.now();   // keep the clock running across edits
   const rec = { ownerUid: user.uid, def: norm, banned: (prev && prev.banned) || null, updatedAt: Date.now(),
-                cap: plan.players || null, suspended: (prev && prev.suspended) || null };
+                cap: plan.players || null, suspended: (prev && prev.suspended) || null,
+                stopped: (prev && prev.stopped) || null };   // publishing changes never restarts a stopped loop
   const upd = {};
   if (prev) rec.slot = prev.slot || null;
   else {
@@ -469,6 +493,19 @@ async function translateLoop(code, norm) {
 
 /* Delete a loop everywhere: the draft, the public loop, its scores and answers, its
    translations, its plan slot — and any TVs showing it go back to their pairing code. */
+/* Stop / start a published loop (2026-09-27). Before, the only ways to take a loop off a TV
+   were deleting it or unpairing the TV. Stopping keeps everything — questions, players,
+   scores, paired TVs — and every screen and phone shows "back soon" until it's started. */
+async function setStopped(code, on) {
+  if (!myLoops[code]) return;
+  try {
+    await db.ref().update({ ['loops/' + code + '/stopped']: on ? true : null, ['users/' + user.uid + '/loops/' + code + '/stopped']: on ? true : null });
+    myLoops[code].stopped = on || null;
+    toast(on ? T('Stopped — every screen shows “back soon”. Start it again any time.') : T('Showing again on every screen.'));
+    if (curCode === code) editorView(); else if (!curCode) listView();
+  } catch (e) { toast('Could not change that — try again.'); }
+}
+
 async function deleteLoop() {
   const code = curCode;
   if (!code || !confirm(T('Delete this loop? Its questions, scores and screen links are removed for good.'))) return;
@@ -496,7 +533,9 @@ function complianceGaps(L) {
   const c = L.compliance, out = [];
   if (!c.organiser) out.push(T('Organiser — the business running this loop.'));
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.contact)) out.push(T('A contact email players can reach you on.'));
-  if ((c.prize || L.reward) && !c.rulesUrl) out.push(T('An official rules link (https) — you’ve offered a prize.'));
+  if ((c.prize || L.reward) && c.rulesMode === 'hosted' && String(c.rulesText || '').trim().length < 40) out.push(T('Your official rules — write them under “Official rules”, or switch to a link.'));
+  else if ((c.prize || L.reward) && c.rulesMode === 'hosted' && /\[[^\]]+\]/.test(c.rulesText || '')) out.push(T('Fill in the [brackets] in your official rules.'));
+  else if ((c.prize || L.reward) && c.rulesMode !== 'hosted' && !c.rulesUrl) out.push(T('An official rules link (https) — you’ve offered a prize.'));
   L.sets.forEach(s => s.items.forEach(it => { if (it.type === 'ad' && it.sponsored && !it.sponsor) out.push(T('Who the ad “{x}” is from (sponsor name).', { x: it.headline || T('untitled') })); }));
   return out;
 }
@@ -864,6 +903,161 @@ function mediaUpload() {
     } catch (e) { toast('Upload failed — try again.'); }
   };
   inp.click();
+}
+
+/* ── LOGO: upload one, or keep a link (2026-09-27) ───────────────────────────
+   Venues often have the logo as a file, not a URL. Same storage as other uploads. */
+function logoUpload() {
+  const inp = document.createElement('input'); inp.type = 'file';
+  inp.accept = 'image/png,image/jpeg,image/webp,image/svg+xml,image/gif';
+  inp.onchange = async () => {
+    const f = inp.files[0]; if (!f) return;
+    if (f.size > 2 * 1024 * 1024) { toast(T('That file is too big — {n} MB maximum.', { n: 2 })); return; }
+    toast('Uploading…');
+    try {
+      const safe = f.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(-60);
+      const snap = await storage.ref(`users/${user.uid}/images/logo_${Date.now()}_${safe}`).put(f, { contentType: f.type });
+      cur.brand.logo = await snap.ref.getDownloadURL();
+      editorView(); toast('Logo uploaded.');
+    } catch (e) { toast('Upload failed — try again.'); }
+  };
+  inp.click();
+}
+
+/* ── OFFICIAL RULES: hosted by PollSlide, or a link (2026-09-27) ──────────────
+   A prize needs official rules, and "publish them somewhere and paste the link" stopped
+   venues publishing at all. Now they can write them here — saved to their own library to
+   reuse — and publishing puts them at app.pollslide.com/rules#CODE, which becomes the
+   rules link everything else already uses. */
+let myRules = null;   // users/<uid>/loop_rules — { id: { title, text, updatedAt } }
+async function loadMyRules() {
+  if (myRules) return myRules;
+  try { myRules = (await db.ref('users/' + user.uid + '/loop_rules').get()).val() || {}; } catch (e) { myRules = {}; }
+  return myRules;
+}
+function rulesEditorHtml(comp) {
+  if (!myRules) { loadMyRules().then(() => { if (cur && document.getElementById('rulesBox')) editorView(); }); }
+  const hosted = comp.rulesMode === 'hosted';
+  const saved = Object.entries(myRules || {}).sort((a, b) => (b[1].updatedAt || 0) - (a[1].updatedAt || 0));
+  return `<div id="rulesBox" style="margin-top:14px;">
+    <label class="f">Official rules (required if there's a prize)</label>
+    <div class="row" style="gap:16px;margin-bottom:8px;">
+      <label class="row note"><input type="radio" name="rulesMode" ${hosted ? 'checked' : ''} onchange="cur.compliance.rulesMode='hosted';editorView()"> Write them here — PollSlide hosts them</label>
+      <label class="row note"><input type="radio" name="rulesMode" ${hosted ? '' : 'checked'} onchange="cur.compliance.rulesMode='link';editorView()"> Link to my own page</label>
+    </div>
+    ${hosted ? `
+      <div class="row" style="gap:8px;margin-bottom:8px;">
+        <select onchange="pickRules(this.value)" style="flex:1;">
+          <option value="">${saved.length ? 'Use rules I saved before…' : 'No saved rules yet'}</option>
+          ${saved.map(([id, r]) => `<option value="${esc(id)}">${esc(r.title || 'Untitled rules')} · ${new Date(r.updatedAt || 0).toLocaleDateString()}</option>`).join('')}
+        </select>
+        <button type="button" class="btn sm" onclick="rulesTemplate()">📝 Start from a template</button>
+      </div>
+      <input value="${esc(comp.rulesTitle || '')}" placeholder="Title, e.g. Crown & Anchor Friday Quiz — Official Rules" oninput="cur.compliance.rulesTitle=this.value" style="margin-bottom:8px;">
+      <textarea rows="10" placeholder="Who can enter, how winners are decided, the prize, dates, no purchase necessary, how to contact you…" oninput="cur.compliance.rulesText=this.value" style="width:100%;font-family:inherit;">${esc(comp.rulesText || '')}</textarea>
+      <div class="row" style="gap:8px;margin-top:8px;">
+        <button type="button" class="btn sm" onclick="saveRules(false)">💾 Save to my rules</button>
+        ${comp.rulesId && (myRules || {})[comp.rulesId] ? `<button type="button" class="btn sm" onclick="saveRules(true)">＋ Save as new</button>` : ''}
+        <span class="note">Published with this loop at <b>${esc(APP.replace(/^https?:\/\//, ''))}/rules#${esc(curCode)}</b> — players see the link on their phones.</span>
+      </div>
+      <p class="note" style="margin-top:6px;">The template is a starting point, not legal advice. Check it fits your prize and where you are.</p>`
+    : `<input value="${esc(comp.rulesUrl || '')}" placeholder="https://yourvenue.com/quiz-rules" oninput="cur.compliance.rulesUrl=this.value">`}
+  </div>`;
+}
+function pickRules(id) {
+  const r = (myRules || {})[id]; if (!r) return;
+  Object.assign(cur.compliance, { rulesMode: 'hosted', rulesId: id, rulesTitle: r.title || '', rulesText: r.text || '' });
+  editorView(); toast('Rules loaded — edit them for this loop if you need to.');
+}
+async function saveRules(asNew) {
+  const c = cur.compliance, text = String(c.rulesText || '').trim();
+  if (text.length < 40) { toast('Write your rules first — a few sentences at least.'); return; }
+  await loadMyRules();
+  const id = (!asNew && c.rulesId && myRules[c.rulesId]) ? c.rulesId : 'r' + Date.now().toString(36);
+  const rec = { title: String(c.rulesTitle || '').slice(0, 120) || 'Official rules', text: text.slice(0, 20000), updatedAt: Date.now() };
+  try { await db.ref('users/' + user.uid + '/loop_rules/' + id).set(rec); myRules[id] = rec; c.rulesId = id; editorView(); toast('Saved to your rules — pick them for any loop.'); }
+  catch (e) { toast('Could not save — try again.'); }
+}
+/* The rules template, in the language the loop's players read (L.lang). Brackets mark what
+   the organiser must fill in; publishing refuses while any are left. Not legal advice. */
+function RULES_TEMPLATE(lang, v) {
+  const A = { en: v.age ? `${v.age} or older` : '[minimum age, if any]', es: v.age ? `${v.age} años o más` : '[edad mínima, si la hay]',
+    de: v.age ? `${v.age} Jahre oder älter` : '[Mindestalter, falls vorhanden]', fr: v.age ? `${v.age} ans ou plus` : '[âge minimum, le cas échéant]',
+    pt: v.age ? `${v.age} anos ou mais` : '[idade mínima, se houver]', it: v.age ? `${v.age} anni o più` : '[età minima, se prevista]' };
+  const T = {
+    en: [`1. Organiser. This game is run by ${v.org} ("the Organiser"). Contact: ${v.contact}. LoopSlide / PollSlide provides the software only and is not the organiser.`,
+      `2. No purchase necessary. You do not need to buy anything to play or to win. Buying something does not improve your chances.`,
+      `3. Who can play. Open to people aged ${A.en} who are at [venue / address]. Employees of the Organiser and their households may not win. [Add any other limits.]`,
+      `4. How to play. Scan the QR code on the screen, choose a nickname and answer the questions on your phone. Correct answers score points, and faster answers score more.`,
+      `5. How winners are decided. The winner(s) are the player(s) with the most points on the leaderboard when [the round / the evening / date and time] ends. Ties are decided by [earliest correct answers / a tie-break question]. This is a game of skill, not chance.`,
+      `6. Prize. ${v.prize}. Not exchangeable for cash. [Say how and when to claim it, e.g. show the reward screen on your phone to staff before closing time.]`,
+      `7. Dates. The game runs from [start date and time] to [end date and time].`,
+      `8. Fair play. The Organiser may remove players who cheat, use offensive nicknames or break these rules.`,
+      `9. Your data. Only your nickname and answers are used to run the game and show the leaderboard. See the PollSlide privacy policy for details.`,
+      `10. Questions. Contact the Organiser at ${v.contact}.`],
+    es: [`1. Organizador. Este juego lo organiza ${v.org} («el Organizador»). Contacto: ${v.contact}. LoopSlide / PollSlide solo proporciona el software y no es el organizador.`,
+      `2. Sin compra necesaria. No necesitas comprar nada para jugar ni para ganar. Comprar algo no aumenta tus posibilidades.`,
+      `3. Quién puede jugar. Abierto a personas de ${A.es} que estén en [local / dirección]. Los empleados del Organizador y sus familiares no pueden ganar. [Añade otros límites.]`,
+      `4. Cómo se juega. Escanea el código QR de la pantalla, elige un apodo y responde las preguntas en tu móvil. Las respuestas correctas suman puntos, y las más rápidas suman más.`,
+      `5. Cómo se decide quién gana. Gana(n) quien(es) tenga(n) más puntos en la clasificación al terminar [la ronda / la noche / fecha y hora]. Los empates se resuelven por [las respuestas correctas más tempranas / una pregunta de desempate]. Es un juego de habilidad, no de azar.`,
+      `6. Premio. ${v.prize}. No se puede canjear por dinero. [Indica cómo y cuándo reclamarlo, p. ej. enseñar la pantalla del premio en el móvil al personal antes del cierre.]`,
+      `7. Fechas. El juego va de [fecha y hora de inicio] a [fecha y hora de fin].`,
+      `8. Juego limpio. El Organizador puede expulsar a quien haga trampas, use apodos ofensivos o incumpla estas bases.`,
+      `9. Tus datos. Solo se usan tu apodo y tus respuestas para el juego y la clasificación. Consulta la política de privacidad de PollSlide.`,
+      `10. Dudas. Contacta con el Organizador en ${v.contact}.`],
+    de: [`1. Veranstalter. Dieses Spiel wird von ${v.org} („der Veranstalter“) durchgeführt. Kontakt: ${v.contact}. LoopSlide / PollSlide stellt nur die Software bereit und ist nicht der Veranstalter.`,
+      `2. Kein Kauf erforderlich. Du musst nichts kaufen, um zu spielen oder zu gewinnen. Ein Kauf erhöht deine Chancen nicht.`,
+      `3. Wer mitspielen darf. Offen für Personen ab ${A.de}, die sich in [Lokal / Adresse] befinden. Mitarbeitende des Veranstalters und ihre Haushaltsangehörigen können nicht gewinnen. [Weitere Einschränkungen ergänzen.]`,
+      `4. So wird gespielt. Scanne den QR-Code auf dem Bildschirm, wähle einen Spitznamen und beantworte die Fragen auf deinem Handy. Richtige Antworten bringen Punkte, schnellere Antworten mehr Punkte.`,
+      `5. So werden Gewinner ermittelt. Gewinner ist, wer am Ende von [der Runde / dem Abend / Datum und Uhrzeit] die meisten Punkte in der Rangliste hat. Bei Gleichstand entscheidet [die früheste richtige Antwort / eine Stechfrage]. Es ist ein Geschicklichkeitsspiel, kein Glücksspiel.`,
+      `6. Preis. ${v.prize}. Keine Barauszahlung. [Angeben, wie und wann der Preis eingelöst wird, z. B. den Gewinnbildschirm auf dem Handy vor Ladenschluss dem Personal zeigen.]`,
+      `7. Zeitraum. Das Spiel läuft von [Startdatum und -uhrzeit] bis [Enddatum und -uhrzeit].`,
+      `8. Fairplay. Der Veranstalter kann Spieler ausschließen, die schummeln, beleidigende Spitznamen verwenden oder gegen diese Bedingungen verstoßen.`,
+      `9. Deine Daten. Nur dein Spitzname und deine Antworten werden für das Spiel und die Rangliste verwendet. Details in der Datenschutzerklärung von PollSlide.`,
+      `10. Fragen. Wende dich an den Veranstalter unter ${v.contact}.`],
+    fr: [`1. Organisateur. Ce jeu est organisé par ${v.org} (« l'Organisateur »). Contact : ${v.contact}. LoopSlide / PollSlide fournit uniquement le logiciel et n'est pas l'organisateur.`,
+      `2. Aucun achat nécessaire. Tu n'as rien à acheter pour jouer ou pour gagner. Un achat n'augmente pas tes chances.`,
+      `3. Qui peut jouer. Ouvert aux personnes de ${A.fr} présentes à [lieu / adresse]. Les employés de l'Organisateur et leur foyer ne peuvent pas gagner. [Ajoute d'autres limites.]`,
+      `4. Comment jouer. Scanne le QR code à l'écran, choisis un pseudo et réponds aux questions sur ton téléphone. Les bonnes réponses rapportent des points, et les plus rapides en rapportent davantage.`,
+      `5. Désignation des gagnants. Le ou les gagnants sont les joueurs ayant le plus de points au classement à la fin de [la manche / la soirée / date et heure]. En cas d'égalité, [la bonne réponse la plus rapide / une question subsidiaire] départage. C'est un jeu d'adresse, pas de hasard.`,
+      `6. Lot. ${v.prize}. Non échangeable contre de l'argent. [Indique comment et quand le récupérer, p. ex. montrer l'écran du lot au personnel avant la fermeture.]`,
+      `7. Dates. Le jeu se déroule du [date et heure de début] au [date et heure de fin].`,
+      `8. Fair-play. L'Organisateur peut exclure les joueurs qui trichent, utilisent des pseudos offensants ou enfreignent ce règlement.`,
+      `9. Tes données. Seuls ton pseudo et tes réponses servent au jeu et au classement. Voir la politique de confidentialité de PollSlide.`,
+      `10. Questions. Contacte l'Organisateur à ${v.contact}.`],
+    pt: [`1. Organizador. Este jogo é organizado por ${v.org} («o Organizador»). Contacto: ${v.contact}. O LoopSlide / PollSlide fornece apenas o software e não é o organizador.`,
+      `2. Sem obrigação de compra. Não precisa de comprar nada para jogar ou para ganhar. Comprar algo não aumenta as suas hipóteses.`,
+      `3. Quem pode jogar. Aberto a pessoas com ${A.pt} que estejam em [local / morada]. Os funcionários do Organizador e o seu agregado familiar não podem ganhar. [Acrescente outros limites.]`,
+      `4. Como jogar. Leia o código QR no ecrã, escolha uma alcunha e responda às perguntas no telemóvel. As respostas certas dão pontos e as mais rápidas dão mais.`,
+      `5. Como se decide quem ganha. Ganha(m) quem tiver mais pontos na classificação no fim de [a ronda / a noite / data e hora]. Os empates decidem-se por [as respostas certas mais rápidas / uma pergunta de desempate]. É um jogo de perícia, não de sorte.`,
+      `6. Prémio. ${v.prize}. Não convertível em dinheiro. [Indique como e quando o levantar, p. ex. mostrar o ecrã do prémio no telemóvel aos funcionários antes do fecho.]`,
+      `7. Datas. O jogo decorre de [data e hora de início] a [data e hora de fim].`,
+      `8. Jogo limpo. O Organizador pode excluir jogadores que façam batota, usem alcunhas ofensivas ou violem estas regras.`,
+      `9. Os seus dados. Só a sua alcunha e as suas respostas são usadas para o jogo e a classificação. Consulte a política de privacidade do PollSlide.`,
+      `10. Dúvidas. Contacte o Organizador em ${v.contact}.`],
+    it: [`1. Organizzatore. Questo gioco è organizzato da ${v.org} («l'Organizzatore»). Contatto: ${v.contact}. LoopSlide / PollSlide fornisce solo il software e non è l'organizzatore.`,
+      `2. Nessun acquisto necessario. Non devi acquistare nulla per giocare o vincere. Un acquisto non aumenta le tue possibilità.`,
+      `3. Chi può giocare. Aperto alle persone di ${A.it} presenti presso [locale / indirizzo]. I dipendenti dell'Organizzatore e i loro familiari non possono vincere. [Aggiungi altri limiti.]`,
+      `4. Come si gioca. Scansiona il codice QR sullo schermo, scegli un soprannome e rispondi alle domande sul telefono. Le risposte giuste danno punti, e quelle più veloci ne danno di più.`,
+      `5. Come si decidono i vincitori. Vince chi ha più punti in classifica alla fine di [il round / la serata / data e ora]. In caso di parità decide [la risposta giusta più rapida / una domanda di spareggio]. È un gioco di abilità, non d'azzardo.`,
+      `6. Premio. ${v.prize}. Non convertibile in denaro. [Indica come e quando ritirarlo, ad es. mostrando al personale la schermata del premio prima della chiusura.]`,
+      `7. Date. Il gioco si svolge dal [data e ora di inizio] al [data e ora di fine].`,
+      `8. Correttezza. L'Organizzatore può escludere chi imbroglia, usa soprannomi offensivi o viola questo regolamento.`,
+      `9. I tuoi dati. Solo il tuo soprannome e le tue risposte vengono usati per il gioco e la classifica. Vedi l'informativa privacy di PollSlide.`,
+      `10. Domande. Contatta l'Organizzatore all'indirizzo ${v.contact}.`],
+  };
+  return T[lang] || T.en;
+}
+function rulesTemplate() {
+  const c = cur.compliance, L = E.normalizeLoop(cur);
+  if (String(c.rulesText || '').trim() && !confirm('Replace what you have written with the template?')) return;
+  const org = c.organiser || '[Your business name]', contact = c.contact || '[contact email]';
+  const prize = c.prize || (L.reward ? `${L.reward.text} (top ${L.reward.top})` : '[describe the prize]');
+  const age = c.minAge ? `${c.minAge} or older` : '[minimum age, if any]';
+  c.rulesMode = 'hosted';
+  c.rulesTitle = c.rulesTitle || `${L.name} — Official Rules`;
+  c.rulesText = RULES_TEMPLATE(L.lang, { org, contact, prize, age: c.minAge || 0 }).join('\n\n');
+  editorView(); toast('Template added — fill in the [brackets] before you publish.');
 }
 
 // ── IMPORT / EXPORT — the bridge to the rest of PollSlide ──────────────────

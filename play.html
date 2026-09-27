@@ -76,8 +76,8 @@
 <script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="/loop-engine.js?v=8cbfc46c"></script>
-<script src="/loop-i18n.js?v=481670f3"></script>
+<script src="/loop-engine.js?v=042b75ae"></script>
+<script src="/loop-i18n.js?v=46d57bef"></script>
 <script>
 /* LoopSlide phone — play#<CODE>[/<cycle>]
  * The phone computes what is on screen from the clock, exactly like the TV, so it can
@@ -149,7 +149,7 @@ else {
   db.ref('loops/' + CODE).on('value', s => {
     const v = s.val();
     if (!v || !v.def) { loop = null; V = null; app(`<h1>${esc(t('Game not found'))}</h1><div class="sub">${esc(t('Scan the code on the screen again.'))}</div>`); return; }
-    if (v.suspended) { loop = null; V = null; app(`<h1>${esc(t('This game is paused.'))}</h1><div class="sub">${esc(t('Check back later.'))}</div>`); return; }
+    if (v.suspended || v.stopped) { loop = null; V = null; app(`<h1>${esc(t('This game is paused.'))}</h1><div class="sub">${esc(t('Check back later.'))}</div>`); return; }
     loop = E.normalizeLoop(v.def); banned = v.banned || {}; cap = Number(v.cap) || 0;
     document.documentElement.style.setProperty('--accent', loop.brand.accent);
     if (lastLang !== loop.lang + '|' + loop.autoTranslate) { lastLang = loop.lang + '|' + loop.autoTranslate; watchTranslation(); }
@@ -323,12 +323,13 @@ async function drawReveal(p) {
   const it = itemOf(p.slot);
   let mine = null; try { mine = localStorage.getItem(answeredKey(p, it)); } catch (e) {}
   const hasC = it.correct !== null;
+  const secret = loop.extras.reveal === 'winners';   // the venue keeps the answer secret
   const b = x => '<b>' + esc(x) + '</b>';
   let head;
-  if (mine === null) head = `<h1>${esc(t('You missed this one'))}</h1><div class="sub">${t('Answer: {x}', { x: hasC ? b(it.options[it.correct]) : '—' })}</div>`;
+  if (mine === null) head = `<h1>${esc(t('You missed this one'))}</h1><div class="sub">${secret ? esc(t('Catch it next time round.')) : t('Answer: {x}', { x: hasC ? b(it.options[it.correct]) : '—' })}</div>`;
   else if (!hasC) head = `<h1>${esc(t('Thanks for voting!'))}</h1><div class="sub">${t('You picked {x}.', { x: b(it.options[+mine]) })}</div>`;
   else if (+mine === it.correct) { head = `<div class="big good">${esc(t('Correct!'))}</div><div class="sub">${esc(me.streak > 1 ? t('🔥 {n} in a row — bonus points!', { n: me.streak }) : t('Keep it going.'))}</div>`; celebrate(); checkFastest(p, it); }
-  else head = `<div class="big bad">${esc(t('Not this time'))}</div><div class="sub">${t('It was {x}.', { x: b(it.options[it.correct]) })}</div>`;
+  else head = `<div class="big bad">${esc(t('Not this time'))}</div><div class="sub">${secret ? esc(t('Try again next time round.')) : t('It was {x}.', { x: b(it.options[it.correct]) })}</div>`;
   app(`${topBar()}${head}<div id="standing"></div>`);
   drawStandingInto(document.getElementById('standing'));
 }

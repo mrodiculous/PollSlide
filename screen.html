@@ -12,9 +12,19 @@
   * { box-sizing:border-box; margin:0; padding:0; }
   html, body { height:100%; background:var(--bg); color:var(--text); font-family:'DM Sans',system-ui,sans-serif; overflow:hidden; }
   /* Everything is sized in vmin so it reads the same on a 32" bar TV and an 85" lobby wall. */
-  #stage { position:fixed; inset:0; display:grid; grid-template-columns:1fr 30vmin; gap:3vmin; padding:3.5vmin; }
-  #main { display:flex; flex-direction:column; min-width:0; }
-  #side { display:flex; flex-direction:column; gap:2.4vmin; }
+  #stage { position:fixed; inset:0; display:grid; grid-template-columns:1fr 30vmin; grid-template-rows:minmax(0,1fr); gap:3vmin; padding:3.5vmin; box-sizing:border-box; }
+  /* Held to the screen's height (2026-09-27): a question with a photo and a two-line title
+     used to run ~20px past the bottom of a 1080p TV, cutting off the last row of answers.
+     The picture is the part that gives; the answers never do. fitMain() finishes the job. */
+  #main { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; }
+  #main > *:not(.qimg):not(.ad):not(.empty) { flex-shrink:0; }
+  #side { display:flex; flex-direction:column; gap:2.4vmin; min-height:0; overflow:hidden; }
+  #main.tight .q { font-size:4.2vmin; margin-bottom:1.8vmin; }
+  #main.tight .opts { gap:1.2vmin; }
+  #main.tight .opt { padding:1.3vmin 2vmin; font-size:2.8vmin; }
+  #main.tight .opt .oimg { width:6.5vmin; height:6.5vmin; }
+  #main.tight .opt .L { width:4.4vmin; height:4.4vmin; }
+  #main.tight .brand { margin-bottom:1.4vmin; } #main.tight .bar { margin-bottom:1.8vmin; }
   .brand { display:flex; align-items:center; gap:1.6vmin; margin-bottom:2.4vmin; }
   .brand img { height:6vmin; max-width:22vmin; object-fit:contain; }
   .brand .t { font-family:'Syne',sans-serif; font-weight:800; font-size:3.4vmin; letter-spacing:-.01em; }
@@ -22,7 +32,7 @@
   .bar i { display:block; height:100%; width:100%; background:var(--accent); transform-origin:left; }
   .kicker { font-size:2.2vmin; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--accent); margin-bottom:1.4vmin; }
   .q { font-family:'Syne',sans-serif; font-weight:800; font-size:5.4vmin; line-height:1.12; margin-bottom:3vmin; }
-  .qimg { max-height:28vmin; max-width:100%; border-radius:1.6vmin; margin-bottom:2.4vmin; object-fit:contain; align-self:flex-start; }
+  .qimg { max-height:28vmin; max-width:100%; min-height:0; flex:0 1 auto; border-radius:1.6vmin; margin-bottom:2.4vmin; object-fit:contain; align-self:flex-start; }
   .opts { display:grid; grid-template-columns:1fr 1fr; gap:1.8vmin; }
   .opt { background:var(--panel); border:.3vmin solid var(--panel2); border-radius:1.8vmin; padding:2.2vmin 2.6vmin; font-size:3.2vmin; font-weight:700; display:flex; align-items:center; gap:2vmin; position:relative; overflow:hidden; }
   .opt .L { width:5.4vmin; height:5.4vmin; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-family:'Syne',sans-serif; flex-shrink:0; }
@@ -80,7 +90,7 @@
   #fs { position:fixed; right:2vmin; bottom:2vmin; background:rgba(255,255,255,.1); color:#fff; border:0; border-radius:1vmin; padding:1.2vmin 2vmin; font:700 1.8vmin 'DM Sans',sans-serif; cursor:pointer; opacity:.8; }
   .foot { margin-top:auto; font-size:1.7vmin; color:#5b5b80; text-align:center; }
   @media (orientation: portrait) {
-    #stage { grid-template-columns:1fr; grid-template-rows:1fr auto; }
+    #stage { grid-template-columns:1fr; grid-template-rows:minmax(0,1fr) auto; }
     #side { flex-direction:row; align-items:stretch; }
     #side > * { flex:1; }
     .opts { grid-template-columns:1fr; }
@@ -100,8 +110,8 @@
 <script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="/loop-i18n.js?v=481670f3"></script>
-<script src="/loop-engine.js?v=8cbfc46c"></script>
+<script src="/loop-i18n.js?v=46d57bef"></script>
+<script src="/loop-engine.js?v=042b75ae"></script>
 <script>
 /* LoopSlide TV screen — screen#<CODE>
  * Reads only. What to show is computed from the clock (LoopEngine.positionAt), so this
@@ -148,7 +158,20 @@ function watchTranslation() {
 document.getElementById('fs').textContent = t('⛶ Full screen');
 let answers = {}, scores = {};
 
-function main(html) { document.getElementById('main').innerHTML = html; }
+function main(html) { const m = document.getElementById('main'); m.innerHTML = html; fitMain(); }
+/* Make sure every answer is on screen, whatever the TV, photo or question length:
+   1) let the picture shrink (CSS), 2) a tighter layout, 3) drop the picture. Re-run when
+   pictures finish loading, since their size isn't known until then. */
+function fitMain() {
+  const m = document.getElementById('main'); if (!m) return;
+  const over = () => m.scrollHeight > m.clientHeight + 1;
+  m.classList.remove('tight');
+  m.querySelectorAll('.qimg').forEach(i => { i.style.display = ''; });
+  if (over()) m.classList.add('tight');
+  if (over()) m.querySelectorAll('.qimg').forEach(i => { i.style.display = 'none'; });
+  m.querySelectorAll('img').forEach(i => { if (!i.complete && !i._fit) { i._fit = 1; i.addEventListener('load', fitMain, { once: true }); } });
+}
+window.addEventListener('resize', fitMain);
 function side(html) { document.getElementById('side').innerHTML = html; }
 
 if (!CODE) {
@@ -160,6 +183,10 @@ if (!CODE) {
     // Paused by PollSlide support: show nothing but a calm notice.
     if (v.suspended) { loop = null; V = null; I.set(E.normalizeLoop(v.def).screenLang !== 'auto' ? E.normalizeLoop(v.def).screenLang : I.nav());
       main('<div class="empty">' + esc(t('This screen is paused.')) + '</div>'); side(''); return; }
+    // Stopped by the venue: their name, and "back soon" — no QR, nothing to play.
+    if (v.stopped) { loop = null; V = null; const Ls = E.normalizeLoop(v.def); I.set(Ls.screenLang !== 'auto' ? Ls.screenLang : I.nav());
+      main(`<div class="brand">${Ls.brand.logo ? `<img src="${esc(Ls.brand.logo)}" alt="">` : ''}<div class="t">${esc(Ls.brand.title || Ls.name)}</div></div>` +
+        '<div class="empty">⏸ ' + esc(t('Back soon!')) + '</div>'); side(''); return; }
     loop = E.normalizeLoop(v.def);
     I.set(screenLang());
     document.getElementById('fs').textContent = t('⛶ Full screen');
@@ -283,6 +310,7 @@ function drawReveal(p) {
     .sort((a, b) => (b.pts || 0) - (a.pts || 0) || (a.ms || 0) - (b.ms || 0)).slice(0, 3);
   const hasC = it.correct !== null;
   const right = hasC ? per[it.correct] : 0;
+  if (hasC && loop.extras.reveal === 'winners') return drawWinnersOnly(p, it, list, right);
   main(`${brandHtml()}<div class="bar"><i></i></div>
     <div class="kicker">${esc(hasC ? (n ? t('{n}% got it right', { n: Math.round(right / n * 100) }) : t('The answer')) : t('How the room voted'))}${aiTag(it)}</div>
     <div class="q">${esc(it.text)}</div>
@@ -296,6 +324,21 @@ function drawReveal(p) {
   // Celebrate once per question, when anyone got it right.
   const ck = p.cycle + ':' + p.index;
   if (hasC && right > 0 && _confettiFor !== ck) { _confettiFor = ck; confetti(); }
+}
+
+/* "Keep the answer secret": who got it right, and the fastest, without marking any option. */
+function drawWinnersOnly(p, it, list, right) {
+  const n = list.length;
+  const top = list.filter(a => a.c === it.correct).sort((a, b) => (b.pts || 0) - (a.pts || 0) || (a.ms || 0) - (b.ms || 0)).slice(0, 5);
+  main(`${brandHtml()}<div class="bar"><i></i></div>
+    <div class="kicker">${esc(n ? t('{n} of {m} got it right', { n: right, m: n }) : t('No answers this time'))}${aiTag(it)}</div>
+    <div class="q">${esc(it.text)}</div>
+    <div class="stat" style="margin-bottom:2.4vmin;">🤫 ${esc(t('The answer stays secret — scan the QR and play to find out.'))}</div>
+    ${top.length ? `<div class="kicker">${esc(t('⚡ Fastest right'))}</div>
+      <div class="board">${top.map((a, i) => `<div class="row ${i === 0 ? 'first' : ''}"><span class="rk">${i < 3 ? ['🥇','🥈','🥉'][i] : '#' + (i + 1)}</span><span class="av">${esc(a.a || '')}</span><span class="nm">${esc(a.n)}${a.x === 2 ? '<span class="x2">⚡2×</span>' : ''}</span><span class="pt">+${num(a.pts || 0)}</span></div>`).join('')}</div>`
+      : `<div class="empty" style="flex:0;padding:4vmin 0;">${esc(n ? t('Nobody got this one — can you?') : t('Be the first to play!'))}</div>`}`);
+  const ck = p.cycle + ':' + p.index;
+  if (right > 0 && _confettiFor !== ck) { _confettiFor = ck; confetti(); }
 }
 
 function drawAd(p) {

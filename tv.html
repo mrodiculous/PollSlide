@@ -12,10 +12,17 @@
   /* Sized in vmin, like screen.html, so it reads the same from across a bar on a 32" or an 85" TV. */
   #pair { position:fixed; top:0; left:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; padding:6vmin; box-sizing:border-box; }
   .wrapP { display:flex; align-items:center; gap:7vmin; max-width:100%; }
-  .left { max-width:62vw; }
+  /* The text column takes whatever the QR leaves; the QR never shrinks. Before (2026-09-27),
+     the column was capped at 62vw while the 6-letter code needed ~10.4em at 12vmin, so on a
+     16:9 TV the last letter ran UNDER the QR and a reader got five letters of six. */
+  .left { -webkit-box-flex:1; flex:1 1 auto; min-width:0; }
+  .qrbox { flex:0 0 auto; }
   .logo { font-family:'Syne',sans-serif; font-weight:800; font-size:3.4vmin; margin-bottom:3vmin; color:#c9c5ff; }
   h1 { font-family:'Syne',sans-serif; font-weight:800; font-size:5.2vmin; line-height:1.1; margin:0 0 1.5vmin; }
   .code { font-family:'Syne',sans-serif; font-weight:800; font-size:12vmin; line-height:1; margin:2.4vmin 0 3vmin; white-space:nowrap; }
+  /* Sized to the space beside the QR (the code is ~10.4em wide). Older TV browsers ignore
+     min() and keep 12vmin — fitCode() below shrinks it there, and on unusual fonts. */
+  .code { font-size:min(12vmin, calc((100vw - 12vmin - 7vmin - 38vmin) / 11)); }
   .code span { display:inline-block; background:#11111f; border:.3vmin solid #2a2a4a; border-radius:1.6vmin; padding:.14em .1em; margin-right:.12em; min-width:.78em; text-align:center; }
   .code span.gap { background:none; border:0; min-width:.3em; }
   .steps { font-size:3vmin; line-height:1.55; color:#c8c8e6; margin:0; padding-left:1.2em; }
@@ -32,6 +39,7 @@
   @media (orientation: portrait) {
     .wrapP { flex-direction:column; gap:5vmin; text-align:center; }
     .left { max-width:90vw; }
+    .code { font-size:min(12vmin, calc((100vw - 12vmin) / 11)); }
     .steps { text-align:left; display:inline-block; }
   }
 </style>
@@ -67,7 +75,7 @@ window.setTimeout(function () { if (typeof window.firebase === 'undefined' || !w
 <script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script src="/loop-i18n.js?v=481670f3"></script>
+<script src="/loop-i18n.js?v=46d57bef"></script>
 <script>
 /* LoopSlide TV — pollslide.com/tv (redirects here, app.pollslide.com/tv).
  *
@@ -134,9 +142,21 @@ function showCode(c) {
   var h = '', i;
   for (i = 0; i < c.length; i++) { if (i === 3) h += '<span class="gap"></span>'; h += '<span>' + c.charAt(i) + '</span>'; }
   $('code').innerHTML = h;
+  fitCode();
   var box = $('qr'); box.innerHTML = '';
   try { new QRCode(box, { text: APP + '/loop#pair=' + c, width: 320, height: 320, correctLevel: QRCode.CorrectLevel.M }); } catch (e) {}
 }
+
+/* Never let the code run under the QR or off the screen: whatever the TV's browser, font
+   or screen shape, shrink the letters until the whole code fits its column. */
+function fitCode() {
+  var el = $('code'), col = el.parentNode, fs, n = 0;
+  if (!el || !col) return;
+  el.style.fontSize = '';
+  fs = parseFloat(window.getComputedStyle(el).fontSize) || 0;
+  while (fs > 12 && el.scrollWidth > col.clientWidth + 1 && n++ < 40) { fs = fs * 0.94; el.style.fontSize = fs + 'px'; }
+}
+window.addEventListener('resize', function () { fitCode(); });
 
 function newCode(tries) {
   tries = tries || 0;
