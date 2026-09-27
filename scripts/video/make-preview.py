@@ -52,16 +52,19 @@ play_button(poster, 70).save(prefix + '-poster.jpg', quality=88)
 W, H, FPS = 560, 315, 6
 FULL = (0, 0, 1920, 1080)
 plan = [('intro', 2.5, 1.2, 1.0, FULL)]   # (scene, offset, seconds, speed, crop)
-for sid, off, secs, speed, crop in [('gifs', 4.0, 3.0, 1.6, (330, 170, 1590, 879)), ('polly', 9.0, 2.5, 1.5, (330, 0, 1590, 709)),
-                                    ('gifs-all', 7.0, 2.0, 1.5, (330, 120, 1590, 829)), ('present', 13.0, 4.0, 1.4, FULL)]:
-    if sid in scene: plan.append((sid, off, secs, speed, crop))
+# Each scene script may list its own highlights (module.exports.preview); these are the
+# getting-started ones, kept as the default.
+DEFAULT = [['gifs', 4.0, 3.0, 1.6, [330, 170, 1590, 879]], ['polly', 9.0, 2.5, 1.5, [330, 0, 1590, 709]],
+           ['gifs-all', 7.0, 2.0, 1.5, [330, 120, 1590, 829]], ['present', 13.0, 4.0, 1.4, list(FULL)]]
+for sid, off, secs, speed, crop in (man.get('preview') or DEFAULT):
+    if sid in scene: plan.append((sid, off, secs, speed, tuple(crop)))
 out = []
 for sid, off, secs, speed, crop in plan:
     base = scene.get(sid, 0) + off
     for k in range(max(1, int(secs * FPS))):
         img = at(base + k * speed / FPS).crop(crop).resize((W, H), Image.LANCZOS)
         img = play_button(img, 24, 'corner') if sid != 'intro' else play_button(img, 30, 'corner')
-        img = banner(img, 'Watch: your first quiz in 2 minutes')
+        img = banner(img, man.get('previewLabel') or 'Watch: your first quiz in 2 minutes')
         out.append(img)
 # Hold the title card a moment so Outlook's single frame and the loop start both read well.
 pal = [im.quantize(colors=72, method=Image.MEDIANCUT, dither=Image.FLOYDSTEINBERG) for im in out]

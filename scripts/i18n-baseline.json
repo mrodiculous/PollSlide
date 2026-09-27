@@ -46,8 +46,8 @@
   },
   "help.html": {
     "pct": 100,
-    "hit": 833,
-    "total": 834
+    "hit": 830,
+    "total": 831
   },
   "how-to-run-a-pub-quiz.html": {
     "pct": 5,
@@ -108,6 +108,11 @@
     "pct": 100,
     "hit": 62,
     "total": 62
+  },
+  "team-setup.html": {
+    "pct": 100,
+    "hit": 26,
+    "total": 26
   },
   "trust-safety.html": {
     "pct": 100,

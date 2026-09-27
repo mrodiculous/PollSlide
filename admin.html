@@ -656,6 +656,7 @@ function renderDetailBody(uid){
     <label style="font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);">Recent Polly generations</label>
     <div id="pollyLog_${uid}" style="font-size:11.5px;color:var(--muted);margin-top:4px;">Loading…</div>
   </div>
+  ${teamLineHtml(uid)}
   ${loopUsageHtml(uid)}
   <div class="dp-sec">
     <h3>🕵️ Support</h3>
@@ -2246,6 +2247,46 @@ async function adminTeamApi(action,payload){
   if(!r.ok)throw new Error(d.error||('HTTP '+r.status));
   return d;
 }
+/* What's wrong with a team, in words support can act on (2026-09-27). Uses allUsers
+   (users/<uid>: tier, workspaceId), so it costs no extra reads. */
+const TEAM_TIERS=['team_small','team_large'];
+function teamHealth(w){
+  const issues=[]; const members=w.members||{}; const owner=allUsers[w.ownerUid]||{};
+  const limit=adminSeats[w.tier]||5, used=Object.keys(members).length+Object.keys(w.invites||{}).length;
+  if(!w.comp && !TEAM_TIERS.includes(owner.tier)) issues.push(`The owner's own plan is “${owner.tier||'free'}”, so nobody is paying for this team. Members may still have team features.`);
+  else if(!w.comp && owner.tier!==w.tier) issues.push(`The owner pays for “${owner.tier}” but the team is set to “${w.tier}”.`);
+  const outOfStep=Object.entries(members).filter(([uid])=>uid!==w.ownerUid && allUsers[uid] && allUsers[uid].tier!==w.tier).map(([,m])=>m.email);
+  if(outOfStep.length) issues.push(`${outOfStep.length} member(s) aren't on the team's plan: ${outOfStep.join(', ')}.`);
+  const unlinked=Object.entries(members).filter(([uid])=>allUsers[uid] && allUsers[uid].workspaceId!==w.id).map(([,m])=>m.email);
+  if(unlinked.length) issues.push(`${unlinked.length} member(s) aren't linked back to this team: ${unlinked.join(', ')}.`);
+  if(used>limit) issues.push(`${used} people for ${limit} seats.`);
+  return { issues, fixable: outOfStep.length>0 };
+}
+/* Team-plan accounts with no team — a buyer who hasn't signed in since paying (the app now
+   creates the team at sign-in), or one who bought before that existed. */
+function teamOrphans(){
+  const inTeam=new Set(); (adminWorkspaces||[]).forEach(w=>Object.keys(w.members||{}).forEach(u=>inTeam.add(u)));
+  return Object.entries(allUsers).filter(([uid,u])=>u && TEAM_TIERS.includes(u.tier) && !inTeam.has(uid)).map(([uid,u])=>({uid,email:u.email||uid,tier:u.tier}));
+}
+async function twCreate(uid){try{await adminTeamApi('adminCreate',{uid});toast('Team created — the owner can invite people now','success');loadTeamsPage();}catch(e){toast(e.message,'danger');}}
+async function twResend(wsId,k){try{await adminTeamApi('resend',{wsId,emailKey:k});toast('Invite email sent again','success');loadTeamsPage();}catch(e){toast(e.message,'danger');}}
+async function twResync(wsId){const w=adminWorkspaces.find(x=>x.id===wsId);if(!w)return;try{await adminTeamApi('adminSetTier',{wsId,tier:w.tier});toast('Members put back on '+w.tier,'success');await loadAllUsers();loadTeamsPage();}catch(e){toast(e.message,'danger');}}
+/* User detail: which team, which role — filled in after the list loads. */
+function teamLineHtml(uid){
+  setTimeout(async()=>{
+    const el=document.getElementById('teamLine_'+uid); if(!el) return;
+    try{ if(!adminWorkspaces||!adminWorkspaces.length){ const d=await adminTeamApi('adminList'); adminWorkspaces=d.workspaces||[]; adminSeats=d.seats||adminSeats; } }catch(e){ el.textContent='Could not load teams.'; return; }
+    const w=adminWorkspaces.find(x=>(x.members||{})[uid]);
+    const u=allUsers[uid]||{};
+    if(!w){ el.innerHTML=TEAM_TIERS.includes(u.tier)?`On a team plan with <b>no team yet</b>. <button class="btn btn-xs btn-green" onclick="twCreate('${esc(uid)}')">Create their team</button>`:'Not in a team.'; return; }
+    const m=w.members[uid], h=teamHealth(w);
+    el.innerHTML=`<b>${esc(w.name||'Team')}</b> · ${esc(m.role)} · ${esc(w.tier)} · ${Object.keys(w.members||{}).length}/${adminSeats[w.tier]||5} seats${w.comp?' · 🎁 demo':''}
+      ${h.issues.length?`<div style="color:var(--accent4);margin-top:4px;">⚠️ ${h.issues.map(esc).join('<br>⚠️ ')}</div>`:''}
+      <div style="margin-top:6px;"><button class="btn btn-xs btn-ghost" onclick="twOpen['${w.id}']=true;showPage('teams');">Open in Teams →</button></div>`;
+  },0);
+  return `<div class="dp-sec"><h3>👥 Team</h3><div id="teamLine_${esc(uid)}" style="font-size:12px;color:var(--muted);">Loading…</div></div>`;
+}
+
 function renderTeams(){
   document.getElementById('content').innerHTML='<div class="card"><div class="card-hd"><h2>Team workspaces</h2><button class="btn btn-sm btn-ghost" onclick="renderTeams()">↺ Refresh</button></div><div id="teamsBody" style="padding:14px 18px;color:var(--muted);font-size:13px;">Loading workspaces…</div></div>';
   loadTeamsPage();
@@ -2255,9 +2296,16 @@ async function loadTeamsPage(){
   try{
     const d=await adminTeamApi('adminList');
     adminWorkspaces=d.workspaces||[]; adminSeats=d.seats||adminSeats;
-    if(!adminWorkspaces.length){el.innerHTML='No team workspaces yet. One is created automatically the first time a team-tier owner opens “Team admin” in the app.';return;}
+    const orphans=teamOrphans();
+    const orphanHtml=orphans.length?`<div style="padding:12px 18px;border-bottom:1px solid var(--border);background:rgba(247,183,49,0.07);">
+        <div style="font-weight:700;margin-bottom:6px;">⚠️ On a team plan but with no team (${orphans.length})</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px;">Usually a buyer who hasn't signed in since paying — the app creates their team at their next sign-in. Create it now if they're waiting on you.</div>
+        ${orphans.map(o=>`<div style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:12.5px;"><span style="flex:1;">${esc(o.email)} <span class="pill pill-team">${esc(o.tier)}</span></span><button class="btn btn-xs btn-green" onclick="twCreate('${esc(o.uid)}')">Create team</button></div>`).join('')}
+      </div>`:'';
+    if(!adminWorkspaces.length){el.innerHTML=orphanHtml+'<div style="padding:14px 18px;">No team workspaces yet. One is created automatically when a team-plan owner first signs in.</div>';el.style.padding='0';return;}
     el.style.padding='0';
-    el.innerHTML='<table><thead><tr><th></th><th>Workspace</th><th>Owner</th><th>Tier</th><th>Seats</th><th>Created</th><th></th></tr></thead><tbody>'+adminWorkspaces.map((w,i)=>{
+    el.innerHTML=orphanHtml+'<table><thead><tr><th></th><th>Workspace</th><th>Owner</th><th>Tier</th><th>Seats</th><th>Health</th><th>Created</th><th></th></tr></thead><tbody>'+adminWorkspaces.map((w,i)=>{
+      const health=teamHealth(w);
       const members=Object.entries(w.members||{}),invites=Object.entries(w.invites||{});
       const owner=(w.members||{})[w.ownerUid]||{};
       const used=members.length+invites.length,limit=adminSeats[w.tier]||5;
@@ -2268,9 +2316,12 @@ async function loadTeamsPage(){
         <td>${esc(owner.email||w.ownerUid)}</td>
         <td><span class="pill pill-team">${esc(w.tier)}</span>${w.comp?` <span class="pill pill-warn" style="margin-left:3px;" title="Free demo${w.comp.expiresAt?' — '+daysLeftLabel(w.comp.expiresAt):''}">🎁 demo</span>`:''}</td>
         <td>${used} / ${limit}</td>
+        <td>${health.issues.length?`<span class="pill pill-warn" title="${esc(health.issues.join(' '))}">⚠️ ${health.issues.length}</span>`:'✅'}</td>
         <td>${w.createdAt?timeAgo(w.createdAt):'—'}</td>
         <td onclick="event.stopPropagation()"><button class="btn btn-xs btn-ghost" style="color:var(--accent2);border-color:var(--accent2);" onclick="twDelete('${w.id}')">Delete</button></td>
-      </tr>`+(open?`<tr><td></td><td colspan="6" style="padding:0 12px 14px;">
+      </tr>`+(open?`<tr><td></td><td colspan="7" style="padding:0 12px 14px;">
+        ${health.issues.length?`<div style="margin:8px 0;padding:9px 12px;border-radius:8px;background:rgba(247,183,49,0.1);border:1px solid rgba(247,183,49,0.3);font-size:12.5px;">${health.issues.map(x=>'⚠️ '+esc(x)).join('<br>')}
+          ${health.fixable?`<div style="margin-top:6px;"><button class="btn btn-xs btn-ghost" onclick="twResync('${w.id}')">Put members back on ${esc(w.tier)}</button></div>`:''}</div>`:''}
         ${members.map(([uid,m])=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12.5px;">
           <span style="flex:1;">${esc(m.email)}</span><span class="pill ${m.role==='owner'?'pill-pro':m.role==='admin'?'pill-team':'pill-free'}">${m.role}</span>
           ${m.role==='member'?`<button class="btn btn-xs btn-ghost" onclick="twSetRole('${w.id}','${uid}','admin')">Make admin</button>`:''}
@@ -2279,6 +2330,8 @@ async function loadTeamsPage(){
         </div>`).join('')}
         ${invites.map(([k,inv])=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12.5px;opacity:.8;">
           <span style="flex:1;">✉️ ${esc(inv.email)} <span style="color:var(--muted)">(invited)</span></span><span class="pill pill-free">${inv.role==='admin'?'admin':'member'}</span>
+          ${inv.resentAt?`<span style="font-size:11px;color:var(--muted);">resent ${timeAgo(inv.resentAt)}</span>`:''}
+          <button class="btn btn-xs btn-ghost" onclick="twResend('${w.id}','${k}')">Resend</button>
           <button class="btn btn-xs btn-ghost" onclick="twRevoke('${w.id}','${k}')">Revoke</button>
         </div>`).join('')}
         <div style="display:flex;gap:6px;align-items:center;margin-top:10px;flex-wrap:wrap;">

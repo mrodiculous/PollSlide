@@ -16,9 +16,13 @@ const Starters = require(path.join(ROOT, 'starters.js'));
 const Media = require(path.join(ROOT, 'starter-media.js'));
 
 const USER = { uid: 'demoTeacher01', email: 'alex@example.com', displayName: 'Alex', createdAt: Date.now() };
+// A second person for team videos: the invitee. A page opened with ?as=member signs in as them.
+const MEMBER = { uid: 'demoMember02', email: 'jamie@example.com', displayName: 'Jamie', createdAt: Date.now() };
+const USERS = { owner: USER, member: MEMBER };
 function seed() {
-  return { users: { [USER.uid]: { email: USER.email, name: 'Alex', displayName: 'Alex', tier: 'free', createdAt: USER.createdAt,
-    lang: 'en', onboarded: true } } };
+  return { users: {
+    [USER.uid]: { email: USER.email, name: 'Alex', displayName: 'Alex', tier: 'free', createdAt: USER.createdAt, lang: 'en', onboarded: true },
+    [MEMBER.uid]: { email: MEMBER.email, name: 'Jamie', displayName: 'Jamie', tier: 'free', createdAt: MEMBER.createdAt, lang: 'en', onboarded: true } } };
 }
 let TREE = seed();
 const split = (p) => String(p || '').split('/').filter(Boolean);
@@ -76,7 +80,7 @@ http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x'); let p = decodeURIComponent(u.pathname);
   try {
     if (p === '/__db/tree') return json(res, 200, TREE);
-    if (p === '/__video/config') return json(res, 200, { user: USER });
+    if (p === '/__video/config') return json(res, 200, { user: USERS[u.searchParams.get('as')] || USER });
     if (p === '/__db/reset') { TREE = seed(); broadcast({ client: 'server', ops: [['', TREE]] }); return json(res, 200, { ok: true }); }
     if (p === '/__db/write' && req.method === 'POST') {
       const m = JSON.parse((await readBody(req)).toString() || '{}');
@@ -95,6 +99,9 @@ http.createServer(async (req, res) => {
       const body = req.method === 'POST' ? JSON.parse((await readBody(req)).toString() || '{}') : {};
       if (p === '/api/polly') return setTimeout(() => json(res, 200, pollyAnswer(body)), 1800);   // Polly takes a moment
       if (p === '/api/gif-search') return setTimeout(() => json(res, 200, gifAnswer(body)), 120);
+      // The app falls back to the same database writes the real /api/team makes when the
+      // endpoint is unavailable — exactly what a video needs, with nothing to reimplement.
+      if (p === '/api/team') return json(res, 503, {});
       return json(res, 200, {});   // not ok: e.g. /api/team must not report a joined team
     }
     if (p.startsWith('/__video/')) p = '/scripts/video/' + p.slice('/__video/'.length);

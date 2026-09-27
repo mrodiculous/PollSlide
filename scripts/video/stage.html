@@ -152,7 +152,13 @@ const D = (() => {
   async function unfocus() { $('appWrap').style.transform = ''; await sleep(1200); }
   /* Ask the recorder for a full-quality still of this exact moment (saved as out/<id>-<name>.png). */
   async function snap(name) { console.log('SNAP:' + name); await sleep(700); }
-  return { sleep, load, find, waitFor, point, click, type, scroll, hideCursor, chip, card, layout, js, move, stagePos, frames, focus, unfocus, snap };
+  /* Set demo data before a page loads it (e.g. put the owner on a team plan). */
+  async function db(pathOrOps, value) {
+    const ops = Array.isArray(pathOrOps) ? pathOrOps : [[pathOrOps, value]];
+    await fetch('/__db/write', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client: 'stage', ops }) });
+    await sleep(150);
+  }
+  return { sleep, load, find, waitFor, point, click, type, scroll, hideCursor, chip, card, layout, js, move, stagePos, frames, focus, unfocus, snap, db };
 })();
 window.D = D;
 setInterval(() => { if (window.scrollY || document.documentElement.scrollTop) window.scrollTo(0, 0); }, 50);   // belt and braces

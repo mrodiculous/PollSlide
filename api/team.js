@@ -56,6 +56,21 @@ module.exports = async function handler(req, res) {
 
     const { action, wsId, email, role, uid, emailKey: ek, tier, expiresAt, note } = req.body || {};
     const isSiteAdmin = ADMIN_EMAILS.includes(callerEmail);
+    /* Who did it, for the tier audit trail. This was referenced by every tier change in this
+       file and never defined (found 2026-09-27), so removing a member, adding one from Admin,
+       changing a team's plan and starting or ending a demo all threw PART-WAY through:
+       e.g. a removed member was detached but kept the paid plan. */
+    const who = { email: callerEmail, uid: callerUid };
+    // Best-effort customer emails. A mail failure never undoes or fails a team change.
+    const mail = async (type, to, data) => {
+      if (!to) return;
+      try {
+        const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com';
+        await fetch(`${APP_URL}/api/send-email`, { method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-internal-key': process.env.INTERNAL_API_KEY || '' },
+          body: JSON.stringify({ type, to, data }) });
+      } catch (e) { console.error('team mail failed (non-fatal):', type, e.message); }
+    };
 
     const wsData = async id => { const s = await db.ref('workspaces/' + id).get(); return s.exists() ? s.val() : null; };
     const requireManager = async id => {
@@ -122,6 +137,10 @@ module.exports = async function handler(req, res) {
         await db.ref('team_invites/' + k).remove();
         await db.ref('users/' + callerUid + '/workspaceId').set(inv.wsId);
         await setUserTier(db, callerUid, ws.tier, { source:'team', actor:'self', reason:'accepted team invite', ref: inv.wsId });
+        // Tell the owner their seat was taken — otherwise they only find out by opening the panel.
+        const ownerEmail = ((ws.members || {})[ws.ownerUid] || {}).email;
+        const used = Object.keys(ws.members || {}).length + 1;
+        await mail('team_joined', ownerEmail, { wsName: ws.name || '', memberEmail: callerEmail, used, limit: seatLimit(ws) });
         return res.status(200).json({ ok: true, wsId: inv.wsId, tier: ws.tier, wsName: ws.name || '' });
       }
       case 'remove': {
@@ -217,6 +236,41 @@ module.exports = async function handler(req, res) {
         for (const k of Object.keys(ws.invites || {})) await db.ref('team_invites/' + k).remove().catch(() => {});
         await db.ref('workspaces/' + wsId).remove();
         return res.status(200).json({ ok: true });
+      }
+      case 'leave': {
+        // A member leaves on their own — before, only an owner/admin could remove them.
+        const ws = await wsData(wsId);
+        if (!ws || !(ws.members || {})[callerUid]) return res.status(404).json({ error: 'You are not in this team' });
+        if (ws.ownerUid === callerUid) return res.status(400).json({ error: 'The owner can\'t leave their own team. Cancel the team plan instead, or contact support to hand the team over.' });
+        await detachMember(wsId, callerUid, ws);
+        return res.status(200).json({ ok: true });
+      }
+      case 'resend': {
+        // Resend an invite email that went to spam or was deleted. Same people who can invite.
+        const ws = await requireManager(wsId);
+        const inv = (ws.invites || {})[ek];
+        if (!inv) return res.status(404).json({ error: 'That invite no longer exists' });
+        await mail('team_invite', inv.email, { wsName: ws.name || '', invitedBy: inv.invitedBy || callerEmail, role: inv.role });
+        await db.ref('workspaces/' + wsId + '/invites/' + ek + '/resentAt').set(Date.now());
+        return res.status(200).json({ ok: true });
+      }
+      case 'adminCreate': {
+        /* Support: a team-plan account with no team yet (a buyer who never opened Team admin).
+           Creates exactly what the app's loadOrCreateWorkspace() creates, owned by that user. */
+        requireSiteAdmin();
+        if (!/^[A-Za-z0-9_-]{1,128}$/.test(String(uid || ''))) return res.status(400).json({ error: 'Missing user id' });
+        const existing = (await db.ref('users/' + uid + '/workspaceId').get()).val();
+        if (existing && await wsData(existing)) return res.status(409).json({ error: 'That account is already in a team' });
+        const u = (await db.ref('users/' + uid).get()).val() || {};
+        const t = SEATS[u.tier] ? u.tier : null;
+        if (!t) return res.status(400).json({ error: 'That account is not on a team plan' });
+        let ownerEmail = (u.email || '').toLowerCase();
+        try { ownerEmail = (await admin.auth(app).getUser(uid)).email || ownerEmail; } catch (e) {}
+        const id = 'ws_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+        await db.ref('workspaces/' + id).set({ name: (ownerEmail || 'My') + '’s Team', ownerUid: uid, tier: t, createdAt: Date.now(),
+          members: { [uid]: { email: ownerEmail, role: 'owner', joinedAt: Date.now() } }, createdBy: callerEmail });
+        await db.ref('users/' + uid + '/workspaceId').set(id);
+        return res.status(200).json({ ok: true, wsId: id });
       }
       case 'revoke': {
         await requireManager(wsId);

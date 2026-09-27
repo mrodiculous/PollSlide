@@ -36,6 +36,17 @@ const BRAND_PINK = '#ff6584';
 const BRAND_GREEN = '#43e97b';
 const BRAND_AMBER = '#f7b731';
 
+
+// The animated preview + link for one of the site's videos. Email can't play video; the
+// first frame of each GIF is a complete title card (all Outlook on Windows shows).
+function videoBlock(slug, label, blurb) {
+  const url = `https://pollslide.com/${slug}?utm_source=email`;
+  return `<a href="${url}" style="display:block;text-decoration:none;margin:0 0 10px;">
+        <img src="https://pollslide.com/videos/${slug}-email.gif" width="496" alt="${label}" style="display:block;width:100%;max-width:496px;height:auto;border:0;border-radius:12px;">
+      </a>
+      <p style="font-size:14px;color:#5a5a78;margin:0 0 22px;text-align:center;"><a href="${url}" style="color:${BRAND_COLOR};font-weight:700;text-decoration:none;">▶ ${label}</a>${blurb ? ' — ' + blurb : ''}</p>`;
+}
+
 // ── EMAIL TEMPLATES ──────────────────────────────────────────────────────────
 // All templates use inline CSS for maximum email client compatibility.
 // Tested with: Gmail, Outlook, Apple Mail, Yahoo, Samsung Email.
@@ -149,8 +160,34 @@ const TEMPLATES = {
       <div style="background:#f4f4fc;border-radius:10px;padding:14px 16px;font-size:14px;color:#5a5a78;margin:0 0 18px;border-left:3px solid ${BRAND_COLOR};">
         Sign in — or create a free account — using <strong>this email address</strong>, and you'll join the team automatically with its paid features unlocked. No code needed.
       </div>
+      <p style="font-size:14px;color:#5a5a78;margin:0 0 12px;">New to PollSlide? This 2-minute video shows you everything:</p>
+      ${videoBlock('getting-started', 'Watch: your first quiz in 2 minutes', 'make a quiz or poll, let Polly write the questions, and add GIFs.')}
       <p style="font-size:13px;color:#9090b8;margin:0;">Didn't expect this? You can simply ignore this email.</p>
     `, 'https://app.pollslide.com/presenter', 'Join the team →')
+  }),
+
+  // Sent by api/team.js to the OWNER when someone accepts an invite.
+  team_joined: (data) => ({
+    subject: `${esc(data.memberEmail)} joined ${esc(data.wsName) || 'your team'} on PollSlide`,
+    html: baseLayout('New team member', `
+      <h1 style="font-size:24px;font-weight:800;margin:0 0 12px;color:#15152a;">Your team is growing 👥</h1>
+      <p style="font-size:16px;color:#5a5a78;margin:0 0 18px;"><strong>${esc(data.memberEmail)}</strong> just joined <strong>${esc(data.wsName) || 'your team'}</strong> and now has your plan's features.</p>
+      <div style="background:#f4f4fc;border-radius:10px;padding:14px 16px;font-size:14px;color:#5a5a78;margin:0 0 18px;border-left:3px solid ${BRAND_COLOR};">
+        ${Number(data.used) || 1} of ${Number(data.limit) || 5} seats in use. Manage your team any time: avatar menu (top right) → <strong>👥 Team admin</strong>.
+      </div>
+    `, 'https://app.pollslide.com/presenter', 'Open Team admin →')
+  }),
+
+  // Sent by api/stripe-webhook.js to each MEMBER when the owner's team plan ends.
+  team_ended: (data) => ({
+    subject: `Your PollSlide team plan has ended`,
+    html: baseLayout('Team plan ended', `
+      <h1 style="font-size:24px;font-weight:800;margin:0 0 12px;color:#15152a;">Your team plan has ended</h1>
+      <p style="font-size:16px;color:#5a5a78;margin:0 0 18px;">The plan for <strong>${esc(data.wsName) || 'your team'}</strong>${data.ownerEmail ? ` (managed by ${esc(data.ownerEmail)})` : ''} is no longer active, so your account is back on the Free plan.</p>
+      <div style="background:#f4f4fc;border-radius:10px;padding:14px 16px;font-size:14px;color:#5a5a78;margin:0 0 18px;border-left:3px solid ${BRAND_AMBER};">
+        <strong>Nothing is deleted.</strong> All your presentations and results are still in your account. Free plan limits apply from now on — ask your team's owner, or upgrade yourself any time.
+      </div>
+    `, 'https://app.pollslide.com/presenter', 'Open PollSlide →')
   }),
 
   // Admin broadcast (admin.html → "Broadcast" / "Send message"), sent alongside the in-app
@@ -204,10 +241,7 @@ const TEMPLATES = {
       <!-- The getting-started video. Email can't play video, so this is an animated preview
            (its first frame is a complete title card, which is all Outlook on Windows shows)
            linking to the page with the real player, captions and chapters. -->
-      <a href="https://pollslide.com/getting-started?utm_source=welcome_email" style="display:block;text-decoration:none;margin:0 0 10px;">
-        <img src="https://pollslide.com/videos/getting-started-email.gif" width="496" alt="Watch: your first quiz in 2 minutes" style="display:block;width:100%;max-width:496px;height:auto;border:0;border-radius:12px;">
-      </a>
-      <p style="font-size:14px;color:#5a5a78;margin:0 0 22px;text-align:center;"><a href="https://pollslide.com/getting-started?utm_source=welcome_email" style="color:${BRAND_COLOR};font-weight:700;text-decoration:none;">▶ Watch the 2-minute video</a> — make a quiz or poll, let Polly write the questions, and add GIFs to questions and answers.</p>
+      ${videoBlock('getting-started', 'Watch: your first quiz in 2 minutes', 'make a quiz or poll, let Polly write the questions, and add GIFs to questions and answers.')}
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:8px;">
         <tr><td style="padding:12px 14px;background:#f4f4fc;border-radius:10px;border-left:3px solid ${BRAND_COLOR};margin-bottom:8px;">
           <strong style="color:${BRAND_COLOR};">Step 1:</strong> Create a quiz or poll — type your questions or let ✨ Polly write them, then add GIFs
@@ -242,7 +276,11 @@ const TEMPLATES = {
         <h1 style="font-size:24px;font-weight:800;margin:0 0 12px;color:#15152a;">You're on ${data.plan || 'Pro'}! 🎉</h1>
         <p style="font-size:16px;color:#5a5a78;margin:0 0 18px;">Your plan is active. Here's what you now have:</p>
         <table width="100%" cellpadding="0" cellspacing="0">${rows}</table>
-      `, 'https://app.pollslide.com/presenter', 'Open PollSlide')
+        ${(data.planKey === 'team_small' || data.planKey === 'team_large') ? `
+        <h2 style="font-size:18px;font-weight:800;margin:26px 0 8px;color:#15152a;">Next: invite your team</h2>
+        <p style="font-size:15px;color:#5a5a78;margin:0 0 14px;">You're the team's <strong>owner</strong>. Open PollSlide, click your avatar (top right) → <strong>👥 Team admin</strong>, and invite people by email. They get your plan the moment they sign in — and you pay for everyone.</p>
+        ${videoBlock('team-setup', 'Watch: set up your team in 2 minutes', 'invite people, roles, seats and billing.')}` : ''}
+      `, 'https://app.pollslide.com/presenter', (data.planKey === 'team_small' || data.planKey === 'team_large') ? 'Invite your team →' : 'Open PollSlide')
     };
   },
 

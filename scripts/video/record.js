@@ -17,7 +17,10 @@ const HERE = __dirname, ROOT = path.resolve(HERE, '..', '..');
 const args = process.argv.slice(2);
 const flag = (n, d) => { const i = args.indexOf('--' + n); return i >= 0 ? args[i + 1] : d; };
 const ID = args.find(a => !a.startsWith('--') && args[args.indexOf(a) - 1] !== '--voice' && args[args.indexOf(a) - 1] !== '--rate') || 'getting-started';
-const VOICE = flag('voice', 'Samantha'), RATE = flag('rate', '172');
+/* Zoe (Premium) since 2026-09-27 (Rod downloaded it). Falls back to Samantha on a Mac without it.
+   No rate by default: premium voices sound most natural at their own pace. */
+const INSTALLED = execFileSync('say', ['-v', '?']).toString();
+const VOICE = flag('voice', /^Zoe \(Premium\)/m.test(INSTALLED) ? 'Zoe (Premium)' : 'Samantha'), RATE = flag('rate', '');
 const SCRIPT = require(path.join(HERE, ID + '.js'));
 const WORK = path.join(os.tmpdir(), 'ps-video-' + ID); const OUT = path.join(HERE, 'out');
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -29,14 +32,14 @@ fs.rmSync(WORK, { recursive: true, force: true }); fs.mkdirSync(path.join(WORK, 
 // ── 1. narration ──────────────────────────────────────────────────────────────
 const lines = SCRIPT.scenes.map((s, i) => {
   const f = path.join(WORK, `say-${i}.aiff`);
-  execFileSync('say', ['-v', VOICE, '-r', RATE, '-o', f, s.say]);
+  execFileSync('say', ['-v', VOICE, ...(RATE ? ['-r', RATE] : []), '-o', f, s.say]);
   const info = execFileSync('afinfo', [f]).toString();
   const dur = parseFloat((info.match(/estimated duration: ([\d.]+)/) || [])[1] || '3');
   const m4a = f.replace(/\.aiff$/, '.m4a');            // AAC, so the final mux can copy streams as-is
   execFileSync('afconvert', ['-f', 'm4af', '-d', 'aac@44100', '-b', '96000', f, m4a]);
   return { file: m4a, dur };
 });
-console.log('narration:', lines.map(l => l.dur.toFixed(1) + 's').join(' '), '=', lines.reduce((a, l) => a + l.dur, 0).toFixed(1) + 's');
+console.log('voice:', VOICE, '· narration:', lines.map(l => l.dur.toFixed(1) + 's').join(' '), '=', lines.reduce((a, l) => a + l.dur, 0).toFixed(1) + 's');
 
 // ── 2. stage + Chrome ─────────────────────────────────────────────────────────
 const server = spawn(process.execPath, [path.join(HERE, 'server.js'), String(PORT)], { stdio: 'ignore' });
@@ -123,7 +126,7 @@ async function cdpConnect() {
 
   // Frame times relative to the start; the first frame covers anything before it.
   const rel = frames.map(x => ({ f: x.f, t: Math.max(0, x.t - t0) })).filter((x, i, a) => i === 0 || x.t >= a[i - 1].t);
-  const manifest = { width: 1920, height: 1080, end, frames: rel, audio, scenes: sceneTimes, out: path.join(OUT, ID + '.mp4') };
+  const manifest = { width: 1920, height: 1080, end, frames: rel, audio, scenes: sceneTimes, preview: SCRIPT.preview || null, previewLabel: SCRIPT.previewLabel || null, out: path.join(OUT, ID + '.mp4') };
   fs.writeFileSync(path.join(WORK, 'manifest.json'), JSON.stringify(manifest));
   console.log(`captured ${rel.length} frames over ${end.toFixed(1)}s`);
 

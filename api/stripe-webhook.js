@@ -133,6 +133,19 @@ async function syncWorkspaceTier(db, uid, tier) {
         reason: `workspace owner moved to ${tier}`, ref: wsId,
       });
     }
+    // Members whose paid access just ended because the OWNER's plan changed: tell them why,
+    // or it looks like PollSlide took their plan away for no reason.
+    if (memberTier === 'free' && (ws.tier === 'team_small' || ws.tier === 'team_large')) {
+      const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com';
+      const ownerEmail = ((ws.members || {})[uid] || {}).email || '';
+      // Awaited (a serverless function may be frozen the moment it returns), all together,
+      // and allSettled — a failed email must never fail the webhook.
+      await Promise.allSettled(Object.entries(ws.members || {})
+        .filter(([memberUid, m]) => memberUid !== uid && m && m.email)
+        .map(([, m]) => fetch(`${APP_URL}/api/send-email`, { method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-internal-key': process.env.INTERNAL_API_KEY || '' },
+          body: JSON.stringify({ type: 'team_ended', to: m.email, data: { wsName: ws.name || '', ownerEmail } }) })));
+    }
     console.log(`Synced workspace ${wsId} tier → ${tier}; members → ${memberTier}`);
   } catch (e) {
     console.error('Workspace tier sync failed (non-fatal):', e.message);

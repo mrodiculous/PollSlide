@@ -1,0 +1,55 @@
+{
+  "_note": "One entry per scene, in order. Register: es tú, de du, fr tu, pt European (você), it tu. App labels the app leaves in English stay English.",
+  "cues": [
+    {
+      "es": "Tienes un plan de equipo de PollSlide. Así se configura tu equipo, en unos dos minutos.",
+      "de": "Du hast einen PollSlide-Teamplan. So richtest du dein Team ein – in etwa zwei Minuten.",
+      "fr": "Tu as un forfait équipe PollSlide. Voici comment configurer ton équipe, en deux minutes environ.",
+      "pt": "Tem um plano de equipa do PollSlide. Veja como configurar a sua equipa, em cerca de dois minutos.",
+      "it": "Hai un piano team di PollSlide. Ecco come configurare il tuo team, in circa due minuti."
+    },
+    {
+      "es": "La primera vez que inicias sesión, «Team admin» se abre solo. Tú eres el propietario. Siempre puedes volver a encontrarlo: haz clic en tu avatar, arriba a la derecha, y luego en «Team admin».",
+      "de": "Beim ersten Anmelden öffnet sich „Team admin“ von selbst. Du bist der Inhaber. Du findest es jederzeit wieder: Klicke oben rechts auf deinen Avatar und dann auf „Team admin“.",
+      "fr": "À ta première connexion, « Team admin » s'ouvre tout seul. Tu es le propriétaire. Tu peux toujours le retrouver : clique sur ton avatar en haut à droite, puis sur « Team admin ».",
+      "pt": "Na primeira vez que inicia sessão, o «Team admin» abre sozinho. É o proprietário. Pode encontrá-lo sempre: clique no seu avatar, no canto superior direito, e depois em «Team admin».",
+      "it": "Al primo accesso, «Team admin» si apre da solo. Sei tu il proprietario. Puoi ritrovarlo sempre: fai clic sul tuo avatar in alto a destra, poi su «Team admin»."
+    },
+    {
+      "es": "Invita a personas por correo. Elige «Member», o «Admin» si deben ayudarte a gestionar el equipo. Reciben un correo con un enlace y un vídeo corto para empezar.",
+      "de": "Lade Leute per E-Mail ein. Wähle „Member“ oder „Admin“, wenn sie dir beim Verwalten des Teams helfen sollen. Sie bekommen eine E-Mail mit einem Link und einem kurzen Einstiegsvideo.",
+      "fr": "Invite des personnes par e-mail. Choisis « Member », ou « Admin » si elles doivent t'aider à gérer l'équipe. Elles reçoivent un e-mail avec un lien et une courte vidéo pour démarrer.",
+      "pt": "Convide pessoas por email. Escolha «Member», ou «Admin» se devem ajudá-lo a gerir a equipa. Recebem um email com uma ligação e um vídeo curto para começar.",
+      "it": "Invita le persone via email. Scegli «Member», oppure «Admin» se devono aiutarti a gestire il team. Ricevono un'email con un link e un breve video per iniziare."
+    },
+    {
+      "es": "Cada invitación ocupa una plaza hasta que se acepta. Si alguien no encuentra el correo, pulsa «Resend». Los administradores pueden invitar y quitar personas. Solo tú, el propietario, puedes volver a convertir un administrador en miembro.",
+      "de": "Jede Einladung belegt einen Platz, bis sie angenommen wird. Wenn jemand die E-Mail nicht findet, klicke auf „Resend“. Admins können Leute einladen und entfernen. Nur du als Inhaber kannst einen Admin wieder zum Mitglied machen.",
+      "fr": "Chaque invitation occupe une place jusqu'à ce qu'elle soit acceptée. Si quelqu'un ne trouve pas l'e-mail, appuie sur « Resend ». Les admins peuvent inviter et retirer des personnes. Seul toi, le propriétaire, peux refaire d'un admin un simple membre.",
+      "pt": "Cada convite ocupa um lugar até ser aceite. Se alguém não encontrar o email, carregue em «Resend». Os administradores podem convidar e remover pessoas. Só o proprietário pode voltar a tornar um administrador num membro.",
+      "it": "Ogni invito occupa un posto finché non viene accettato. Se qualcuno non trova l'email, premi «Resend». Gli admin possono invitare e rimuovere persone. Solo tu, il proprietario, puoi riportare un admin a membro."
+    },
+    {
+      "es": "Cuando Jamie inicia sesión con ese correo, se une automáticamente, con tu plan: presentaciones ilimitadas, más Polly, todo. Recibes un correo cada vez que alguien se une. Y los miembros pueden salir del equipo por sí mismos cuando quieran.",
+      "de": "Wenn Jamie sich mit dieser E-Mail anmeldet, tritt Jamie automatisch bei – mit deinem Plan: unbegrenzte Präsentationen, mehr Polly, alles. Du bekommst eine E-Mail, wenn jemand beitritt. Und Mitglieder können das Team jederzeit selbst verlassen.",
+      "fr": "Quand Jamie se connecte avec cet e-mail, Jamie rejoint l'équipe automatiquement, avec ton forfait : présentations illimitées, plus de Polly, tout. Tu reçois un e-mail dès que quelqu'un rejoint l'équipe. Et les membres peuvent quitter l'équipe eux-mêmes, quand ils veulent.",
+      "pt": "Quando a Jamie inicia sessão com esse email, entra automaticamente, com o seu plano: apresentações ilimitadas, mais Polly, tudo. Recebe um email sempre que alguém entra. E os membros podem sair da equipa sozinhos, quando quiserem.",
+      "it": "Quando Jamie accede con quell'email, entra automaticamente, con il tuo piano: presentazioni illimitate, più Polly, tutto. Ricevi un'email quando qualcuno si unisce. E i membri possono lasciare il team da soli, quando vogliono."
+    },
+    {
+      "es": "De vuelta como propietario, Jamie ya está en tu equipo. Pagas por todos, en una sola factura. Y si el plan de equipo termina, los miembros conservan todo su trabajo y simplemente vuelven al plan gratuito.",
+      "de": "Zurück als Inhaber: Jamie ist in deinem Team. Du zahlst für alle, auf einer Rechnung. Und falls der Teamplan endet, behalten die Mitglieder all ihre Arbeit und wechseln einfach zurück in den kostenlosen Plan.",
+      "fr": "De retour en tant que propriétaire, Jamie fait partie de ton équipe. Tu paies pour tout le monde, sur une seule facture. Et si le forfait équipe se termine, les membres gardent tout leur travail et repassent simplement au forfait gratuit.",
+      "pt": "De volta como proprietário, a Jamie já está na sua equipa. Paga por todos, numa só fatura. E se o plano de equipa terminar, os membros mantêm todo o trabalho e simplesmente voltam ao plano gratuito.",
+      "it": "Di nuovo come proprietario, Jamie è nel tuo team. Paghi per tutti, con un'unica fattura. E se il piano team finisce, i membri conservano tutto il loro lavoro e tornano semplicemente al piano gratuito."
+    },
+    {
+      "en": "That's your team, set up. If you'd like a hand, email help@pollslide.com, and we'll help you get everyone on board.",
+      "es": "Tu equipo ya está listo. Si necesitas ayuda, escribe a help@pollslide.com y te ayudaremos a incorporar a todos.",
+      "de": "Dein Team ist eingerichtet. Wenn du Hilfe möchtest, schreib an help@pollslide.com – wir helfen dir, alle ins Boot zu holen.",
+      "fr": "Ton équipe est prête. Si tu veux un coup de main, écris à help@pollslide.com et nous t'aiderons à embarquer tout le monde.",
+      "pt": "A sua equipa está configurada. Se precisar de ajuda, escreva para help@pollslide.com e ajudamos a trazer todos a bordo.",
+      "it": "Il tuo team è pronto. Se ti serve una mano, scrivi a help@pollslide.com e ti aiuteremo a coinvolgere tutti."
+    }
+  ]
+}

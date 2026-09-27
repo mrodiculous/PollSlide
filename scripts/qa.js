@@ -37,6 +37,7 @@ const fast = process.argv.includes('--fast');
 const GATES = [
   { name: 'syntax',       script: 'qa-syntax.js',       why: 'inline <script> blocks parse' },
   { name: 'undefined',    script: 'qa-undefined.js',    why: 'nothing is called that is not defined' },
+  { name: 'server-names', script: 'qa-server-undefined.js', why: 'no server code reads a name nobody defined' },
   { name: 'reachability', script: 'qa-reachability.js', why: 'every control can actually be used' },
   { name: 'escaping',     script: 'qa-escaping.js',     why: 'nothing user-typed reaches innerHTML raw' },
   { name: 'rules',        script: 'qa-rules.js',        why: 'database-rules.json will paste, and covers every write' },

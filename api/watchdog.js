@@ -15,7 +15,7 @@ const admin = require('firebase-admin');
 const {
   evalBackupAge, evalErrorSpike, evalTierDrift, evalProbe, evalAiReachable,
   decideNotification, isStoredBackup,
-  evalShareHygiene, evalQidBackfill, evalOrphanGrants, evalFeatureHealth,
+  evalShareHygiene, evalQidBackfill, evalOrphanGrants, evalFeatureHealth, evalTeamDrift,
 } = require('../lib/watchdog');
 const {
   urlsToCheck, planMediaRepair, evalStarterMedia, describeRepair,
@@ -369,6 +369,30 @@ const CHECKS = [
     },
     evaluate: evalProbe,
     hint: 'Check the Vercel dashboard for a failed deploy — a bad build serves the last good one, but a runtime error shows up here.',
+  },
+
+  {
+    id: 'team_drift',
+    title: 'A team\'s billing or members are out of step',
+    severity: 'medium',
+    autoFix: false,   // which side is right (Stripe, the owner, a comp) needs a person
+    async gather(ctx) {
+      const ws = (await ctx.db.ref('workspaces').get()).val() || {};
+      const teams = [];
+      for (const [id, w] of Object.entries(ws)) {
+        if (!w) continue;
+        const members = [];
+        for (const [uid, m] of Object.entries(w.members || {})) {
+          const [t, l] = await Promise.all([ctx.db.ref('users/' + uid + '/tier').get(), ctx.db.ref('users/' + uid + '/workspaceId').get()]);
+          members.push({ email: (m && m.email) || uid, owner: uid === w.ownerUid, tier: t.val() || 'free', linked: l.val() === id });
+        }
+        const owner = members.find(m => m.owner);
+        teams.push({ name: w.name || id, tier: w.tier, comp: !!w.comp, ownerTier: owner ? owner.tier : null, members });
+      }
+      return { teams };
+    },
+    evaluate: evalTeamDrift,
+    hint: 'Open Admin → Teams: the Health column names each problem, and "Put members back on …" re-syncs members. A team whose owner stopped paying usually means a cancelled subscription the webhook missed — check Stripe.',
   },
 
   {

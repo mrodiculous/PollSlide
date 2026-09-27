@@ -37,6 +37,23 @@ const scenes = require(path.join(ROOT, 'scripts', 'video', 'getting-started.js')
 const caps = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts', 'video', 'getting-started.captions.json'), 'utf8')).cues;
 ok('every narrated scene has its translations', caps.length === scenes.length, [caps.length, scenes.length]);
 
+console.log('\nThe team video');
+if (hasSite) {
+  const V = path.join(SITE, 'videos');
+  ok('the team video, poster and email preview are on the site', ['team-setup.mp4', 'team-setup-poster.jpg', 'team-setup-email.gif'].every(f => fs.existsSync(path.join(V, f))));
+  ok('team captions in all six languages', ['en', 'es', 'de', 'fr', 'pt', 'it'].every(l => fs.existsSync(path.join(V, `team-setup.${l}.vtt`))));
+  const help = fs.readFileSync(path.join(SITE, 'help.html'), 'utf8');
+  const teams = help.slice(help.indexOf('<section id="teams">'), help.indexOf('<section id="privacy">'));
+  ok('the help centre Teams section plays it', /\/videos\/team-setup\.mp4/.test(teams));
+  ok('…and names the real menu item, not the old "account menu → Team"', /Team admin/.test(teams) && !/account menu → Team/.test(teams));
+  ok('…and no longer promises a shared presentation library', !/shared home for presentations/.test(teams));
+  ok('the team page is in the sitemap', /pollslide\.com\/team-setup</.test(fs.readFileSync(path.join(SITE, 'sitemap.xml'), 'utf8')));
+}
+const tscenes = require(path.join(ROOT, 'scripts', 'video', 'team-setup.js')).scenes;
+ok('every team scene has its translations', JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts', 'video', 'team-setup.captions.json'), 'utf8')).cues.length === tscenes.length);
+const presT = fs.readFileSync(path.join(ROOT, 'presenter.html'), 'utf8');
+ok('Team admin links to the team video', /href="https:\/\/pollslide\.com\/team-setup"/.test(presT));
+
 console.log('\nGIPHY Production-key package');
 const G = path.join(ROOT, 'SUBMIT-TO-GIPHY');
 const vid = path.join(G, '1-app-demo-video.mp4');

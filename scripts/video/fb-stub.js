@@ -14,7 +14,8 @@
   const CLIENT = Math.random().toString(36).slice(2);
   const sync = (url) => { const x = new XMLHttpRequest(); x.open('GET', url, false); x.send(); return JSON.parse(x.responseText || 'null'); };
   let TREE = sync('/__db/tree') || {};
-  const CONF = sync('/__video/config') || {};
+  const AS = (/[?&]as=(\w+)/.exec(location.search) || [])[1] || '';
+  const CONF = sync('/__video/config' + (AS ? '?as=' + AS : '')) || {};
 
   // ── paths & tree ─────────────────────────────────────────────────────────────
   const split = (p) => String(p || '').split('/').filter(Boolean);
