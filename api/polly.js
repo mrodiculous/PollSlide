@@ -186,7 +186,20 @@ function normalizeDeck(raw) {
 // alone, since there the phrasing is meant to stay faithful.
 // "Pub quiz, all genres" is MEANT to roam; "the French Revolution" is not. One definition,
 // used by the variety nudge, the diversity rule and the on-topic check.
-const isBroadTopic = (topic) => !topic || /general|mixed|misc|any|all\s*genres?|pub\s*quiz|trivia|random|variety/i.test(topic);
+/* A topic is BROAD only when nothing specific is left once the "general" words are gone
+   (fixed 2026-09-28). The old test matched letters anywhere: "Germany", "Botany", "Company"
+   and "How many planets" all contain "any"; "Animal trivia", "General science" and "Mixed
+   martial arts" contain a broad word but name a subject. Each was treated as broad — Polly
+   was told to spread across different subjects (and handed random ones: sport, film…) and
+   the off-topic check was skipped. That is where off-topic questions came from. */
+const BROAD_WORDS = new Set(('general knowledge trivia pub quiz quizzes random mixed mix bag misc miscellaneous ' +
+  'anything everything any all genre genres variety various assorted fun questions question round rounds ' +
+  'night party team teams easy medium hard difficult tricky for about on a an the of and or with some ' +
+  'kids adults family office class students everyone people').split(' '));
+function isBroadTopic(topic) {
+  const words = String(topic || '').toLowerCase().replace(/[^a-z0-9\u00c0-\u024f ]/g, ' ').split(/\s+/).filter(Boolean);
+  return words.filter(w => !BROAD_WORDS.has(w)).length === 0;
+}
 
 function varietyNudge(topic) {
   const pick = (arr, n) => {
@@ -708,10 +721,14 @@ module.exports = async function handler(req, res) {
     const tasks = [
       checkFacts ? (src ? 'the marked answer is NOT supported by the source material, or another option is also supported' : 'the marked answer is wrong, disputed, out of date, or only true under some reading — or another option is also correct') : '',
       checkTopic ? 'the question is not clearly about the topic (a neighbouring or merely related subject counts as off topic)' : '',
+      /* Teachers are asked to be descriptive ("mix of easy and hard, skip Only Fools and
+         Horses, for 8-year-olds"). Those instructions are part of the brief, so a question
+         that breaks one — a skipped subject, the wrong level or audience — is flagged too. */
+      checkTopic ? 'the question goes against the presenter\'s own instructions in the description (for example a subject they asked to skip, or the wrong level or audience)' : '',
     ].filter(Boolean);
     const messages = [
       { role: 'system', content: 'You are a meticulous fact-checker for quiz questions shown to live audiences. Flag a question if ANY of these is true: ' + tasks.join('; ') + '. Be strict about facts: if you are not confident the marked answer is right and the others are wrong, flag it. Return ONLY JSON: {"flag":[{"i":index,"why":"short reason"}]}. An empty list means every question passes.' },
-      { role: 'user', content: (checkTopic ? `Topic: ${topicText.slice(0, 400)}\n\n` : '') + (src && checkFacts ? `SOURCE MATERIAL:\n"""\n${String(src).slice(0, 12000)}\n"""\n\n` : '') + `Questions:\n${list}` },
+      { role: 'user', content: (checkTopic ? `Topic and instructions from the presenter (all of it applies):\n${topicText.slice(0, 2000)}\n\n` : '') + (src && checkFacts ? `SOURCE MATERIAL:\n"""\n${String(src).slice(0, 12000)}\n"""\n\n` : '') + `Questions:\n${list}` },
     ];
     const tryOne = async (cfg) => {
       const raw = await callChat(Object.assign({ messages, temperature: 0, timeoutMs: Math.min(20000, Math.max(4000, DEADLINE - Date.now() - 2000)) }, cfg));

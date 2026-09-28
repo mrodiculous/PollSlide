@@ -106,6 +106,23 @@ function call(providerStatus, providerBody) {
   ok('the writer stays creative (0.7–0.8); the checker is strict (0)', /\(type === 'poll' \|\| type === 'survey'\) \? 0\.8 : 0\.7/.test(polly) && /messages, temperature: 0,/.test(polly));
   ok('every batch is fact-checked by a separate call at temperature 0', /async function review\(/.test(polly) && /messages, temperature: 0,/.test(polly) && /marked answer is wrong, disputed, out of date/.test(polly));
   ok('an unchecked batch is counted, not hidden', /bump\('unchecked', entry\.unchecked\)/.test(polly));
+  // 2026-09-28: 2 of 15 off topic. "Germany", "Botany", "Company", "How many" contain "any";
+  // "Animal trivia" / "General science" name a subject. All were called broad → Polly spread
+  // the set across OTHER subjects and skipped the topic check.
+  const specific = ['History of Germany', 'Company onboarding', 'Botany basics', 'How many planets', 'Animal trivia',
+    'General science for 5th grade', 'Anything about space', 'Mixed martial arts', 'Random number theory', 'Tiffany lamps', 'Miscarriage awareness'];
+  const broadOnes = ['pub quiz, all genres', 'General knowledge', 'Trivia', 'A fun mixed bag for the office party', 'random questions', ''];
+  const wrongS = specific.filter(t => P.isBroadTopic(t)), wrongB = broadOnes.filter(t => !P.isBroadTopic(t));
+  ok('a topic that names a subject is never treated as "broad"', !wrongS.length, wrongS);
+  ok('…while a true grab-bag still is', !wrongB.length, wrongB);
+  const gm = P.buildMessages({ topic: 'History of Germany', type: 'quiz', count: 15 }).map(x => x.content).join('\n');
+  ok('"History of Germany" is locked to its topic, never "different subject areas"', /squarely about: History of Germany/.test(gm) && !/different subject areas/.test(gm) && !/draw especially from/.test(gm));
+  // Teachers are asked to be descriptive in the Polly box — the whole brief must reach the checker.
+  ok('the fact-check reads the WHOLE description (not the first 400 characters)', /topicText\.slice\(0, 2000\)/.test(polly) && !/topicText\.slice\(0, 400\)/.test(polly));
+  ok('…and flags questions that break the teacher\'s own instructions (a skipped subject, the wrong level)', /goes against the presenter\\'s own instructions/.test(polly));
+  const desc = '1990s British sitcoms — mix of easy and hard, include a couple on theme tunes, skip Only Fools and Horses';
+  ok('a descriptive brief counts as a specific topic and is locked in full', !P.isBroadTopic(desc) && P.buildMessages({ topic: desc, type: 'quiz', count: 10 }).map(x => x.content).join('\n').includes('squarely about: ' + desc));
+  ok('a descriptive grab-bag errs to specific — the questions must fit what was described', !P.isBroadTopic('general knowledge for my office party, mostly food and sport'));
   ok('a short delivery is told to the teacher', /Polly wrote \$\{added\} of the \$\{data\.requested\}/.test(pres));
 
   console.log(`\n${pass} passed, ${fail} failed`);
