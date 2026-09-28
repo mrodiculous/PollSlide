@@ -662,6 +662,8 @@ module.exports = async (req, res) => {
         { key: 'BACKUP_MAX_AGE_HOURS', set: has('BACKUP_MAX_AGE_HOURS'), needed: 'How stale a backup may get before alerting. Optional — defaults to 48h.', optional: true },
         { key: 'STRIPE_SECRET_KEY',  set: has('STRIPE_SECRET_KEY'),  needed: 'Missing → the plan-vs-Stripe drift check is skipped entirely.' },
         { key: 'OPENAI_API_KEY',     set: has('OPENAI_API_KEY'),     needed: 'Polly\'s cloud fallback. Missing → Polly fails whenever the Mac is offline.' },
+        { key: 'GEMINI_API_KEY',     set: has('GEMINI_API_KEY'),     needed: 'Lets Polly\'s fact-checker search Google before a question ships. Use a PAID-tier (billing on) key so prompts aren\'t used for training. Optional — without it, OpenAI checks from memory.', optional: true },
+        { key: 'OPENAI_TEXT_MODEL',  set: has('OPENAI_TEXT_MODEL'),  needed: 'Which OpenAI model writes Polly\'s questions. Optional — defaults to gpt-4o-mini; a newer budget model is more accurate for about the same price.', optional: true },
         { key: 'LOCAL_LLM_URL',      set: has('LOCAL_LLM_URL'),      needed: 'The local model on the Mac. Optional if the cloud key is set.', optional: true },
         { key: 'NEXT_PUBLIC_APP_URL',set: has('NEXT_PUBLIC_APP_URL'),needed: 'Optional — defaults to https://app.pollslide.com.', optional: true },
       ],

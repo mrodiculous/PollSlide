@@ -27,6 +27,29 @@
 
 const OPENAI_API_KEY    = process.env.OPENAI_API_KEY;
 const OPENAI_TEXT_MODEL = process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini';
+// Cloud writes first whenever there is a key, unless POLLY_PREFER=local (see genBatch).
+const PREFER_CLOUD = !!process.env.OPENAI_API_KEY && String(process.env.POLLY_PREFER || 'cloud').toLowerCase() !== 'local';
+/* The fact-checker can LOOK THINGS UP: Gemini with Grounding with Google Search, when
+   GEMINI_API_KEY is set (use a PAID-tier key — the free tier may use prompts to improve
+   Google's products). gemini-2.5-flash-lite bills grounding per prompt with a daily free
+   allowance, so one review per batch is effectively free at our volume. */
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+const GEMINI_CHECK_MODEL = process.env.GEMINI_CHECK_MODEL || 'gemini-2.5-flash-lite';
+
+// Gemini generateContent with the google_search tool. Returns the text of the reply.
+async function callGeminiGrounded({ prompt, timeoutMs }) {
+  const ctl = new AbortController(); const tm = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(GEMINI_CHECK_MODEL)}:generateContent`, {
+      method: 'POST', signal: ctl.signal,
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
+      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], tools: [{ google_search: {} }], generationConfig: { temperature: 0 } }),
+    });
+    if (!r.ok) throw new Error('Gemini HTTP ' + r.status + ' ' + (await r.text().catch(() => '')).slice(0, 160));
+    const d = await r.json();
+    return ((d.candidates && d.candidates[0] && d.candidates[0].content && d.candidates[0].content.parts) || []).map(p => p.text || '').join('');
+  } finally { clearTimeout(tm); }
+}
 const OPENAI_BASE       = 'https://api.openai.com/v1';
 
 const LOCAL_LLM_URL     = process.env.LOCAL_LLM_URL || '';      // empty = skip local, go straight to OpenAI
@@ -624,16 +647,27 @@ module.exports = async function handler(req, res) {
        cooler for quizzes and flashcards — because truth is enforced by the separate
        temperature-0 review below, not by making every question dull. */
     const temperature = (type === 'poll' || type === 'survey') ? 0.8 : 0.7;
-    if (LOCAL_LLM_URL) {
-      try {
-        const budget = Math.min(LOCAL_TIMEOUT_MS, Math.max(4000, DEADLINE - Date.now() - CLOUD_RESERVE));
-        return { qs: normalizeQuestions(await callChat({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_LLM_MODEL, messages, timeoutMs: budget, extraHeaders: CF_ACCESS_HEADERS, seed, reasoningEffort: LOCAL_REASONING_EFFORT, temperature }), type), src: 'local' };
-      } catch (err) { console.warn('Polly: local batch failed (' + err.message + ') → OpenAI fallback'); }
-    }
-    if (OPENAI_API_KEY) {
+    const viaLocal = async (reserve) => {
+      const budget = Math.min(LOCAL_TIMEOUT_MS, Math.max(4000, DEADLINE - Date.now() - reserve));
+      return { qs: normalizeQuestions(await callChat({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_LLM_MODEL, messages, timeoutMs: budget, extraHeaders: CF_ACCESS_HEADERS, seed, reasoningEffort: LOCAL_REASONING_EFFORT, temperature }), type), src: 'local' };
+    };
+    const viaCloud = async () => {
       const budget = Math.min(CLOUD_TIMEOUT_MS, Math.max(4000, DEADLINE - Date.now()));
       return { qs: normalizeQuestions(await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: budget, seed, temperature }), type), src: 'openai' };
+    };
+    /* Which model WRITES (2026-09-27). The local 20B model on the Mac invents facts, so
+       with an OpenAI key set the cloud model writes first and the Mac is the fallback.
+       POLLY_PREFER=local restores Mac-first (free, but more fact-check drops). */
+    if (PREFER_CLOUD) {
+      try { return await viaCloud(); }
+      catch (err) { console.warn('Polly: cloud batch failed (' + err.message + ') → local fallback'); if (!LOCAL_LLM_URL) throw err; }
+      return await viaLocal(0);
     }
+    if (LOCAL_LLM_URL) {
+      try { return await viaLocal(CLOUD_RESERVE); }
+      catch (err) { console.warn('Polly: local batch failed (' + err.message + ') → OpenAI fallback'); }
+    }
+    if (OPENAI_API_KEY) return await viaCloud();
     throw new Error('Local LLM unavailable and no OpenAI key set.');
   };
 
@@ -658,7 +692,7 @@ module.exports = async function handler(req, res) {
      Env POLLY_CHECK_MODEL picks a stronger OpenAI model for this job alone.
      Fails OPEN (a missing checker never costs the teacher their questions) and says so in
      the log; a verdict against more than 70% of a batch reads as a confused checker. */
-  let factDropped = 0, unchecked = 0;
+  let factDropped = 0, unchecked = 0, checkedBy = '';
   async function review(qs, topicText, kind, src) {
     if (!qs.length) return new Set();
     const checkTopic = !!topicText && !src && !isBroadTopic(topicText);
@@ -686,7 +720,16 @@ module.exports = async function handler(req, res) {
     };
     try {
       let flags = null;
-      if (OPENAI_API_KEY) { try { flags = await tryOne({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: process.env.POLLY_CHECK_MODEL || OPENAI_TEXT_MODEL }); } catch (e) {} }
+      // 1) Look it up: Gemini + Google Search. 2) OpenAI. 3) A different local model.
+      if (GEMINI_API_KEY) {
+        try {
+          const raw = await callGeminiGrounded({ prompt: messages[0].content + ' Search the web to confirm each marked answer.\n\n' + messages[1].content,
+            timeoutMs: Math.min(25000, Math.max(5000, DEADLINE - Date.now() - 2000)) });
+          const j = parseJsonLoose(raw);
+          if (j && Array.isArray(j.flag)) { flags = j.flag.map(f => ({ i: Number(f && f.i), why: String((f && f.why) || '').slice(0, 120) })).filter(f => Number.isInteger(f.i) && f.i >= 0 && f.i < qs.length); checkedBy = 'gemini+search'; }
+        } catch (e) { console.warn('Polly: grounded review failed (' + e.message + ')'); }
+      }
+      if (!flags && OPENAI_API_KEY) { try { flags = await tryOne({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: process.env.POLLY_CHECK_MODEL || OPENAI_TEXT_MODEL }); checkedBy = checkedBy || 'openai'; } catch (e) {} }
       // Local fallback: a DIFFERENT model from the one that wrote the batch (it tends to repeat
       // its own mistakes). POLLY_LOCAL_CHECK_MODEL, e.g. qwen3:32b on the M4 Pro.
       if (!flags && LOCAL_LLM_URL) { try { flags = await tryOne({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: process.env.POLLY_LOCAL_CHECK_MODEL || LOCAL_LLM_MODEL, extraHeaders: CF_ACCESS_HEADERS, reasoningEffort: LOCAL_REASONING_EFFORT }); } catch (e) {} }
@@ -728,7 +771,7 @@ module.exports = async function handler(req, res) {
   }
 
   // Bill ONE quota unit for the whole generation, however many calls it took.
-  await logGen(quota, { topic: topic.slice(0, 120), type, requested: count, delivered: acc.length, source, ok: true, short: acc.length < count, offTopicDropped, factDropped, unchecked });
+  await logGen(quota, { topic: topic.slice(0, 120), type, requested: count, delivered: acc.length, source, ok: true, short: acc.length < count, offTopicDropped, factDropped, unchecked, checkedBy: checkedBy || null });
   try { await consumeQuota(quota); } catch (e) { /* never fail the response over the counter */ }
   return res.status(200).json({ source, type, topic, questions: acc, requested: count });
   } catch (fatal) {

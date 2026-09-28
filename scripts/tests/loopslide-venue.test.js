@@ -59,9 +59,25 @@ ok('the TV shows who got it right and the fastest, without marking an option', /
 const play = read('play.html');
 ok('phones never name the answer in secret mode', /secret \? esc\(t\('Try again next time round\.'\)\)/.test(play) && /secret \? esc\(t\('Catch it next time round\.'\)\)/.test(play));
 
+console.log('\nGIFs for everything in LoopSlide');
+ok('one click for the whole loop, and one per round', /onclick="gifsView\(null\)"/.test(st) && /onclick="gifsView\(\$\{si\}\)"/.test(st));
+ok('only EMPTY boxes are filled — the venue\'s own pictures are never replaced', /if \(sl\.f === 'img'\) \{ if \(it\.img\) continue;/.test(st) && /if \(it\.optImgs\[oi\]\) continue;/.test(st));
+ok('every answer gets one (so no picture gives the right one away)', /PSGifs\.answerTerm\(o, \{ seed: it\.id \+ ':o' \+ oi, correct: false \}\)/.test(st));
+ok('it stops cleanly at the GIF search\'s hourly limit', /if \(res\.status === 429\) \{ quota = true; break; \}/.test(st));
+ok('"Remove" takes away only what it added', /function gifsRemove\(/.test(st) && /it\.img === g\.img/.test(st));
+ok('a Polly draft can arrive with GIFs already on it', /id="pyGifs" checked/.test(st) && /if \(_wantGifs\) fillGifs\(/.test(st));
+ok('GIPHY is credited', /Powered by GIPHY/.test(st.slice(st.indexOf('function gifsView'))));
+
+console.log('\nPolly: a better writer and a checker that looks things up');
+const pol = read('api/polly.js');
+ok('with an OpenAI key the cloud model writes first; the Mac is the fallback (POLLY_PREFER=local reverses)', /const PREFER_CLOUD = !!process\.env\.OPENAI_API_KEY && String\(process\.env\.POLLY_PREFER \|\| 'cloud'\)/.test(pol) && /if \(PREFER_CLOUD\) \{\s*try \{ return await viaCloud\(\); \}/.test(pol));
+ok('the fact-checker searches Google first when GEMINI_API_KEY is set', /tools: \[\{ google_search: \{\} \}\]/.test(pol) && /if \(GEMINI_API_KEY\) \{/.test(pol));
+ok('the Gemini key travels in a header, never the URL', /'x-goog-api-key': GEMINI_API_KEY/.test(pol) && !/generateContent\?key=/.test(pol));
+ok('which checker ran is logged', /checkedBy: checkedBy \|\| null/.test(pol));
+
 console.log('\nEvery new phrase is in all six languages');
 const I = window.LoopI18n;
-const phrases = ['⏸ Stop showing', 'Back soon!', 'Only who got it right and the fastest — keep the answer secret', 'Write them here — PollSlide hosts them',
+const phrases = ['🎞 GIFs for everything', 'Remove the GIFs we added ({n})', 'Finding GIFs… {k} of {n}', '⏸ Stop showing', 'Back soon!', 'Only who got it right and the fastest — keep the answer secret', 'Write them here — PollSlide hosts them',
   'Fill in the [brackets] in your official rules.', 'Report this page', '{n} of {m} got it right'];
 const missing = [];
 for (const l of ['es', 'de', 'fr', 'pt', 'it']) { I.set(l); for (const p of phrases) if (I.t(p) === p) missing.push(l + ': ' + p); }

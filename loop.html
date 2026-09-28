@@ -82,7 +82,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 <script src="/gifs.js?v=ed7add18"></script>
-<script src="/loop-i18n.js?v=46d57bef"></script>
+<script src="/loop-i18n.js?v=d62db8ea"></script>
 <script src="/loop-engine.js?v=042b75ae"></script>
 <script>
 /* LoopSlide Studio — build, publish and run loops for public screens.
@@ -362,6 +362,7 @@ function editorView() {
       <span class="note">Each round ends with its own leaderboard. With more than one round, the loop ends with the overall leaderboard.</span>
       <span style="margin-left:auto;" class="row">
         <button class="btn primary" onclick="pollyView()">✨ Draft with Polly</button>
+        <button class="btn" onclick="gifsView(null)" title="Fill every empty question, answer and card with a GIF">🎞 GIFs for everything</button>
         <button class="btn" onclick="importView()">⬇ Import a PollSlide deck</button>
         <button class="btn" onclick="importFile()">Import file</button>
         <button class="btn" onclick="exportFile()">Export file</button>
@@ -377,7 +378,7 @@ function setHtml(s, si) {
       <button class="btn sm" onclick="moveSet(${si},-1)">↑</button><button class="btn sm" onclick="moveSet(${si},1)">↓</button>
       <button class="btn sm danger" onclick="delSet(${si})">Delete round</button></div>
     ${(s.items || []).map((it, ii) => it.type === 'ad' ? adHtml(it, si, ii) : qHtml(it, si, ii)).join('') || '<p class="note" style="margin:12px 0;">No questions yet.</p>'}
-    <div class="row" style="margin-top:8px;"><button class="btn sm" onclick="addQ(${si})">+ Question</button><button class="btn sm" onclick="addAd(${si},false)">+ Media card</button><button class="btn sm" onclick="addAd(${si},true)">+ Sponsor card</button></div>
+    <div class="row" style="margin-top:8px;"><button class="btn sm" onclick="addQ(${si})">+ Question</button><button class="btn sm" onclick="addAd(${si},false)">+ Media card</button><button class="btn sm" onclick="addAd(${si},true)">+ Sponsor card</button><button class="btn sm" onclick="gifsView(${si})" title="GIFs for every question and answer in this round">🎞 GIFs</button></div>
   </div>`;
 }
 function itemTools(si, ii) {
@@ -741,6 +742,7 @@ function pollyView() {
     <div class="cols"><div><label class="f">Kind of questions</label><select id="pyKind"><option value="quiz">Trivia — with a right answer</option><option value="survey">Opinion poll — no right answer</option></select></div>
       <div><label class="f">How many</label><input id="pyN" type="number" min="1" max="${room}" value="${n}"></div></div>
     <label class="row" style="margin-top:12px;font-size:14px;"><input type="checkbox" id="pyFacts" checked> Add a “💡 Did you know?” card after every few questions</label>
+    <label class="row" style="margin-top:8px;font-size:14px;"><input type="checkbox" id="pyGifs" checked> 🎞 Add GIFs to the questions and answers (free, a few seconds)</label>
     <label class="row" style="margin-top:8px;font-size:14px;"><input type="checkbox" id="pyPics"> Add a Polly picture to each question</label>
     <p class="note" style="margin:2px 0 0 24px;">Each picture uses one Polly credit from your plan.</p>
     <div class="row" style="margin-top:14px;"><button class="btn primary" id="pyGo" onclick="pollyGo()">✨ Draft questions</button><button class="btn" onclick="closeModal()">Cancel</button></div>
@@ -769,6 +771,7 @@ async function pollyGo() {
     }).filter(it => it.text && it.options.length >= 2);
     if (!items.length) throw new Error('no usable questions');
     const wantFacts = $('pyFacts') && $('pyFacts').checked, wantPics = $('pyPics') && $('pyPics').checked;
+    _wantGifs = !!($('pyGifs') && $('pyGifs').checked);
     /* Fun-fact cards from Polly's own explanations: one after every third question, only
        while the plan has room — cards count as slides like any other. */
     let round = items;
@@ -791,6 +794,8 @@ async function pollyGo() {
     closeModal(); editorView();
     toast(T('Polly drafted {n} question(s). Check them before you publish.', { n: items.length }));
     if (wantPics) pollyPictures(set);
+    // GIFs fill whatever the pictures don't: pictures go in the question box first.
+    if (_wantGifs) fillGifs([cur.sets.length - 1], { q: !wantPics, o: true, card: true }).then(r => { editorView(); gifToast(r); });
   } catch (e) {
     go.disabled = false; go.textContent = T('✨ Draft questions');
     $('pySt').textContent = T('Polly couldn’t write those just now. Try again, or rephrase the topic.');
@@ -903,6 +908,84 @@ function mediaUpload() {
     } catch (e) { toast('Upload failed — try again.'); }
   };
   inp.click();
+}
+
+/* ── GIFs FOR EVERYTHING (2026-09-27) ─────────────────────────────────────────
+   The PollSlide editor could fill a whole deck with GIFs in one click; LoopSlide could only
+   add one at a time. Same search (/api/gif-search: server-side, G-rated, GIPHY credited),
+   same picking (PSGifs), and the same promises: only EMPTY boxes are filled — the venue's
+   own pictures are never touched — and "Remove" takes away only what this added. */
+let _wantGifs = false;
+function gifSlots(sets, want) {
+  const out = [];
+  sets.forEach(si => (cur.sets[si].items || []).forEach((it, ii) => {
+    if (it.type === 'q') {
+      if (want.q && !it.img && it.text) out.push({ si, ii, f: 'img', term: PSGifs.searchTerm(it.text), seed: it.id + ':q' });
+      if (want.o) (it.options || []).forEach((o, oi) => { if (o && !((it.optImgs || [])[oi])) out.push({ si, ii, f: 'o' + oi, term: PSGifs.answerTerm(o, { seed: it.id + ':o' + oi, correct: false }), seed: it.id + ':o' + oi, fallback: PSGifs.answerTerm('', { seed: it.id + ':o' + oi, correct: false }) }); });
+    } else if (want.card && it.type === 'ad' && !it.sponsored && !it.img && (it.headline || it.body)) {
+      out.push({ si, ii, f: 'img', term: PSGifs.searchTerm(it.body || it.headline), seed: it.id + ':c' });
+    }
+  }));
+  return out.filter(x => x.term || x.fallback);
+}
+async function gifSearchOne(term) {
+  const r = await fetch('/api/gif-search', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ q: term, limit: 8 }) });
+  const d = await readJson(r);
+  return { ok: r.ok, status: r.status, d };
+}
+async function fillGifs(sets, want, onStep) {
+  const slots = gifSlots(sets, want); let done = 0, quota = false, failed = 0, credit = '';
+  for (let k = 0; k < slots.length; k++) {
+    const sl = slots[k]; if (onStep) onStep(k + 1, slots.length);
+    let res = await gifSearchOne(sl.term || sl.fallback);
+    if (res.status === 429) { quota = true; break; }
+    let g = res.ok ? PSGifs.pickBest(res.d.results || [], { seed: sl.seed }) : null;
+    if (!g && sl.fallback && sl.term) { res = await gifSearchOne(sl.fallback); if (res.status === 429) { quota = true; break; } g = res.ok ? PSGifs.pickBest(res.d.results || [], { seed: sl.seed }) : null; }
+    if (res.d && res.d.attribution) credit = res.d.attribution;
+    if (!g) { if (!res.ok) failed++; if (failed >= 3 && !done) break; continue; }
+    const it = cur.sets[sl.si].items[sl.ii];
+    it._gifs = it._gifs || {};                       // remembers what WE put where, for "Remove"
+    if (sl.f === 'img') { if (it.img) continue; it.img = g.url; it._gifs.img = g.url; }
+    else { const oi = +sl.f.slice(1); it.optImgs = it.optImgs || []; if (it.optImgs[oi]) continue; it.optImgs[oi] = g.url; it._gifs['o' + oi] = g.url; }
+    done++;
+  }
+  return { done, total: slots.length, quota, credit };
+}
+function gifToast(r) {
+  if (r.quota) toast(T('Added {n} GIFs, then hit the GIF search’s hourly limit — try the rest in a few minutes.', { n: r.done }));
+  else if (r.done) toast(T('Added {n} GIFs. Check them before you publish.', { n: r.done }) + (r.credit ? ' · ' + r.credit : ''));
+  else if (r.total) toast(T('GIF search isn’t available right now.'));
+}
+function gifsView(si) {
+  const sets = si === null ? cur.sets.map((_, i) => i) : [si];
+  const cnt = (w) => gifSlots(sets, w).length;
+  const ours = sets.reduce((n, i) => n + cur.sets[i].items.reduce((m, it) => m + Object.keys(it._gifs || {}).length, 0), 0);
+  modal(`<h2>🎞 ${esc(si === null ? T('GIFs for everything') : T('GIFs for this round'))}</h2>
+    <p class="note" style="margin-bottom:10px;">${esc(T('Fills the empty boxes with a GIF that matches the words. Your own pictures are never replaced, and you can change or remove any GIF afterwards.'))}</p>
+    <label class="row" style="font-size:14px;"><input type="checkbox" id="gfQ" checked> ${esc(T('Questions'))} <span class="note">(${cnt({ q: 1 })})</span></label>
+    <label class="row" style="margin-top:6px;font-size:14px;"><input type="checkbox" id="gfO" checked> ${esc(T('Answers — every answer gets one, so a picture never gives the right one away'))} <span class="note">(${cnt({ o: 1 })})</span></label>
+    <label class="row" style="margin-top:6px;font-size:14px;"><input type="checkbox" id="gfC" checked> ${esc(T('Fun-fact and media cards'))} <span class="note">(${cnt({ card: 1 })})</span></label>
+    <div class="row" style="margin-top:14px;"><button class="btn primary" id="gfGo" onclick="gifsGo(${si === null ? 'null' : si})">🎞 ${esc(T('Find GIFs'))}</button>
+      ${ours ? `<button class="btn" onclick="gifsRemove(${si === null ? 'null' : si})">${esc(T('Remove the GIFs we added ({n})', { n: ours }))}</button>` : ''}
+      <button class="btn" onclick="closeModal()">${esc(T('Cancel'))}</button></div>
+    <p class="note" id="gfSt" style="margin-top:8px;">Powered by GIPHY · ${esc(T('safe search is always on'))}</p>`);
+}
+async function gifsGo(si) {
+  const sets = si === null ? cur.sets.map((_, i) => i) : [si];
+  const want = { q: $('gfQ').checked, o: $('gfO').checked, card: $('gfC').checked };
+  const go = $('gfGo'); go.disabled = true;
+  const r = await fillGifs(sets, want, (k, n) => { $('gfSt').textContent = T('Finding GIFs… {k} of {n}', { k, n }); });
+  closeModal(); editorView(); gifToast(r);
+}
+function gifsRemove(si) {
+  const sets = si === null ? cur.sets.map((_, i) => i) : [si]; let n = 0;
+  sets.forEach(i => cur.sets[i].items.forEach(it => {
+    const g = it._gifs || {};
+    if (g.img && it.img === g.img) { it.img = ''; n++; }
+    Object.keys(g).filter(k => k[0] === 'o').forEach(k => { const oi = +k.slice(1); if (it.optImgs && it.optImgs[oi] === g[k]) { it.optImgs[oi] = ''; n++; } });
+    delete it._gifs;
+  }));
+  closeModal(); editorView(); toast(T('Removed {n} GIFs. Your own pictures are untouched.', { n }));
 }
 
 /* ── LOGO: upload one, or keep a link (2026-09-27) ───────────────────────────
