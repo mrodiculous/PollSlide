@@ -105,7 +105,6 @@ function call(providerStatus, providerBody) {
   ok('surveys are not told there is a right answer', !/STRICT ABOUT WHAT IS TRUE/.test(P.buildMessages({ topic: 'lunch', type: 'survey', count: 3 }).map(x => x.content).join('\n')));
   ok('the writer stays creative (0.7–0.8); the checker is strict (0)', /\(type === 'poll' \|\| type === 'survey'\) \? 0\.8 : 0\.7/.test(polly) && /messages, temperature: 0,/.test(polly));
   ok('every batch is fact-checked by a separate call at temperature 0', /async function review\(/.test(polly) && /messages, temperature: 0,/.test(polly) && /marked answer is wrong, disputed, out of date/.test(polly));
-  ok('a stronger checker model can be set on its own (POLLY_CHECK_MODEL)', /process\.env\.POLLY_CHECK_MODEL \|\| OPENAI_TEXT_MODEL/.test(polly));
   ok('an unchecked batch is counted, not hidden', /bump\('unchecked', entry\.unchecked\)/.test(polly));
   ok('a short delivery is told to the teacher', /Polly wrote \$\{added\} of the \$\{data\.requested\}/.test(pres));
 

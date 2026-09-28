@@ -235,16 +235,12 @@ module.exports = async function handler(req, res) {
     const messages = buildMessages({ question, texts, distribution, topic, language });
     let suggestions = null, source = '';
 
-    /* Co-pilot WRITES QUESTIONS, so it follows Polly's split (2026-09-27): the knowledgeable
-       cloud model (POLLY_MODEL) first when there's a key, the Mac as the fallback.
-       POLLY_PREFER=local restores Mac-first. */
-    const POLLY_MODEL = process.env.POLLY_MODEL || OPENAI_TEXT_MODEL;
-    const WRITER_BASE = process.env.POLLY_BASE_URL || OPENAI_BASE;
-    const WRITER_KEY  = process.env.POLLY_BASE_URL ? (process.env.POLLY_API_KEY || '') : OPENAI_API_KEY;
-    const preferCloud = !!WRITER_KEY && String(process.env.POLLY_PREFER || 'cloud').toLowerCase() !== 'local';
+    /* Co-pilot WRITES QUESTIONS, so like Polly the OpenAI model goes first and the Mac is the
+       fallback (Rod, 2026-09-28: one model, OPENAI_TEXT_MODEL). */
+    const preferCloud = !!OPENAI_API_KEY;
     if (preferCloud) {
       try {
-        const raw = await callChat({ baseURL: WRITER_BASE, apiKey: WRITER_KEY, model: POLLY_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS });
+        const raw = await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS });
         suggestions = parseSuggestions(raw);
         if (suggestions) source = 'openai';
       } catch (err) { console.warn('Co-pilot: cloud failed (' + err.message + ') → local fallback'); }
@@ -260,9 +256,9 @@ module.exports = async function handler(req, res) {
     }
 
     // 2) OpenAI fallback — on local unreachable, too slow, OR unparseable output.
-    if (!suggestions && WRITER_KEY && !preferCloud) {
+    if (!suggestions && OPENAI_API_KEY && !preferCloud) {
       try {
-        const raw = await callChat({ baseURL: WRITER_BASE, apiKey: WRITER_KEY, model: POLLY_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS });
+        const raw = await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS });
         suggestions = parseSuggestions(raw);
         if (suggestions) source = 'openai';
       } catch (err) { console.error('Co-pilot: OpenAI error:', err.message); }
