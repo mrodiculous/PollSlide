@@ -63,7 +63,7 @@ const CF_ACCESS_HEADERS = (process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACC
 // serverless budget (vercel.json). Recommended for gpt-oss:20b: LOCAL_TIMEOUT_MS=42000
 // and CLOUD_TIMEOUT_MS=15000 (= 57s, leaves margin).
 const LOCAL_TIMEOUT_MS  = parseInt(process.env.LOCAL_TIMEOUT_MS, 10) || 30000;  // Mac's head-start before cloud fallback
-const CLOUD_TIMEOUT_MS  = parseInt(process.env.CLOUD_TIMEOUT_MS, 10) || 20000;
+const CLOUD_TIMEOUT_MS  = parseInt(process.env.CLOUD_TIMEOUT_MS, 10) || 45000;   // newer models think before answering; 20s cut them off
 
 // Whole-request time budget for the top-up loop (below). Sits ~15s under the maxDuration in
 // vercel.json (180s on the Pro plan), which is what lets the local model carry a whole large
@@ -78,7 +78,9 @@ const CLOUD_TIMEOUT_MS  = parseInt(process.env.CLOUD_TIMEOUT_MS, 10) || 20000;
 // with "doesn't match any Serverless Functions inside the api directory". Raise the shared
 // maxDuration instead. That's safe here because every endpoint enforces its own, much shorter
 // AbortController timeout, so the higher ceiling only ever benefits this top-up loop.
-const POLLY_BUDGET_MS   = parseInt(process.env.POLLY_BUDGET_MS, 10) || 165000;
+/* 80s, not 165s (2026-09-28): app.pollslide.com sits behind Cloudflare, which gives up after
+   100 seconds and shows the teacher "524". Polly now always answers inside that, with what it has. */
+const POLLY_BUDGET_MS   = Math.min(parseInt(process.env.POLLY_BUDGET_MS, 10) || 80000, 85000);
 
 // Supported content types → how Polly should think about each.
 // Forward-feature: matches the Poll/Survey/Quiz/Study product suite.
@@ -298,29 +300,43 @@ function buildMessages({ topic, type, count, difficulty, audience, source, langu
 }
 
 // One helper for BOTH local Ollama and OpenAI — identical request shape.
+/* Settings a model has refused, per base URL + model (2026-09-28). Newer OpenAI models
+   reject a custom temperature (and older ones reject reasoning_effort); every call then
+   failed at once and Polly silently fell back to the Mac — slow, and the model that
+   invents facts. Now a refused setting is dropped, remembered, and the call retried. */
+const REFUSED = new Map();
+const TUNABLE = ['temperature', 'seed', 'reasoning_effort', 'response_format'];
 async function callChat({ baseURL, apiKey, model, messages, timeoutMs, extraHeaders = {}, seed, reasoningEffort, temperature }) {
+  const key = baseURL + '|' + model;
+  const refused = REFUSED.get(key) || new Set();
+  // OpenAI: think briefly — fast enough for a waiting teacher; the review catches mistakes.
+  const effort = reasoningEffort || (baseURL === OPENAI_BASE ? (process.env.OPENAI_REASONING_EFFORT || 'low') : '');
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const r = await fetch(`${baseURL}/chat/completions`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, ...extraHeaders },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: temperature == null ? 0.8 : temperature,
-        ...(seed != null ? { seed } : {}),
-        ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
-        response_format: { type: 'json_object' },
-      }),
-      signal: controller.signal,
-    });
-    if (!r.ok) {
+    for (let tries = 0; tries < TUNABLE.length + 1; tries++) {
+      const body = { model, messages };
+      if (!refused.has('temperature')) body.temperature = temperature == null ? 0.8 : temperature;
+      if (seed != null && !refused.has('seed')) body.seed = seed;
+      if (effort && !refused.has('reasoning_effort')) body.reasoning_effort = effort;
+      if (!refused.has('response_format')) body.response_format = { type: 'json_object' };
+      const r = await fetch(`${baseURL}/chat/completions`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, ...extraHeaders },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      if (r.ok) {
+        const data = await r.json();
+        return data.choices?.[0]?.message?.content || '';
+      }
       const detail = await r.text().catch(() => '');
-      throw new Error(`HTTP ${r.status} ${detail.slice(0, 200)}`);
+      const bad = r.status === 400 && TUNABLE.find(p => p in body && new RegExp(p, 'i').test(detail) && /unsupported|not support|does not support|invalid/i.test(detail));
+      if (!bad) throw new Error(`HTTP ${r.status} ${detail.slice(0, 200)}`);
+      refused.add(bad); REFUSED.set(key, refused);
+      console.warn(`Polly: ${model} refuses "${bad}" — retrying without it`);
     }
-    const data = await r.json();
-    return data.choices?.[0]?.message?.content || '';
+    throw new Error('model refused every optional setting');
   } finally {
     clearTimeout(timer);
   }
@@ -717,22 +733,34 @@ module.exports = async function handler(req, res) {
      • One empty round is not the end — the next asks with everything so far as `avoid`.
      • Each batch's NEW questions are checked for topic by a second, cheap call and the
        strays dropped before they count; the loop then tops up the gap. */
+  /* In PARALLEL (2026-09-28): the batches used to run one after another — write, check,
+     write, check — and 30 questions took long enough for Cloudflare to cut the teacher off
+     ("524"). Now each round writes up to MAX_PARALLEL batches at once, each checked as it
+     lands; a later round (if time allows) tops up anything the checks removed. Different
+     random lenses per call keep parallel batches from repeating each other, and dedupe
+     catches the rest. */
+  const MAX_PARALLEL = 4;
   let emptyRounds = 0;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS + 2 && acc.length < count && Date.now() < DEADLINE; attempt++) {
+  for (let round = 0; round < MAX_ATTEMPTS && acc.length < count && Date.now() < DEADLINE - 8000; round++) {
     const missing = count - acc.length;
-    const need = Math.min(missing + Math.max(1, Math.ceil(missing * 0.15)), MAX_PER_CALL + 2);
-    let batch;
-    try {
-      const r = await genBatch(need, [...avoid, ...acc.map(asAvoid)]);
-      batch = r.qs; source = source || r.src;
-    } catch (err) { lastErr = err; break; }              // no provider worked — return what we have
+    const want = missing + Math.max(1, Math.ceil(missing * 0.2));          // spares for dedupe + checks
+    const n = Math.min(MAX_PARALLEL, Math.ceil(want / MAX_PER_CALL));
+    const size = Math.ceil(want / n);
+    const avoidNow = [...avoid, ...acc.map(asAvoid)];
+    const results = await Promise.allSettled(Array.from({ length: n }, async () => {
+      const r = await genBatch(size, avoidNow);
+      const fresh = dropRepeats(r.qs, avoidNow, type);
+      const bad = await review(fresh, topic, type, sourceMaterial);
+      return { src: r.src, qs: fresh.filter((q, i) => !bad.has(i)), dropped: bad.size };
+    }));
     const before = acc.length;
-    // Dedup the batch against everything so far (dropRepeats seeds from `avoid`).
-    let merged = dropRepeats([...acc, ...batch], avoid, type);
-    const fresh = merged.slice(before);
-    const strays = await review(fresh, topic, type, sourceMaterial);
-    if (strays.size) { offTopicDropped += strays.size; merged = merged.filter((q, i) => i < before || !strays.has(i - before)); }
-    acc = merged.slice(0, count);
+    for (const r of results) {
+      if (r.status !== 'fulfilled') { lastErr = r.reason; continue; }
+      source = source || r.value.src; offTopicDropped += r.value.dropped;
+      acc = dropRepeats([...acc, ...r.value.qs], avoid, type);
+    }
+    acc = acc.slice(0, count);
+    if (results.every(r => r.status === 'rejected')) break;             // no provider worked — return what we have
     if (acc.length === before) { if (++emptyRounds >= 2) break; } else emptyRounds = 0;
   }
 

@@ -7842,7 +7842,8 @@ async function runPolly() {
     let data; try { data = JSON.parse(text); } catch(_) { data = null; }
     if (!data) {
       throw new Error(r.status === 404 ? 'Polly isn’t deployed yet (api/polly.js).'
-        : 'Polly hit a server error (' + r.status + '). Check the AI key in Vercel.');
+        : (r.status === 524 || r.status === 504) ? 'Polly took too long to answer. Try again, or ask for fewer questions at a time.'
+        : 'Polly hit a server error (' + r.status + '). Please try again in a moment.');
     }
     if (r.status === 429 || data.overLimit) {   // monthly quota reached (server-enforced)
       goBtn.disabled = false; status.style.display = 'none';
@@ -7879,7 +7880,9 @@ async function runPolly() {
     renderEditor(selIdx);
     scheduleSave();
     closePolly();
-    toast(`✨ Polly added ${added} ${PRODUCTS[activeProduct].short.toLowerCase()} · via ${data.source === 'local' ? 'your Mac 🖥️' : 'OpenAI ☁️'}`, 'success');
+    // Which AI wrote them is for Admin → Polly log, not for teachers: "via your Mac" read as
+    // their own computer (and alarmed Windows users), and a vendor name told them nothing.
+    toast(`✨ Polly added ${added} ${PRODUCTS[activeProduct].short.toLowerCase()} — check them before you present.`, 'success');
     // Never let a short delivery pass silently — say how many, and how to get the rest.
     if (data.requested && added < data.requested) {
       setTimeout(() => toast(`Polly wrote ${added} of the ${data.requested} you asked for. Ask again for ${data.requested - added} more — she won't repeat these.`, 'warn'), 1800);
