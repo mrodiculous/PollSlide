@@ -27,8 +27,20 @@
 
 const OPENAI_API_KEY    = process.env.OPENAI_API_KEY;
 const OPENAI_TEXT_MODEL = process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini';
+/* The split (Rod, 2026-09-27): jobs that need to KNOW things — writing questions, flashcards,
+   decks — use POLLY_MODEL (e.g. gpt-6-luna); jobs that only work on text they're given
+   (translation, themes, summaries, grading) stay on the Mac first, with OPENAI_TEXT_MODEL
+   as their cheap cloud fallback. */
+const POLLY_MODEL = process.env.POLLY_MODEL || OPENAI_TEXT_MODEL;
+/* WHERE the writer runs. Any OpenAI-compatible service works: POLLY_BASE_URL + POLLY_API_KEY
+   (e.g. Ollama Cloud: https://ollama.com/v1 with POLLY_MODEL=gpt-oss:120b or
+   deepseek-v4.1-flash; or Groq). Unset → OpenAI with OPENAI_API_KEY. The fact-checker
+   deliberately stays on a different vendor (Gemini/OpenAI), so one model never marks its
+   own homework. */
+const WRITER_BASE = process.env.POLLY_BASE_URL || 'https://api.openai.com/v1';
+const WRITER_KEY  = process.env.POLLY_BASE_URL ? (process.env.POLLY_API_KEY || '') : (process.env.OPENAI_API_KEY || '');
 // Cloud writes first whenever there is a key, unless POLLY_PREFER=local (see genBatch).
-const PREFER_CLOUD = !!process.env.OPENAI_API_KEY && String(process.env.POLLY_PREFER || 'cloud').toLowerCase() !== 'local';
+const PREFER_CLOUD = !!WRITER_KEY && String(process.env.POLLY_PREFER || 'cloud').toLowerCase() !== 'local';
 /* The fact-checker can LOOK THINGS UP: Gemini with Grounding with Google Search, when
    GEMINI_API_KEY is set (use a PAID-tier key — the free tier may use prompts to improve
    Google's products). gemini-2.5-flash-lite bills grounding per prompt with a daily free
@@ -609,15 +621,17 @@ module.exports = async function handler(req, res) {
     const messages = buildDeckMessages({ topic, count, includePolls, includeImages, source: sourceMaterial, language });
     const seed = newSeed();
     let slides = null, source = '';
-    if (LOCAL_LLM_URL) {
-      try { slides = normalizeDeck(await callChat({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_LLM_MODEL, messages, timeoutMs: LOCAL_TIMEOUT_MS, extraHeaders: CF_ACCESS_HEADERS, seed, reasoningEffort: LOCAL_REASONING_EFFORT })); source = 'local'; }
-      catch (err) { console.warn('Polly: local deck failed (' + err.message + ') → OpenAI fallback'); }
-    }
-    if (!slides) {
-      if (!OPENAI_API_KEY) return res.status(503).json({ error: 'Local LLM unavailable and no OpenAI key set.' });
-      try { slides = normalizeDeck(await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS, seed })); source = 'openai'; }
+    // A deck is facts too: the knowledgeable cloud model writes first, the Mac is the fallback.
+    const deckCloud = async () => { slides = normalizeDeck(await callChat({ baseURL: WRITER_BASE, apiKey: WRITER_KEY, model: POLLY_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS, seed, temperature: 0.7 })); source = process.env.POLLY_BASE_URL ? 'cloud' : 'openai'; };
+    const deckLocal = async () => { slides = normalizeDeck(await callChat({ baseURL: LOCAL_LLM_URL, apiKey: 'ollama', model: LOCAL_LLM_MODEL, messages, timeoutMs: LOCAL_TIMEOUT_MS, extraHeaders: CF_ACCESS_HEADERS, seed, reasoningEffort: LOCAL_REASONING_EFFORT })); source = 'local'; };
+    if (PREFER_CLOUD) { try { await deckCloud(); } catch (err) { console.warn('Polly: cloud deck failed (' + err.message + ') → local fallback'); } }
+    if (!slides && LOCAL_LLM_URL) { try { await deckLocal(); } catch (err) { console.warn('Polly: local deck failed (' + err.message + ')'); } }
+    if (!slides && !PREFER_CLOUD) {
+      if (!WRITER_KEY) return res.status(503).json({ error: 'Local LLM unavailable and no OpenAI key set.' });
+      try { await deckCloud(); }
       catch (err) { console.error('Polly: OpenAI error:', err.message); return res.status(503).json({ error: 'AI generation failed', detail: err.message }); }
     }
+    if (!slides) return res.status(503).json({ error: 'AI generation failed', detail: 'no provider produced a deck' });
     await logGen(quota, { topic: topic.slice(0, 120), type, requested: count, delivered: slides.length, source, ok: true });
     try { await consumeQuota(quota); } catch (e) { /* never fail the response over the counter */ }
     return res.status(200).json({ source, type, topic, slides });
@@ -653,7 +667,7 @@ module.exports = async function handler(req, res) {
     };
     const viaCloud = async () => {
       const budget = Math.min(CLOUD_TIMEOUT_MS, Math.max(4000, DEADLINE - Date.now()));
-      return { qs: normalizeQuestions(await callChat({ baseURL: OPENAI_BASE, apiKey: OPENAI_API_KEY, model: OPENAI_TEXT_MODEL, messages, timeoutMs: budget, seed, temperature }), type), src: 'openai' };
+      return { qs: normalizeQuestions(await callChat({ baseURL: WRITER_BASE, apiKey: WRITER_KEY, model: POLLY_MODEL, messages, timeoutMs: budget, seed, temperature }), type), src: process.env.POLLY_BASE_URL ? 'cloud' : 'openai' };
     };
     /* Which model WRITES (2026-09-27). The local 20B model on the Mac invents facts, so
        with an OpenAI key set the cloud model writes first and the Mac is the fallback.
@@ -667,8 +681,8 @@ module.exports = async function handler(req, res) {
       try { return await viaLocal(CLOUD_RESERVE); }
       catch (err) { console.warn('Polly: local batch failed (' + err.message + ') → OpenAI fallback'); }
     }
-    if (OPENAI_API_KEY) return await viaCloud();
-    throw new Error('Local LLM unavailable and no OpenAI key set.');
+    if (WRITER_KEY) return await viaCloud();
+    throw new Error('Local LLM unavailable and no cloud key set.');
   };
 
   // Compact avoid-entry for a shaped question, so top-up calls don't repeat what we have.

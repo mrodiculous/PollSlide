@@ -70,10 +70,15 @@ ok('GIPHY is credited', /Powered by GIPHY/.test(st.slice(st.indexOf('function gi
 
 console.log('\nPolly: a better writer and a checker that looks things up');
 const pol = read('api/polly.js');
-ok('with an OpenAI key the cloud model writes first; the Mac is the fallback (POLLY_PREFER=local reverses)', /const PREFER_CLOUD = !!process\.env\.OPENAI_API_KEY && String\(process\.env\.POLLY_PREFER \|\| 'cloud'\)/.test(pol) && /if \(PREFER_CLOUD\) \{\s*try \{ return await viaCloud\(\); \}/.test(pol));
+ok('with an OpenAI key the cloud model writes first; the Mac is the fallback (POLLY_PREFER=local reverses)', /const PREFER_CLOUD = !!WRITER_KEY && String\(process\.env\.POLLY_PREFER \|\| 'cloud'\)/.test(pol) && /if \(PREFER_CLOUD\) \{\s*try \{ return await viaCloud\(\); \}/.test(pol));
 ok('the fact-checker searches Google first when GEMINI_API_KEY is set', /tools: \[\{ google_search: \{\} \}\]/.test(pol) && /if \(GEMINI_API_KEY\) \{/.test(pol));
 ok('the Gemini key travels in a header, never the URL', /'x-goog-api-key': GEMINI_API_KEY/.test(pol) && !/generateContent\?key=/.test(pol));
 ok('which checker ran is logged', /checkedBy: checkedBy \|\| null/.test(pol));
+const cop = read('api/copilot.js');
+ok('the split: knowledge jobs use POLLY_MODEL (questions, decks, Co-pilot)', /model: POLLY_MODEL, messages, timeoutMs: budget/.test(pol) && /const deckCloud = async[\s\S]{0,160}model: POLLY_MODEL/.test(pol) && /model: POLLY_MODEL, messages, timeoutMs: CLOUD_TIMEOUT_MS/.test(cop));
+ok('the writer can run on any OpenAI-compatible service (e.g. Ollama Cloud) via POLLY_BASE_URL + POLLY_API_KEY', /const WRITER_BASE = process\.env\.POLLY_BASE_URL \|\| 'https:\/\/api\.openai\.com\/v1'/.test(pol) && /baseURL: WRITER_BASE, apiKey: WRITER_KEY/.test(pol) && /baseURL: WRITER_BASE, apiKey: WRITER_KEY/.test(cop));
+ok('…and decks and Co-pilot are cloud-first like Polly', /if \(PREFER_CLOUD\) \{ try \{ await deckCloud\(\); \}/.test(pol) && /if \(preferCloud\) \{/.test(cop));
+ok('text-only jobs stay Mac-first (translation, themes, summaries/grading)', ['api/translate.js', 'api/loop-translate.js', 'api/insights.js', 'api/ai.js'].every(f => !/POLLY_MODEL|PREFER_CLOUD/.test(read(f))));
 
 console.log('\nEvery new phrase is in all six languages');
 const I = window.LoopI18n;
