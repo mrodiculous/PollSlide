@@ -463,6 +463,11 @@ function dropRepeats(questions, avoid, type) {
       ? answerKey(q.back)
       : answerKey((q.correctAnswers || []).map(i => (q.options || [])[i]));
     const dupe = seen.some(s => {
+      /* Near-identical wording is a repeat WHATEVER the answer (2026-09-28). With batches
+         written in parallel, two can ask the very same question and disagree on the answer —
+         keeping both put a duplicate on screen, one of them wrong. "Capital of France" vs
+         "capital of Spain" share only a third of their words, far below this bar. */
+      if (jaccard(w, s.w) >= 0.85) return true;
       if (s.k && k) {
         if (s.k !== k) return false;                       // different answer = different question
         /* SAME ANSWER is the signal that actually works.
@@ -574,7 +579,7 @@ module.exports = async function handler(req, res) {
   const type       = ['poll', 'survey', 'quiz', 'study', 'presentation', 'deck'].includes(body.type) ? body.type : 'quiz';
   const includePolls  = body.includePolls  !== false;   // deck only: polls woven in (default on)
   const includeImages = body.includeImages !== false;   // deck only: imagePrompts (default on)
-  const count      = Math.min(Math.max(parseInt(body.count, 10) || 1, 1), 30);   // clamp 1–10
+  const count      = Math.min(Math.max(parseInt(body.count, 10) || 1, 1), 100);  // up to 100 (2026-09-28): parallel batches make size cheap in time
   const difficulty = body.difficulty ? String(body.difficulty).slice(0, 40) : '';
   const audience   = body.audience   ? String(body.audience).slice(0, 80)   : '';
   // What's already in the deck, so a second "generate" doesn't return the same
@@ -633,7 +638,7 @@ module.exports = async function handler(req, res) {
   // run low on the time budget, or a call adds nothing.
   const DEADLINE     = Date.now() + POLLY_BUDGET_MS;   // whole-request budget (env POLLY_BUDGET_MS); stays under maxDuration
   const MAX_ATTEMPTS = 6;
-  const MAX_PER_CALL = 10;                    // reliable/fast batch size for the local model
+  const MAX_PER_CALL = 8;                     // small batches come back fast, which leaves time for a top-up round
   const CLOUD_RESERVE = OPENAI_API_KEY ? 15000 : 0;   // keep this much back so a slow local never starves the cloud fill
 
   // Generate ONE batch of ~`need` questions (local first, OpenAI fallback on
@@ -739,11 +744,15 @@ module.exports = async function handler(req, res) {
      lands; a later round (if time allows) tops up anything the checks removed. Different
      random lenses per call keep parallel batches from repeating each other, and dedupe
      catches the rest. */
-  const MAX_PARALLEL = 4;
+  /* 2026-09-28: 40 asked → 25 delivered. Parallel batches on a narrow topic overlap, and the
+     one round there was time for couldn't make up the difference. So: more, smaller batches
+     at once (a 100-question set takes about as long as 10), 30% spares, and a top-up round
+     only when there's time for it to finish. */
+  const MAX_PARALLEL = 16;
   let emptyRounds = 0;
-  for (let round = 0; round < MAX_ATTEMPTS && acc.length < count && Date.now() < DEADLINE - 8000; round++) {
+  for (let round = 0; round < MAX_ATTEMPTS && acc.length < count && (round === 0 || DEADLINE - Date.now() > 30000); round++) {
     const missing = count - acc.length;
-    const want = missing + Math.max(1, Math.ceil(missing * 0.2));          // spares for dedupe + checks
+    const want = missing + Math.max(2, Math.ceil(missing * 0.3));          // spares for dedupe + checks
     const n = Math.min(MAX_PARALLEL, Math.ceil(want / MAX_PER_CALL));
     const size = Math.ceil(want / n);
     const avoidNow = [...avoid, ...acc.map(asAvoid)];

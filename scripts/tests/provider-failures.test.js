@@ -91,7 +91,7 @@ function call(providerStatus, providerBody) {
   const b = P.buildMessages({ topic: 'pub quiz, all genres', type: 'quiz', count: 30 }).map(x => x.content).join('\n');
   ok('a broad pub-quiz topic may still roam', /different subject areas/.test(b) && !/squarely about/.test(b));
   const polly = fs.readFileSync(path.join(ROOT, 'api', 'polly.js'), 'utf8');
-  ok('the top-up asks for spares and survives one empty round', /missing \* 0\.2\)/.test(polly) && /emptyRounds >= 2/.test(polly));
+  ok('the top-up asks for spares and survives one empty round', /missing \* 0\.3\)/.test(polly) && /emptyRounds >= 2/.test(polly));
   ok('each batch gets a second-opinion review (facts + topic)', /await review\(fresh, topic, type, sourceMaterial\)/.test(polly));
   console.log('\nPolly writes plain, checked facts (2026-09-27)');
   ok('markdown and asterisks are stripped, emojis kept', P.plain('**Which** planet is *red*? 🔴 **') === 'Which planet is red? 🔴');

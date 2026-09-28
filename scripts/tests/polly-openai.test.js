@@ -38,7 +38,7 @@ global.fetch = async (url, o) => {
   const sys = body.messages[0].content;
   if (/fact-checker/.test(sys)) return { ok: true, json: async () => ({ choices: [{ message: { content: '{"flag":[]}' } }] }) };
   const m = /Create (\d+) quiz question/.exec(body.messages[1].content); const k = m ? +m[1] : 5;
-  const qs = Array.from({ length: k }, () => { qn++; return { text: `Planet fact number ${qn} about moon count ${qn * 7}?`, options: [`A${qn}`, `B${qn}`, `C${qn}`, `D${qn}`], answers: [`A${qn}`], kind: 'single', explanation: `Because ${qn}.` }; });
+  const qs = Array.from({ length: k }, (_, j) => { qn++; const d = global.DUP && j % 4 === 3; const id = d ? 1 : qn; return { text: d ? 'Which planet has the most moons in our solar system today?' : `Planet fact number ${id} about moon count ${id * 7}?`, options: [`A${qn}`, `B${qn}`, `C${qn}`, `D${qn}`], answers: [`A${qn}`], kind: 'single', explanation: `Because ${qn}.` }; });
   return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ questions: qs }) } }] }) };
 };
 function run(body) {
@@ -57,12 +57,24 @@ function run(body) {
   ok('…written by OpenAI, not the Mac', r.body.source === 'openai' && !calls.some(c => c.url.startsWith('http://mac.local')), r.body.source);
   const oa = calls.filter(c => c.url.includes('api.openai.com'));
   const withT = oa.map((c, i) => ('temperature' in c.body) ? i : -1).filter(i => i >= 0);
-  ok('the refused setting is dropped and remembered (only the first parallel calls ever send it)', withT.length <= 4 && withT.every(i => i < 4) && oa.length > 8, withT);
+  ok('the refused setting is dropped and remembered (only the first parallel calls ever send it)', withT.length <= 16 && oa.slice(withT.length).every(c => !('temperature' in c.body)) && oa.length > 8, withT);
   ok('OpenAI is asked to think briefly (reasoning_effort low)', calls.filter(c => c.url.includes('api.openai.com')).every(c => c.body.reasoning_effort === 'low'));
   ok('batches run in parallel', maxInFlight >= 3, maxInFlight);
   ok('every batch is fact-checked', calls.filter(c => /fact-checker/.test((c.body.messages || [])[0]?.content || '')).length >= 3);
   ok('it finishes well inside the time limit', ms < 5000, ms);
+  console.log('\nBig sets come back complete (Rod asked for 40, got 25)');
+  calls = []; maxInFlight = 0;
+  const t1 = Date.now();
+  const big = await run({ topic: 'the planets of the solar system', type: 'quiz', count: 100 });
+  ok('100 asked → 100 delivered', big.code === 200 && big.body.questions.length === 100, big.body && big.body.questions && big.body.questions.length);
+  ok('…with many batches at once', maxInFlight >= 10, maxInFlight);
+  ok('…quickly', Date.now() - t1 < 8000, Date.now() - t1);
+  global.DUP = true; calls = [];
+  const dup = await run({ topic: 'the planets of the solar system', type: 'quiz', count: 40 });
+  global.DUP = false;
+  ok('a quarter of the questions duplicated → still 40, the repeats replaced', dup.code === 200 && dup.body.questions.length === 40 && new Set(dup.body.questions.map(q => q.text)).size === 40, dup.body && dup.body.questions && dup.body.questions.length);
   const src = require('fs').readFileSync(path.join(ROOT, 'api', 'polly.js'), 'utf8');
+  ok('the cap is 100, in the app and on the server', /Math\.min\(Math\.max\(parseInt\(body\.count, 10\) \|\| 1, 1\), 100\)/.test(src) && /id="pollyCount" min="1" max="100"/.test(require('fs').readFileSync(path.join(ROOT, 'presenter.html'), 'utf8')));
   ok('the whole request is capped under Cloudflare\'s 100 seconds', /Math\.min\(parseInt\(process\.env\.POLLY_BUDGET_MS, 10\) \|\| 80000, 85000\)/.test(src));
   const pres = require('fs').readFileSync(path.join(ROOT, 'presenter.html'), 'utf8');
   ok('a timeout reads "took too long", not "check the AI key"', /r\.status === 524 \|\| r\.status === 504\) \? 'Polly took too long/.test(pres) && !/Check the AI key in Vercel/.test(pres));
