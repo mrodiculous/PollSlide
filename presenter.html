@@ -237,6 +237,13 @@
     border-radius:7px; padding:4px 11px; font-size:11.5px; font-family:'DM Sans',sans-serif;
     cursor:pointer; white-space:nowrap; flex-shrink:0; }
   .cm-switch:hover { background:var(--accent); border-color:var(--accent); color:#fff; }
+  /* The correct answer, for the presenter only (2026-09-29). Blurred until hovered or
+     clicked, because this screen is often shared or mirrored to the room. */
+  .cm-answer { display:inline-flex; align-items:center; gap:5px; max-width:38%; flex-shrink:1; min-width:0;
+    background:rgba(67,233,123,.12); border:1px solid rgba(67,233,123,.3); color:var(--accent3);
+    border-radius:7px; padding:3px 9px; font-size:11.5px; cursor:pointer; white-space:nowrap; }
+  .cm-answer .cm-ans-txt { overflow:hidden; text-overflow:ellipsis; filter:blur(5px); transition:filter .15s; }
+  .cm-answer:hover .cm-ans-txt, .cm-answer:focus .cm-ans-txt, .cm-answer.shown .cm-ans-txt { filter:none; }
   /* ── Topbar: one primary action, everything else behind ⋯ ── */
   .more-wrap { position:relative; }
   .more-menu { display:none; position:absolute; top:calc(100% + 6px); right:0; z-index:9999;
@@ -5015,6 +5022,33 @@ async function doDeckShare(id) {
  * Nothing on screen said which — you inferred it from the content, and the switch
  * between edit and live was a button buried inside whichever one was showing.
  * ------------------------------------------------------------------------- */
+/* The correct answer as one short line — '' when the question has none (polls, word
+   clouds, ratings…). Read-only: nothing here changes the question or what the room sees. */
+function answerSummary(q) {
+  if (!q) return '';
+  if (q.type === 'flashcard') return q.back ? String(q.back) : '';
+  const ca = q.correctAnswer;
+  if (ca === undefined || ca === null || ca === '' || (Array.isArray(ca) && !ca.length)) return '';
+  const opts = (q.options || []).map(o => (typeof o === 'string' ? o : (o && o.text) || ''));
+  const L = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  const one = v => { const n = Number(v);
+    return (Number.isInteger(n) && n >= 0 && n < opts.length) ? (L[n] || (n + 1)) + '. ' + opts[n] : String(v); };
+  return (Array.isArray(ca) ? ca : [ca]).map(one).join(' · ');
+}
+function answerChip(q) {
+  const a = answerSummary(q);
+  if (!a) return '';
+  let shown = false; try { shown = localStorage.getItem('psShowAnswer') === '1'; } catch (e) {}
+  return '<span class="cm-answer' + (shown ? ' shown' : '') + '" tabindex="0" role="button" ' +
+    'title="Only you see this. Hover to peek — click to keep it showing (click again to hide)." ' +
+    'onclick="toggleAnswerChip(this)">🔑 <span class="cm-ans-txt">' + escapeHtml(a) + '</span></span>';
+}
+function toggleAnswerChip(el) {
+  const on = !el.classList.contains('shown');
+  el.classList.toggle('shown', on);
+  try { localStorage.setItem('psShowAnswer', on ? '1' : '0'); } catch (e) {}
+}
+
 function syncCenterMode(idx) {
   const bar = document.getElementById('centerMode');
   if (!bar) return;
@@ -5055,6 +5089,7 @@ function syncCenterMode(idx) {
         (isLive ? '🟢 Live' : '👁 Preview') + '</span>' +
       '<span class="cm-what">' + escapeHtml(pos) +
         (isLive ? ' · this is what your audience sees right now' : where) + '</span>' +
+      answerChip(q) +
       '<button class="cm-switch" onclick="editQuestion(' + i + ')">✏️ Edit this question</button>';
   }
 }
