@@ -331,7 +331,7 @@ console.log('\nWord clouds and ratings draw properly, not as a raw list');
   /* Math.random() reshuffled the whole cloud on every incoming answer, which on a
      projector reads as the slide glitching. The scatter is index-derived instead. */
   ok('the cloud does not reshuffle on each answer', !/\.sort\(\(\)=>Math\.random/.test(c) && /\(i \* 37\) % 15/.test(c));
-  ok('ratings show an average', /Average \$\{avg\}/.test(c));
+  ok('ratings show an average', /tr\('Average \{n\}', \{ n: avg \}\)/.test(c));
   ok('free text still falls back to listing answers', /class="free"/.test(c));
 
   /* These renderers were PORTED into the content add-in. The shared audience page and

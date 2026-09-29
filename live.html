@@ -1170,7 +1170,7 @@ function renderChart(q, responses) {
     } else {
       responses.forEach(r => {
         const txt = safeAnswer(r.answer);
-        txt.toLowerCase().replace(/[^a-z0-9\s]/g,'').split(/\s+/).forEach(w => {
+        txt.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu,'').split(/\s+/).forEach(w => {
           if (w.length > 2 && !STOP_WORDS.has(w)) wordCounts[w] = (wordCounts[w]||0) + 1;
         });
       });

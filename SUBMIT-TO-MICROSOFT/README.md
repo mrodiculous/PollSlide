@@ -10,9 +10,11 @@ its old "PollSlide for Powerpoint" offer in Partner Center.
 
 | In this folder | What it's for |
 |---|---|
-| `manifest.xml` | The file you upload (Step 5). Identical to `powerpoint-content/manifest.xml` — a test keeps them the same. |
+| `manifest.xml` | The one file you upload (Step 5), for every language. Identical to `powerpoint-content/manifest.xml` — a test keeps them the same. |
 | `copy-paste/1-name.txt` … `6-notes-for-certification.txt` | Exact text for each Partner Center box |
-| `screenshots/01-live.png` … `04-first.png` | The 4 listing images — 1366×768 PNG, under 1 MB each, as Microsoft requires |
+| `screenshots/01-live.png` … `04-first.png` | The 4 English listing images — 1366×768 PNG, under 1 MB each, as Microsoft requires |
+| `screenshots/es/` `de/` `fr/` `pt/` `it/` | The same 4 images, fully translated, for each extra language |
+| `copy-paste/es/` … `copy-paste/it/` | The listing text for each extra language |
 | `logo-300x300.png` | The store logo (Microsoft accepts 216–350 px square PNG) |
 
 **Company:** PollSlide Technologies LLC (US, Wyoming). **Support:** help@pollslide.com.
@@ -84,12 +86,48 @@ Language: **English (United States)**.
 
 Video: optional — leave empty. **Save draft.**
 
+### Step 4b — Other languages (Spanish, German, French, Portuguese, Italian)
+
+The add-in itself now speaks all five: it follows **PowerPoint's own language**, so a
+presenter whose PowerPoint is in German sees the sign-in, "responses", "Reveal now" and every
+other add-in word in German — nothing to set. Any other language gets English. (Your questions
+and answers are never translated: they are the presenter's own words.) That's what Microsoft
+requires before a listing language is allowed, and `manifest.xml` already carries the translated
+name and description for each, so **there is only one manifest — the same file for every language.**
+
+**Who sees which listing?** Microsoft shows the listing in the language the shopper's store is
+set to (normally their Windows/browser language), falling back to English. You don't choose
+per country.
+
+In **Marketplace listings → Manage additional languages**, tick the five below, then fill each one
+exactly like Step 4, pasting from its own folder:
+
+| Language to tick | Paste text from | Upload screenshots from | Name length |
+|---|---|---|---|
+| Spanish — es-ES (also fine for Mexico/Latin America) | `copy-paste/es/` | `screenshots/es/` | 45/50 |
+| German — de-DE | `copy-paste/de/` | `screenshots/de/` | 44/50 |
+| French — fr-FR | `copy-paste/fr/` | `screenshots/fr/` | 45/50 |
+| Portuguese — **pt-PT** (Portugal, our house Portuguese) | `copy-paste/pt/` | `screenshots/pt/` | 42/50 |
+| Italian — it-IT | `copy-paste/it/` | `screenshots/it/` | 42/50 |
+
+- Each text folder has `1-name.txt`, `2-summary.txt`, `3-description.txt`, `4-keywords.txt`. The
+  **name must match the manifest word for word** — copy it, don't retype it.
+- Each screenshot folder has the same four pictures as English (`01-live`, `02-show`,
+  `03-cloud`, `04-first`), fully translated — caption, demo slide and the add-in itself. Upload
+  them in that order.
+- Help link, privacy link, support email and logo are the same as English.
+
+To remake the screenshots after changing the add-in: `node scripts/appsource/screenshots.js`
+(they're taken from the real add-in page, so they always match what users see).
+
 ## Step 5 — Technical configuration (2 min)
 
 1. Upload **`manifest.xml`** from this folder.
 2. Wait for it to validate. It was checked on 2026-09-26: valid XML, a unique Id
    (`6a2cf181-7fbf-4d5e-8dfc-690b55082599`, never used before), icons exactly 32×32 and
    64×64, every URL live, description 245/250 characters, size within Office's limits.
+   On 2026-09-29 the translated name and description for es-ES, de-DE, fr-FR, pt-PT and it-IT
+   were added (same Id — it's still the same, never-submitted add-in).
 3. **Save draft.**
 
 ## Step 6 — Availability (2 min)
@@ -135,6 +173,7 @@ what is live.
 | Icons exactly 32×32 and 64×64 | ✓ checked |
 | Screenshots 1366×768, ≤1 MB, show the real add-in, one message each, no unrelated Office UI | ✓ captured from the add-in's own code |
 | Works as described on the platforms offered | Tested on the web; mobile left off |
+| Every listing language is supported by the add-in | The add-in follows PowerPoint's language in all five; a test checks each listing language is in the add-in and the manifest |
 | Paid plans declared | Step 3 |
 | No purchase path on iOS/Android | Mobile availability off (Step 6) |
 

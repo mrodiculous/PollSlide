@@ -1,3 +1,5 @@
 live poll
-quiz
+live quiz
 audience response
+QR question code
+answer

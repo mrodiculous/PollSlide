@@ -9801,7 +9801,7 @@ function buildWordCloud(q, counts, responses) {
     responses.forEach(r => {
       if (!r.answer || r.answer === '__none__') return;
       r.answer.split(/\s+/).forEach(w => {
-        const clean = w.toLowerCase().replace(/[^a-z0-9']/g,'');
+        const clean = w.toLowerCase().replace(/[^\p{L}\p{N}']/gu,'');
         if (clean.length > 2 && !STOP_WORDS.has(clean)) freq[clean] = (freq[clean]||0)+1;
       });
     });

@@ -28,6 +28,33 @@ const png = f => { const b = fs.readFileSync(f); return [b.readUInt32BE(16), b.r
 ok('every screenshot is exactly 1366×768', shots.every(f => { const [w, h] = png(path.join(D, 'screenshots', f)); return w === 1366 && h === 768; }));
 const [lw, lh] = png(path.join(D, 'logo-300x300.png'));
 ok('logo is a 216–350 px square', lw === lh && lw >= 216 && lw <= 350);
+// The five extra listing languages (added 2026-09-29).
+const multi = m;   // one manifest since 2026-09-29: the add-in itself speaks all five
+const LOC = { es: 'es-ES', de: 'de-DE', fr: 'fr-FR', pt: 'pt-PT', it: 'it-IT' };
+const badLang = [];
+for (const [code, loc] of Object.entries(LOC)) {
+  const nm = cp(code + '/1-name.txt'), sm = cp(code + '/2-summary.txt'), ds = cp(code + '/3-description.txt'), kw = cp(code + '/4-keywords.txt');
+  const ov = (multi.match(new RegExp('<DisplayName[\\s\\S]*?<Override Locale="' + loc + '" Value="([^"]*)"')) || [])[1];
+  if (nm !== ov) badLang.push(code + ': name ≠ manifest');
+  if (nm.length > 50 || sm.length > 100 || ds.length > 4000 || !kw) badLang.push(code + ': over a limit');
+  if (!/help@pollslide\.com/.test(ds) || !/app\.pollslide\.com\/presenter/.test(ds)) badLang.push(code + ': missing free-account or support line');
+  const dv = (multi.match(new RegExp('<Description[\\s\\S]*?<Override Locale="' + loc + '" Value="([^"]*)"')) || [])[1] || '';
+  if (!dv || dv.length > 250) badLang.push(code + ': manifest description missing or > 250');
+}
+ok('each extra language: name matches the manifest, all limits met, free-account + support lines kept', !badLang.length, badLang);
+ok('only one manifest to upload (no second copy to mix up)', !fs.existsSync(path.join(D, 'manifest-with-languages.xml')));
+// Microsoft: every listing language must be supported by the add-in itself — so each one is in its phrase book.
+const l10n = JSON.parse((read('powerpoint-content/index.html').match(/const L10N = (\{.*?\});\n/) || [])[1] || '{}');
+ok('the add-in speaks every listing language', Object.keys(LOC).every(c => l10n[c] && Object.keys(l10n[c]).length >= 50), Object.keys(l10n));
+// Translated screenshots: the same four pictures in each language.
+const badShots = [];
+for (const code of Object.keys(LOC)) {
+  const dir = path.join(D, 'screenshots', code);
+  const got = fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => f.endsWith('.png')).sort() : [];
+  if (got.join() !== shots.slice().sort().join()) badShots.push(code + ': ' + got.join(','));
+  for (const f of got) { const [w, h] = png(path.join(dir, f)); if (w !== 1366 || h !== 768 || fs.statSync(path.join(dir, f)).size > 1024 * 1024) badShots.push(code + '/' + f); }
+}
+ok('each language has the same four screenshots, 1366×768, under 1 MB', !badShots.length, badShots);
 ok('the folder is never deployed publicly (it holds the reviewer login)', /^SUBMIT-TO-MICROSOFT\/$/m.test(read('.vercelignore')) && /^\*\.md$/m.test(read('.vercelignore')));
 const pages = [...fs.readdirSync(ROOT).filter(x => x.endsWith('.html')).map(x => path.join(ROOT, x)),
   ...(fs.existsSync(path.join(ROOT, '..', 'pollslide-website')) ? fs.readdirSync(path.join(ROOT, '..', 'pollslide-website')).filter(x => x.endsWith('.html')).map(x => path.join(ROOT, '..', 'pollslide-website', x)) : [])];

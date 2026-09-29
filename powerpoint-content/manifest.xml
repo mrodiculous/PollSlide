@@ -38,8 +38,20 @@
   <ProviderName>PollSlide</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
 
-  <DisplayName DefaultValue="PollSlide LIVE — Results on Your Slide" />
-  <Description DefaultValue="Drop live poll, quiz and survey results directly onto a PowerPoint slide. Results animate on the slide while you present. Your audience answers by QR code from any phone. Free individual accounts — no enterprise purchase or admin setup required." />
+  <DisplayName DefaultValue="PollSlide LIVE — Results on Your Slide">
+    <Override Locale="es-ES" Value="PollSlide LIVE — Resultados en tu diapositiva" />
+    <Override Locale="de-DE" Value="PollSlide LIVE — Ergebnisse auf deiner Folie" />
+    <Override Locale="fr-FR" Value="PollSlide LIVE — Résultats sur ta diapositive" />
+    <Override Locale="pt-PT" Value="PollSlide LIVE — Resultados no diapositivo" />
+    <Override Locale="it-IT" Value="PollSlide LIVE — Risultati sulla tua slide" />
+  </DisplayName>
+  <Description DefaultValue="Drop live poll, quiz and survey results directly onto a PowerPoint slide. Results animate on the slide while you present. Your audience answers by QR code from any phone. Free individual accounts — no enterprise purchase or admin setup required.">
+    <Override Locale="es-ES" Value="Muestra en tu diapositiva de PowerPoint los resultados en directo de encuestas, quizzes y sondeos, animados mientras presentas. Tu público responde con un código QR desde cualquier móvil. Cuentas individuales gratuitas, sin compra empresarial." />
+    <Override Locale="de-DE" Value="Zeigt Live-Ergebnisse von Umfragen, Quizzen und Befragungen direkt auf deiner PowerPoint-Folie – animiert, während du präsentierst. Dein Publikum antwortet per QR-Code vom Handy. Kostenlose Einzelkonten, kein Unternehmenskauf nötig." />
+    <Override Locale="fr-FR" Value="Affiche sur ta diapositive PowerPoint les résultats en direct de sondages, quiz et enquêtes, animés pendant que tu présentes. Ton public répond par QR code depuis son téléphone. Comptes individuels gratuits, sans achat entreprise." />
+    <Override Locale="pt-PT" Value="Mostra no seu diapositivo do PowerPoint os resultados em direto de sondagens, quizzes e inquéritos, animados enquanto apresenta. O público responde por código QR no telemóvel. Contas individuais gratuitas, sem compra empresarial." />
+    <Override Locale="it-IT" Value="Mostra sulla tua slide di PowerPoint i risultati in tempo reale di sondaggi, quiz e questionari, animati mentre presenti. Il pubblico risponde con un codice QR dal telefono. Account individuali gratuiti, senza acquisti aziendali." />
+  </Description>
 
   <!-- AppSource requires EXACT sizes: IconUrl=32x32, HighResolutionIconUrl=64x64 -->
   <IconUrl DefaultValue="https://pollslide.com/icon-32.png" />
