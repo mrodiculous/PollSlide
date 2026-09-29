@@ -22,6 +22,7 @@ ok('this is the content add-in, with its own Id', /xsi:type="ContentApp"/.test(m
 ok('icons are the sizes Microsoft requires', /icon-32\.png/.test(m) && /icon-64\.png/.test(m));
 const notes = cp('6-notes-for-certification.txt');
 ok('notes give the test account and say it is not enterprise-only', /appsource-review@pollslide\.com/.test(notes) && /NOT an enterprise-only/.test(notes));
+ok('the certification PDF is there and carries the test account', (() => { try { const b = fs.readFileSync(path.join(D, 'certification-notes.pdf')); return b.slice(0, 5).toString() === '%PDF-' && b.length < 10 * 1024 * 1024; } catch (e) { return false; } })());
 const shots = fs.readdirSync(path.join(D, 'screenshots')).filter(f => f.endsWith('.png'));
 ok('1–5 screenshots, each under 1 MB', shots.length >= 1 && shots.length <= 5 && shots.every(f => fs.statSync(path.join(D, 'screenshots', f)).size <= 1024 * 1024), shots);
 const png = f => { const b = fs.readFileSync(f); return [b.readUInt32BE(16), b.readUInt32BE(20)]; };

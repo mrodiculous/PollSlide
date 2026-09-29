@@ -15,6 +15,7 @@ its old "PollSlide for Powerpoint" offer in Partner Center.
 | `screenshots/01-live.png` … `04-first.png` | The 4 English listing images — 1366×768 PNG, under 1 MB each, as Microsoft requires |
 | `screenshots/es/` `de/` `fr/` `pt/` `it/` | The same 4 images, fully translated, for each extra language |
 | `copy-paste/es/` … `copy-paste/it/` | The listing text for each extra language |
+| `certification-notes.pdf` | The PDF for **Additional certification info** (Step 7): test account, test steps, pictures |
 | `logo-300x300.png` | The store logo (Microsoft accepts 216–350 px square PNG) |
 
 **Company:** PollSlide Technologies LLC (US, Wyoming). **Support:** help@pollslide.com.
@@ -139,18 +140,22 @@ To remake the screenshots after changing the add-in: `node scripts/appsource/scr
   sign-up where paid plans exist. Keeping mobile off avoids that whole rule.
 - **Save draft.**
 
-## Step 7 — Notes for certification (2 min) — the most important box
+## Step 7 — Additional certification info (2 min) — the most important box
 
-Find the free-text box for the certification team (called **Notes for certification**,
-**Supplemental content** or **How to test**). Paste **all** of
-`copy-paste/6-notes-for-certification.txt`. **Save**, then reopen the page to make sure it
-kept the text.
+Left menu → **Additional certification info**. It asks for a **PDF**: drag in
+**`certification-notes.pdf`** from this folder. It has the test account, the 2-minute test
+steps, the languages note and pictures of what the reviewer should see. It's never shown to
+customers. **Save draft.**
+
+If a text box for notes appears as well, paste all of `copy-paste/6-notes-for-certification.txt`
+(the same words). To rebuild the PDF after editing that file:
+`node scripts/appsource/cert-notes-pdf.js`.
 
 ## Step 8 — Submit
 
 1. **Review and publish** — every section must say **Complete**.
 2. Re-check three things: the name matches the manifest exactly, the support link is
-   `pollslide.com/powerpoint-live`, and the certification notes are there.
+   `pollslide.com/powerpoint-live`, and `certification-notes.pdf` is uploaded.
 3. **Publish.** You'll get an email; the status becomes **In review**.
 
 **While it's in review, don't change the add-in or its help page** — the reviewer tests
