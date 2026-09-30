@@ -1,0 +1,67 @@
+{
+  "_note": "One entry per scene, in order. Used as the NARRATION of each language's own video (--lang), where the app is shown in that language — so quoted labels are the app's translated labels (ui-lang.js). <lang>_say = spoken form where it differs (email addresses). Register: es tú, de du, fr tu, pt European, it tu.",
+  "cues": [
+    {
+      "es": "Así se gestiona tu cuenta de PollSlide: tu contraseña, tu dirección de correo y tus datos.",
+      "de": "So verwaltest du dein PollSlide-Konto: dein Passwort, deine E-Mail-Adresse und deine Daten.",
+      "fr": "Voici comment gérer ton compte PollSlide : ton mot de passe, ton adresse e-mail et tes données.",
+      "pt": "Veja como gerir a sua conta PollSlide: a palavra-passe, o endereço de email e os seus dados.",
+      "it": "Ecco come gestire il tuo account PollSlide: la password, l'indirizzo email e i tuoi dati."
+    },
+    {
+      "es": "Todo lo de tu cuenta está en un solo sitio. Haz clic en tu avatar, arriba a la derecha, y luego en «Ajustes de la cuenta».",
+      "de": "Alles rund um dein Konto ist an einem Ort. Klicke oben rechts auf deinen Avatar und dann auf „Kontoeinstellungen“.",
+      "fr": "Tout ce qui concerne ton compte est au même endroit. Clique sur ton avatar en haut à droite, puis sur « Paramètres du compte ».",
+      "pt": "Tudo sobre a sua conta está num só sítio. Clique no seu avatar, no canto superior direito, e depois em «Definições da conta».",
+      "it": "Tutto ciò che riguarda il tuo account è in un unico posto. Fai clic sul tuo avatar in alto a destra, poi su «Impostazioni account»."
+    },
+    {
+      "es": "Para cambiar tu contraseña, escribe la actual y luego la nueva dos veces, y haz clic en «Cambiar contraseña». ¿Olvidaste la actual? Justo debajo hay un enlace para restablecerla.",
+      "de": "Um dein Passwort zu ändern, gib dein aktuelles ein, dann zweimal das neue, und klicke auf „Passwort ändern“. Aktuelles Passwort vergessen? Direkt darunter gibt es einen Link zum Zurücksetzen.",
+      "fr": "Pour changer ton mot de passe, saisis l'actuel, puis le nouveau deux fois, et clique sur « Changer le mot de passe ». Tu as oublié l'actuel ? Il y a un lien de réinitialisation juste en dessous.",
+      "pt": "Para alterar a palavra-passe, escreva a atual e depois a nova duas vezes, e clique em «Alterar palavra-passe». Esqueceu-se da atual? Há uma ligação para a repor logo abaixo.",
+      "it": "Per cambiare la password, inserisci quella attuale, poi due volte quella nuova, e fai clic su «Cambia password». Hai dimenticato quella attuale? C'è un link per reimpostarla subito sotto."
+    },
+    {
+      "es": "Para cambiar tu correo, escribe la nueva dirección y tu contraseña actual, y haz clic en «Enviar enlace de confirmación». Nada cambia hasta que haces clic en el enlace que enviamos a la nueva dirección, y también avisamos a tu dirección anterior.",
+      "de": "Um deine E-Mail zu ändern, gib die neue Adresse und dein aktuelles Passwort ein und klicke auf „Bestätigungslink senden“. Nichts ändert sich, bis du auf den Link klickst, den wir an die neue Adresse schicken – und wir informieren auch deine alte Adresse.",
+      "fr": "Pour changer ton e-mail, saisis la nouvelle adresse et ton mot de passe actuel, puis clique sur « Envoyer le lien de confirmation ». Rien ne change tant que tu n'as pas cliqué sur le lien envoyé à la nouvelle adresse, et nous prévenons aussi ton ancienne adresse.",
+      "pt": "Para alterar o email, introduza o novo endereço e a palavra-passe atual, e clique em «Enviar ligação de confirmação». Nada muda até clicar na ligação que enviamos para o novo endereço, e também avisamos o endereço antigo.",
+      "it": "Per cambiare email, inserisci il nuovo indirizzo e la password attuale, poi fai clic su «Invia link di conferma». Non cambia nulla finché non fai clic sul link che inviamo al nuovo indirizzo, e avvisiamo anche il vecchio indirizzo."
+    },
+    {
+      "es": "Hasta que lo confirmes, sigues iniciando sesión con tu dirección actual. Tus presentaciones, resultados y plan se quedan exactamente como están.",
+      "de": "Bis du bestätigst, meldest du dich weiter mit deiner aktuellen Adresse an. Deine Präsentationen, Ergebnisse und dein Tarif bleiben genau, wie sie sind.",
+      "fr": "Tant que tu n'as pas confirmé, tu continues à te connecter avec ton adresse actuelle. Tes présentations, résultats et ta formule restent exactement comme ils sont.",
+      "pt": "Até confirmar, continua a iniciar sessão com o endereço atual. As suas apresentações, resultados e plano ficam exatamente como estão.",
+      "it": "Finché non confermi, continui ad accedere con il tuo indirizzo attuale. Le tue presentazioni, i risultati e il piano restano esattamente come sono."
+    },
+    {
+      "es": "En la sección «Tus datos» puedes descargar una copia de todo: tus presentaciones, las preguntas y las respuestas que recogieron.",
+      "de": "Unter „Deine Daten“ kannst du eine Kopie von allem herunterladen: deine Präsentationen, Fragen und die gesammelten Antworten.",
+      "fr": "Dans la partie « Tes données », tu peux télécharger une copie de tout : tes présentations, les questions et les réponses recueillies.",
+      "pt": "Na secção «Os seus dados», pode descarregar uma cópia de tudo: as suas apresentações, as perguntas e as respostas recolhidas.",
+      "it": "Nella sezione «I tuoi dati» puoi scaricare una copia di tutto: le tue presentazioni, le domande e le risposte raccolte."
+    },
+    {
+      "es": "Y si algún día quieres irte, «Eliminar la cuenta» lo elimina todo para siempre. Un plan de pago simplemente deja de renovarse, así que no hay más cargos.",
+      "de": "Und falls du einmal gehen möchtest: „Konto löschen“ löscht alles dauerhaft. Ein kostenpflichtiger Tarif verlängert sich einfach nicht mehr – es fallen keine weiteren Kosten an.",
+      "fr": "Et si un jour tu veux partir, « Supprimer le compte » supprime tout définitivement. Une formule payante n'est simplement plus renouvelée : aucun autre prélèvement.",
+      "pt": "E se um dia quiser sair, «Eliminar conta» elimina tudo permanentemente. Um plano pago simplesmente deixa de ser renovado, por isso não há mais cobranças.",
+      "it": "E se un giorno vuoi andartene, «Elimina account» elimina tutto definitivamente. Un piano a pagamento semplicemente non si rinnova più, quindi nessun altro addebito."
+    },
+    {
+      "en": "Sign in with Google? Then your password and email are managed by Google, and we can move your presentations for you. Questions? Email help@pollslide.com.",
+      "es": "¿Inicias sesión con Google? Entonces tu contraseña y tu correo los gestiona Google, y podemos pasar tus presentaciones por ti. ¿Preguntas? Escribe a help@pollslide.com.",
+      "de": "Du meldest dich mit Google an? Dann verwaltet Google dein Passwort und deine E-Mail, und wir können deine Präsentationen für dich übertragen. Fragen? Schreib an help@pollslide.com.",
+      "fr": "Tu te connectes avec Google ? Alors ton mot de passe et ton e-mail sont gérés par Google, et nous pouvons transférer tes présentations pour toi. Des questions ? Écris à help@pollslide.com.",
+      "pt": "Inicia sessão com o Google? Então a palavra-passe e o email são geridos pelo Google, e podemos passar as suas apresentações por si. Dúvidas? Escreva para help@pollslide.com.",
+      "it": "Accedi con Google? Allora password ed email sono gestite da Google, e possiamo spostare noi le tue presentazioni. Domande? Scrivi a help@pollslide.com.",
+      "es_say": "¿Inicias sesión con Google? Entonces tu contraseña y tu correo los gestiona Google, y podemos pasar tus presentaciones por ti. ¿Preguntas? Escribe a help arroba pollslide punto com.",
+      "de_say": "Du meldest dich mit Google an? Dann verwaltet Google dein Passwort und deine E-Mail, und wir können deine Präsentationen für dich übertragen. Fragen? Schreib an help ät pollslide punkt com.",
+      "fr_say": "Tu te connectes avec Google ? Alors ton mot de passe et ton e-mail sont gérés par Google, et nous pouvons transférer tes présentations pour toi. Des questions ? Écris à help arobase pollslide point com.",
+      "pt_say": "Inicia sessão com o Google? Então a palavra-passe e o email são geridos pelo Google, e podemos passar as suas apresentações por si. Dúvidas? Escreva para help arroba pollslide ponto com.",
+      "it_say": "Accedi con Google? Allora password ed email sono gestite da Google, e possiamo spostare noi le tue presentazioni. Domande? Scrivi a help chiocciola pollslide punto com."
+    }
+  ]
+}

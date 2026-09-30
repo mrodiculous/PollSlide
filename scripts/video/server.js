@@ -18,11 +18,14 @@ const Media = require(path.join(ROOT, 'starter-media.js'));
 const USER = { uid: 'demoTeacher01', email: 'alex@example.com', displayName: 'Alex', createdAt: Date.now() };
 // A second person for team videos: the invitee. A page opened with ?as=member signs in as them.
 const MEMBER = { uid: 'demoMember02', email: 'jamie@example.com', displayName: 'Jamie', createdAt: Date.now() };
-const USERS = { owner: USER, member: MEMBER };
+// Support staff, for filming and testing Admin → Accounts (?as=admin).
+const ADMINU = { uid: 'demoAdmin00', email: 'help@pollslide.com', displayName: 'Support', createdAt: Date.now() };
+const USERS = { owner: USER, member: MEMBER, admin: ADMINU };
 function seed() {
   return { users: {
     [USER.uid]: { email: USER.email, name: 'Alex', displayName: 'Alex', tier: 'free', createdAt: USER.createdAt, lang: 'en', onboarded: true },
-    [MEMBER.uid]: { email: MEMBER.email, name: 'Jamie', displayName: 'Jamie', tier: 'free', createdAt: MEMBER.createdAt, lang: 'en', onboarded: true } } };
+    [MEMBER.uid]: { email: MEMBER.email, name: 'Jamie', displayName: 'Jamie', tier: 'free', createdAt: MEMBER.createdAt, lang: 'en', onboarded: true },
+    [ADMINU.uid]: { email: ADMINU.email, name: 'Support', tier: 'free', createdAt: ADMINU.createdAt } } };
 }
 let TREE = seed();
 const split = (p) => String(p || '').split('/').filter(Boolean);
@@ -64,6 +67,61 @@ function gifAnswer(body) {
   return { attribution: 'Powered by GIPHY', provider: 'giphy', results: list.map(g => ({ url: g.url, still: g.still, alt: g.alt, id: g.id, source: 'giphy', width: 200, height: 200 })) };
 }
 
+// ── /api/account on the stage: the REAL lib/account.js against the stage database ──
+/* So Account settings and Admin → Accounts can be tested and filmed end to end with the
+   production logic. Every write is broadcast, so open pages update like with Firebase. */
+const AccountLib = require(path.join(ROOT, 'lib', 'account.js'));
+function stageDb() {
+  const read = p => split(p).reduce((o, k) => (o && typeof o === 'object') ? o[k] : undefined, TREE);
+  const clone = v => v === undefined ? null : JSON.parse(JSON.stringify(v));
+  const write = (p, v) => { setAt(split(p), v === undefined ? null : clone(v)); broadcast({ client: 'server', ops: [[p, clone(v)]] }); };
+  const snap = (key, v) => ({ key, exists: () => v !== undefined && v !== null, val: () => clone(v),
+    forEach(fn) { if (v && typeof v === 'object') Object.keys(v).forEach(k => fn(snap(k, v[k]))); } });
+  let n = 0;
+  const ref = p => ({
+    get: async () => snap(split(p).pop(), read(p)),
+    set: async v => write(p, v), remove: async () => write(p, null),
+    update: async o => { Object.keys(o).forEach(k => write((p === '/' ? '' : p + '/') + k, o[k])); },
+    push: async v => { const k = 'x' + Date.now() + (++n); write(p + '/' + k, v); return { key: k }; },
+    orderByChild: c => ({ equalTo: x => ({ get: async () => { const all = read(p) || {}; const out = {};
+      Object.keys(all).forEach(k => { if (all[k] && all[k][c] === x) out[k] = all[k]; }); return snap(split(p).pop(), Object.keys(out).length ? out : null); } }) }),
+  });
+  return { ref };
+}
+async function stageAccount(body, asUser) {
+  const db = stageDb(), users = TREE.users || {};
+  const find = q => { q = String(q || '').trim();
+    const uid = users[q] ? q : Object.keys(users).find(k => String(users[k].email || '').toLowerCase() === q.toLowerCase());
+    if (!uid) throw new Error('No account with that email or uid.');
+    const r = users[uid]; return { uid, email: r.email || '', emailVerified: true, disabled: false, providers: ['password'],
+      created: new Date(r.createdAt || Date.now()).toUTCString(), lastSignIn: new Date().toUTCString(), tier: r.tier || 'free',
+      decks: Object.keys(r.presentations || {}).length, classes: Object.keys(r.classes || {}).length, workspaceId: r.workspaceId || null,
+      stripeCustomerId: r.stripeCustomerId || null, pendingEmail: r.pendingEmail || null }; };
+  const audit = e => db.ref('admin/account_audit').push(Object.assign({ at: Date.now(), by: asUser.email }, e));
+  switch (body.action) {
+    case 'adminFind': return { ok: true, user: find(body.query) };
+    case 'adminChangeEmail': {
+      const u = find(body.uid); const next = String(body.newEmail || '').toLowerCase().trim();
+      if (!body.reason) throw new Error('Record how you verified the request (SOP step 2).');
+      if (Object.values(users).some(x => String(x.email || '').toLowerCase() === next)) throw new Error('Another account already uses that email. Move content instead (SOP: duplicate accounts).');
+      const r = await AccountLib.syncEmail(db, { uid: u.uid, newEmail: next, oldEmails: [u.email] });
+      await audit({ type: 'email_changed', uid: u.uid, from: u.email, to: next, self: false, reason: body.reason, done: r.done, problems: r.problems });
+      return { ok: true, done: r.done, problems: r.problems };
+    }
+    case 'adminTransferPlan': return { ok: true, plan: await AccountLib.transferPlan(db, body.fromUid, body.toUid) };
+    case 'adminTransferRun': {
+      if (body.confirm !== 'MOVE') throw new Error('Type MOVE to confirm.');
+      if (!body.reason) throw new Error('Record how you verified both accounts belong to this person (SOP).');
+      const r = await AccountLib.transferRun(db, body.fromUid, body.toUid, { actor: asUser.email });
+      await audit({ type: 'content_moved', uid: body.fromUid, toUid: body.toUid, transfer: r.id, moved: r.moved, reason: body.reason });
+      return { ok: true, result: r };
+    }
+    case 'adminTransferUndo': { const r = await AccountLib.transferUndo(db, body.id); await audit({ type: 'content_move_undone', transfer: r.id }); return { ok: true, result: r }; }
+    case 'syncEmail': return { ok: true, changed: false };
+  }
+  throw new Error('Unknown action.');
+}
+
 // ── static files with Firebase swapped out ────────────────────────────────────
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css', '.json': 'application/json',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.gif': 'image/gif', '.mp4': 'video/mp4', '.ico': 'image/x-icon', '.webp': 'image/webp', '.woff2': 'font/woff2', '.vtt': 'text/vtt' };
@@ -102,6 +160,10 @@ http.createServer(async (req, res) => {
       // The app falls back to the same database writes the real /api/team makes when the
       // endpoint is unavailable — exactly what a video needs, with nothing to reimplement.
       if (p === '/api/team') return json(res, 503, {});
+      if (p === '/api/account') {
+        const who = USERS[(req.headers.referer && new URL(req.headers.referer).searchParams.get('as')) || ''] || USER;
+        try { return json(res, 200, await stageAccount(body, who)); } catch (e) { return json(res, 400, { error: e.message }); }
+      }
       return json(res, 200, {});   // not ok: e.g. /api/team must not report a joined team
     }
     if (p.startsWith('/__video/')) p = '/scripts/video/' + p.slice('/__video/'.length);

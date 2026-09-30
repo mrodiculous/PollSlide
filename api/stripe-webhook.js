@@ -68,6 +68,14 @@ async function updateUserTier(uid, tier, stripeCustomerId, meta = {}) {
     await db.ref(`admin/users_index/${uid}/stripeCustomerId`).set(stripeCustomerId).catch(() => {});
   }
   if (result.changed) await syncWorkspaceTier(db, uid, tier);
+  /* A deleted account's plan is set to stop at the end of its period (api/delete-account),
+     so this event arrives AFTER the account is gone. Everything above still runs — a
+     deleted team owner's members must still move to Free — but the writes above would
+     recreate an empty ghost record for someone who asked to be erased. Remove it again. */
+  try {
+    const gone = await db.ref(`admin/deleted_accounts/${uid}`).get();
+    if (gone.exists()) await db.ref('/').update({ [`users/${uid}`]: null, [`admin/users_index/${uid}`]: null });
+  } catch (e) { /* cleanup is best effort */ }
   return result;
 }
 

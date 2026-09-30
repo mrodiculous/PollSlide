@@ -249,6 +249,9 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
     <div class="nav-item" onclick="showPage('users')" id="nav-users">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Users
     </div>
+    <div class="nav-item" onclick="showPage('accounts')" id="nav-accounts">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a7 7 0 0 1 14 0v1"/><path d="M19 8h4M21 6v4"/></svg>Accounts
+    </div>
     <div class="nav-item" onclick="showPage('teams')" id="nav-teams">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><circle cx="19" cy="11" r="1"/></svg>Teams
     </div>
@@ -473,7 +476,7 @@ function showPage(page){
   closeDetail();renderPage();
 }
 function renderPage(){
-  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture,runbook:renderRunbook,billing:renderBilling,errors:renderErrors,autopilot:renderAutopilot,sharing:renderSharing,seo:renderSEO,leads:renderEnterpriseLeads,compliance:renderCompliance,loopslide:renderLoopslide,launch:renderLaunch};
+  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture,runbook:renderRunbook,billing:renderBilling,errors:renderErrors,autopilot:renderAutopilot,sharing:renderSharing,seo:renderSEO,leads:renderEnterpriseLeads,compliance:renderCompliance,loopslide:renderLoopslide,launch:renderLaunch,accounts:renderAccounts};
   const fn=map[currentPage];
   if(!fn) return;
   /* A page that fails must SAY so. Two of these renderers are async, so a throw inside
@@ -491,6 +494,157 @@ function renderPage(){
   };
   try { const r=fn(); if(r&&typeof r.catch==='function') r.catch(fail); }
   catch(e){ fail(e); }
+}
+
+// ─── ACCOUNTS (2026-09-30) ────────────────────────────────────────────────────
+/* Email changes, password resets and moving an account's content, for support.
+ * Every action runs server-side in /api/account (admin-checked there, from the token) and
+ * is written to admin/account_audit. Follow docs/ACCOUNT-SUPPORT-SOP.md: the "how did you
+ * verify it's really them?" box is required because an email change on request is the
+ * classic way accounts get stolen. */
+async function accountApi(action, body){
+  if(!auth.currentUser) throw new Error('not signed in yet — try again in a moment');
+  const t=await auth.currentUser.getIdToken();
+  const r=await fetch('/api/account',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify(Object.assign({action},body||{}))});
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error||('HTTP '+r.status));
+  return d;
+}
+const acInp='background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;padding:9px 11px;font-size:13px;';
+function renderAccounts(){
+  document.getElementById('content').innerHTML=`
+  <div class="card">
+    <div class="card-hd"><h2>Find an account</h2></div>
+    <div style="padding:12px 18px;color:var(--muted);font-size:12.5px;line-height:1.6;">Email or uid. Before changing anything, follow <b>docs/ACCOUNT-SUPPORT-SOP.md</b> — confirm the request comes from the owner.</div>
+    <div style="padding:0 18px 14px;display:flex;gap:8px;">
+      <input id="acFind" placeholder="teacher@school.edu or uid" onkeydown="if(event.key==='Enter')acFindGo()" style="flex:1;${acInp}">
+      <button class="btn btn-primary btn-sm" onclick="acFindGo()">Look up</button>
+    </div>
+    <div id="acFindOut" style="padding:0 18px 16px;font-size:13px;"></div>
+  </div>
+  <div class="card">
+    <div class="card-hd"><h2>Move everything to another account</h2></div>
+    <div style="padding:12px 18px;color:var(--muted);font-size:12.5px;line-height:1.6;">
+      Moves presentations, folders, classes, trash, images and slideshow decks. Decks keep their session codes, so QR codes, results and class sign-in keep working.
+      A backup is taken first and every move can be undone. Plans, billing, AI credits, team membership, shared decks and LoopSlide games do <b>not</b> move — the preview lists them.
+      The destination must have signed in once.
+    </div>
+    <div style="padding:0 18px 12px;display:flex;gap:8px;flex-wrap:wrap;">
+      <input id="acFrom" placeholder="FROM: email or uid" style="flex:1;min-width:200px;${acInp}">
+      <input id="acTo" placeholder="TO: email or uid" style="flex:1;min-width:200px;${acInp}">
+      <button class="btn btn-ghost btn-sm" onclick="acPlan()">Preview</button>
+    </div>
+    <div id="acPlanOut" style="padding:0 18px 16px;font-size:13px;"></div>
+  </div>
+  <div class="card">
+    <div class="card-hd"><h2>Recent account changes</h2></div>
+    <div id="acAudit" style="padding:12px 18px 16px;font-size:12.5px;color:var(--muted);">Loading…</div>
+  </div>`;
+  acLoadAudit();
+}
+async function acResolve(q){
+  q=String(q||'').trim(); if(!q) throw new Error('Enter an email or uid.');
+  return (await accountApi('adminFind',{query:q})).user;
+}
+let acUser=null;
+async function acFindGo(){
+  const out=document.getElementById('acFindOut'); out.innerHTML='<span class="loader">Looking…</span>';
+  try{
+    const u=await acResolve(document.getElementById('acFind').value); acUser=u;
+    const row=(k,v)=>`<tr><td style="color:var(--muted);padding:3px 12px 3px 0;">${k}</td><td>${v}</td></tr>`;
+    out.innerHTML=`<table style="font-size:12.5px;margin-bottom:10px;">
+      ${row('Email',esc(u.email)+(u.emailVerified?' ✓ verified':' · not verified'))}
+      ${row('Signs in with',esc((u.providers||[]).join(', ')||'—'))}
+      ${row('uid','<code>'+esc(u.uid)+'</code>')}
+      ${row('Plan',esc(u.tier)+(u.stripeCustomerId?' · Stripe '+esc(u.stripeCustomerId):''))}
+      ${row('Content',u.decks+' decks · '+u.classes+' classes'+(u.workspaceId?' · in a team':''))}
+      ${row('Created / last sign-in',esc(u.created||'—')+' / '+esc(u.lastSignIn||'—'))}
+      ${u.pendingEmail?row('Waiting to confirm','<b>'+esc(u.pendingEmail)+'</b> (they asked to change to this)'):''}
+      ${u.disabled?row('Status','<b style="color:var(--accent2)">DISABLED</b>'):''}
+    </table>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      <button class="btn btn-ghost btn-sm" onclick="acReset()">Send password reset email</button>
+    </div>
+    <div style="border-top:1px solid var(--border);padding-top:10px;">
+      <div style="font-weight:600;margin-bottom:6px;">Change their sign-in email</div>
+      ${(u.providers||[]).includes('password')?'':'<div style="color:var(--accent4);font-size:12px;margin-bottom:6px;">⚠ This account signs in with Google. Changing the email does not change their Google login — usually the right answer is to move their content to a new account instead (SOP §5).</div>'}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <input id="acNewEmail" placeholder="new@address.com" style="flex:1;min-width:200px;${acInp}">
+        <input id="acReason" placeholder="How you verified it's them (required)" style="flex:2;min-width:260px;${acInp}">
+        <button class="btn btn-amber btn-sm" onclick="acChangeEmail()">Change email</button>
+      </div>
+      <div id="acEmailOut" style="margin-top:8px;font-size:12.5px;"></div>
+    </div>`;
+  }catch(e){ out.innerHTML='<span style="color:var(--accent2)">'+esc(e.message)+'</span>'; }
+}
+function acReset(){
+  const email=acUser&&acUser.email; if(!email) return;
+  auth.sendPasswordResetEmail(email).then(()=>toast('Password reset sent to '+email,'success')).catch(e=>toast(e.message,'danger'));
+}
+async function acChangeEmail(){
+  if(!acUser) return; const uid=acUser.uid, oldEmail=acUser.email;
+  const next=(document.getElementById('acNewEmail').value||'').trim(), reason=(document.getElementById('acReason').value||'').trim();
+  const out=document.getElementById('acEmailOut');
+  if(!confirm(`Change the sign-in email of ${oldEmail} to ${next}?\n\nBoth addresses are emailed. They sign in with the new address and the SAME password.`)) return;
+  out.textContent='Working…';
+  try{
+    const d=await accountApi('adminChangeEmail',{uid,newEmail:next,reason});
+    out.innerHTML='<span style="color:var(--accent3)">✓ Changed. Updated: '+esc((d.done||[]).join(', '))+'</span>'+((d.problems||[]).length?'<br><span style="color:var(--accent4)">⚠ '+esc(d.problems.join('; '))+'</span>':'');
+    acLoadAudit();
+  }catch(e){ out.innerHTML='<span style="color:var(--accent2)">'+esc(e.message)+'</span>'; }
+}
+let acLastPlan=null;
+async function acPlan(){
+  const out=document.getElementById('acPlanOut'); out.innerHTML='<span class="loader">Checking…</span>'; acLastPlan=null;
+  try{
+    const f=await acResolve(document.getElementById('acFrom').value), t=await acResolve(document.getElementById('acTo').value);
+    const {plan}=await accountApi('adminTransferPlan',{fromUid:f.uid,toUid:t.uid});
+    acLastPlan=plan;
+    const c=plan.counts;
+    out.innerHTML=`<div style="margin-bottom:8px;">From <b>${esc(plan.from.email)}</b> → to <b>${esc(plan.to.email)}</b> (${esc(plan.to.tier)})</div>
+      <div style="margin-bottom:8px;">Will move: <b>${c.presentations}</b> decks · ${c.folders} folders · ${c.classes} classes · ${c.trash} in trash · ${c.presentDecks} slideshow decks · ${c.images} images · ${c.archives} archives</div>
+      <div style="max-height:180px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px;margin-bottom:8px;font-size:12px;">
+        ${plan.decks.map(d=>`<div>${d.shared||d.clash?'⏸':'✓'} ${esc(d.name)} <span style="color:var(--muted)">· ${esc(d.code||'no code')} · ${d.questions} q${d.shared?' · shared, stays':''}${d.clash?' · already in destination, skipped':''}</span></div>`).join('')||'<span style="color:var(--muted)">No decks.</span>'}
+      </div>
+      ${plan.warnings.map(w=>`<div style="color:var(--accent4);font-size:12px;margin-bottom:4px;">⚠ ${esc(w)}</div>`).join('')}
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+        <input id="acMoveReason" placeholder="How you verified both accounts are theirs (required)" style="flex:2;min-width:260px;${acInp}">
+        <input id="acMoveConfirm" placeholder="Type MOVE" style="width:120px;${acInp}">
+        <button class="btn btn-red btn-sm" onclick="acRun()">Move now</button>
+      </div>
+      <div id="acRunOut" style="margin-top:8px;font-size:12.5px;"></div>`;
+  }catch(e){ out.innerHTML='<span style="color:var(--accent2)">'+esc(e.message)+'</span>'; }
+}
+async function acRun(){
+  if(!acLastPlan) return;
+  const out=document.getElementById('acRunOut'); out.textContent='Moving… (backup first)';
+  try{
+    const d=await accountApi('adminTransferRun',{fromUid:acLastPlan.from.uid,toUid:acLastPlan.to.uid,
+      confirm:(document.getElementById('acMoveConfirm').value||'').trim(),reason:(document.getElementById('acMoveReason').value||'').trim()});
+    const m=d.result.moved||{};
+    out.innerHTML='<span style="color:var(--accent3)">✓ Done. Moved '+Object.entries(m).map(([k,v])=>v+' '+k).join(', ')+'. Class links re-pointed: '+d.result.classLinks+'. Transfer id <code>'+esc(d.result.id)+'</code> (undo below).</span>';
+    acLastPlan=null; acLoadAudit();
+  }catch(e){ out.innerHTML='<span style="color:var(--accent2)">'+esc(e.message)+'</span>'; }
+}
+async function acUndo(id){
+  if(!confirm('Undo transfer '+id+'? Everything it moved goes back to the old account.')) return;
+  try{ await accountApi('adminTransferUndo',{id}); toast('Transfer undone','success'); acLoadAudit(); }
+  catch(e){ toast(e.message,'danger'); }
+}
+async function acLoadAudit(){
+  const el=document.getElementById('acAudit'); if(!el) return;
+  try{
+    const a=(await db.ref('admin/account_audit').limitToLast(25).get()).val()||{};
+    const t=(await db.ref('admin/account_transfers').limitToLast(25).get()).val()||{};
+    const rows=Object.values(a).sort((x,y)=>(y.at||0)-(x.at||0)).map(e=>{
+      const when=new Date(e.at||0).toLocaleString();
+      const what=e.type==='email_changed'?`Email ${esc(e.from)} → <b>${esc(e.to)}</b>${e.self?' (by the user)':''}`
+        :e.type==='content_moved'?`Content moved ${esc(e.uid)} → ${esc(e.toUid)} · ${esc(JSON.stringify(e.moved||{}))}${t[e.transfer]&&t[e.transfer].status==='done'?` <button class="btn btn-xs btn-ghost" data-t="${esc(e.transfer)}" onclick="acUndo(this.dataset.t)">Undo</button>`:''}`
+        :e.type==='content_move_undone'?`Transfer ${esc(e.transfer)} undone`:esc(e.type||'');
+      return `<div style="padding:5px 0;border-bottom:1px solid var(--border);"><span style="color:var(--muted)">${esc(when)} · ${esc(e.by||'')}</span><br>${what}${e.reason?`<br><span style="color:var(--muted)">Verified: ${esc(e.reason)}</span>`:''}${(e.problems||[]).length?`<br><span style="color:var(--accent4)">⚠ ${esc(e.problems.join('; '))}</span>`:''}</div>`;
+    });
+    el.innerHTML=rows.join('')||'Nothing yet.';
+  }catch(e){ el.textContent='Could not load: '+e.message; }
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
@@ -3277,9 +3431,13 @@ const ARCH_LAYERS=[
         detail:'These power System Health, AI status, Security scan, and the legal watcher. status.js also writes the incident log automatically.',
         reads:['all services'],writes:['admin/incidents','admin/security_log','admin/legal_alerts']},
       {icon:'🗑️',name:'Account ops',file:'api/delete-account.js · admin-quota.js',status:'live',
-        desc:'Full account deletion (Auth + DB) and AI quota reset.',
-        detail:'Privileged actions the client cannot do alone; used from the user detail panel.',
-        reads:[],writes:['Firebase Auth','users/$uid']},
+        desc:'Full account deletion (Auth + DB) and AI quota reset. Deletion first sets any paid subscription to end at period close (or deletes nothing).',
+        detail:'Privileged actions the client cannot do alone; used from Account settings (self) and the user detail panel.',
+        reads:['Stripe subscriptions'],writes:['Firebase Auth','users/$uid','admin/deleted_accounts']},
+      {icon:'🪪',name:'Account changes',file:'api/account.js · lib/account.js',status:'live',
+        desc:'Email change sync (self, after the owner confirms the new address) and support tools: find, change email, move content between accounts, undo.',
+        detail:'Admin → Accounts. Every change is logged to admin/account_audit; every move is backed up to admin/account_transfers first. SOP: docs/ACCOUNT-SUPPORT-SOP.md.',
+        reads:['Firebase Auth','users/$uid','workspaces','shares','team_invites'],writes:['users/$uid','workspaces/$ws/members','team_invites','shares','quiz_builder/$code/ownerUid','Stripe customer email','admin/account_audit','admin/account_transfers']},
     ]},
   { key:'external', num:'6', accent:'#9090b8', title:'External services', sub:'Third parties the backend talks to',
     tools:[

@@ -16,13 +16,41 @@ const { spawn, execFileSync } = require('child_process');
 const HERE = __dirname, ROOT = path.resolve(HERE, '..', '..');
 const args = process.argv.slice(2);
 const flag = (n, d) => { const i = args.indexOf('--' + n); return i >= 0 ? args[i + 1] : d; };
-const ID = args.find(a => !a.startsWith('--') && args[args.indexOf(a) - 1] !== '--voice' && args[args.indexOf(a) - 1] !== '--rate') || 'getting-started';
+const ID = args.find(a => !a.startsWith('--') && !['--voice', '--rate', '--lang'].includes(args[args.indexOf(a) - 1])) || 'getting-started';
+/* --lang es|de|fr|pt|it (2026-09-30): a fully localized version — the app itself switched to
+   that language, narration read from <id>.captions.json in that language (a cue may carry a
+   separate spoken form, e.g. "es_say", for things like email addresses), and the best
+   installed voice for it. Written as <id>-<lang>.mp4 with its own <id>-<lang>.vtt. */
+const LANG = flag('lang', 'en');
+const LOCALE = { en: 'en_US', es: 'es_ES', de: 'de_DE', fr: 'fr_FR', pt: 'pt_PT', it: 'it_IT' }[LANG];
+if (!LOCALE) { console.error('Unknown --lang ' + LANG); process.exit(1); }
 /* Zoe (Premium) since 2026-09-27 (Rod downloaded it). Falls back to Samantha on a Mac without it.
    No rate by default: premium voices sound most natural at their own pace. */
 const INSTALLED = execFileSync('say', ['-v', '?']).toString();
-const VOICE = flag('voice', /^Zoe \(Premium\)/m.test(INSTALLED) ? 'Zoe (Premium)' : 'Samantha'), RATE = flag('rate', '');
+/* Best voice for a language: a Premium voice if one is downloaded, then Enhanced, then the
+   standard voice we chose for that language. Premium voices sound far more natural — download
+   them in System Settings → Accessibility → Spoken Content → System voice → Manage Voices. */
+const FALLBACK = { es_ES: 'Mónica', de_DE: 'Anna', fr_FR: 'Thomas', pt_PT: 'Joana', it_IT: 'Alice' };
+/* Spanish may also use a high-quality Latin American voice: the scripts are written in
+   neutral Spanish, and a natural es_MX voice beats the robotic standard es_ES one. Not done
+   for Portuguese — the text is European Portuguese, and a Brazilian voice would misread it. */
+const ALSO = { es_ES: ['es_MX', 'es_US'] };
+function bestVoice(locale) {
+  const all = INSTALLED.split('\n').map(l => { const m = /^(.+?)\s+([a-z]{2}_[A-Z]{2})\s+#/.exec(l); return m ? { name: m[1].trim(), loc: m[2] } : null; }).filter(Boolean);
+  const rows = all.filter(r => r.loc === locale), alt = all.filter(r => (ALSO[locale] || []).includes(r.loc));
+  const pick = (list, re) => (list.find(r => re.test(r.name)) || {}).name;
+  return pick(rows, /\(Premium\)/) || pick(rows, /\(Enhanced\)/) || pick(alt, /\(Premium\)/) || pick(alt, /\(Enhanced\)/)
+      || (rows.find(r => r.name === FALLBACK[locale]) || {}).name || (rows[0] || {}).name;
+}
+const VOICE = flag('voice', LANG === 'en' ? (/^Zoe \(Premium\)/m.test(INSTALLED) ? 'Zoe (Premium)' : 'Samantha') : bestVoice(LOCALE)), RATE = flag('rate', '');
+if (!VOICE) { console.error('No voice installed for ' + LOCALE); process.exit(1); }
 const SCRIPT = require(path.join(HERE, ID + '.js'));
-const WORK = path.join(os.tmpdir(), 'ps-video-' + ID); const OUT = path.join(HERE, 'out');
+const OID = LANG === 'en' ? ID : ID + '-' + LANG;          // output name
+const CAPS = LANG === 'en' ? null : JSON.parse(fs.readFileSync(path.join(HERE, ID + '.captions.json'), 'utf8')).cues;
+if (CAPS && CAPS.length !== SCRIPT.scenes.length) { console.error('captions.json has ' + CAPS.length + ' cues for ' + SCRIPT.scenes.length + ' scenes'); process.exit(1); }
+const sayOf = (s, i) => LANG === 'en' ? s.say : (CAPS[i][LANG + '_say'] || CAPS[i][LANG]);
+const textOf = (s, i) => LANG === 'en' ? s.say : CAPS[i][LANG];
+const WORK = path.join(os.tmpdir(), 'ps-video-' + OID); const OUT = path.join(HERE, 'out');
 const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = 8161, DBG = 9337;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -32,14 +60,14 @@ fs.rmSync(WORK, { recursive: true, force: true }); fs.mkdirSync(path.join(WORK, 
 // ── 1. narration ──────────────────────────────────────────────────────────────
 const lines = SCRIPT.scenes.map((s, i) => {
   const f = path.join(WORK, `say-${i}.aiff`);
-  execFileSync('say', ['-v', VOICE, ...(RATE ? ['-r', RATE] : []), '-o', f, s.say]);
+  execFileSync('say', ['-v', VOICE, ...(RATE ? ['-r', RATE] : []), '-o', f, sayOf(s, i)]);
   const info = execFileSync('afinfo', [f]).toString();
   const dur = parseFloat((info.match(/estimated duration: ([\d.]+)/) || [])[1] || '3');
   const m4a = f.replace(/\.aiff$/, '.m4a');            // AAC, so the final mux can copy streams as-is
   execFileSync('afconvert', ['-f', 'm4af', '-d', 'aac@44100', '-b', '96000', f, m4a]);
   return { file: m4a, dur };
 });
-console.log('voice:', VOICE, '· narration:', lines.map(l => l.dur.toFixed(1) + 's').join(' '), '=', lines.reduce((a, l) => a + l.dur, 0).toFixed(1) + 's');
+console.log('lang:', LANG, '· voice:', VOICE, '· narration:', lines.map(l => l.dur.toFixed(1) + 's').join(' '), '=', lines.reduce((a, l) => a + l.dur, 0).toFixed(1) + 's');
 
 // ── 2. stage + Chrome ─────────────────────────────────────────────────────────
 const server = spawn(process.execPath, [path.join(HERE, 'server.js'), String(PORT)], { stdio: 'ignore' });
@@ -87,6 +115,9 @@ async function cdpConnect() {
   const loaded = new Promise(r => { handlers['Page.loadEventFired'] = r; });
   await send('Page.navigate', { url: `http://localhost:${PORT}/__video/stage.html` });
   await loaded; await sleep(1200);
+  // The app's own interface language, and the script's on-screen words (chips, title cards).
+  await evaluate(`(function(){ try { ${LANG === 'en' ? "localStorage.removeItem('ps_ui_lang')" : `localStorage.setItem('ps_ui_lang', ${JSON.stringify(LANG)})`}; } catch (e) {}
+    window.VT = ${JSON.stringify((SCRIPT.t && SCRIPT.t[LANG]) || {})}; window.VLANG = ${JSON.stringify(LANG)}; })()`);
 
   // Frames: Chrome sends one whenever the picture changes, stamped with wall-clock time.
   const frames = []; let n = 0;
@@ -107,7 +138,7 @@ async function cdpConnect() {
     const s = SCRIPT.scenes[i], line = lines[i];
     const start = Date.now() / 1000;
     audio.push({ file: line.file, t: start - t0 + 0.25 }); sceneTimes.push({ id: s.id, t: start - t0 });
-    cues.push({ from: start - t0 + 0.25, to: start - t0 + 0.25 + line.dur, text: s.say });
+    cues.push({ from: start - t0 + 0.25, to: start - t0 + 0.25 + line.dur, text: textOf(s, i) });
     process.stdout.write(`scene ${i + 1}/${SCRIPT.scenes.length} ${s.id} … `);
     try { await evaluate(`(${s.run.toString()})(window.D)`); }
     catch (e) {
@@ -126,18 +157,23 @@ async function cdpConnect() {
 
   // Frame times relative to the start; the first frame covers anything before it.
   const rel = frames.map(x => ({ f: x.f, t: Math.max(0, x.t - t0) })).filter((x, i, a) => i === 0 || x.t >= a[i - 1].t);
-  const manifest = { width: 1920, height: 1080, end, frames: rel, audio, scenes: sceneTimes, preview: SCRIPT.preview || null, previewLabel: SCRIPT.previewLabel || null, out: path.join(OUT, ID + '.mp4') };
+  const manifest = { width: 1920, height: 1080, end, frames: rel, audio, scenes: sceneTimes, preview: SCRIPT.preview || null, previewLabel: SCRIPT.previewLabel || null, out: path.join(OUT, OID + '.mp4') };
   fs.writeFileSync(path.join(WORK, 'manifest.json'), JSON.stringify(manifest));
+  // Scene start times, for chapter buttons on the page that shows this video.
+  fs.writeFileSync(path.join(OUT, OID + '.scenes.json'), JSON.stringify(sceneTimes.map(x => ({ id: x.id, t: Math.round(x.t * 10) / 10 }))));
   console.log(`captured ${rel.length} frames over ${end.toFixed(1)}s`);
 
   // Captions (WebVTT) from the narration.
   const ts = (s) => { const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, x = (s % 60).toFixed(3).padStart(6, '0'); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${x}`; };
-  fs.writeFileSync(path.join(OUT, ID + '.en.vtt'), 'WEBVTT\n\n' + cues.map((c, i) => `${i + 1}\n${ts(c.from)} --> ${ts(c.to)}\n${c.text}\n`).join('\n'));
-  fs.writeFileSync(path.join(OUT, ID + '.cues.json'), JSON.stringify(cues, null, 1));
+  const vtt = 'WEBVTT\n\n' + cues.map((c, i) => `${i + 1}\n${ts(c.from)} --> ${ts(c.to)}\n${c.text}\n`).join('\n');
+  if (LANG === 'en') {
+    fs.writeFileSync(path.join(OUT, ID + '.en.vtt'), vtt);
+    fs.writeFileSync(path.join(OUT, ID + '.cues.json'), JSON.stringify(cues, null, 1));
+  } else fs.writeFileSync(path.join(OUT, OID + '.vtt'), vtt);
 
   // ── 3. assemble ──
   execFileSync('swift', [path.join(HERE, 'assemble.swift'), path.join(WORK, 'manifest.json')], { stdio: 'inherit' });
-  execFileSync('python3', [path.join(HERE, 'make-preview.py'), path.join(WORK, 'manifest.json'), path.join(OUT, ID)], { stdio: 'inherit' });
-  if (fs.existsSync(path.join(HERE, ID + '.captions.json'))) execFileSync('python3', [path.join(HERE, 'captions.py'), ID], { stdio: 'inherit' });
+  execFileSync('python3', [path.join(HERE, 'make-preview.py'), path.join(WORK, 'manifest.json'), path.join(OUT, OID)], { stdio: 'inherit' });
+  if (LANG === 'en' && fs.existsSync(path.join(HERE, ID + '.captions.json'))) execFileSync('python3', [path.join(HERE, 'captions.py'), ID], { stdio: 'inherit' });
   console.log('done →', OUT);
 })().catch(e => { console.error(e); cleanup(); process.exit(1); });

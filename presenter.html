@@ -16,7 +16,7 @@
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=a4fd5f2d"></script>
+<script src="/ui-lang.js?v=74e54d6c"></script>
 <script src="/tickets.js?v=edb362ec"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -1427,6 +1427,8 @@ auth.onAuthStateChanged(user => {
       db.ref(`users/${userId}`).update(loginMeta).catch(()=>{});
       db.ref(`admin/users_index/${userId}`).update(Object.assign({}, loginMeta, { tier: userTier || 'free' })).catch(()=>{});
     }
+    // A confirmed email change: bring every copy of the address in line (never blocks sign-in).
+    if (!_MASQ) maybeSyncEmail(user);
 
     // Check inbox for admin messages. They used to be 3.5-second toasts, marked read the
     // moment they were SHOWN — so a message that arrived while the tab was in the background,
@@ -2348,6 +2350,247 @@ function friendlyAuthError(code) {
   return map[code] || 'Something went wrong. Please try again.';
 }
 
+// ─── ACCOUNT SETTINGS (2026-09-30) ────────────────────────────────────────────
+/* One place for the account itself: sign-in email, password, your data, deletion.
+ * Until this existed a customer asked "is there a way to change my email or password?"
+ * and the honest answer was no — and "Delete my account" in the menu called a function
+ * that had been removed in v40, so it silently did nothing.
+ *
+ * Security shape — every change re-checks the CURRENT password first (Firebase requires a
+ * recent sign-in anyway, and it stops someone at an unlocked laptop). An email change
+ * only happens when the owner clicks the link sent to the NEW address; the OLD address is
+ * told. Everything that keeps a copy of the address is brought in line server-side
+ * (api/account.js → lib/account.js) the next time they sign in.
+ * Nothing here touches decks, sessions or answers. */
+function acctProviders() {
+  return ((currentUser && currentUser.providerData) || []).map(p => p && p.providerId).filter(Boolean);
+}
+function acctHasPassword() { return acctProviders().includes('password'); }
+
+async function openAccountSettings(focus) {
+  if (!currentUser) return;
+  closeUserMenu();
+  let m = document.getElementById('acctModal');
+  if (!m) { m = document.createElement('div'); m.id = 'acctModal'; m.className = 'overlay';
+            m.onclick = e => { if (e.target === m) closeAccountSettings(); }; document.body.appendChild(m); }
+  let pending = null;
+  try { const s = await db.ref(`users/${userId}/pendingEmail`).get(); pending = s.exists() ? s.val() : null; } catch (e) {}
+  const email = currentUser.email || '';
+  const google = acctProviders().includes('google.com');
+  const pw = acctHasPassword();
+  const plan = (TIERS[normalizeTier(userTier)] || TIERS.free).name;
+  const lbl = 'font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);';
+  const inp = 'width:100%;margin:5px 0 9px;padding:9px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;font-size:13px;font-family:inherit;';
+  const card = 'background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px 15px;margin-bottom:12px;';
+  const h = 'font-family:Syne,sans-serif;font-weight:700;font-size:14px;margin-bottom:6px;';
+  const note = 'color:var(--muted);font-size:12px;line-height:1.55;';
+  m.innerHTML = `<div class="modal" style="max-width:480px;" id="acctBox">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:2px;">
+      <h2 style="margin:0;white-space:nowrap;" data-i18n>⚙️ Account settings</h2>
+      <button class="icon-btn" onclick="closeAccountSettings()" title="Close">✕</button>
+    </div>
+    <div style="margin-bottom:12px;"><a href="https://pollslide.com/account-help" target="_blank" rel="noopener" style="color:var(--accent);font-size:12px;" data-i18n>▶ 1-minute video</a></div>
+    <div style="${card}">
+      <div style="${lbl}" data-i18n>Signed in as</div>
+      <div style="font-size:14px;font-weight:600;margin:4px 0 2px;word-break:break-all;">${escapeHtml(email)}</div>
+      <div style="${note}"><span data-i18n>${google && !pw ? 'Signs in with Google' : google ? 'Signs in with Google or a password' : 'Signs in with email and password'}</span> · <span data-i18n>Plan</span>: ${escapeHtml(plan)}</div>
+    </div>
+
+    <div style="${card}" id="acctEmailCard">
+      <div style="${h}" data-i18n>Change email address</div>
+      ${pending ? `<div id="acctPending" style="background:rgba(247,183,49,.12);border:1px solid rgba(247,183,49,.35);border-radius:9px;padding:9px 11px;font-size:12.5px;line-height:1.5;margin-bottom:9px;">
+          <span data-i18n>Waiting for you to confirm</span> <b>${escapeHtml(pending)}</b>. <span data-i18n>Open that inbox and click the link. Until then, keep signing in with your current address.</span>
+          <a onclick="acctCancelPending()" style="color:var(--accent);cursor:pointer;text-decoration:underline;" data-i18n>Cancel</a></div>` : ''}
+      ${pw ? `<label style="${lbl}" data-i18n>New email</label>
+        <input id="acctNewEmail" type="email" autocomplete="email" style="${inp}" placeholder="you@example.com">
+        <label style="${lbl}" data-i18n>Current password</label>
+        <input id="acctEmailPw" type="password" autocomplete="current-password" style="${inp}">
+        <button class="btn btn-primary btn-sm" id="acctEmailBtn" onclick="acctChangeEmail()" data-i18n>Send confirmation link</button>
+        ${'<div id="acctMsgEmail" class="acct-msg" style="display:none;font-size:12.5px;line-height:1.5;border-radius:9px;padding:9px 11px;margin-top:10px;"></div>'}
+        <div style="${note};margin-top:8px;" data-i18n>We send a link to the new address. Your email only changes when you click it, and we let your current address know. Your presentations, results and plan stay exactly as they are.</div>`
+      : `<div style="${note}" data-i18n>Your email comes from your Google account. To use a different address, write to help@pollslide.com — we can move all your presentations to a new account for you.</div>`}
+    </div>
+
+    <div style="${card}" id="acctPwCard">
+      <div style="${h}" data-i18n>Password</div>
+      ${pw ? `<label style="${lbl}" data-i18n>Current password</label>
+        <input id="acctCurPw" type="password" autocomplete="current-password" style="${inp}">
+        <label style="${lbl}" data-i18n>New password</label>
+        <input id="acctNewPw" type="password" autocomplete="new-password" style="${inp}" data-i18n-ph placeholder="At least 8 characters">
+        <label style="${lbl}" data-i18n>New password again</label>
+        <input id="acctNewPw2" type="password" autocomplete="new-password" style="${inp}">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <button class="btn btn-primary btn-sm" id="acctPwBtn" onclick="acctChangePassword()" data-i18n>Change password</button>
+          <a onclick="acctSendReset()" style="color:var(--accent);cursor:pointer;font-size:12px;text-decoration:underline;" data-i18n>Forgot your current password? Email me a reset link</a>
+        </div><div id="acctMsgPw" class="acct-msg" style="display:none;font-size:12.5px;line-height:1.5;border-radius:9px;padding:9px 11px;margin-top:10px;"></div>`
+      : `<div style="${note}" data-i18n>You sign in with Google, so there is no PollSlide password — it is managed in your Google account.</div>
+         <a href="https://myaccount.google.com/security" target="_blank" rel="noopener" style="color:var(--accent);font-size:12px;" data-i18n>Open Google account security ↗</a>`}
+    </div>
+
+    <div style="${card}">
+      <div style="${h}" data-i18n>Your data</div>
+      <div style="${note};margin-bottom:9px;" data-i18n>Download a copy of everything in your account: presentations, questions and the answers they collected.</div>
+      <button class="btn btn-ghost btn-sm" id="acctExportBtn" onclick="acctExport()" data-i18n>⬇ Download my data</button>
+      <div id="acctMsgData" class="acct-msg" style="display:none;font-size:12.5px;line-height:1.5;border-radius:9px;padding:9px 11px;margin-top:10px;"></div>
+    </div>
+
+    <div style="${card};border-color:rgba(255,101,132,.35);" id="acctDeleteCard">
+      <div style="${h};color:var(--accent2);" data-i18n>Delete account</div>
+      <div style="${note};margin-bottom:9px;" data-i18n>Permanently deletes your account, presentations and their answers. A paid plan stops renewing — no further charges. This cannot be undone, so download your data first if you want it.</div>
+      <label style="${lbl}" data-i18n>Type DELETE to confirm</label>
+      <input id="acctDelConfirm" autocomplete="off" style="${inp}">
+      <button class="btn btn-sm" id="acctDelBtn" onclick="acctDelete()" style="background:var(--accent2);color:#fff;border:none;" data-i18n>Delete my account permanently</button>
+      <div id="acctMsgDel" class="acct-msg" style="display:none;font-size:12.5px;line-height:1.5;border-radius:9px;padding:9px 11px;margin-top:10px;"></div>
+    </div>
+  </div>`;
+  m.style.display = 'flex';
+  if (focus === 'delete') setTimeout(() => document.getElementById('acctDeleteCard')?.scrollIntoView({ block: 'center' }), 60);
+}
+function closeAccountSettings() { const m = document.getElementById('acctModal'); if (m) m.remove(); }
+/* Each section answers inside itself, right under the button that was pressed — a message at
+   the bottom of the window scrolled people away from what they were doing. */
+function acctSay(msg, kind, where) {
+  document.querySelectorAll('#acctBox .acct-msg').forEach(m => { if (m.id !== where) m.style.display = 'none'; });
+  const el = document.getElementById(where); if (!el) { toast(msg, kind === 'err' ? 'danger' : 'success'); return; }
+  el.style.display = 'block';
+  el.style.background = kind === 'err' ? 'rgba(255,101,132,.12)' : 'rgba(67,233,123,.12)';
+  el.style.color = kind === 'err' ? 'var(--accent2)' : 'var(--accent3)';
+  el.textContent = msg;
+  el.scrollIntoView({ block: 'nearest' });
+}
+function acctBusy(id, on, label) {
+  const b = document.getElementById(id); if (!b) return;
+  if (on) { b._txt = b.textContent; b.disabled = true; b.textContent = tr('Working…'); }
+  else { b.disabled = false; if (b._txt) b.textContent = b._txt; }
+}
+function acctAuthError(e) {
+  const c = e && e.code;
+  const map = {
+    'auth/wrong-password': 'Your current password is not right.',
+    'auth/invalid-credential': 'Your current password is not right.',
+    'auth/too-many-requests': 'Too many attempts. Please wait a few minutes and try again.',
+    'auth/weak-password': 'Choose a longer password (at least 8 characters).',
+    'auth/email-already-in-use': 'Another PollSlide account already uses that email. Write to help@pollslide.com and we can move your presentations there.',
+    'auth/invalid-email': 'That email address does not look right.',
+    'auth/requires-recent-login': 'For your security, sign out and back in, then try again.',
+    'auth/network-request-failed': 'No connection. Check your internet and try again.',
+  };
+  return tr(map[c] || 'Something went wrong. Please try again.');
+}
+async function acctReauth(password) {
+  const cred = firebase.auth.EmailAuthProvider.credential(currentUser.email, password);
+  await currentUser.reauthenticateWithCredential(cred);
+}
+async function acctChangePassword() {
+  const cur = document.getElementById('acctCurPw').value;
+  const n1 = document.getElementById('acctNewPw').value, n2 = document.getElementById('acctNewPw2').value;
+  if (!cur) return acctSay(tr('Enter your current password.'), 'err', 'acctMsgPw');
+  if (n1.length < 8) return acctSay(tr('Choose a longer password (at least 8 characters).'), 'err', 'acctMsgPw');
+  if (n1 !== n2) return acctSay(tr('The two new passwords do not match.'), 'err', 'acctMsgPw');
+  if (n1 === cur) return acctSay(tr('The new password is the same as the current one.'), 'err', 'acctMsgPw');
+  acctBusy('acctPwBtn', true);
+  try {
+    await acctReauth(cur);
+    await currentUser.updatePassword(n1);
+    ['acctCurPw', 'acctNewPw', 'acctNewPw2'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    acctSay(tr('Password changed. Use the new one next time you sign in.'), 'ok', 'acctMsgPw');
+  } catch (e) { acctSay(acctAuthError(e), 'err', 'acctMsgPw'); }
+  acctBusy('acctPwBtn', false);
+}
+async function acctSendReset() {
+  try { await auth.sendPasswordResetEmail(currentUser.email); acctSay(tr('Reset link sent to') + ' ' + currentUser.email + '.', 'ok', 'acctMsgPw'); }
+  catch (e) { acctSay(acctAuthError(e), 'err', 'acctMsgPw'); }
+}
+async function acctChangeEmail() {
+  const next = (document.getElementById('acctNewEmail').value || '').trim().toLowerCase();
+  const pwd = document.getElementById('acctEmailPw').value;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next)) return acctSay(tr('That email address does not look right.'), 'err', 'acctMsgEmail');
+  if (next === (currentUser.email || '').toLowerCase()) return acctSay(tr('That is already your email.'), 'err', 'acctMsgEmail');
+  if (!pwd) return acctSay(tr('Enter your current password.'), 'err', 'acctMsgEmail');
+  acctBusy('acctEmailBtn', true);
+  try {
+    await acctReauth(pwd);
+    // Record the change we are waiting for FIRST: the server uses it to know the old
+    // address once the owner has confirmed the new one.
+    await db.ref(`users/${userId}`).update({ pendingEmail: next, pendingEmailFrom: (currentUser.email || '').toLowerCase(), pendingEmailAt: Date.now() });
+    await currentUser.verifyBeforeUpdateEmail(next);
+    acctSay(tr('Check your inbox at') + ' ' + next + ' ' + tr('and click the link to confirm. Until then, keep signing in with your current address.'), 'ok', 'acctMsgEmail');
+    const b = document.getElementById('acctEmailBtn'); if (b) b._txt = tr('Send confirmation link');
+  } catch (e) {
+    try { await db.ref(`users/${userId}`).update({ pendingEmail: null, pendingEmailFrom: null, pendingEmailAt: null }); } catch (x) {}
+    acctSay(acctAuthError(e), 'err', 'acctMsgEmail');
+  }
+  acctBusy('acctEmailBtn', false);
+}
+async function acctCancelPending() {
+  try { await db.ref(`users/${userId}`).update({ pendingEmail: null, pendingEmailFrom: null, pendingEmailAt: null }); } catch (e) {}
+  document.getElementById('acctPending')?.remove();
+  acctSay(tr('Cancelled. Your email stays as it is. (If you click the old link anyway, the change will still go through.)'), 'ok', 'acctMsgEmail');
+}
+/* After the owner has clicked the link, Firebase signs them in with the new address.
+   Bring every copy of it in line — best effort, never blocking sign-in. */
+async function maybeSyncEmail(user) {
+  try {
+    if (!user || !user.email) return;
+    const s = await db.ref(`users/${user.uid}/pendingEmail`).get();
+    const pending = s.exists() ? String(s.val() || '').toLowerCase() : '';
+    if (!pending || pending !== user.email.toLowerCase()) return;
+    const tok = await user.getIdToken(true);
+    const r = await fetch('/api/account', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+      body: JSON.stringify({ action: 'syncEmail' }) });
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && d.changed) toast(tr('Your email is now') + ' ' + user.email, 'success');
+  } catch (e) { /* next sign-in tries again */ }
+}
+async function acctExport() {
+  acctBusy('acctExportBtn', true);
+  try {
+    const own = (await db.ref(`users/${userId}/presentations`).get()).val() || {};
+    const out = { exportedAt: new Date().toISOString(), account: { email: currentUser.email, uid: userId }, presentations: [] };
+    for (const [id, p] of Object.entries(own)) {
+      const entry = { id, name: p.name || 'Untitled', type: p.productType || null, sessionCode: p.sessionCode || null,
+                      createdAt: p.createdAt || null, questions: toQArr(p.questions), answers: {} };
+      if (p.sessionCode) {
+        try { entry.answers = (await db.ref(`sessions/${p.sessionCode}/responses`).get()).val() || {}; } catch (e) {}
+      }
+      out.presentations.push(entry);
+    }
+    try { out.classes = (await db.ref(`users/${userId}/classes`).get()).val() || {}; } catch (e) {}
+    const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'pollslide-data-' + new Date().toISOString().slice(0, 10) + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    acctSay(tr('Downloaded.') + ' ' + out.presentations.length + ' ' + tr('presentations'), 'ok', 'acctMsgData');
+  } catch (e) { acctSay(tr('Could not build the download. Please try again.'), 'err', 'acctMsgData'); }
+  acctBusy('acctExportBtn', false);
+}
+async function acctDelete() {
+  if ((document.getElementById('acctDelConfirm').value || '').trim().toUpperCase() !== 'DELETE') {
+    return acctSay(tr('Type DELETE to confirm.'), 'err', 'acctMsgDel');
+  }
+  acctBusy('acctDelBtn', true);
+  try {
+    const tok = await currentUser.getIdToken(true);
+    const r = await fetch('/api/delete-account', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+      body: JSON.stringify({ uid: userId }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || !d.success) throw new Error(d.error || tr('Please try again, or write to help@pollslide.com.'));
+    closeAccountSettings();
+    try { await auth.signOut(); } catch (e) {}
+    alert(tr('Your account has been deleted. Thank you for using PollSlide.'));
+    location.reload();
+  } catch (e) {
+    acctSay(tr('Your account was not deleted.') + ' ' + (e.message || ''), 'err', 'acctMsgDel');
+    acctBusy('acctDelBtn', false);
+  }
+}
+// The menu's "Delete my account" item has called this name since v34; it was lost in v40.
+function requestAccountDeletion() { openAccountSettings('delete'); }
+
 // ─── USER DROPDOWN MENU ──────────────────────────────────────────────────────
 function toggleUserMenu() {
   const dd = document.getElementById('userDropdown');
@@ -2380,6 +2623,7 @@ function toggleUserMenu() {
   if (itemsEl) {
     const isTeamTier = ['team_small','team_large'].includes(normalizeTier(userTier));
     const menuItems = [
+      { icon:'⚙️', label:'Account settings',     fn:'openAccountSettings()' },
       { icon:'🔗', label:'Connect Mac App',      fn:'generatePairingCode()' },
       ...(isTeamTier ? [{ icon:'👥', label:'Team admin',        fn:'openTeamPanel()' }] : []),
       { icon:'🗄', label:'History (saved data)',  fn:'openHistory()' },

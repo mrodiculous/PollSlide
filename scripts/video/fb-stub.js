@@ -232,7 +232,10 @@
       getIdToken: async () => 'video-demo-token',
       getIdTokenResult: async () => ({ token: 'video-demo-token', claims: {} }),
       reload: async () => {}, updateProfile: async (p) => { Object.assign(user, p); },
-      sendEmailVerification: async () => {}, delete: async () => {}, toJSON() { return { uid: this.uid, email: this.email }; } });
+      sendEmailVerification: async () => {}, delete: async () => {}, toJSON() { return { uid: this.uid, email: this.email }; },
+      // Account settings (2026-09-30). The password "wrong" is rejected, so the error path can be filmed too.
+      reauthenticateWithCredential: async (c) => { if (!c || !c.password || c.password === 'wrong') { const e = new Error('bad'); e.code = 'auth/invalid-credential'; throw e; } },
+      updatePassword: async () => {}, verifyBeforeUpdateEmail: async () => {} });
   }
   let user = (CONF.signedIn === false || /[?&]signedout\b/.test(location.search)) ? null : makeUser(CONF.user);
   const authSubs = [];
@@ -253,7 +256,7 @@
   };
   function GoogleAuthProvider() { this.addScope = () => this; this.setCustomParameters = () => this; }
   GoogleAuthProvider.credential = () => ({});
-  function EmailAuthProvider() {} EmailAuthProvider.credential = () => ({});
+  function EmailAuthProvider() {} EmailAuthProvider.credential = (email, password) => ({ email, password });
 
   // ── storage: uploads go to the local server and come back as real URLs ─────
   const storage = { ref(p) { return storageRef(split(p || '')); }, refFromURL(u) { return storageRef(['from-url']); } };

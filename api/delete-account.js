@@ -79,6 +79,38 @@ module.exports = async function handler(req, res) {
     }
   } catch (e) { errors.push('user_read: ' + e.message); }
 
+  /* 1b. Stop billing and free the team seat BEFORE anything is erased (2026-09-30).
+     Deleting the account used to leave a paid subscription renewing — the customer kept
+     being charged for an account that no longer existed. Now every active subscription
+     is set to end at the close of the period already paid for (no further charges, no
+     partial refund, which is what the Terms say). If Stripe cannot be reached, NOTHING is
+     deleted: an erased account with a live subscription is the one outcome to avoid. */
+  let billingNote = null;
+  try {
+    const u = (await db.ref('users/' + uid).get()).val() || {};
+    if (u.stripeCustomerId) {
+      if (!process.env.STRIPE_SECRET_KEY) throw new Error('Stripe not configured');
+      const Stripe = require('stripe');
+      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2026-05-27.dahlia' });
+      const subs = await stripe.subscriptions.list({ customer: u.stripeCustomerId, status: 'all', limit: 100 });
+      for (const sub of subs.data) {
+        if (['active', 'trialing', 'past_due', 'unpaid'].includes(sub.status) && !sub.cancel_at_period_end) {
+          await stripe.subscriptions.update(sub.id, { cancel_at_period_end: true });
+          billingNote = 'subscription set to end at period close';
+        }
+      }
+    }
+    // A member leaving by deletion frees their seat. An OWNER's team ends with their plan.
+    if (u.workspaceId) {
+      const ws = (await db.ref('workspaces/' + u.workspaceId).get()).val();
+      if (ws && ws.ownerUid !== uid && ws.members && ws.members[uid]) {
+        await db.ref('workspaces/' + u.workspaceId + '/members/' + uid).remove();
+      }
+    }
+  } catch (e) {
+    return res.status(503).json({ error: 'We could not stop your subscription, so nothing was deleted. Please try again, or write to help@pollslide.com. (' + e.message + ')' });
+  }
+
   // 2. Delete Firebase Auth user
   try {
     await admin.auth(app).deleteUser(uid);
@@ -126,6 +158,7 @@ module.exports = async function handler(req, res) {
       deletedAt:   Date.now(),
       deletedBy:   callerEmail,
       selfDelete:  isOwner,
+      billing:     billingNote,
       results,
     });
   } catch (e) { /* Audit failure shouldn't block response */ }

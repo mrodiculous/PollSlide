@@ -166,6 +166,23 @@ const TEMPLATES = {
     `, 'https://app.pollslide.com/presenter', 'Join the team →')
   }),
 
+  /* Sent by api/account.js when a sign-in email changes — to BOTH addresses. The old
+     address is the one that matters for security: if the owner didn't make this change,
+     this is how they find out, so it says plainly what to do. */
+  email_changed: (data) => {
+    const toOld = data.audience === 'old';
+    return {
+      subject: toOld ? 'Your PollSlide sign-in email was changed' : 'Your PollSlide sign-in email is now this address',
+      html: baseLayout('Email changed', `
+      <h1 style="font-size:24px;font-weight:800;margin:0 0 12px;color:#15152a;">${toOld ? 'Your sign-in email was changed' : 'You now sign in with this address'}</h1>
+      <p style="font-size:16px;color:#5a5a78;margin:0 0 18px;">Your PollSlide account's sign-in email changed from <strong>${esc(data.oldEmail)}</strong> to <strong>${esc(data.newEmail)}</strong>${data.bySupport ? ', by PollSlide Support at your request' : ''}. All your presentations, results and your plan are unchanged.</p>
+      <div style="background:#f4f4fc;border-radius:10px;padding:14px 16px;font-size:14px;color:#5a5a78;margin:0 0 18px;border-left:3px solid ${toOld ? BRAND_PINK : BRAND_COLOR};">
+        ${toOld ? "<strong>Didn't do this?</strong> Reply to this email or write to help@pollslide.com straight away and we'll secure your account." : 'From now on, sign in with this address. Your password stays the same.'}
+      </div>
+    `, 'https://app.pollslide.com/presenter', 'Open PollSlide →'),
+    };
+  },
+
   // Sent by api/team.js to the OWNER when someone accepts an invite.
   team_joined: (data) => ({
     subject: `${esc(data.memberEmail)} joined ${esc(data.wsName) || 'your team'} on PollSlide`,
