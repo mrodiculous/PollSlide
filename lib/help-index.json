@@ -23,6 +23,20 @@
    "text": "Click + Add Question . Type your question in the question box . Fill in the answer options (A, B, C, D…). Choose a question type — single choice, multi-select, rating, word cloud, or free text. Mark the correct answer (for quizzes) by tapping the ✓ next to an option. In a hurry? Click ✨ Ask Polly and give it a topic or paste your notes — Polly drafts a full set of questions for you to edit."
   },
   {
+   "id": "move-questions",
+   "url": "https://pollslide.com/help#move-questions",
+   "kind": "section",
+   "title": "↕️ Move questions within a deck",
+   "text": "Put your questions in the order you want to ask them. Each question keeps its QR code and link when you move it. Click the question in the list on the left. Click “✏️ Edit this question”. At the bottom of the editor, click “↑ Up” or “↓ Down”. Each click moves it one place, and the list updates straight away. What happens when you move a question Its QR code and link still open the same question. That includes QR codes on your Keynote, PowerPoint and Google Slides slides, printed handouts, and the Mac companion. You don't need to copy anything again. Its number changes to match its new place. The question list, your audience's phones and your reports number questions by where they are in the deck now. A question you move from 2nd to 5th shows as “Question 5”, even if your slide still says “Question 2”. Answers stay with their question. Results, reports, leaderboards and exports are not affected. You can move questions during a live session. If you move the question that is showing, your audience stays on it and keeps what they have chosen. Deleting a question doesn't change the other questions' codes. Anyone who scans a deleted question's code is told it isn't available, then…",
+   "titles": {
+    "es": "↕️ Mover preguntas dentro de una presentación",
+    "de": "↕️ Fragen in einer Präsentation verschieben",
+    "fr": "↕️ Déplacer des questions dans une présentation",
+    "pt": "↕️ Mover perguntas numa apresentação",
+    "it": "↕️ Spostare le domande in una presentazione"
+   }
+  },
+  {
    "id": "polly",
    "url": "https://pollslide.com/help#polly",
    "kind": "section",

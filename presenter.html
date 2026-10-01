@@ -16,7 +16,7 @@
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=46268bef"></script>
+<script src="/ui-lang.js?v=2b1099bb"></script>
 <script src="/tickets.js?v=edb362ec"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -9064,6 +9064,14 @@ function moveQ(idx,dir){
   if (liveQId) resyncLiveIdx();
   else if (liveQIdx===idx) liveQIdx=ni; else if (liveQIdx===ni) liveQIdx=idx;   // no id saved: as before
   selIdx=ni;saveBack();renderQList();renderEditor(ni);
+  moveTipOnce();
+}
+/* The first time someone moves a question (2026-10-01): one short note on what moving does,
+   with the full explainer a click away. Shown once per browser; it changes nothing. */
+function moveTipOnce() {
+  try { if (localStorage.getItem('ps_move_tip')) return; localStorage.setItem('ps_move_tip', '1'); } catch (e) { return; }
+  toast(tr('Moved. Its QR code still opens this question — its number now shows its new place.'), 'info',
+    { label: tr('How moving works'), timeout: 10000, onClick: () => window.open('https://pollslide.com/help#move-questions', '_blank', 'noopener') });
 }
 function saveAndNext(idx){renderQList();if(idx+1<questions.length)selectQ(idx+1);else toast('All questions saved!','success');}
 
