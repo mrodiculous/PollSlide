@@ -124,6 +124,9 @@ function fakeDb(init) {
     && del.indexOf('cancel_at_period_end: true') < del.indexOf('deleteUser(uid)') && /nothing was deleted/.test(del));
 
   ok('deleting an account whose Stripe customer no longer exists still works (nothing to bill)', /e\.code === 'resource_missing'/.test(del) && /Any OTHER failure still blocks the deletion/.test(del));
+  ok('Google users: Route A switches to email + password on the SAME account (unlinks google.com)', /providersToUnlink: \['google\.com'\]/.test(src) && /isGoogle && !toPassword\) return res\.status\(400\)/.test(src));
+  const mailSrc = require('fs').readFileSync(path.join(__dirname, '..', '..', 'api', 'send-email.js'), 'utf8');
+  ok('a switched Google user is told to SET a password (not "your password stays the same")', /data\.switchedToPassword[\s\S]{0,120}set your password/.test(mailSrc));
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

@@ -224,6 +224,36 @@
 </div>
 
 <script>
+/* ── Interface language (2026-10-01) ─────────────────────────────────────────
+   The Mac app (1.3.5+) adds &lang=xx: the Mac's language, or the one picked in the app's
+   Language menu, so the menu, dialogs and this window always agree. With no lang (app
+   1.3.4 and older, a browser, OBS) everything stays English exactly as before.
+   Keyed by the exact English (like ui-lang.js); a missing entry shows the English.
+   Only this page's own words go through T() — never a question, option, name or answer. */
+const UI_LANG_C = (function () { try { const l = new URLSearchParams(location.search).get('lang'); return ['es','de','fr','pt','it'].includes(l) ? l : 'en'; } catch (e) { return 'en'; } })();
+const COMP_I18N = {
+  es: {"LIVE": "EN VIVO", "Bars": "Barras", "Column": "Columnas", "Word Cloud": "Nube de palabras", "Donut": "Anillo", "Pie": "Circular", "Numbers": "Números", "Leaderboard": "Clasificación", "Fill Slide": "Llenar diapositiva", "Media": "Multimedia", "Reveal": "Revelar", "Fill the window — question on top, answers below — so you can drag it tall over your slide": "Llena la ventana —pregunta arriba, respuestas abajo— para que puedas estirarla sobre tu diapositiva", "Show/hide question image or video": "Mostrar/ocultar la imagen o el vídeo de la pregunta", "Reveal the correct answer now": "Revelar ahora la respuesta correcta", "Switch light / dark mode": "Cambiar modo claro / oscuro", "Connecting…": "Conectando…", "No account linked. Click the bar-chart icon in the menu bar (top right) → “Disconnect Account (Re-pair)”, then type a new code from app.pollslide.com/presenter (your email, top right → Connect Mac App) into the “Connect to PollSlide” window.": "No hay ninguna cuenta conectada. Haz clic en el icono de gráfico de barras de la barra de menús (arriba a la derecha) → «Desconectar cuenta (volver a conectar)» y escribe en la ventana «Conectar con PollSlide» un código nuevo de app.pollslide.com/presenter (tu correo, arriba a la derecha → Conectar la app de Mac).", "Question not found for this slide.": "No se encontró la pregunta de esta diapositiva.", "Could not load this question.": "No se pudo cargar esta pregunta.", "Waiting for your presentation…": "Esperando tu presentación…", "Open a presentation on pollslide.com to begin.": "Abre una presentación en pollslide.com para empezar.", "Waiting for a question to go live…": "Esperando a que una pregunta se active…", "PollSlide Companion {v} is available": "PollSlide Companion {v} ya está disponible", "(you have {v}).": "(tienes la {v}).", "How to update": "Cómo actualizar", "Later": "Más tarde", "Post-reveal in": "Tras la revelación en", "Manual reveal": "Revelación manual", "Reveal in": "Revelación en", "Reveal starts on first answer": "La revelación empieza con la primera respuesta", "Answer revealed": "Respuesta revelada", "Scan to answer": "Escanea para responder", "Point your phone camera here to join this question.": "Apunta aquí con la cámara del móvil para unirte a esta pregunta.", "Fastest": "Más rápido", "Player {n}": "Jugador {n}", "No responses yet.": "Aún no hay respuestas.", "LEADERBOARD": "CLASIFICACIÓN", "+ {n} more": "+ {n} más", "Fantastic!": "¡Fantástico!", "Nice work!": "¡Buen trabajo!", "Keep going!": "¡Sigue así!", "Tough one!": "¡Era difícil!", "avg score · {a} fully correct / {b}": "puntuación media · {a} totalmente correctas / {b}", "DID YOU KNOW?": "¿SABÍAS QUE…?", "No explainer text set.": "No hay texto explicativo.", "{n} took part": "{n} participaron", "Scan for full results · {code}": "Escanea para ver todos los resultados · {code}", "Final results": "Resultados finales", "Could not load results.": "No se pudieron cargar los resultados.", "Podium": "Podio", "Score Card": "Marcador", "Explainer": "Explicación", "Post-Reveal": "Tras la revelación", "response": "respuesta", "responses": "respuestas", "Results hidden until reveal": "Resultados ocultos hasta la revelación", "Waiting for responses…": "Esperando respuestas…", "Anonymous": "Anónimo", "avg {x} ★": "media {x} ★", "Correct": "Correcta", "Most got it right!": "¡La mayoría acertó!", "Over half correct!": "¡Más de la mitad acertó!", "Tricky one!": "¡Era complicada!", "Tough crowd!": "¡Público difícil!", "{p}% correct": "{p}% de aciertos", "{n} responses in 10s": "{n} respuestas en 10 s", "No answer": "Sin respuesta"},
+  de: {"LIVE": "LIVE", "Bars": "Balken", "Column": "Säulen", "Word Cloud": "Wortwolke", "Donut": "Ring", "Pie": "Kreis", "Numbers": "Zahlen", "Leaderboard": "Rangliste", "Fill Slide": "Folie füllen", "Media": "Medien", "Reveal": "Aufdecken", "Fill the window — question on top, answers below — so you can drag it tall over your slide": "Füllt das Fenster – Frage oben, Antworten unten –, damit du es hoch über deine Folie ziehen kannst", "Show/hide question image or video": "Bild oder Video der Frage ein-/ausblenden", "Reveal the correct answer now": "Richtige Antwort jetzt aufdecken", "Switch light / dark mode": "Hell-/Dunkelmodus wechseln", "Connecting…": "Verbinden …", "No account linked. Click the bar-chart icon in the menu bar (top right) → “Disconnect Account (Re-pair)”, then type a new code from app.pollslide.com/presenter (your email, top right → Connect Mac App) into the “Connect to PollSlide” window.": "Kein Konto verbunden. Klick in der Menüleiste (oben rechts) auf das Balkendiagramm-Symbol → „Konto trennen (neu verbinden)“ und gib dann im Fenster „Mit PollSlide verbinden“ einen neuen Code von app.pollslide.com/presenter ein (deine E-Mail oben rechts → Mac-App verbinden).", "Question not found for this slide.": "Keine Frage für diese Folie gefunden.", "Could not load this question.": "Diese Frage konnte nicht geladen werden.", "Waiting for your presentation…": "Warten auf deine Präsentation …", "Open a presentation on pollslide.com to begin.": "Öffne eine Präsentation auf pollslide.com, um zu beginnen.", "Waiting for a question to go live…": "Warten, bis eine Frage live geht …", "PollSlide Companion {v} is available": "PollSlide Companion {v} ist verfügbar", "(you have {v}).": "(du hast {v}).", "How to update": "So aktualisierst du", "Later": "Später", "Post-reveal in": "Nach der Auflösung in", "Manual reveal": "Manuell aufdecken", "Reveal in": "Aufdecken in", "Reveal starts on first answer": "Der Countdown startet mit der ersten Antwort", "Answer revealed": "Antwort aufgedeckt", "Scan to answer": "Scannen zum Antworten", "Point your phone camera here to join this question.": "Richte die Kamera deines Handys hierauf, um bei dieser Frage mitzumachen.", "Fastest": "Am schnellsten", "Player {n}": "Spieler {n}", "No responses yet.": "Noch keine Antworten.", "LEADERBOARD": "RANGLISTE", "+ {n} more": "+ {n} weitere", "Fantastic!": "Fantastisch!", "Nice work!": "Gut gemacht!", "Keep going!": "Weiter so!", "Tough one!": "Die war schwer!", "avg score · {a} fully correct / {b}": "Ø-Punktzahl · {a} komplett richtig / {b}", "DID YOU KNOW?": "SCHON GEWUSST?", "No explainer text set.": "Kein Erklärtext hinterlegt.", "{n} took part": "{n} haben mitgemacht", "Scan for full results · {code}": "Scannen für alle Ergebnisse · {code}", "Final results": "Endergebnis", "Could not load results.": "Ergebnisse konnten nicht geladen werden.", "Podium": "Podium", "Score Card": "Punktekarte", "Explainer": "Erklärung", "Post-Reveal": "Nach der Auflösung", "response": "Antwort", "responses": "Antworten", "Results hidden until reveal": "Ergebnisse bis zum Aufdecken verborgen", "Waiting for responses…": "Warten auf Antworten…", "Anonymous": "Anonym", "avg {x} ★": "Ø {x} ★", "Correct": "Richtig", "Most got it right!": "Die meisten lagen richtig!", "Over half correct!": "Über die Hälfte richtig!", "Tricky one!": "Knifflig!", "Tough crowd!": "Harte Runde!", "{p}% correct": "{p}% richtig", "{n} responses in 10s": "{n} Antworten in 10 s", "No answer": "Keine Antwort"},
+  fr: {"LIVE": "EN DIRECT", "Bars": "Barres", "Column": "Colonnes", "Word Cloud": "Nuage de mots", "Donut": "Anneau", "Pie": "Camembert", "Numbers": "Nombres", "Leaderboard": "Classement", "Fill Slide": "Remplir la diapo", "Media": "Médias", "Reveal": "Révéler", "Fill the window — question on top, answers below — so you can drag it tall over your slide": "Remplit la fenêtre — question en haut, réponses en bas — pour que tu puisses l’étirer sur ta diapositive", "Show/hide question image or video": "Afficher/masquer l’image ou la vidéo de la question", "Reveal the correct answer now": "Révéler la bonne réponse maintenant", "Switch light / dark mode": "Basculer mode clair / sombre", "Connecting…": "Connexion…", "No account linked. Click the bar-chart icon in the menu bar (top right) → “Disconnect Account (Re-pair)”, then type a new code from app.pollslide.com/presenter (your email, top right → Connect Mac App) into the “Connect to PollSlide” window.": "Aucun compte connecté. Clique sur l’icône en forme de graphique à barres dans la barre des menus (en haut à droite) → « Déconnecter le compte (reconnecter) », puis saisis dans la fenêtre « Se connecter à PollSlide » un nouveau code obtenu sur app.pollslide.com/presenter (ton e-mail, en haut à droite → Connecter l’app Mac).", "Question not found for this slide.": "Question introuvable pour cette diapositive.", "Could not load this question.": "Impossible de charger cette question.", "Waiting for your presentation…": "En attente de ta présentation…", "Open a presentation on pollslide.com to begin.": "Ouvre une présentation sur pollslide.com pour commencer.", "Waiting for a question to go live…": "En attente d’une question en direct…", "PollSlide Companion {v} is available": "PollSlide Companion {v} est disponible", "(you have {v}).": "(tu as la {v}).", "How to update": "Comment mettre à jour", "Later": "Plus tard", "Post-reveal in": "Après la révélation dans", "Manual reveal": "Révélation manuelle", "Reveal in": "Révélation dans", "Reveal starts on first answer": "La révélation démarre à la première réponse", "Answer revealed": "Réponse révélée", "Scan to answer": "Scanne pour répondre", "Point your phone camera here to join this question.": "Pointe l’appareil photo de ton téléphone ici pour rejoindre cette question.", "Fastest": "Plus rapide", "Player {n}": "Joueur {n}", "No responses yet.": "Pas encore de réponses.", "LEADERBOARD": "CLASSEMENT", "+ {n} more": "+ {n} de plus", "Fantastic!": "Fantastique !", "Nice work!": "Beau travail !", "Keep going!": "Continue comme ça !", "Tough one!": "Pas facile, celle-là !", "avg score · {a} fully correct / {b}": "score moyen · {a} entièrement justes / {b}", "DID YOU KNOW?": "LE SAVAIS-TU ?", "No explainer text set.": "Aucun texte d’explication défini.", "{n} took part": "{n} ont participé", "Scan for full results · {code}": "Scanne pour voir tous les résultats · {code}", "Final results": "Résultats finaux", "Could not load results.": "Impossible de charger les résultats.", "Podium": "Podium", "Score Card": "Carte de score", "Explainer": "Explication", "Post-Reveal": "Après la révélation", "response": "réponse", "responses": "réponses", "Results hidden until reveal": "Résultats masqués jusqu’à la révélation", "Waiting for responses…": "En attente de réponses…", "Anonymous": "Anonyme", "avg {x} ★": "moy. {x} ★", "Correct": "Correct", "Most got it right!": "La plupart ont trouvé !", "Over half correct!": "Plus de la moitié a trouvé !", "Tricky one!": "Pas évidente !", "Tough crowd!": "Public exigeant !", "{p}% correct": "{p}% justes", "{n} responses in 10s": "{n} réponses en 10 s", "No answer": "Pas de réponse"},
+  pt: {"LIVE": "EM DIRETO", "Bars": "Barras", "Column": "Colunas", "Word Cloud": "Nuvem de palavras", "Donut": "Anel", "Pie": "Circular", "Numbers": "Números", "Leaderboard": "Classificação", "Fill Slide": "Preencher diapositivo", "Media": "Multimédia", "Reveal": "Revelar", "Fill the window — question on top, answers below — so you can drag it tall over your slide": "Preenche a janela — pergunta em cima, respostas em baixo — para a poder esticar sobre o diapositivo", "Show/hide question image or video": "Mostrar/ocultar a imagem ou o vídeo da pergunta", "Reveal the correct answer now": "Revelar agora a resposta correta", "Switch light / dark mode": "Alternar modo claro / escuro", "Connecting…": "A ligar…", "No account linked. Click the bar-chart icon in the menu bar (top right) → “Disconnect Account (Re-pair)”, then type a new code from app.pollslide.com/presenter (your email, top right → Connect Mac App) into the “Connect to PollSlide” window.": "Nenhuma conta ligada. Clique no ícone de gráfico de barras na barra de menus (canto superior direito) → «Desligar conta (voltar a ligar)» e introduza na janela «Ligar ao PollSlide» um código novo de app.pollslide.com/presenter (o seu e-mail, canto superior direito → Ligar a app de Mac).", "Question not found for this slide.": "Pergunta não encontrada para este diapositivo.", "Could not load this question.": "Não foi possível carregar esta pergunta.", "Waiting for your presentation…": "A aguardar a sua apresentação…", "Open a presentation on pollslide.com to begin.": "Abra uma apresentação em pollslide.com para começar.", "Waiting for a question to go live…": "A aguardar que uma pergunta fique em direto…", "PollSlide Companion {v} is available": "O PollSlide Companion {v} está disponível", "(you have {v}).": "(tem a {v}).", "How to update": "Como atualizar", "Later": "Mais tarde", "Post-reveal in": "Após a revelação em", "Manual reveal": "Revelação manual", "Reveal in": "Revelação em", "Reveal starts on first answer": "A revelação começa com a primeira resposta", "Answer revealed": "Resposta revelada", "Scan to answer": "Leia o código para responder", "Point your phone camera here to join this question.": "Aponte a câmara do telemóvel aqui para participar nesta pergunta.", "Fastest": "Mais rápido", "Player {n}": "Jogador {n}", "No responses yet.": "Ainda sem respostas.", "LEADERBOARD": "CLASSIFICAÇÃO", "+ {n} more": "+ {n} mais", "Fantastic!": "Fantástico!", "Nice work!": "Bom trabalho!", "Keep going!": "Continue assim!", "Tough one!": "Esta era difícil!", "avg score · {a} fully correct / {b}": "pontuação média · {a} totalmente corretas / {b}", "DID YOU KNOW?": "SABIA QUE…?", "No explainer text set.": "Sem texto explicativo definido.", "{n} took part": "{n} participaram", "Scan for full results · {code}": "Leia para ver todos os resultados · {code}", "Final results": "Resultados finais", "Could not load results.": "Não foi possível carregar os resultados.", "Podium": "Pódio", "Score Card": "Cartão de pontuação", "Explainer": "Explicação", "Post-Reveal": "Após a revelação", "response": "resposta", "responses": "respostas", "Results hidden until reveal": "Resultados ocultos até à revelação", "Waiting for responses…": "A aguardar respostas…", "Anonymous": "Anónimo", "avg {x} ★": "média {x} ★", "Correct": "Correta", "Most got it right!": "A maioria acertou!", "Over half correct!": "Mais de metade acertou!", "Tricky one!": "Esta era complicada!", "Tough crowd!": "Público difícil!", "{p}% correct": "{p}% de acertos", "{n} responses in 10s": "{n} respostas em 10 s", "No answer": "Sem resposta"},
+  it: {"LIVE": "LIVE", "Bars": "Barre", "Column": "Colonne", "Word Cloud": "Nuvola di parole", "Donut": "Ciambella", "Pie": "Torta", "Numbers": "Numeri", "Leaderboard": "Classifica", "Fill Slide": "Riempi slide", "Media": "Media", "Reveal": "Rivela", "Fill the window — question on top, answers below — so you can drag it tall over your slide": "Riempie la finestra — domanda in alto, risposte sotto — così puoi allungarla sopra la slide", "Show/hide question image or video": "Mostra/nascondi l’immagine o il video della domanda", "Reveal the correct answer now": "Rivela ora la risposta corretta", "Switch light / dark mode": "Passa alla modalità chiara / scura", "Connecting…": "Collegamento…", "No account linked. Click the bar-chart icon in the menu bar (top right) → “Disconnect Account (Re-pair)”, then type a new code from app.pollslide.com/presenter (your email, top right → Connect Mac App) into the “Connect to PollSlide” window.": "Nessun account collegato. Fai clic sull’icona a grafico a barre nella barra dei menu (in alto a destra) → «Scollega account (ricollega)», poi inserisci nella finestra «Collegati a PollSlide» un nuovo codice da app.pollslide.com/presenter (la tua email in alto a destra → Collega l’app per Mac).", "Question not found for this slide.": "Domanda non trovata per questa slide.", "Could not load this question.": "Impossibile caricare questa domanda.", "Waiting for your presentation…": "In attesa della tua presentazione…", "Open a presentation on pollslide.com to begin.": "Apri una presentazione su pollslide.com per iniziare.", "Waiting for a question to go live…": "In attesa che una domanda vada in diretta…", "PollSlide Companion {v} is available": "PollSlide Companion {v} è disponibile", "(you have {v}).": "(hai la {v}).", "How to update": "Come aggiornare", "Later": "Più tardi", "Post-reveal in": "Dopo la rivelazione tra", "Manual reveal": "Rivelazione manuale", "Reveal in": "Rivelazione tra", "Reveal starts on first answer": "La rivelazione parte alla prima risposta", "Answer revealed": "Risposta rivelata", "Scan to answer": "Scansiona per rispondere", "Point your phone camera here to join this question.": "Inquadra qui con la fotocamera del telefono per partecipare a questa domanda.", "Fastest": "Più veloce", "Player {n}": "Giocatore {n}", "No responses yet.": "Ancora nessuna risposta.", "LEADERBOARD": "CLASSIFICA", "+ {n} more": "+ altri {n}", "Fantastic!": "Fantastico!", "Nice work!": "Ottimo lavoro!", "Keep going!": "Continua così!", "Tough one!": "Era difficile!", "avg score · {a} fully correct / {b}": "punteggio medio · {a} del tutto corrette / {b}", "DID YOU KNOW?": "LO SAPEVI?", "No explainer text set.": "Nessun testo esplicativo impostato.", "{n} took part": "{n} hanno partecipato", "Scan for full results · {code}": "Scansiona per i risultati completi · {code}", "Final results": "Risultati finali", "Could not load results.": "Impossibile caricare i risultati.", "Podium": "Podio", "Score Card": "Scheda punteggio", "Explainer": "Spiegazione", "Post-Reveal": "Dopo la rivelazione", "response": "risposta", "responses": "risposte", "Results hidden until reveal": "Risultati nascosti fino alla rivelazione", "Waiting for responses…": "In attesa di risposte…", "Anonymous": "Anonimo", "avg {x} ★": "media {x} ★", "Correct": "Corretta", "Most got it right!": "Quasi tutti hanno indovinato!", "Over half correct!": "Più della metà ha indovinato!", "Tricky one!": "Era complicata!", "Tough crowd!": "Pubblico difficile!", "{p}% correct": "{p}% corrette", "{n} responses in 10s": "{n} risposte in 10 s", "No answer": "Nessuna risposta"}
+};
+function T(en, vars) {
+  let s = (UI_LANG_C !== 'en' && COMP_I18N[UI_LANG_C] && COMP_I18N[UI_LANG_C][en]) || en;
+  if (vars) for (const k in vars) s = s.split('{' + k + '}').join(vars[k]);
+  return s;
+}
+if (UI_LANG_C !== 'en') {
+  document.documentElement.lang = UI_LANG_C;
+  const setTxt = (el, txt) => { if (el) el.textContent = txt; };
+  setTxt(document.getElementById('livePill'), T('LIVE'));
+  document.querySelectorAll('.toggle-btn[data-mode]').forEach(b => { b.textContent = T(b.textContent.trim()); });
+  const pb = document.getElementById('portraitBtn'), mb = document.getElementById('mediaToggleBtn'), rb = document.getElementById('revealBtn'), tb = document.getElementById('themeBtn');
+  setTxt(pb, '⤢ ' + T('Fill Slide')); setTxt(mb, '🖼 ' + T('Media')); setTxt(rb, T('Reveal'));
+  [pb, mb, rb, tb].forEach(b => { if (b && b.title) b.title = T(b.title); });
+  setTxt(document.getElementById('waitMsg'), T('Connecting…'));
+}
+
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyBPncI0e-LlIgLvTcq76O1Kdq2jXJ6DiME",
   authDomain: "echonest-live-survey.firebaseapp.com",
@@ -433,16 +463,55 @@ function showWaiting(msg) {
   document.getElementById('livePill').style.display = 'none';
   document.getElementById('toggleBar').style.display = 'none';
   document.getElementById('body').innerHTML =
-    `<div class="waiting"><div class="waiting-icon">⏳</div><div>${msg}</div></div>`;
+    `<div class="waiting"><div class="waiting-icon">⏳</div><div>${msg}</div></div>` + macUpdateNote();
+}
+
+/* ── Mac app update notice (2026-10-01) ──────────────────────────────────────
+   The Mac app has no updater of its own, but every copy shows THIS page — so this page is
+   how existing installs learn a new version exists. The app adds ?cb= to the address
+   (always) and, from 1.3.5, &v=<its version>; a Mac app with no v is 1.3.4 or older.
+   Admin → Health → "Mac companion" sets app_config/mac_companion { latest, notes }.
+   ONLY on this waiting screen — never over live results, which may be on a projector —
+   and "Later" snoozes it for 3 days. Translated via T() when the app passes &lang= (1.3.5+).
+   Apps before 1.3.5 cannot open a new-tab link (no handler in their web view), so they
+   also get the address to type into a browser. */
+const _qs = new URLSearchParams(location.search);
+const MAC_APP = _qs.has('cb');
+const MAC_V = _qs.get('v') || (MAC_APP ? '1.3.4' : null);
+let _macLatest = null;
+function verLess(a, b) {
+  const pa = String(a).split('.').map(n => parseInt(n, 10) || 0), pb = String(b).split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) < (pb[i] || 0); }
+  return false;
+}
+function macUpdateNote() {
+  if (!MAC_APP || !_macLatest || !_macLatest.latest || !verLess(MAC_V, _macLatest.latest)) return '';
+  try { if (Date.now() < Number(localStorage.getItem('ps_mac_update_snooze') || 0)) return ''; } catch (e) {}
+  return `<div id="macUpd" style="margin:14px auto 0;max-width:420px;background:rgba(108,99,255,.14);border:1px solid rgba(108,99,255,.4);border-radius:12px;padding:10px 12px;font-size:12.5px;line-height:1.5;text-align:left;">
+    <b>${escapeHtml(T('PollSlide Companion {v} is available', { v: _macLatest.latest }))}</b> ${escapeHtml(T('(you have {v}).', { v: MAC_V }))}
+    ${_macLatest.notes ? `<div style="opacity:.8;margin-top:3px;">${escapeHtml(String(_macLatest.notes).slice(0, 200))}</div>` : ''}
+    <div style="margin-top:8px;display:flex;gap:8px;">
+      <a href="https://pollslide.com/mac-update?v=${encodeURIComponent(MAC_V)}" target="_blank" rel="noopener" style="background:#6c63ff;color:#fff;border-radius:8px;padding:6px 12px;text-decoration:none;font-weight:700;">${T('How to update')}</a>
+      <a href="#" onclick="try{localStorage.setItem('ps_mac_update_snooze',Date.now()+3*864e5)}catch(e){};document.getElementById('macUpd').remove();return false;" style="color:inherit;opacity:.75;padding:6px 4px;">${T('Later')}</a>
+    </div>${_qs.has('v') ? '' : '<div style="opacity:.7;margin-top:6px;font-size:11.5px;">Or open pollslide.com/mac-update in your browser.</div>'}</div>`;
+}
+if (MAC_APP) {
+  try {
+    db.ref('app_config/mac_companion').get().then(s => {
+      _macLatest = s.exists() ? s.val() : null;
+      const w = document.querySelector('#body .waiting');   // already on the waiting screen? add it now
+      if (w && !document.getElementById('macUpd')) w.insertAdjacentHTML('afterend', macUpdateNote());
+    }).catch(() => {});
+  } catch (e) {}
 }
 
 // ── Boot ──
 function boot() {
   /* Names the real way back, not just "re-pair". Checked against the shipped app
      (v1.3.4 build 10): the menu item is "Disconnect Account (Re-pair)" and it returns to the
-     "Connect to PollSlide" window. There is no "Connect Account" item. English on purpose —
-     this page runs inside the Mac app, whose labels are English. */
-  if (!userId) { showWaiting('No account linked. Click the bar-chart icon in the menu bar (top right) → “Disconnect Account (Re-pair)”, then type a new code from app.pollslide.com/presenter (your email, top right → Connect Mac App) into the “Connect to PollSlide” window.'); return; }
+     "Connect to PollSlide" window. There is no "Connect Account" item. From 1.3.5 the app is
+     translated and passes &lang=; the translations quote the app's translated labels. */
+  if (!userId) { showWaiting(T('No account linked. Click the bar-chart icon in the menu bar (top right) → “Disconnect Account (Re-pair)”, then type a new code from app.pollslide.com/presenter (your email, top right → Connect Mac App) into the “Connect to PollSlide” window.')); return; }
   if (targetSession && targetQIndex !== null) {
     // QR-driven mode: show exactly the question the scanned QR points to
     showTargetedQuestion(targetSession, targetQIndex);
@@ -515,7 +584,7 @@ function showTargetedQuestion(session, link) {
     const questions = snap.exists() ? snap.val() : [];
     const qIdx = PSQid.resolve(hs && hs.exists() ? hs.val() : null, link);   // no map → position, as before
     const q = (Array.isArray(questions) && qIdx >= 0) ? questions[qIdx] : null;
-    if (!q || !q.text) { showWaiting('Question not found for this slide.'); return; }
+    if (!q || !q.text) { showWaiting(T('Question not found for this slide.')); return; }
     const qId = PSQid.bucket(q, qIdx, session); // the question's own id — survives reordering
     const qObj = Object.assign({}, q, { id: qId, qIndex: qIdx, home: link });
     if (curQId !== qId) {
@@ -568,16 +637,16 @@ function showTargetedQuestion(session, link) {
     phaseRef.on('value', s => { _stQ = s.val(); applyTargetedState(); });
     phaseRef2 = db.ref(`sessions/${session}/currentQuestion`);
     phaseRef2.on('value', s => { _stCur = s.val(); applyTargetedState(); });
-  }).catch(() => showWaiting('Could not load this question.'));
+  }).catch(() => showWaiting(T('Could not load this question.')));
 }
 
 function watchMacLink() {
-  showWaiting('Waiting for your presentation…');
+  showWaiting(T('Waiting for your presentation…'));
   macLinkRef = db.ref(`mac_link/${userId}`);
   macLinkRef.on('value', snap => {
     const data = snap.val();
     if (!data || !data.sessionCode) {
-      showWaiting('Open a presentation on pollslide.com to begin.');
+      showWaiting(T('Open a presentation on pollslide.com to begin.'));
       return;
     }
     if (sessionCode !== data.sessionCode) {
@@ -596,7 +665,7 @@ function watchLiveQuestion() {
     const q = snap.val();
     if (!q || !q.text) {
       curQ = null;
-      showWaiting('Waiting for a question to go live…');
+      showWaiting(T('Waiting for a question to go live…'));
       return;
     }
     // Presentation reached the Final Results card → show a compact tally + QR.
@@ -741,20 +810,20 @@ function renderAll() {
   let revealBar = '';
   const isQuiz = (curQ.type === 'multiple_choice' || curQ.type === 'multiple_choice_multi');
   const prRem = postRevealRemaining(); // synced to presenter; null when no countdown should show
-  const prBadge = `<div class="reveal-bar"><span style="color:#a78bfa;font-weight:700;">✦ Post-reveal in <strong class="reveal-strong" id="prCount">${prRem}s</strong></span></div>`;
+  const prBadge = `<div class="reveal-bar"><span style="color:#a78bfa;font-weight:700;">✦ ${T('Post-reveal in')} <strong class="reveal-strong" id="prCount">${prRem}s</strong></span></div>`;
   if (isQuiz && !revealed) {
     revealBar = revealArmed
       ? (revealSeconds === -1
-          ? `<div class="reveal-bar"><span>Manual reveal</span></div>`
-          : `<div class="reveal-bar"><span>Reveal in <strong class="reveal-strong" id="revealCount">${revealRemaining}s</strong></span></div>`)
+          ? `<div class="reveal-bar"><span>${T('Manual reveal')}</span></div>`
+          : `<div class="reveal-bar"><span>${T('Reveal in')} <strong class="reveal-strong" id="revealCount">${revealRemaining}s</strong></span></div>`)
       : (revealSeconds === -1
-          ? `<div class="reveal-bar"><span>Manual reveal</span></div>`
-          : `<div class="reveal-bar"><span>⏳ Reveal starts on first answer</span></div>`);
+          ? `<div class="reveal-bar"><span>${T('Manual reveal')}</span></div>`
+          : `<div class="reveal-bar"><span>⏳ ${T('Reveal starts on first answer')}</span></div>`);
   } else if (isQuiz && revealed) {
     // Once revealed, show the post-reveal countdown if one is running, else "revealed".
     revealBar = (prRem !== null)
       ? prBadge
-      : `<div class="reveal-bar"><span style="color:var(--accent3);font-weight:600;">✓ Answer revealed</span></div>`;
+      : `<div class="reveal-bar"><span style="color:var(--accent3);font-weight:600;">✓ ${T('Answer revealed')}</span></div>`;
   } else if (!isQuiz && prRem !== null) {
     // Opinion polls (word cloud / rating) are always "revealed" — show the countdown.
     revealBar = prBadge;
@@ -768,8 +837,8 @@ function renderAll() {
     ? `<div class="qr-pane">
          <div class="qr-box" id="qrBox"></div>
          <div class="qr-info">
-           <h3>Scan to answer</h3>
-           <p>Point your phone camera here to join this question.</p>
+           <h3>${T('Scan to answer')}</h3>
+           <p>${T('Point your phone camera here to join this question.')}</p>
          </div>
        </div>`
     : '';
@@ -992,13 +1061,13 @@ function buildPostRevealContent(q, resps) {
       const _pTxt = _psc===1?'✓':_psc===-1?'✗':_psc!==null?Math.round(_psc*100)+'%':'·';
       const score = `<span style="color:${_pCol};font-size:13px;">${_pTxt}</span>`;
       const isFastest = rank === fastestIdx && r.isCorrect === true;
-      const fastBadge = isFastest ? `<span style="font-size:11px;background:#f7b73122;border:1px solid #f7b731;border-radius:6px;padding:1px 6px;color:#f7b731;flex-shrink:0;">⚡ Fastest</span>` : '';
+      const fastBadge = isFastest ? `<span style="font-size:11px;background:#f7b73122;border:1px solid #f7b731;border-radius:6px;padding:1px 6px;color:#f7b731;flex-shrink:0;">⚡ ${T('Fastest')}</span>` : '';
       return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);">
         <span style="width:22px;text-align:center;font-size:12px;">${rank<3?medals[rank]:'#'+(rank+1)}</span>
-        <span style="flex:1;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.name && r.name.trim() ? r.name : 'Player '+(rank+1))}${speed}</span>
+        <span style="flex:1;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.name && r.name.trim() ? r.name : T('Player {n}', { n: rank+1 }))}${speed}</span>
         ${fastBadge}${score}</div>`;
-    }).join('') || '<div style="color:var(--muted);font-size:13px;">No responses yet.</div>';
-    return `<div style="font-size:11px;font-weight:700;color:#a78bfa;letter-spacing:.06em;margin-bottom:8px;">✦ LEADERBOARD</div>${rows}`;
+    }).join('') || '<div style="color:var(--muted);font-size:13px;">' + T('No responses yet.') + '</div>';
+    return `<div style="font-size:11px;font-weight:700;color:#a78bfa;letter-spacing:.06em;margin-bottom:8px;">✦ ${T('LEADERBOARD')}</div>${rows}`;
   }
 
   if (type === 'podium') {
@@ -1012,14 +1081,14 @@ function buildPostRevealContent(q, resps) {
       if (!r) return `<div style="flex:1;"></div>`;
       return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;">
         <div style="font-size:18px;">${medals[i]}</div>
-        <div style="font-size:11px;font-weight:700;color:var(--text);text-align:center;max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.name && r.name.trim() ? r.name : 'Player '+(i+1))}</div>
+        <div style="font-size:11px;font-weight:700;color:var(--text);text-align:center;max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(r.name && r.name.trim() ? r.name : T('Player {n}', { n: i+1 }))}</div>
         ${r.elapsed?`<div style="font-size:9px;color:var(--muted);">${(r.elapsed/1000).toFixed(1)}s</div>`:''}
         <div style="width:100%;height:${heights[i]};background:${cols[i]};border-radius:6px 6px 0 0;box-shadow:0 0 14px ${cols2[i]};animation:podiumRise 0.6s ${0.1*i}s ease both;"></div>
       </div>`;
     });
     return `<div style="font-size:11px;font-weight:700;color:#a78bfa;letter-spacing:.06em;margin-bottom:10px;">✦ TOP 3</div>
       <div style="display:flex;align-items:flex-end;gap:6px;justify-content:center;padding:0 4px;">${podiums.join('')}</div>
-      ${sorted.length>3?`<div style="margin-top:10px;font-size:11px;color:var(--muted);text-align:center;">+ ${sorted.length-3} more</div>`:''}`;
+      ${sorted.length>3?`<div style="margin-top:10px;font-size:11px;color:var(--muted);text-align:center;">${T('+ {n} more', { n: sorted.length-3 })}</div>`:''}`;
   }
 
   if (type === 'scorecard') {
@@ -1027,10 +1096,10 @@ function buildPostRevealContent(q, resps) {
     const totalScore = resps.reduce((sum,r)=>sum+(r.isCorrect===true?1:typeof r.isCorrect==='number'&&r.isCorrect>0?r.isCorrect:0),0);
     const pct = total>0 ? Math.round(totalScore/total*100) : 0;
     const fullCorrect = resps.filter(r=>r.isCorrect===true).length;
-    const [emoji, label, col] = pct>=80?['🎉','Fantastic!','#43e97b']:pct>=60?['👏','Nice work!','#6c63ff']:pct>=40?['💪','Keep going!','#f7b731']:['🤔','Tough one!','#ff6584'];
+    const [emoji, label, col] = pct>=80?['🎉',T('Fantastic!'),'#43e97b']:pct>=60?['👏',T('Nice work!'),'#6c63ff']:pct>=40?['💪',T('Keep going!'),'#f7b731']:['🤔',T('Tough one!'),'#ff6584'];
     return `<div style="text-align:center;padding:4px 0;">
       <div style="font-size:48px;font-weight:900;color:${col};text-shadow:0 0 24px ${col}88;line-height:1;">${pct}%</div>
-      <div style="font-size:12px;color:var(--muted);margin-top:2px;">avg score · ${fullCorrect} fully correct / ${total}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px;">${T('avg score · {a} fully correct / {b}', { a: fullCorrect, b: total })}</div>
       <div style="margin-top:12px;font-size:18px;">${emoji}</div>
       <div style="font-size:14px;font-weight:700;color:${col};margin-top:2px;">${label}</div>
       <div style="height:5px;background:var(--border2);border-radius:3px;margin-top:14px;overflow:hidden;">
@@ -1041,8 +1110,8 @@ function buildPostRevealContent(q, resps) {
   if (type === 'explainer') {
     const text = q.postReveal?.explainerText || '';
     return `<div style="background:rgba(108,99,255,0.1);border:1px solid rgba(108,99,255,0.3);border-radius:10px;padding:14px 16px;">
-      <div style="font-size:11px;font-weight:700;color:#a78bfa;letter-spacing:.06em;margin-bottom:8px;">💡 DID YOU KNOW?</div>
-      <div style="font-size:13px;line-height:1.6;color:var(--text);">${escapeHtml(text)||'<em style="color:var(--muted)">No explainer text set.</em>'}</div></div>`;
+      <div style="font-size:11px;font-weight:700;color:#a78bfa;letter-spacing:.06em;margin-bottom:8px;">💡 ${T('DID YOU KNOW?')}</div>
+      <div style="font-size:13px;line-height:1.6;color:var(--text);">${escapeHtml(text)||'<em style="color:var(--muted)">' + T('No explainer text set.') + '</em>'}</div></div>`;
   }
   return '';
 }
@@ -1129,9 +1198,9 @@ function buildCompanionTallyHtml(t, code, pubOn) {
   const lb = t.leaderboard.slice(0, 6);
   const list = (t.hasCorrect && lb.length)
     ? lb.map((p, i) => `<div class="p-row"><span class="p-rank">${i<3?medals[i]:'#'+(i+1)}</span><span class="p-name">${escapeHtml(p.name)}</span><span class="p-score" style="color:var(--accent3)">${Math.round(p.score*10)/10}</span></div>`).join('')
-    : `<div style="color:var(--muted);font-size:13px;text-align:center;padding:12px;">${t.respondents} took part 🎉</div>`;
-  const qr = pubOn ? `<div style="display:flex;flex-direction:column;align-items:center;gap:5px;margin-top:10px;"><div id="compTallyQR" style="background:#fff;border-radius:8px;padding:6px;width:96px;height:96px;"></div><div style="font-size:10px;color:var(--muted);text-align:center;">Scan for full results · ${escapeHtml(code)}</div></div>` : '';
-  return `<div class="resp-big" style="text-align:center;">🏆 <span>Final results</span></div>${list}${qr}`;
+    : `<div style="color:var(--muted);font-size:13px;text-align:center;padding:12px;">${T('{n} took part', { n: t.respondents })} 🎉</div>`;
+  const qr = pubOn ? `<div style="display:flex;flex-direction:column;align-items:center;gap:5px;margin-top:10px;"><div id="compTallyQR" style="background:#fff;border-radius:8px;padding:6px;width:96px;height:96px;"></div><div style="font-size:10px;color:var(--muted);text-align:center;">${escapeHtml(T('Scan for full results · {code}', { code: code }))}</div></div>` : '';
+  return `<div class="resp-big" style="text-align:center;">🏆 <span>${T('Final results')}</span></div>${list}${qr}`;
 }
 function renderCompanionTally() {
   const area = document.getElementById('resultsArea'); if (!area) return;
@@ -1147,7 +1216,7 @@ function renderCompanionTally() {
     area.innerHTML = buildCompanionTallyHtml(t, sessionCode, pubOn);
     if (pubOn) { const el = document.getElementById('compTallyQR'); if (el && window.QRCode) { try { new QRCode(el, { text: 'https://app.pollslide.com/results#' + sessionCode, width: 88, height: 88, colorDark: '#0b0b15', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H }); psBrandQR(el); } catch (e) {} } }
     requestFitToContent();
-  }).catch(() => { area.innerHTML = `<div style="color:var(--muted);text-align:center;padding:20px;">Could not load results.</div>`; });
+  }).catch(() => { area.innerHTML = `<div style="color:var(--muted);text-align:center;padding:20px;">${T('Could not load results.')}</div>`; });
 }
 
 function renderResults() {
@@ -1162,9 +1231,9 @@ function renderResults() {
   const inPostReveal = presentPhase === 'post_reveal' || curQ?.phase === 'post_reveal';
   if (inPostReveal) {
     const pr = (curQ.postReveal && typeof curQ.postReveal === 'object') ? curQ.postReveal : { type: 'leaderboard' };
-    const label = {leaderboard:'Leaderboard',podium:'Podium',scorecard:'Score Card',explainer:'Explainer'}[pr.type] || 'Post-Reveal';
+    const label = T({leaderboard:'Leaderboard',podium:'Podium',scorecard:'Score Card',explainer:'Explainer'}[pr.type] || 'Post-Reveal');
     const qForPR = Object.assign({}, curQ, { postReveal: pr });
-    area.innerHTML = `<div style="animation:fadeInScale .4s ease;" class="resp-big">${responses.length} <span>responses · ${label}</span></div>${buildPostRevealContent(qForPR, responses)}`;
+    area.innerHTML = `<div style="animation:fadeInScale .4s ease;" class="resp-big">${responses.length} <span>${T('responses')} · ${label}</span></div>${buildPostRevealContent(qForPR, responses)}`;
     requestFitToContent();
     return;
   }
@@ -1173,25 +1242,25 @@ function renderResults() {
   // answer (published on the live question). Show only the count until they reveal — then
   // this falls through to the full results + correct-answer highlight below.
   if (hideResults && !revealed) {
-    area.innerHTML = `<div class="resp-big">${responses.length} <span>response${responses.length!==1?'s':''}</span></div>` +
-      `<div style="text-align:center;color:var(--muted);font-size:12px;padding:10px 6px;line-height:1.5;">🙈 Results hidden until reveal</div>`;
+    area.innerHTML = `<div class="resp-big">${responses.length} <span>${T(responses.length!==1?'responses':'response')}</span></div>` +
+      `<div style="text-align:center;color:var(--muted);font-size:12px;padding:10px 6px;line-height:1.5;">🙈 ${T('Results hidden until reveal')}</div>`;
     requestFitToContent();
     return;
   }
 
   const total = responses.length;
   const isChoice = curQ.type === 'multiple_choice' || curQ.type === 'multiple_choice_multi';
-  const waiting = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">Waiting for responses…</div>';
+  const waiting = '<div style="color:var(--muted);font-size:13px;padding:8px 0;">' + T('Waiting for responses…') + '</div>';
 
   // ── Free text ──────────────────────────────────────────────────────────────
   if (curQ.type === 'free_text') {
     if (viewMode === 'word_cloud' && total > 0) {
       const wc = buildWordCloud(responses.map(r => safeAnswer(r.answer)).join(' '));
-      area.innerHTML = `<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>${wc}`;
+      area.innerHTML = `<div class="resp-big">${total} <span>${T(total!==1?'responses':'response')}</span></div>${wc}`;
     } else {
-      area.innerHTML = `<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>` +
+      area.innerHTML = `<div class="resp-big">${total} <span>${T(total!==1?'responses':'response')}</span></div>` +
         (total===0 ? waiting : responses.map(r =>
-          `<div class="txt-resp">${escapeHtml(safeAnswer(r.answer))}<div class="from">— ${escapeHtml(r.name && r.name.trim() ? r.name : 'Anonymous')}</div></div>`
+          `<div class="txt-resp">${escapeHtml(safeAnswer(r.answer))}<div class="from">— ${escapeHtml(r.name && r.name.trim() ? r.name : T('Anonymous'))}</div></div>`
         ).join(''));
     }
     requestFitToContent(); return;
@@ -1204,7 +1273,7 @@ function renderResults() {
     for (let i=1;i<=max;i++) counts[i]=0;
     responses.forEach(r=>{ try{const v=JSON.parse(r.answer);if(v)counts[v]=(counts[v]||0)+1;}catch(e){} });
     const avg = total>0 ? (Object.entries(counts).reduce((s,[k,v])=>s+(+k*v),0)/total).toFixed(1) : '—';
-    area.innerHTML = `<div class="resp-big">${total} <span>responses · avg ${avg} ★</span></div>` +
+    area.innerHTML = `<div class="resp-big">${total} <span>${T('responses')} · ${T('avg {x} ★', { x: avg })}</span></div>` +
       Object.entries(counts).map(([val,cnt])=>{
         const p = total>0?Math.round(cnt/total*100):0;
         return `<div class="bar-wrap" style="border-color:#f7b73144;box-shadow:0 0 10px #f7b73118;">
@@ -1241,7 +1310,7 @@ function renderResults() {
     });}catch(e){} });
     const words = Object.entries(wordCounts).filter(([,c])=>c>0).sort((a,b)=>b[1]-a[1]);
     if (!words.length) {
-      area.innerHTML = `<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>${waiting}`;
+      area.innerHTML = `<div class="resp-big">${total} <span>${T(total!==1?'responses':'response')}</span></div>${waiting}`;
     } else {
       const max=words[0][1], min=words[words.length-1][1];
       inner = `<div class="word-cloud">${words.map(([w,c],idx)=>{
@@ -1250,7 +1319,7 @@ function renderResults() {
         const rot = (Math.random()*8-4).toFixed(1);
         return `<span style="font-size:${sz}px;color:${col};transform:rotate(${rot}deg);" title="${c}">${escapeHtml(w)}</span>`;
       }).join('')}</div>`;
-      area.innerHTML = `<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>${inner}`;
+      area.innerHTML = `<div class="resp-big">${total} <span>${T(total!==1?'responses':'response')}</span></div>${inner}`;
     }
     requestFitToContent(); return;
   }
@@ -1272,7 +1341,7 @@ function renderResults() {
         ? `<span class="p-score" style="color:${_lc}">${_lt}</span>`
         : `<span class="p-score" style="color:var(--accent3)">●</span>`;
       const speed = (revealed&&r.elapsed)?`<span style="font-size:10px;color:var(--muted);margin-left:6px;">${(r.elapsed/1000).toFixed(1)}s</span>`:'';
-      return `<div class="p-row"><span class="p-rank">${revealed?(rank<3?medals[rank]:'#'+(rank+1)):'•'}</span><span class="p-name">${escapeHtml(r.name && r.name.trim() ? r.name : 'Player '+(rank+1))}${speed}</span>${score}</div>`;
+      return `<div class="p-row"><span class="p-rank">${revealed?(rank<3?medals[rank]:'#'+(rank+1)):'•'}</span><span class="p-name">${escapeHtml(r.name && r.name.trim() ? r.name : T('Player {n}', { n: rank+1 }))}${speed}</span>${score}</div>`;
     }).join('') || waiting;
 
   // ── Numbers ────────────────────────────────────────────────────────────────
@@ -1362,7 +1431,7 @@ function renderResults() {
         ? `background:#43e97b33;border:2px solid #43e97b;color:#43e97b;box-shadow:0 0 14px #43e97b99;font-size:13px;`
         : `background:${color}22;border:1.5px solid ${color};color:${color};box-shadow:0 0 6px ${color}55;`;
       const correctPill = showCorrect
-        ? `<span style="font-size:11px;font-weight:800;color:#43e97b;background:rgba(67,233,123,0.18);border:1px solid #43e97b77;padding:2px 9px;border-radius:100px;white-space:nowrap;flex-shrink:0;">✓ Correct</span>`
+        ? `<span style="font-size:11px;font-weight:800;color:#43e97b;background:rgba(67,233,123,0.18);border:1px solid #43e97b77;padding:2px 9px;border-radius:100px;white-space:nowrap;flex-shrink:0;">✓ ${T('Correct')}</span>`
         : '';
 
       return `<div class="bar-wrap" style="${wrapStyle}">
@@ -1385,7 +1454,7 @@ function renderResults() {
     const now = Date.now();
     _recentResponses = _recentResponses.filter(t => now - t < 10000);
     const velocity = _recentResponses.length;
-    velChip = velocity >= 3 ? `<div style="font-size:11px;color:#f7b731;margin-bottom:8px;">🔥 ${velocity} responses in 10s</div>` : '';
+    velChip = velocity >= 3 ? `<div style="font-size:11px;color:#f7b731;margin-bottom:8px;">🔥 ${T('{n} responses in 10s', { n: velocity })}</div>` : '';
   }
 
   // Feature 1 — Smart insight chip after reveal (choice questions with correct answer)
@@ -1397,11 +1466,11 @@ function renderResults() {
     // to mark those partial answers as correct — the bug this fixes.
     const fullyCorrect = responses.filter(r => r.isCorrect === true).length;
     const pctVal = Math.round(fullyCorrect / total * 100);
-    const [emoji, msg, col] = pctVal >= 80 ? ['🎉','Most got it right!','#43e97b'] : pctVal >= 50 ? ['👏','Over half correct!','#6c63ff'] : pctVal >= 25 ? ['🤔','Tricky one!','#f7b731'] : ['😅','Tough crowd!','#ff6584'];
-    insightChip = `<div style="display:flex;align-items:center;gap:7px;background:${col}18;border:1px solid ${col}44;border-radius:10px;padding:7px 12px;margin-bottom:12px;font-size:12px;font-weight:700;color:${col};">${emoji} ${msg} <span style="margin-left:auto;font-family:Syne,sans-serif;font-size:13px;">${pctVal}% correct</span></div>`;
+    const [emoji, msg, col] = pctVal >= 80 ? ['🎉',T('Most got it right!'),'#43e97b'] : pctVal >= 50 ? ['👏',T('Over half correct!'),'#6c63ff'] : pctVal >= 25 ? ['🤔',T('Tricky one!'),'#f7b731'] : ['😅',T('Tough crowd!'),'#ff6584'];
+    insightChip = `<div style="display:flex;align-items:center;gap:7px;background:${col}18;border:1px solid ${col}44;border-radius:10px;padding:7px 12px;margin-bottom:12px;font-size:12px;font-weight:700;color:${col};">${emoji} ${msg} <span style="margin-left:auto;font-family:Syne,sans-serif;font-size:13px;">${T('{p}% correct', { p: pctVal })}</span></div>`;
   }
 
-  area.innerHTML = `<div class="resp-big">${total} <span>response${total!==1?'s':''}</span></div>${velChip}${insightChip}${inner||waiting}`;
+  area.innerHTML = `<div class="resp-big">${total} <span>${T(total!==1?'responses':'response')}</span></div>${velChip}${insightChip}${inner||waiting}`;
   requestFitToContent();
 }
 
@@ -1422,7 +1491,7 @@ function buildWordCloud(text) {
 }
 
 function safeAnswer(a) {
-  if (a === '__none__') return 'No answer';
+  if (a === '__none__') return T('No answer');
   try { const v = JSON.parse(a); return typeof v === 'string' ? v : a; } catch(e) { return a; }
 }
 function escapeHtml(s) {

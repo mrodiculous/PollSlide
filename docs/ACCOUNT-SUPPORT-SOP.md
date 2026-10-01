@@ -64,9 +64,20 @@ email** → new address + how you verified → **Change email**. Both addresses 
 They sign in with the new address and the **same password**.
 
 **Won't work if** another account already uses the new address — that's §5.
-**Google sign-in accounts:** the email comes from Google. Changing it in Admin does NOT change
-their Google login. Usually the right answer is §5: they sign up with the new address, and we
-move their content.
+
+### 2b. Google sign-in accounts
+Their address comes from Google, so Account settings can't change it. Ask which they want:
+
+- **Route A — same account, new address, email + password from now on** (typical: they left a
+  school and lost that Google account). Verify (§0) → Admin → Accounts → find them → tick
+  **"Switch to email + password at the new address"** → new address + how you verified →
+  **Change email**. Google sign-in is removed; Firebase emails a **set-your-password** link to the
+  new address; both addresses get our notice. Plan, team, decks, classes and billing all stay —
+  it is the same account. Tell them: *sign in with the new address and the password you set —
+  not "Sign in with Google"* (that would create a new, empty account).
+- **Route B — they want to sign in with a different Google account.** Ask them to sign in once
+  with that Google account (it creates an empty account), then move everything from the old
+  account to the new one (§5). Plan/billing move separately (§5 step 3).
 
 ---
 

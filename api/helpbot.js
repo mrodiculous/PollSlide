@@ -89,6 +89,15 @@ module.exports = async function handler(req, res) {
     out = { topics: hits.map(t => t.id), answer: '', confident: hits.length > 0 };
   }
 
+  // Daily counts for Admin → Slidekick (asked / answered). Best effort.
+  if (db) {
+    const day = new Date().toISOString().slice(0, 10);
+    db.ref('admin/helpbot_stats/' + day).transaction(v => {
+      v = v || { asked: 0, answered: 0 };
+      v.asked = (v.asked || 0) + 1; if (out.confident) v.answered = (v.answered || 0) + 1;
+      return v;
+    }).catch(() => {});
+  }
   // Questions Slidekick could not answer are exactly the help pages worth writing next.
   if (db && !out.confident) {
     db.ref('admin/helpbot_unanswered').push({ at: Date.now(), q: question.slice(0, 300), lang, source }).catch(() => {});

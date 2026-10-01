@@ -119,12 +119,19 @@ module.exports = async function handler(req, res) {
       if (old === next) return res.status(400).json({ error: 'That is already their email.' });
       try { await admin.auth(app).getUserByEmail(next); return res.status(409).json({ error: 'Another account already uses that email. Move content instead (SOP: duplicate accounts).' }); }
       catch (e) { if (e.code !== 'auth/user-not-found') throw e; }
-      await admin.auth(app).updateUser(uid, { email: next, emailVerified: false });
+      /* A Google sign-in account's address comes from Google, so changing only the email
+         field leaves them signing in with the OLD Google account. switchToPassword (Route A,
+         2026-10-01): same account — uid, plan, team, decks, billing all kept — but Google
+         sign-in is removed and they set a password from a reset email at the NEW address. */
+      const isGoogle = (u.providerData || []).some(p => p.providerId === 'google.com');
+      const toPassword = !!body.switchToPassword && isGoogle;
+      if (isGoogle && !toPassword) return res.status(400).json({ error: 'This account signs in with Google. Choose "Switch to email + password at the new address", or move their content to a new account instead (SOP §2).' });
+      await admin.auth(app).updateUser(uid, Object.assign({ email: next, emailVerified: false }, toPassword ? { providersToUnlink: ['google.com'] } : {}));
       const r = await A.syncEmail(db, { uid, newEmail: next, oldEmails: [old], stripeUpdate });
-      await audit({ type: 'email_changed', uid, from: old, to: next, self: false, reason, done: r.done, problems: r.problems });
+      await audit({ type: 'email_changed', uid, from: old, to: next, self: false, reason, done: r.done, problems: r.problems, switchedToPassword: toPassword || undefined });
       await mail('email_changed', old, { newEmail: next, oldEmail: old, audience: 'old', bySupport: true });
-      await mail('email_changed', next, { newEmail: next, oldEmail: old, audience: 'new', bySupport: true });
-      return res.status(200).json({ ok: true, done: r.done, problems: r.problems });
+      await mail('email_changed', next, { newEmail: next, oldEmail: old, audience: 'new', bySupport: true, switchedToPassword: toPassword });
+      return res.status(200).json({ ok: true, done: r.done, problems: r.problems, switchedToPassword: toPassword });
     }
 
     if (action === 'adminTransferPlan') {

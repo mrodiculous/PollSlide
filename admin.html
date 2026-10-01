@@ -261,6 +261,9 @@ tr.clickable:hover td{background:rgba(255,255,255,.02);cursor:pointer;}
     </div>
 
     <div class="nav-section">Communication</div>
+    <div class="nav-item" onclick="showPage('slidekick')" id="nav-slidekick">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg>Slidekick
+    </div>
     <div class="nav-item" onclick="showPage('comms')" id="nav-comms">
       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>Send message
     </div>
@@ -476,7 +479,7 @@ function showPage(page){
   closeDetail();renderPage();
 }
 function renderPage(){
-  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture,runbook:renderRunbook,billing:renderBilling,errors:renderErrors,autopilot:renderAutopilot,sharing:renderSharing,seo:renderSEO,leads:renderEnterpriseLeads,compliance:renderCompliance,loopslide:renderLoopslide,launch:renderLaunch,accounts:renderAccounts};
+  const map={dashboard:renderDashboard,users:renderUsers,teams:renderTeams,tickets:renderTickets,comms:renderComms,flows:renderFlows,legal:renderLegal,health:renderHealth,security:renderSecurity,ai:renderAI,tiers:renderTiers,search:renderSearch,architecture:renderArchitecture,runbook:renderRunbook,billing:renderBilling,errors:renderErrors,autopilot:renderAutopilot,sharing:renderSharing,seo:renderSEO,leads:renderEnterpriseLeads,compliance:renderCompliance,loopslide:renderLoopslide,launch:renderLaunch,accounts:renderAccounts,slidekick:renderSlidekick};
   const fn=map[currentPage];
   if(!fn) return;
   /* A page that fails must SAY so. Two of these renderers are async, so a throw inside
@@ -567,7 +570,10 @@ async function acFindGo(){
     </div>
     <div style="border-top:1px solid var(--border);padding-top:10px;">
       <div style="font-weight:600;margin-bottom:6px;">Change their sign-in email</div>
-      ${(u.providers||[]).includes('password')?'':'<div style="color:var(--accent4);font-size:12px;margin-bottom:6px;">⚠ This account signs in with Google. Changing the email does not change their Google login — usually the right answer is to move their content to a new account instead (SOP §5).</div>'}
+      ${(u.providers||[]).includes('google.com')?`<div style="color:var(--accent4);font-size:12px;margin-bottom:6px;line-height:1.5;">⚠ This account signs in with <b>Google</b>. Two routes (SOP §2b):<br>
+        <b>A.</b> Keep this account, switch it to <b>email + password at the new address</b> — tick the box below. Google sign-in is removed; they get a "set your password" email at the new address. Plan, team, decks and billing stay.<br>
+        <b>B.</b> They want to use a <b>different Google account</b>: they sign in once with it, then use "Move everything to another account" below.</div>
+        <label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-bottom:6px;"><input type="checkbox" id="acSwitchPw"> Switch to email + password at the new address (Route A)</label>`:''}
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <input id="acNewEmail" placeholder="new@address.com" style="flex:1;min-width:200px;${acInp}">
         <input id="acReason" placeholder="How you verified it's them (required)" style="flex:2;min-width:260px;${acInp}">
@@ -588,8 +594,11 @@ async function acChangeEmail(){
   if(!confirm(`Change the sign-in email of ${oldEmail} to ${next}?\n\nBoth addresses are emailed. They sign in with the new address and the SAME password.`)) return;
   out.textContent='Working…';
   try{
-    const d=await accountApi('adminChangeEmail',{uid,newEmail:next,reason});
-    out.innerHTML='<span style="color:var(--accent3)">✓ Changed. Updated: '+esc((d.done||[]).join(', '))+'</span>'+((d.problems||[]).length?'<br><span style="color:var(--accent4)">⚠ '+esc(d.problems.join('; '))+'</span>':'');
+    const sw=!!document.getElementById('acSwitchPw')?.checked;
+    const d=await accountApi('adminChangeEmail',{uid,newEmail:next,reason,switchToPassword:sw});
+    // Route A: they have no password yet — Firebase emails a "set your password" link to the new address.
+    if(d.switchedToPassword){ try{ await auth.sendPasswordResetEmail(next); }catch(e){ toast('Changed, but the password email failed: '+e.message+' — use "Send password reset email".','danger'); } }
+    out.innerHTML='<span style="color:var(--accent3)">✓ Changed. Updated: '+esc((d.done||[]).join(', '))+(d.switchedToPassword?'. Google sign-in removed — a "set your password" email went to '+esc(next)+'. Tell them: sign in with the new address and that password, not "Sign in with Google".':'')+'</span>'+((d.problems||[]).length?'<br><span style="color:var(--accent4)">⚠ '+esc(d.problems.join('; '))+'</span>':'');
     acLoadAudit();
   }catch(e){ out.innerHTML='<span style="color:var(--accent2)">'+esc(e.message)+'</span>'; }
 }
@@ -645,6 +654,103 @@ async function acLoadAudit(){
     });
     el.innerHTML=rows.join('')||'Nothing yet.';
   }catch(e){ el.textContent='Could not load: '+e.message; }
+}
+
+// ─── SLIDEKICK (2026-10-01) ───────────────────────────────────────────────────
+/* What people ask the help guide that it could NOT answer — i.e. the help pages worth
+ * writing next. Grouped by their key words so ten people asking the same thing show as
+ * one row "×10". "Help page written" marks a group handled; after you add the page to the
+ * help centre, the help map is rebuilt (node scripts/helpbot/build-index.js) and
+ * Slidekick starts answering it. Data: admin/helpbot_unanswered (pushed by api/helpbot.js,
+ * question text only — no names), admin/helpbot_stats/<day> {asked, answered}. */
+const SK_STOP=new Set('a an the and or but if of to in on at for with by from is are was were be been do does did how what why when where which who can could would should will i me my we our you your it its this that there here not no please help pollslide get make use want need just so as about into then have has any some all more very also up out'.split(' '));
+/* Key words of a question: "co-host" = "cohost", plurals folded, filler dropped. */
+const SK_VERBS=new Set('add change set show find see turn put work able way session presentation deck'.split(' '));
+function skWords(q){
+  return [...new Set(String(q||'').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g,'').replace(/(\w)-(\w)/g,'$1$2')
+    .split(/[^a-z0-9]+/).filter(x=>x.length>2&&!SK_STOP.has(x)&&!SK_VERBS.has(x)).map(x=>x.replace(/(ings|ing|es|s|ed)$/,'')))];
+}
+/* Same request, different words: a question joins a group when at least half of its key
+   words match the group's first question (greedy, oldest first — fine for a support queue). */
+function skGroup(items){
+  const groups=[];
+  items.sort((a,b)=>(a.at||0)-(b.at||0)).forEach(x=>{
+    const w=skWords(x.q);
+    const g=groups.find(g=>{ const inter=w.filter(t=>g.words.includes(t)).length; const min=Math.min(w.length,g.words.length)||1; return inter>0 && inter/min>=0.5; });
+    if(g) g.items.push(x); else groups.push({words:w.length?w:[String(x.q||'').toLowerCase()],items:[x]});
+  });
+  return groups;
+}
+async function renderSlidekick(){
+  document.getElementById('content').innerHTML=`
+  <div class="stat-grid" id="skStats"><div class="loader">Loading…</div></div>
+  <div class="card">
+    <div class="card-hd"><h2>Questions Slidekick couldn't answer</h2><span style="font-size:11px;color:var(--muted);">The help pages worth writing next — grouped by key words</span></div>
+    <div style="padding:10px 18px;color:var(--muted);font-size:12px;line-height:1.6;">When you add a page or FAQ for one of these to the help centre (pollslide-website/help.html), rebuild Slidekick's map — <code>node scripts/helpbot/build-index.js</code> (QA reminds you) — and mark the row <b>Help page written</b>.</div>
+    <div id="skList" style="padding:0 18px 16px;"><div class="loader">Loading…</div></div>
+  </div>
+  <div class="card">
+    <div class="card-hd"><h2>Try Slidekick</h2><span style="font-size:11px;color:var(--muted);">Ask it exactly what a user would — see what they'd get</span></div>
+    <div style="padding:12px 18px;display:flex;gap:8px;flex-wrap:wrap;">
+      <input id="skTry" placeholder="e.g. how do I add a co-host?" onkeydown="if(event.key==='Enter')skTryGo()" style="flex:1;min-width:240px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;padding:9px 11px;font-size:13px;">
+      <select id="skTryLang" style="background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;padding:8px;font-size:12px;"><option value="en">English</option><option value="es">Español</option><option value="de">Deutsch</option><option value="fr">Français</option><option value="pt">Português</option><option value="it">Italiano</option></select>
+      <button class="btn btn-primary btn-sm" onclick="skTryGo()">Ask</button>
+    </div>
+    <div id="skTryOut" style="padding:0 18px 16px;font-size:13px;"></div>
+  </div>`;
+  skLoad();
+}
+async function skLoad(){
+  try{
+    const stats=(await db.ref('admin/helpbot_stats').limitToLast(30).get()).val()||{};
+    let asked=0,answered=0,today=stats[new Date().toISOString().slice(0,10)]||{};
+    Object.values(stats).forEach(v=>{asked+=v.asked||0;answered+=v.answered||0;});
+    const pct=asked?Math.round(answered/asked*100):0;
+    document.getElementById('skStats').innerHTML=
+      `<div class="stat"><div class="stat-val">${asked}</div><div class="stat-label">Questions · last 30 days</div></div>`+
+      `<div class="stat"><div class="stat-val">${pct}%</div><div class="stat-label">Answered from help pages</div></div>`+
+      `<div class="stat"><div class="stat-val">${asked-answered}</div><div class="stat-label">Sent toward a ticket</div></div>`+
+      `<div class="stat"><div class="stat-val">${today.asked||0}</div><div class="stat-label">Asked today</div></div>`;
+  }catch(e){ document.getElementById('skStats').innerHTML=''; }
+  const el=document.getElementById('skList');
+  try{
+    const raw=(await db.ref('admin/helpbot_unanswered').limitToLast(500).get()).val()||{};
+    const open=Object.entries(raw).filter(([id,v])=>v&&v.status!=='covered'&&v.status!=='dismissed').map(([id,v])=>Object.assign({id},v));
+    const list=skGroup(open).sort((a,b)=>b.items.length-a.items.length||(Math.max(...b.items.map(x=>x.at||0))-Math.max(...a.items.map(x=>x.at||0))));
+    if(!list.length){ el.innerHTML='<div class="empty">Nothing outstanding — Slidekick answered everything it was asked (or nobody has asked yet).</div>'; return; }
+    el.innerHTML=list.map((g,i)=>{
+      const last=g.items.reduce((a,b)=>(b.at||0)>(a.at||0)?b:a);
+      const langs=[...new Set(g.items.map(x=>x.lang||'en'))].join(', ');
+      const samples=g.items.slice(-3).reverse().map(x=>`<div style="font-size:12px;color:var(--text);padding:2px 0;">“${esc(x.q)}”</div>`).join('');
+      return `<div style="border-bottom:1px solid var(--border);padding:9px 0;">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
+          <div style="min-width:0;">${samples}<div style="font-size:11px;color:var(--muted);margin-top:3px;">×${g.items.length} · ${esc(langs)} · last ${timeAgo(last.at)}</div></div>
+          <div style="display:flex;gap:6px;flex-shrink:0;">
+            <button class="btn btn-xs btn-green" data-g="${i}" onclick="skMark(this.dataset.g,'covered')">Help page written</button>
+            <button class="btn btn-xs btn-ghost" data-g="${i}" onclick="skMark(this.dataset.g,'dismissed')">Dismiss</button>
+          </div>
+        </div></div>`;
+    }).join('');
+    window._skGroups=list;
+  }catch(e){ el.innerHTML='<span style="color:var(--accent2)">Could not load: '+esc(e.message)+'</span>'; }
+}
+async function skMark(i,status){
+  const g=(window._skGroups||[])[+i]; if(!g)return;
+  const upd={}; g.items.forEach(x=>{ upd['admin/helpbot_unanswered/'+x.id+'/status']=status; upd['admin/helpbot_unanswered/'+x.id+'/handledAt']=Date.now(); });
+  try{ await db.ref('/').update(upd); toast(status==='covered'?'Marked as covered':'Dismissed','success'); skLoad(); }
+  catch(e){ toast(e.message,'danger'); }
+}
+async function skTryGo(){
+  const q=(document.getElementById('skTry').value||'').trim(); if(q.length<3)return;
+  const out=document.getElementById('skTryOut'); out.innerHTML='<span class="loader">Asking…</span>';
+  try{
+    const t=await auth.currentUser.getIdToken();
+    const r=await fetch('/api/helpbot',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify({question:q,lang:document.getElementById('skTryLang').value})});
+    const d=await r.json().catch(()=>({})); if(!r.ok) throw new Error(d.error||('HTTP '+r.status));
+    out.innerHTML=`<div style="margin-bottom:6px;">${d.confident?'✅':'↪️ would offer a ticket'} · answered by <b>${esc(d.source||'?')}</b> <span style="color:var(--muted);font-size:11px;">(users never see this)</span></div>`+
+      (d.answer?`<div style="margin-bottom:6px;">${esc(d.answer)}</div>`:'')+
+      (d.topics||[]).map(t=>`<div style="font-size:12px;"><a href="${esc(t.url)}" target="_blank" rel="noopener" style="color:var(--accent);">${esc(t.title)}</a></div>`).join('');
+  }catch(e){ out.innerHTML='<span style="color:var(--accent2)">'+esc(e.message)+'</span>'; }
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
@@ -2566,6 +2672,34 @@ function renderHealth(){
   <div class="card"><div class="card-hd"><h2>Platform components</h2><button class="btn btn-sm btn-ghost" onclick="renderHealth()">↺ Re-check</button></div><div id="healthBody" style="padding:14px 18px;color:var(--muted);font-size:13px;">Probing all systems…</div></div>
   <div class="card"><div class="card-hd"><h2>Incident log</h2><span style="font-size:11.5px;color:var(--muted);">written automatically on every status change — what happened and what the platform did about it</span></div><div id="incidentBody" style="padding:14px 18px;color:var(--muted);font-size:13px;">Loading…</div></div>`;
   loadHealth();loadIncidents();
+  document.getElementById('content').insertAdjacentHTML('beforeend',`
+  <div class="card"><div class="card-hd"><h2>Mac companion version</h2><span style="font-size:11.5px;color:var(--muted);">Set the latest version after you publish a new download — every installed copy then offers the update on its waiting screen (never over live results)</span></div>
+    <div id="macVerBody" style="padding:12px 18px;"><div class="loader">Loading…</div></div></div>`);
+  loadMacVersion();
+}
+/* app_config/mac_companion { latest, notes, setAt } — read by companion.html (2026-10-01).
+   The app can't update itself; this is how existing installs hear about a new version.
+   Only set it once the new build is signed, notarized and live at pollslide.com/download. */
+async function loadMacVersion(){
+  const el=document.getElementById('macVerBody'); if(!el)return;
+  let v={}; try{ v=(await db.ref('app_config/mac_companion').get()).val()||{}; }catch(e){}
+  const inp='background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;padding:8px 10px;font-size:13px;';
+  el.innerHTML=`<div style="font-size:12.5px;margin-bottom:8px;">Announced: <b>${esc(v.latest||'none')}</b>${v.setAt?` · set ${timeAgo(v.setAt)}`:''} <span style="color:var(--muted);">(copies older than this see the notice; 1.3.4 and older count as 1.3.4)</span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input id="macVerIn" placeholder="1.3.5" value="${esc(v.latest||'')}" style="width:110px;${inp}">
+      <input id="macNotesIn" placeholder="One line on what's new (optional)" value="${esc(v.notes||'')}" maxlength="200" style="flex:1;min-width:240px;${inp}">
+      <button class="btn btn-primary btn-sm" onclick="saveMacVersion()">Announce</button>
+      ${v.latest?'<button class="btn btn-ghost btn-sm" onclick="saveMacVersion(true)">Stop announcing</button>':''}
+    </div>`;
+}
+async function saveMacVersion(clear){
+  const latest=clear?null:(document.getElementById('macVerIn').value||'').trim();
+  if(!clear && !/^\d+\.\d+(\.\d+)?$/.test(latest)){ toast('Use a version like 1.3.5','danger'); return; }
+  if(!clear && !confirm('Announce PollSlide Companion '+latest+'?\n\nOnly do this once the signed, notarized build is live at pollslide.com/download — every older copy will start offering the update.'))return;
+  try{
+    await db.ref('app_config/mac_companion').set(clear?null:{ latest, notes:(document.getElementById('macNotesIn').value||'').trim().slice(0,200)||null, setAt:Date.now(), setBy:auth.currentUser&&auth.currentUser.email });
+    toast(clear?'Stopped announcing':'Announced '+latest,'success'); loadMacVersion();
+  }catch(e){ toast(e.message,'danger'); }
 }
 async function loadHealth(){
   const el=document.getElementById('healthBody');

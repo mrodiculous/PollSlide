@@ -998,7 +998,14 @@
    "url": "https://pollslide.com/download",
    "kind": "page",
    "title": "PollSlide Companion for Mac",
-   "text": "📊 PollSlide Companion for Mac Present live polls over anything on your Mac — Keynote, PowerPoint, a PDF, a webpage, even a video. Live results float on top and appear automatically when your QR is on screen. Download for Mac — Free Version 1.3.4 · Free · macOS 14 Sonoma or later · Apple Silicon & Intel (universal) Signed & notarized by Apple — installs with no security warnings 🌐 Needs an internet connection for live results. Set it up in five steps 1 Download & install Open the downloaded .dmg and drag PollSlide Companion into your Applications folder. Open it from Applications — at the one-time macOS prompt, click Open. 2 Get your code — in your browser Sign in at app.pollslide.com/presenter. Click your email address at the top right, then choose 🔗 Connect Mac App . You get a 6-character code — it expires in 10 minutes. 3 Type the code on your Mac Go back to your Mac. Nothing opens on its own — in the menu bar at the top right of your screen, click the bar-chart icon , then “Disconnect Account (Re-pair)” . That opens the “Connect to PollSlide” window. Click the “Enter code” box, type the 6 characters and click “Connect” . When it says “Connected!” , you're linked. 4 Turn on auto-show System Settings → Privacy & Security → Screen Recording → switch PollSlide Companion ON → quit the app and open it again (macOS only applies the permission to a freshly opened app). Is…"
+   "text": "📊 PollSlide Companion for Mac Present live polls over anything on your Mac — Keynote, PowerPoint, a PDF, a webpage, even a video. Live results float on top and appear automatically when your QR is on screen. Download for Mac — Free Version 1.3.4 · Free · macOS 14 Sonoma or later · Apple Silicon & Intel (universal) Signed & notarized by Apple — installs with no security warnings 🌐 Needs an internet connection for live results. Set it up in five steps 1 Download & install Open the downloaded .dmg and drag PollSlide Companion into your Applications folder. Open it from Applications — at the one-time macOS prompt, click Open. 2 Get your code — in your browser Sign in at app.pollslide.com/presenter. Click your email address at the top right, then choose 🔗 Connect Mac App . You get a 6-character code — it expires in 10 minutes. 3 Type the code on your Mac Go back to your Mac. Nothing opens on its own — in the menu bar at the top right of your screen, click the bar-chart icon , then “Disconnect Account (Re-pair)” . That opens the “Connect to PollSlide” window. Click the “Enter code” box, type the 6 characters and click “Connect” . When it says “Connected!” , you're linked. 4 Turn on auto-show System Settings → Privacy & Security → Screen Recording → switch PollSlide Companion ON → quit the app and open it again (macOS only applies the permission to a freshly opened app). Is…",
+   "titles": {
+    "es": "PollSlide Companion para Mac",
+    "de": "PollSlide Companion für Mac",
+    "fr": "PollSlide Companion pour Mac",
+    "pt": "PollSlide Companion para Mac",
+    "it": "PollSlide Companion per Mac"
+   }
   },
   {
    "id": "page:join",
@@ -1006,6 +1013,20 @@
    "kind": "page",
    "title": "Taking you to PollSlide…",
    "text": "Taking you to PollSlide… If nothing happens, tap here to enter your code ."
+  },
+  {
+   "id": "page:mac-update",
+   "url": "https://pollslide.com/mac-update",
+   "kind": "page",
+   "title": "Update PollSlide Companion",
+   "text": "It takes about two minutes. You stay connected to your account — no new code needed. Which version do I have? Click the bar-chart icon in the menu bar at the top right of your screen, then “About PollSlide Companion”. From version 1.3.5 the version number is shown there. If you see no number, you have version 1.3.4 or older — please update. Update in six steps Quit the old app. Click the bar-chart icon in the menu bar, then “Quit”. Remove the old version. In Finder, open Applications and drag PollSlide Companion to the Trash. If you have another copy in Downloads or on a disk image, remove that too — two copies confuse macOS permissions. Download the new version. Get it from pollslide.com/download. Install it. Open the downloaded .dmg file and drag PollSlide Companion into your Applications folder. Then eject the disk image. Open it from Applications. You stay connected to your PollSlide account — you don't need a new code. Check Screen Recording. Open System Settings → Privacy & Security → Screen Recording (on newer macOS: Screen & System Audio Recording) and make sure PollSlide Companion is switched on. Then quit the app and open it again. Slides not detected after updating? macOS sometimes keeps the old app's permission. In Screen Recording, switch PollSlide Companion off and on again, then quit and reopen the app. If it is listed twice, remove both entries with the minus…",
+   "titles": {
+    "es": "Actualizar PollSlide Companion",
+    "de": "PollSlide Companion aktualisieren",
+    "fr": "Mettre à jour PollSlide Companion",
+    "pt": "Atualizar o PollSlide Companion",
+    "it": "Aggiorna PollSlide Companion"
+   }
   }
  ]
 }

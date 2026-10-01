@@ -177,7 +177,10 @@ const TEMPLATES = {
       <h1 style="font-size:24px;font-weight:800;margin:0 0 12px;color:#15152a;">${toOld ? 'Your sign-in email was changed' : 'You now sign in with this address'}</h1>
       <p style="font-size:16px;color:#5a5a78;margin:0 0 18px;">Your PollSlide account's sign-in email changed from <strong>${esc(data.oldEmail)}</strong> to <strong>${esc(data.newEmail)}</strong>${data.bySupport ? ', by PollSlide Support at your request' : ''}. All your presentations, results and your plan are unchanged.</p>
       <div style="background:#f4f4fc;border-radius:10px;padding:14px 16px;font-size:14px;color:#5a5a78;margin:0 0 18px;border-left:3px solid ${toOld ? BRAND_PINK : BRAND_COLOR};">
-        ${toOld ? "<strong>Didn't do this?</strong> Reply to this email or write to help@pollslide.com straight away and we'll secure your account." : 'From now on, sign in with this address. Your password stays the same.'}
+        ${toOld ? "<strong>Didn't do this?</strong> Reply to this email or write to help@pollslide.com straight away and we'll secure your account."
+          : data.switchedToPassword
+            ? 'You no longer sign in with Google. We have sent you a second email with a link to <strong>set your password</strong> — after that, sign in with this address and that password.'
+            : 'From now on, sign in with this address. Your password stays the same.'}
       </div>
     `, 'https://app.pollslide.com/presenter', 'Open PollSlide →'),
     };
