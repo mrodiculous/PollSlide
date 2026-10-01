@@ -16,7 +16,7 @@
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=9b3075c4"></script>
+<script src="/ui-lang.js?v=46268bef"></script>
 <script src="/tickets.js?v=edb362ec"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -937,6 +937,11 @@
 
   <!-- LIST view -->
   <div data-view="list" style="flex:1;flex-direction:column;min-height:0;">
+    <!-- Slidekick (2026-10-01): an optional first stop, never a gate before a ticket. -->
+    <div style="margin:12px 12px 0;padding:10px 12px;border:1px solid var(--border2);border-radius:12px;background:var(--surface2);display:flex;align-items:center;gap:10px;">
+      <div style="flex:1;min-width:0;font-size:12px;line-height:1.45;"><b data-i18n>🧭 Ask Slidekick</b><br><span style="color:var(--muted);" data-i18n>Instant answers from our help guides. Tickets go to a person and take about 1 business day.</span></div>
+      <button class="btn btn-ghost btn-sm" onclick="openSlidekick()" data-i18n>Ask now</button>
+    </div>
     <div data-slot="list-items" style="flex:1;overflow-y:auto;padding:12px;"></div>
     <div style="padding:12px;border-top:1px solid var(--border);flex-shrink:0;">
       <button data-action="new-req" class="btn btn-primary" style="width:100%;justify-content:center;" data-i18n>+ New request</button>
@@ -1565,6 +1570,112 @@ function openSupportChat() {
   renderChatPanel();
 }
 function openSupportTicket(){ openSupportChat(); } // legacy alias
+
+// ─── SLIDEKICK — the help guide (2026-10-01) ─────────────────────────────────
+/* Ask a question, get pointed at the right help page — instantly, from the help centre's
+ * own words. It never stands between a user and a person: "Open a ticket" is always on
+ * screen, and a ticket opened from here is pre-filled with the question. The server
+ * (api/helpbot.js → lib/helpbot.js) only ever links to help that exists. Local LLM first,
+ * OpenAI if it's down, keyword search if both are; the user is never told which. */
+let _skBusy = false, _skLastQ = '';
+function openSlidekick() {
+  closeUserMenu();
+  document.getElementById('supportChatModal')?.remove();
+  let ov = document.getElementById('slidekickModal');
+  if (ov) { document.getElementById('skInput')?.focus(); return; }
+  ov = document.createElement('div');
+  ov.id = 'slidekickModal';
+  Object.assign(ov.style, { position:'fixed', inset:'0', zIndex:'200000', background:'rgba(0,0,0,.6)', display:'flex',
+    alignItems:'flex-end', justifyContent:'flex-end', padding:'72px 20px 20px', backdropFilter:'blur(3px)' });
+  ov.addEventListener('click', e => { if (e.target === ov) ov.remove(); });
+  ov.innerHTML = `<div id="skPanel" style="width:380px;max-width:calc(100vw - 40px);height:560px;max-height:calc(100vh - 110px);background:var(--surface);border:1px solid var(--border2);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.5);">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);">
+      <div><strong style="font-family:Syne,sans-serif;font-size:15px;">🧭 Slidekick</strong>
+        <div style="font-size:11.5px;color:var(--muted);" data-i18n>Instant answers from our help guides</div></div>
+      <button onclick="document.getElementById('slidekickModal').remove()" style="background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;" title="Close">✕</button>
+    </div>
+    <div id="skLog" style="flex:1;min-height:0;overflow-y:auto;padding:14px 14px 6px;display:flex;flex-direction:column;gap:10px;">
+      <div class="sk-bot" style="background:var(--surface2);border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.5;" data-i18n>Hi! I'm Slidekick. Ask me anything about PollSlide and I'll show you where the answer is.</div>
+    </div>
+    <div style="padding:10px 12px;border-top:1px solid var(--border);">
+      <div style="display:flex;gap:6px;">
+        <input id="skInput" maxlength="500" autocomplete="off" data-i18n-ph placeholder="e.g. How do I change my password?"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();askSlidekick();}"
+          style="flex:1;min-width:0;padding:9px 11px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;font-size:13px;font-family:inherit;">
+        <button class="btn btn-primary btn-sm" id="skAsk" onclick="askSlidekick()" data-i18n>Ask</button>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px;font-size:11.5px;color:var(--muted);">
+        <span data-i18n>Prefer a person? We reply within 1 business day.</span>
+        <a onclick="slidekickToTicket()" style="color:var(--accent);cursor:pointer;white-space:nowrap;text-decoration:underline;" data-i18n>Open a ticket</a>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  setTimeout(() => document.getElementById('skInput')?.focus(), 50);
+}
+function skBubble(html, who) {
+  const log = document.getElementById('skLog'); if (!log) return null;
+  const d = document.createElement('div');
+  d.style.cssText = who === 'me'
+    ? 'align-self:flex-end;max-width:85%;background:var(--accent);color:#fff;border-radius:12px;padding:8px 11px;font-size:13px;line-height:1.45;'
+    : 'background:var(--surface2);border-radius:12px;padding:10px 12px;font-size:13px;line-height:1.5;';
+  d.innerHTML = html;
+  log.appendChild(d); log.scrollTop = log.scrollHeight;
+  return d;
+}
+function skCards(topics) {
+  return (topics || []).map(t => `<a href="${escAttr(t.url)}" target="_blank" rel="noopener"
+      style="display:block;margin-top:8px;padding:9px 11px;background:var(--surface);border:1px solid var(--border2);border-radius:10px;color:var(--text);text-decoration:none;">
+      <div style="font-weight:600;font-size:12.5px;">${escapeHtml(t.title)} <span style="color:var(--accent);">↗</span></div>
+      ${t.excerpt ? `<div style="font-size:12px;color:var(--muted);margin-top:3px;line-height:1.45;">${escapeHtml(t.excerpt)}</div>` : ''}</a>`).join('');
+}
+async function askSlidekick() {
+  const inp = document.getElementById('skInput'); if (!inp || _skBusy) return;
+  const q = inp.value.trim(); if (q.length < 3) return;
+  _skBusy = true; _skLastQ = q; inp.value = '';
+  skBubble(escapeHtml(q), 'me');
+  const reply = skBubble(`<span style="color:var(--muted);">${escapeHtml(tr('Looking through the help guides…'))}</span>`, 'bot');
+  const call = async (mode) => {
+    const tok = await currentUser.getIdToken();
+    const r = await fetch('/api/helpbot', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+      body: JSON.stringify({ question: q, lang: UI_LANG, mode }) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+    return d;
+  };
+  // Instant keyword matches first, then the guide's answer replaces them.
+  let shown = false;
+  call('quick').then(d => {
+    if (!shown && d.topics && d.topics.length) reply.innerHTML = `<span style="color:var(--muted);">${escapeHtml(tr('These look related — still checking…'))}</span>` + skCards(d.topics);
+  }).catch(() => {});
+  try {
+    const d = await call('');
+    shown = true;
+    const good = d.confident && d.topics && d.topics.length;
+    reply.innerHTML = good
+      ? (d.answer ? `<div>${escapeHtml(d.answer)}</div>` : `<div>${escapeHtml(tr('Here is what the help centre says:'))}</div>`) + skCards(d.topics) +
+        `<div style="margin-top:10px;font-size:12px;color:var(--muted);">${escapeHtml(tr('Not what you needed?'))} <a onclick="slidekickToTicket()" style="color:var(--accent);cursor:pointer;text-decoration:underline;">${escapeHtml(tr('Ask a person'))}</a></div>`
+      : `<div>${escapeHtml(tr("I couldn't find that in our help guides — a person can help."))}</div>` + (d.topics && d.topics.length ? skCards(d.topics) : '') +
+        `<button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="slidekickToTicket()">${escapeHtml(tr('Open a ticket with my question'))}</button>`;
+  } catch (e) {
+    shown = true;
+    reply.innerHTML = `<div>${escapeHtml(e && /many questions/.test(e.message) ? e.message : tr("Slidekick can't answer right now — a person can help."))}</div>` +
+      `<button class="btn btn-primary btn-sm" style="margin-top:10px;" onclick="slidekickToTicket()">${escapeHtml(tr('Open a ticket with my question'))}</button>`;
+  }
+  _skBusy = false;
+  document.getElementById('skLog')?.scrollTo({ top: 1e6, behavior: 'smooth' });
+}
+/* Straight to a new Support Chat request, pre-filled with what they asked — no retyping. */
+function slidekickToTicket() {
+  const q = _skLastQ;
+  document.getElementById('slidekickModal')?.remove();
+  openSupportChat();
+  _chatView = 'new'; renderChatPanel();
+  const panel = document.getElementById('chatPanel'); if (!panel || !q) return;
+  const subj = panel.querySelector('[data-slot="subj"]'), msg = panel.querySelector('[data-slot="msg"]');
+  if (subj && !subj.value) subj.value = q.slice(0, 120);
+  if (msg && !msg.value) msg.value = q;
+}
 // Straight to one conversation — the target of the "Reply in PollSlide" button in a
 // ticket-reply email (?support=<ticketId>). An id that is not theirs finds no ticket under
 // users/<uid>/tickets and loadChatThread falls back to the list.
@@ -2668,6 +2779,7 @@ function toggleUserMenu() {
         Object.entries(UI_LANGS).map(([c,n]) =>
           '<option value="' + c + '"' + (c === UI_LANG ? ' selected' : '') + '>' + n + '</option>').join('') +
       '</select></div>' +
+    '<button onclick="openSlidekick()" style="width:100%;padding:10px 14px;background:none;border:none;cursor:pointer;font-family:DM Sans,sans-serif;font-size:13px;color:var(--text);text-align:left;display:flex;align-items:center;gap:8px;border-top:1px solid var(--border);">🧭 <span data-i18n>Ask Slidekick</span></button>' +
     '<button onclick="openSupportChat();closeUserMenu()" style="width:100%;padding:10px 14px;background:none;border:none;cursor:pointer;font-family:DM Sans,sans-serif;font-size:13px;color:var(--text);text-align:left;display:flex;align-items:center;justify-content:space-between;">' +'<span style="display:flex;align-items:center;gap:8px;">💬 <span data-i18n>Support Chat</span></span>' +'<span id="supportChatDot" style="display:none;width:8px;height:8px;border-radius:50%;background:#43e97b;"></span></button>';
   }
   dd.style.display = 'block';
@@ -8934,7 +9046,8 @@ function deleteQ(idx){
   const removed=questions[idx], prevLiveIdx=liveQIdx, prevLiveId=liveQId;   // keep for Undo
   questions.splice(idx,1);
   if(liveQIdx===idx){liveQIdx=null;liveQId=null;}
-  else resyncLiveIdx();
+  else if (liveQId) resyncLiveIdx();
+  else if (liveQIdx>idx) liveQIdx--;   // no id saved: as before
   selIdx=Math.min(idx,questions.length-1);
   saveBack();renderQList();
   if(questions.length>0) renderEditor(selIdx); else showSetup();
@@ -8948,7 +9061,8 @@ function deleteQ(idx){
 function moveQ(idx,dir){
   const ni=idx+dir;if(ni<0||ni>=questions.length)return;
   [questions[idx],questions[ni]]=[questions[ni],questions[idx]];
-  resyncLiveIdx();
+  if (liveQId) resyncLiveIdx();
+  else if (liveQIdx===idx) liveQIdx=ni; else if (liveQIdx===ni) liveQIdx=idx;   // no id saved: as before
   selIdx=ni;saveBack();renderQList();renderEditor(ni);
 }
 function saveAndNext(idx){renderQList();if(idx+1<questions.length)selectQ(idx+1);else toast('All questions saved!','success');}

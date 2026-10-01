@@ -123,6 +123,7 @@ function fakeDb(init) {
   ok('deleting an account stops its subscription first, or deletes nothing', /cancel_at_period_end: true/.test(del)
     && del.indexOf('cancel_at_period_end: true') < del.indexOf('deleteUser(uid)') && /nothing was deleted/.test(del));
 
+  ok('deleting an account whose Stripe customer no longer exists still works (nothing to bill)', /e\.code === 'resource_missing'/.test(del) && /Any OTHER failure still blocks the deletion/.test(del));
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

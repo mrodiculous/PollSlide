@@ -160,6 +160,23 @@ http.createServer(async (req, res) => {
       // The app falls back to the same database writes the real /api/team makes when the
       // endpoint is unavailable — exactly what a video needs, with nothing to reimplement.
       if (p === '/api/team') return json(res, 503, {});
+      if (p === '/api/helpbot') {
+        /* Slidekick on the stage: the REAL lib/helpbot.js and the real LOCAL model (Ollama on
+           this Mac, gemma4 — what production tries first), so it can be tested and filmed
+           end to end. No Ollama → keyword search, exactly like production with both AIs down. */
+        const H = require(path.join(ROOT, 'lib', 'helpbot.js'));
+        const lang = H.LANG_NAMES[body.lang] ? body.lang : 'en', q = String(body.question || '').slice(0, 500);
+        if (body.mode === 'quick') return json(res, 200, { ok: true, quick: true, topics: H.cards(H.search(q, 3).map(t => t.id), lang) });
+        let out = null;
+        try {
+          const r = await fetch('http://localhost:11434/v1/chat/completions', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: process.env.STAGE_HELPBOT_MODEL || 'gemma4:latest', messages: H.buildMessages(q, lang), response_format: { type: 'json_object' }, temperature: 0 }) });
+          const d = await r.json();
+          out = H.validate(String(d.choices?.[0]?.message?.content || '').replace(/<think>[\s\S]*?<\/think>/g, ''));
+        } catch (e) {}
+        if (!out) { const hits = H.search(q, 3); out = { topics: hits.map(t => t.id), answer: '', confident: hits.length > 0 }; }
+        return json(res, 200, { ok: true, answer: out.answer, confident: out.confident, topics: H.cards(out.topics, lang) });
+      }
       if (p === '/api/account') {
         const who = USERS[(req.headers.referer && new URL(req.headers.referer).searchParams.get('as')) || ''] || USER;
         try { return json(res, 200, await stageAccount(body, who)); } catch (e) { return json(res, 400, { error: e.message }); }

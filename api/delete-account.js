@@ -92,7 +92,13 @@ module.exports = async function handler(req, res) {
       if (!process.env.STRIPE_SECRET_KEY) throw new Error('Stripe not configured');
       const Stripe = require('stripe');
       const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2026-05-27.dahlia' });
-      const subs = await stripe.subscriptions.list({ customer: u.stripeCustomerId, status: 'all', limit: 100 });
+      let subs = { data: [] };
+      try { subs = await stripe.subscriptions.list({ customer: u.stripeCustomerId, status: 'all', limit: 100 }); }
+      catch (e) {
+        // The customer was deleted in Stripe (by hand, or long ago): nothing can bill them,
+        // so there is nothing to stop. Any OTHER failure still blocks the deletion.
+        if (!(e && (e.code === 'resource_missing' || e.statusCode === 404))) throw e;
+      }
       for (const sub of subs.data) {
         if (['active', 'trialing', 'past_due', 'unpaid'].includes(sub.status) && !sub.cancel_at_period_end) {
           await stripe.subscriptions.update(sub.id, { cancel_at_period_end: true });

@@ -245,6 +245,7 @@ let   Q_INDEX = _loc0.qIndex;   // mutable: followLive advances it IN PLACE (no 
 let   Q_LINK = Q_INDEX;
 let   _homes = undefined;       // quiz_builder/$code/homes, once read (null = none)
 let   _linkResolved = false;
+let   _waitRetry = null;     // the "question not available" re-check; cancelled once we move on
 async function resolveLink() {
   if (_linkResolved || isNaN(Q_LINK) || Q_LINK < 0) { _linkResolved = true; return true; }
   try { const h = await db.ref(`quiz_builder/${SESSION}/homes`).get(); _homes = h.exists() ? h.val() : null; }
@@ -1199,6 +1200,7 @@ function goToQuestion(idx){
   if (idx === Q_INDEX) return;
   Q_INDEX = idx;
   _linkResolved = true;       // idx is a POSITION (from currentQuestion), already resolved
+  clearTimeout(_waitRetry);   // a pending re-check must not redraw this question mid-answer
   Q_LINK = linkForIndex(idx);
   focusResetForQuestion();   // per question, so a teacher sees WHICH one they left on
   STABLE_QID = (_liveQ && _liveQ.id && Number(_liveQ.qIndex) === idx)
@@ -1379,7 +1381,8 @@ async function loadQuestion() {
     followLive(true);
     // Not a real position: whatever question goes live next is "different" and gets opened.
     if (Q_INDEX >= 0) Q_INDEX = -99;
-    setTimeout(loadQuestion, 3000);
+    clearTimeout(_waitRetry);
+    _waitRetry = setTimeout(() => { if (!_linkResolved) loadQuestion(); }, 3000);
     return;
   }
   // Load question definition from quiz_builder

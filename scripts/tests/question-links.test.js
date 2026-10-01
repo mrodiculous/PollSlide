@@ -28,7 +28,11 @@ ok('numbers are assigned on open and on every save', /questions = toQArr\(pres\.
 ok('the homes map is published with the questions (open + save + copy)', (P.match(/quiz_builder\/\$\{[^}]+\}\/homes`\)\.set\(PSQid\.homesMap/g) || []).length === 3);
 ok('the live pointer moves only AFTER the new order is published', /\/questions`\)\.set\(pres\.questions\);[\s\S]{0,200}\/homes`\)\.set\([\s\S]{0,600}syncLivePosition\(pres\.sessionCode, pres\.questions\)/.test(P));
 ok('both "question is live" payloads carry the link number', (P.match(/total: questions\.length, home: PSQid\.homeOf\(q, idx\)/g) || []).length === 2);
-ok('move, delete and undo re-point the live question by id', (grab(P, 'moveQ').includes('resyncLiveIdx()')) && /else resyncLiveIdx\(\);/.test(grab(P, 'deleteQ')) && /selIdx=idx; resyncLiveIdx\(\);/.test(grab(P, 'deleteQ')));
+ok('move, delete and undo re-point the live question by id (and keep the old position rule when no id was saved)',
+   /if \(liveQId\) resyncLiveIdx\(\);\s*else if \(liveQIdx===idx\) liveQIdx=ni;/.test(grab(P, 'moveQ'))
+   && /else if \(liveQId\) resyncLiveIdx\(\);\s*else if \(liveQIdx>idx\) liveQIdx--;/.test(grab(P, 'deleteQ'))
+   && /selIdx=idx; resyncLiveIdx\(\);/.test(grab(P, 'deleteQ')));
+ok('a pending "not available" re-check is cancelled once the phone moves to a question', /clearTimeout\(_waitRetry\);\s*\/\/ a pending re-check/.test(A) && /if \(!_linkResolved\) loadQuestion\(\);/.test(A));
 ok('a collaborator\'s reorder keeps the live pointer and the selection on the same question', /questions = remoteQs;\s*PSQid\.ensureHomes\(questions\);\s*_orderSig = orderSignature\(\);\s*resyncLiveIdx\(\);/.test(P) && /selId \? questions\.findIndex/.test(P));
 ok('a copied question drops its old number and gets one in its new deck', /delete q\.home;[\s\S]{0,400}PSQid\.ensureHomes\(targetQs\);\s*targetQs\.push\(q\);\s*PSQid\.ensureHomes\(targetQs\);/.test(P));
 ok('"session started" times are keyed by question, not position (A3)', /const startKey = liveStartKey\(stableQId\);/.test(P) && !/localStorage\.setItem\(`ql_liveStart_/.test(P));
