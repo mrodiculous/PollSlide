@@ -3,7 +3,7 @@
 Living punch list. Updated as things land. Owner-only items are things only Rod can do
 (they need a console login, a card, or a lawyer).
 
-Last updated: 2026-09-01 (sixteenth pass)
+Last updated: 2026-10-01 (question reordering planned)
 
 ---
 
@@ -59,6 +59,25 @@ Last updated: 2026-09-01 (sixteenth pass)
 | 📝 | Legal pages are English-only **on purpose** | `terms` 2%, `privacy` 2%, `dpa`/`vpat`/`subprocessors` 0%. Machine-translating an indemnity clause creates liability rather than removing it. Standard practice is one authoritative language — but the pages should SAY so ("the English version governs"). Fold into the counsel review below rather than translating. |
 | ⬜ | Presenter offers 6 languages, students' phones offer 11 | `en/es/de/fr/pt/it` vs those plus `nl/ja/zh/ar/hi`. A Japanese teacher gets an English app while their own students get Japanese. |
 | ⬜ | Big screen (`live.html`) doesn't follow the atmosphere | It reads `uiLang` from the session already; the same route would carry this. Only matters when the projector is a different machine from the presenter. |
+
+## Question reordering — planned 2026-09-30, next to build
+
+Goal (Rod): moving questions is seamless for the user and **cannot** break anything that works, with a
+short explainer page + video shown when someone reorders, so it behaves exactly as designed.
+Full audit and reasoning: memory `question-reorder-plan`.
+**Order (Microsoft review in progress):** A2, A3, B and D can be built now — none touch `powerpoint-content/`. A1 waits for approval; C waits for A1. Votes already follow the question (stable ids);
+what still works by POSITION is below. The existing ↑/↓ buttons in the editor can already trigger all of it.
+
+| | Item | Notes |
+|---|---|---|
+| ⏸ | **A1 — PowerPoint LIVE add-in follows the question, not the slot** | Also: its notes-marker fallback should resolve the number through `quiz_builder/$code/homes` (the side panel now writes link numbers). If the saved id no longer matches the question at `qIdx`, find it by id and re-save the binding; not found → today's behaviour. **BLOCKED until Microsoft approves PollSlide LIVE** (submitted 2026-10-01; reviewers test the live `powerpoint-content/` page — do not change it during review). After approval it's a normal push: the manifest doesn't change, so no resubmission. |
+| ✅ | **A2 — Reordering during a live session** (2026-10-01) | Republish `currentQuestion` (new `qIndex`, same id) after a move, so following phones don't jump to a different question. |
+| ✅ | **A3 — "Session started" times move with the question** (2026-10-01) | `ql_liveStart_<code>_<idx>` is per position; carry it along on a move. |
+| ✅ | **B — Links follow their question — DONE 2026-10-01, differently than planned** | Not the id in the link (would push every QR from version 5 to 6 at error-correction H — denser, harder to scan). Each question has a permanent LINK NUMBER (`qid.js` ensureHomes/homeOf/resolve); links keep today's exact shape; first open sets number = current position so every existing QR is byte-identical; presenter publishes `quiz_builder/$code/homes`. Answer page, Mac companion page (so app 1.3.4 needs NO update), overlay (also fixed its wrong-QR fallback), slideshow editor imports, side-panel add-in all resolve through it. Deletions no longer shift later links either. Tests: qid.test.js + question-links.test.js. Original note: | `answer#CODE/<idx>/<id>`; answer page, PresentSlide imports and the Mac companion look up by id first, position as fallback. Every existing link keeps working. Old position-only QR codes are the one thing that can't be fixed after the fact. |
+| ☐ | **B2 — Mac companion update notice + removal guide** (no longer needed for reordering — the companion WEB page resolves link numbers — but Rod wants a reliable way to get users onto new app versions) | The Mac app (direct download, Developer ID signed — NOT App Store; 1.3.4 today; no auto-updater) reads only `#code/index` from the slide QR and passes just those to `companion.html`. 1.3.5: also pass the question id + its version (`&v=`). `companion.html` (web, updates instantly) shows "New version available → Download" when no version is sent, so every existing install hears about it. Consider Sparkle so future updates are one click. Rod builds/signs/notarizes and replaces the download. Old versions keep working, position-based. |
+| ☐ | **C — Drag-to-reorder + deck "My order"** — **only after A1 has shipped** | Drag in the question list (same path as ↑/↓). Free until a deck has gone live; after that, one plain warning (QR codes already on slides/handouts point to positions) with a "Learn how reordering works" link. Deck list "My order" stored per user (`users/$uid/deckOrder`), touches nothing else. |
+| ☐ | **D — Explainer page + video, in all 6 site languages** | `pollslide.com/reorder-questions`: what moves with a question (answers, results, reports), what to re-copy (QR codes already pasted/printed), with a short video recorded per language like `account-help`. Linked from the move warning, the help centre, and sent by support. |
+| ☐ | **Tests + checks for each phase** | Regression tests for every row of the audit; full `node scripts/qa.js`; checked in the real presenter, add-in, answer page and companion paths — including an OLD position-only link — before each phase ships. |
 
 ## Admin
 

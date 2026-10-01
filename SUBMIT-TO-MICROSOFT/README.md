@@ -196,6 +196,8 @@ reviewer saw) and send me the text. If a rule we already meet is cited, the like
 is that something wasn't live when they tested — re-run Step 1.
 
 **The day it's approved:**
+- Tell me — I delete `REVIEW-FREEZE.json` (it blocks any add-in change while in review) and ship the
+  queued add-in fix for question reordering (TODO.md, step A1). Normal push, no resubmission.
 - Change `pollslide.com/pollslide-for-powerpoint` — it still says the add-in "isn't
   available to install yet" — and link it to the store listing and `/powerpoint-live`.
 - Mark the PowerPoint add-in "Available" on `pollslide.com/integrations`.

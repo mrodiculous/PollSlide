@@ -9,14 +9,14 @@
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="/errors.js?v=25c25f5f"></script>
 <script src="/present-display.js?v=b01c9c51"></script>
-<script src="/qid.js?v=5e6ebfdc"></script>
+<script src="/qid.js?v=f6f81595"></script>
 <script src="/roster.js?v=88b6f2d4"></script>
 <script src="/retakes.js?v=d187d4ee"></script>
 <script src="/gifs.js?v=ed7add18"></script>
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=74e54d6c"></script>
+<script src="/ui-lang.js?v=9b3075c4"></script>
 <script src="/tickets.js?v=edb362ec"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -2379,6 +2379,16 @@ async function openAccountSettings(focus) {
   const google = acctProviders().includes('google.com');
   const pw = acctHasPassword();
   const plan = (TIERS[normalizeTier(userTier)] || TIERS.free).name;
+  /* Who pays: a team MEMBER's plan is billed to the team owner, so they have nothing of
+     their own to manage (the billing portal would wrongly tell them their plan "was granted
+     directly"). Enterprise is invoiced by hand. Everyone else: portal if paid, plans if free. */
+  const tierKey = normalizeTier(userTier);
+  let teamOwner = null;
+  try {
+    const ws = (await db.ref(`users/${userId}/workspaceId`).get()).val();
+    if (ws) { const o = (await db.ref(`workspaces/${ws}/ownerUid`).get()).val(); if (o && o !== userId) teamOwner = o; }
+  } catch (e) {}
+  const billing = teamOwner ? 'member' : tierKey === 'enterprise' ? 'invoice' : tierKey === 'free' ? 'free' : 'paid';
   const lbl = 'font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);';
   const inp = 'width:100%;margin:5px 0 9px;padding:9px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;font-size:13px;font-family:inherit;';
   const card = 'background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px 15px;margin-bottom:12px;';
@@ -2394,6 +2404,16 @@ async function openAccountSettings(focus) {
       <div style="${lbl}" data-i18n>Signed in as</div>
       <div style="font-size:14px;font-weight:600;margin:4px 0 2px;word-break:break-all;">${escapeHtml(email)}</div>
       <div style="${note}"><span data-i18n>${google && !pw ? 'Signs in with Google' : google ? 'Signs in with Google or a password' : 'Signs in with email and password'}</span> · <span data-i18n>Plan</span>: ${escapeHtml(plan)}</div>
+    </div>
+
+    <div style="${card}" id="acctPlanCard">
+      <div style="${h}" data-i18n>Plan & billing</div>
+      ${billing === 'paid' ? `<div style="${note};margin-bottom:9px;" data-i18n>Change or cancel your plan, update your card and download invoices. If you cancel, your plan stays until the end of the period you have paid for.</div>
+          <button class="btn btn-ghost btn-sm" onclick="openBillingPortal()" data-i18n>💳 Manage billing & invoices</button>`
+        : billing === 'member' ? `<div style="${note}" data-i18n>Your plan comes from your team, so the team's owner manages billing. Open Team admin to see your team.</div>`
+        : billing === 'invoice' ? `<div style="${note}" data-i18n>Your plan is invoiced. For billing questions, write to help@pollslide.com.</div>`
+        : `<div style="${note};margin-bottom:9px;" data-i18n>You are on the Free plan.</div>
+          <button class="btn btn-ghost btn-sm" onclick="closeAccountSettings();openPlanPicker()" data-i18n>✨ See plans & upgrade</button>`}
     </div>
 
     <div style="${card}" id="acctEmailCard">
@@ -2437,6 +2457,7 @@ async function openAccountSettings(focus) {
     <div style="${card};border-color:rgba(255,101,132,.35);" id="acctDeleteCard">
       <div style="${h};color:var(--accent2);" data-i18n>Delete account</div>
       <div style="${note};margin-bottom:9px;" data-i18n>Permanently deletes your account, presentations and their answers. A paid plan stops renewing — no further charges. This cannot be undone, so download your data first if you want it.</div>
+      ${billing === 'paid' ? `<div style="${note};margin-bottom:9px;" data-i18n>Started your first paid plan less than 14 days ago? Write to help@pollslide.com before deleting — you are entitled to a full refund.</div>` : ''}
       <label style="${lbl}" data-i18n>Type DELETE to confirm</label>
       <input id="acctDelConfirm" autocomplete="off" style="${inp}">
       <button class="btn btn-sm" id="acctDelBtn" onclick="acctDelete()" style="background:var(--accent2);color:#fff;border:none;" data-i18n>Delete my account permanently</button>
@@ -3265,13 +3286,19 @@ async function saveCurrentPresentation() {
     // pasted, restored from an old backup) gets one before it is persisted, so a
     // later reorder can never orphan its answers.
     PSQid.backfill(Array.isArray(pres.questions) ? pres.questions : []);
+    PSQid.ensureHomes(Array.isArray(pres.questions) ? pres.questions : []);
     // Save full presentation record
     await db.ref(deckPath(activePresId)).set(pres);
     // ALSO mirror questions to quiz_builder/sessionCode so participants can find them by QR.
     // Publish productType too so the participant page knows whether to grade (quiz) or not.
     if (pres.sessionCode && pres.questions) {
       await db.ref(`quiz_builder/${pres.sessionCode}/questions`).set(pres.questions);
-      await db.ref(`quiz_builder/${pres.sessionCode}/productType`).set(presType(pres));
+      await db.ref(`quiz_builder/${pres.sessionCode}/homes`).set(PSQid.homesMap(pres.questions));
+      /* A2 — order changed (a move, a delete, an undo): now that phones can see the new
+         order, tell them where the LIVE question is. After the questions write, never
+         before, or a following phone would look up the new position too early. */
+      const sig = orderSignature(pres.questions);
+      if (sig !== _orderSig) { _orderSig = sig; syncLivePosition(pres.sessionCode, pres.questions); }
       await db.ref(`quiz_builder/${pres.sessionCode}/language`).set(pres.language || 'en');
       await db.ref(`quiz_builder/${pres.sessionCode}/teamMode`).set(!!pres.teamMode);
       await db.ref(`quiz_builder/${pres.sessionCode}/focusTrack`).set(!!pres.focusTrack);
@@ -3373,7 +3400,11 @@ function selectPresentation(id) {
      the media boxes, so a deck fetched before that change keeps its pictures — and shows
      them in the editor, where they were previously invisible. */
   const migrated = qarr.reduce((n, q) => n + (migrateLegacyGifs(q) ? 1 : 0), 0);
-  if (PSQid.backfill(qarr) || migrated) {
+  /* Link numbers (qid.js ensureHomes): the first time a deck loads after 2026-10-01 each
+     question's number is set to its CURRENT position — every QR and link already in use
+     stays exactly the same — and is saved, so it is fixed before anyone moves anything. */
+  const homed = PSQid.ensureHomes(qarr);
+  if (PSQid.backfill(qarr) || migrated || homed) {
     pres.questions = qarr;
     if (userId) db.ref(deckPath(id) + '/questions').set(qarr).catch(() => {});
   }
@@ -3407,6 +3438,8 @@ function selectPresentation(id) {
   }
 
   questions = toQArr(pres.questions);
+  PSQid.ensureHomes(questions);
+  _orderSig = orderSignature();
   selIdx = null;
   if (respListener) { respListener(); respListener = null; }
   if (_dashListener) { _dashListener(); _dashListener = null; }   // drop survey dashboard listener when switching presentations
@@ -3415,9 +3448,12 @@ function selectPresentation(id) {
   const savedLiveId  = localStorage.getItem('ql_liveQId_' + pres.sessionCode);
   liveQIdx = savedLiveIdx !== null ? parseInt(savedLiveIdx) : null;
   liveQId  = savedLiveId  || null;
+  // The saved POSITION goes stale if the deck was reordered elsewhere; the id cannot.
+  resyncLiveIdx();
   // Mirror questions to quiz_builder path so participants can find them
   if (pres.sessionCode && questions.length > 0) {
     db.ref(`quiz_builder/${pres.sessionCode}/questions`).set(questions).catch(()=>{});
+    db.ref(`quiz_builder/${pres.sessionCode}/homes`).set(PSQid.homesMap(questions)).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/productType`).set(presType(pres)).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/teamMode`).set(!!pres.teamMode).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/focusTrack`).set(!!pres.focusTrack).catch(()=>{});
@@ -3788,13 +3824,20 @@ async function doCopyQuestion(targetPresId) {
   document.getElementById('copyQuestionsModal').classList.add('hidden');
 
   const q = JSON.parse(JSON.stringify(questions[copyFromQIdx])); // Deep copy
+  /* Its link number belongs to the deck it came from. Carried over, it could collide in
+     the target — or, in a deck not yet numbered, make every OTHER question look
+     un-numbered and get renumbered, changing links already in use. */
+  delete q.home;
   const targetQs = toQArr(presentations[targetPresId].questions);
+  PSQid.ensureHomes(targetQs);
   targetQs.push(q);
+  PSQid.ensureHomes(targetQs);
   presentations[targetPresId].questions = targetQs;
 
   const code = presentations[targetPresId].sessionCode;
   await db.ref(deckPath(targetPresId) + '/questions').set(targetQs);
   await db.ref(`quiz_builder/${code}/questions`).set(targetQs);
+  await db.ref(`quiz_builder/${code}/homes`).set(PSQid.homesMap(targetQs));
   await db.ref(`quiz_builder/${code}/productType`).set(presType(presentations[targetPresId]));
 
   copyFromQIdx = null;
@@ -5497,8 +5540,13 @@ function startCollab(id) {
       presentations[id] = remote;
       if (questionsChanged) {
         const wasSel = selIdx;
+        const selId = (wasSel != null && questions[wasSel]) ? questions[wasSel].id : null;
         questions = remoteQs;
-        selIdx = (wasSel != null && wasSel < questions.length) ? wasSel : (questions.length ? 0 : null);
+        PSQid.ensureHomes(questions);
+        _orderSig = orderSignature();
+        resyncLiveIdx();
+        const selAt = selId ? questions.findIndex(q => q && q.id === selId) : -1;
+        selIdx = selAt >= 0 ? selAt : (wasSel != null && wasSel < questions.length) ? wasSel : (questions.length ? 0 : null);
         renderQList();
         if (selIdx != null && editMode) renderEditor(selIdx);
       }
@@ -5760,7 +5808,10 @@ async function doResetAll() {
     // Reset every question's session-start timestamp so all cleared states are clean
     for (const [pid, pres] of Object.entries(presentations)) {
       const c = pres.sessionCode;
-      toQArr(pres.questions).forEach((_, qi) => localStorage.setItem(`ql_liveStart_${c}_${qi}`, Date.now()));
+      toQArr(pres.questions).forEach((q, qi) => {
+        localStorage.setItem(liveStartKey(PSQid.bucket(q, qi, c)), Date.now());
+        localStorage.removeItem(`ql_liveStart_${c}_${qi}`);
+      });
     }
     renderQList();
     toast('All tallies cleared across every presentation. Questions remain live.', 'success');
@@ -6224,8 +6275,8 @@ async function launchQuestion(idx, opts) {
   // presenting is not resuming.
   //
   // Keyed by qId, NOT by index, so reordering questions keeps each cutoff with its
-  // own question. (ql_liveStart_<code>_<idx> — the key showLiveOrEdit uses — is
-  // per-index and is not remapped by moveQ/deleteQ, so it must not be used here.)
+  // own question. (showLiveOrEdit's start time is keyed by bucket too since 2026-10-01 —
+  // liveStartKey(); the old per-position ql_liveStart_<code>_<idx> is only read as a fallback.)
   const runKey = 'ql_runStart_' + qId;
   if (!_qLaunchedAt[qId]) {
     let prior = 0;
@@ -6237,7 +6288,7 @@ async function launchQuestion(idx, opts) {
   liveStartedAt = launchedAt; // set synchronously so callers right after launch read the right cutoff
 
   const payload = {
-    id: qId, qIndex: idx, index: idx+1, total: questions.length,
+    id: qId, qIndex: idx, index: idx+1, total: questions.length, home: PSQid.homeOf(q, idx),
     text: q.text, type: q.type,
     options: q.options||null,
     correctAnswer: q.correctAnswer!==undefined ? q.correctAnswer : null,
@@ -7468,7 +7519,8 @@ async function resetQuestionTally(qIdx) {
     // pre-reset value, so the next launchQuestion re-published the OLD launchedAt to
     // currentQuestion and qstate — and companion.html/live.html adopt that as their
     // own cutoff, bringing the answers you just cleared back onto the Mac companion.
-    localStorage.setItem(`ql_liveStart_${code}_${qIdx}`, Date.now());
+    localStorage.setItem(liveStartKey(stableQId), Date.now());
+    localStorage.removeItem(`ql_liveStart_${code}_${qIdx}`);
     delete _qLaunchedAt[stableQId];
     try { sessionStorage.removeItem('ql_runStart_' + stableQId); } catch(e){}
     // Step 4: Clear UI and re-show the live view (still answerable)
@@ -8274,13 +8326,18 @@ function showLiveOrEdit(idx) {
   // liveStartedAt: the moment this question's CURRENT session began. Persist it
   // per-question (in localStorage) so re-clicking the question doesn't drop
   // responses already gathered this session. It only resets on Reset Tally.
-  const startKey = `ql_liveStart_${code}_${idx}`;
-  let savedStart = parseInt(localStorage.getItem(startKey) || '0', 10);
-  if (!savedStart) { savedStart = Date.now(); localStorage.setItem(startKey, savedStart); }
-  liveStartedAt = savedStart;
-
   // Live view: use the stable qId so it always matches participant responses
   const stableQId = PSQid.bucket(questions[idx], idx, code);
+  // A3 (2026-10-01): keyed by the question's bucket, not its position, so a reorder can't
+  // hand one question another's start time. The old per-position key is read once as a
+  // fallback — right as long as the deck wasn't reordered since, which is all it ever was.
+  const startKey = liveStartKey(stableQId);
+  let savedStart = parseInt(localStorage.getItem(startKey) || '0', 10);
+  if (!savedStart) {
+    savedStart = parseInt(localStorage.getItem(`ql_liveStart_${code}_${idx}`) || '0', 10) || Date.now();
+    localStorage.setItem(startKey, savedStart);
+  }
+  liveStartedAt = savedStart;
   liveQIdx = idx;
   liveQId  = stableQId;
   renderLiveView(idx, stableQId, questions[idx]);
@@ -8294,7 +8351,7 @@ async function publishLive(idx, qId) {
   const q = questions[idx];
   const code = presentations[activePresId].sessionCode;
   const payload = {
-    id: qId, qIndex: idx, index: idx+1, total: questions.length,
+    id: qId, qIndex: idx, index: idx+1, total: questions.length, home: PSQid.homeOf(q, idx),
     text: q.text, type: q.type,
     options: q.options||null,
     correctAnswer: q.correctAnswer!==undefined ? q.correctAnswer : null,
@@ -8877,13 +8934,13 @@ function deleteQ(idx){
   const removed=questions[idx], prevLiveIdx=liveQIdx, prevLiveId=liveQId;   // keep for Undo
   questions.splice(idx,1);
   if(liveQIdx===idx){liveQIdx=null;liveQId=null;}
-  else if(liveQIdx>idx) liveQIdx--;
+  else resyncLiveIdx();
   selIdx=Math.min(idx,questions.length-1);
   saveBack();renderQList();
   if(questions.length>0) renderEditor(selIdx); else showSetup();
   toast('Question deleted','info',{label:'↶ Undo',timeout:10000,onClick:()=>{
     questions.splice(Math.min(idx,questions.length),0,removed);
-    liveQIdx=prevLiveIdx; liveQId=prevLiveId; selIdx=idx;
+    liveQIdx=prevLiveIdx; liveQId=prevLiveId; selIdx=idx; resyncLiveIdx();
     saveBack();renderQList();renderEditor(idx);
     toast('Question restored','success');
   }});
@@ -8891,7 +8948,7 @@ function deleteQ(idx){
 function moveQ(idx,dir){
   const ni=idx+dir;if(ni<0||ni>=questions.length)return;
   [questions[idx],questions[ni]]=[questions[ni],questions[idx]];
-  if(liveQIdx===idx)liveQIdx=ni;else if(liveQIdx===ni)liveQIdx=idx;
+  resyncLiveIdx();
   selIdx=ni;saveBack();renderQList();renderEditor(ni);
 }
 function saveAndNext(idx){renderQList();if(idx+1<questions.length)selectQ(idx+1);else toast('All questions saved!','success');}
@@ -8908,10 +8965,56 @@ function saveAndLaunch(idx) {
   toast(`Q${idx+1} saved and now live!`, 'success');
 }
 
+// ─── QUESTION ORDER (2026-10-01) ─────────────────────────────────────────────
+/* Where a question's "this session started at" time is kept (A3). */
+function liveStartKey(bucket) { return 'ql_liveStart2_' + bucket; }
+
+/* The deck's order as ids, to notice when a save changed it. */
+let _orderSig = '';
+function orderSignature(qs) { return (qs || questions || []).map(q => (q && q.id) || '').join('|'); }
+
+/* Point liveQIdx back at the live QUESTION after the array changed under it (a move, a
+   delete, an undo, a collaborator's edit, a reload). Its id cannot go stale; its position
+   can. Not found → it was deleted, so nothing is live. */
+function resyncLiveIdx() {
+  if (!liveQId || !activePresId) return;
+  const code = presentations[activePresId]?.sessionCode || '';
+  const at = questions.findIndex((q, i) => PSQid.bucket(q, i, code) === liveQId);
+  liveQIdx = at >= 0 ? at : null;
+  if (at < 0) liveQId = null;
+  try {
+    if (at >= 0) { localStorage.setItem('ql_liveQIdx_' + code, at); }
+    else { localStorage.removeItem('ql_liveQIdx_' + code); localStorage.removeItem('ql_liveQId_' + code); }
+  } catch (e) {}
+}
+
+/* A2 — the order changed: move the published "current question" pointer with its
+   question, so phones following along stay on it and new joiners land on it. ONLY the
+   position fields are updated — never set() — so the question's timer, reveal and
+   post-reveal state are untouched. Reads the published pointer rather than this tab's
+   memory, so it is right whoever made the change (a collaborator, another tab). */
+async function syncLivePosition(code, qs) {
+  if (!code) return;
+  try {
+    const cq = (await db.ref(`sessions/${code}/currentQuestion`).get()).val();
+    if (!cq || !cq.id) return;
+    const at = (qs || []).findIndex((q, i) => PSQid.bucket(q, i, code) === cq.id);
+    if (at < 0) return;                        // not one of ours (e.g. a positional pointer)
+    const upd = {};
+    if (cq.qIndex !== at) { upd.qIndex = at; upd.index = at + 1; }
+    if (cq.total !== qs.length) upd.total = qs.length;
+    const home = PSQid.homeOf(qs[at], at);
+    if (cq.home !== home) upd.home = home;
+    if (Object.keys(upd).length) await db.ref(`sessions/${code}/currentQuestion`).update(upd);
+  } catch (e) { /* best effort: the next launch republishes everything */ }
+}
+
 // ─── QR HELPERS ───────────────────────────────────────────────────────────────
 function getQuestionURL(idx) {
   const code = presentations[activePresId]?.sessionCode || '';
-  return `${BASE_URL}#${code}/${idx}`;
+  // The question's link number (qid.js), not its position — so a QR pasted into slides
+  // or printed keeps opening THIS question after the deck is reordered.
+  return `${BASE_URL}#${code}/${PSQid.homeOf(questions[idx], idx)}`;
 }
 
 // Whole-set link (no question index) — used by async products (survey / study).
@@ -10815,7 +10918,7 @@ function renderPresentSlide(idx) {
             </div>`
           : '');
 
-  const qUrl = `${((window.PS_ENV && PS_ENV.appOrigin) || 'https://app.pollslide.com')}/answer#${presentations[activePresId]?.sessionCode||''}/${idx}`;
+  const qUrl = `${((window.PS_ENV && PS_ENV.appOrigin) || 'https://app.pollslide.com')}/answer#${presentations[activePresId]?.sessionCode||''}/${PSQid.homeOf(questions[idx], idx)}`;
   const qrId = 'presentQR_' + idx;
 
   // ── Left 2/9 column inner HTML ────────────────────────────────────────────

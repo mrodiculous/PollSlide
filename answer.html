@@ -195,7 +195,7 @@
 
 <script src="/errors.js?v=25c25f5f"></script>
 <script src="/roster.js?v=88b6f2d4"></script>
-<script src="/qid.js?v=5e6ebfdc"></script>
+<script src="/qid.js?v=f6f81595"></script>
 <script src="/retakes.js?v=d187d4ee"></script>
 <script src="/offline-queue.js?v=bcd437e7"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -237,6 +237,27 @@ function parseLocation() {
 const _loc0 = parseLocation();
 const SESSION = _loc0.session;
 let   Q_INDEX = _loc0.qIndex;   // mutable: followLive advances it IN PLACE (no full page reload)
+/* The number in the link is the question's LINK NUMBER (qid.js "home"), which is its
+   position unless the deck was reordered or had a question deleted (2026-10-01). It is
+   turned into the current position once, from quiz_builder/$code/homes, before the first
+   load. No homes map (older decks, PresentSlide) → the number IS the position, as before.
+   After that Q_INDEX is always the current position; Q_LINK is what goes in the URL. */
+let   Q_LINK = Q_INDEX;
+let   _homes = undefined;       // quiz_builder/$code/homes, once read (null = none)
+let   _linkResolved = false;
+async function resolveLink() {
+  if (_linkResolved || isNaN(Q_LINK) || Q_LINK < 0) { _linkResolved = true; return true; }
+  try { const h = await db.ref(`quiz_builder/${SESSION}/homes`).get(); _homes = h.exists() ? h.val() : null; }
+  catch (e) { _homes = null; }        // can't read it → behave exactly as before
+  const at = PSQid.resolve(_homes, Q_LINK);
+  if (at < 0) return false;          // not in this deck (removed, or not published yet)
+  Q_INDEX = at; _linkResolved = true;
+  return true;
+}
+function linkForIndex(idx) {
+  if (_liveQ && Number(_liveQ.qIndex) === idx && _liveQ.home != null) return Number(_liveQ.home);
+  return PSQid.linkFor(_homes, idx);
+}
 const QA_FLAG = _loc0.qa;
 const QA_MODE = !!SESSION && !!QA_FLAG;
 // No question index (and not Q&A) → answer the whole set as one async form.
@@ -381,6 +402,13 @@ const I18N = {
   pt:{enterName:'Digite seu nome',nameOnce:'Só precisa fazer isso uma vez por sessão.',yourName:'Seu nome',continue:'Continuar →',enterNamePlease:'Por favor, digite seu nome.',submitAnswer:'Enviar resposta',submitRating:'Enviar avaliação',submitAnswers:'Enviar respostas',submitted:'✓ Enviado!',alreadyAnswered:'Você já respondeu a esta pergunta!',selectAll:'✓ Marque todas as aplicáveis',submitSurvey:'Enviar pesquisa',submitQuiz:'Enviar e ver pontuação',thankYou:'Obrigado!',recorded:'Suas respostas foram registradas.',qaTitle:'Perguntas do público',qaSub:'Faça uma pergunta — ou vote nas que quer ver respondidas.',ask:'Perguntar',typeQuestion:'Escreva sua pergunta…',loading:'Carregando…',responses:'respostas',question:'Pergunta',typeAnswer:'Digite sua resposta…',tapToFlip:'TOQUE PARA VIRAR',answerFace:'RESPOSTA',showAnswer:'Mostrar resposta',again:'De novo',hard:'Difícil',good:'Bom',easy:'Fácil',yourAnswer:'Sua resposta',correctWas:'Correta',skipped:'(pulada)',joinTitle:'Entrar em uma sessão',joinSub:'Digite o código exibido ao lado do QR code.',joinBtn:'Entrar →',joinShort:'Esse código parece curto demais — confira e tente novamente.',joinNotFound:'Nenhuma sessão encontrada com esse código — confirme com seu apresentador.',joinFail:'Não foi possível verificar o código — verifique sua conexão.',seeOriginal:'Ver original',seeTranslation:'Ver tradução',teamTitle:'Entre em uma equipe',teamSub:'Respondam juntos — escolha a equipe da sua mesa ou crie uma.',teamNewLabel:'…ou crie uma nova',teamFirst:'Crie a primeira equipe',teamNew:'Nome da nova equipe…',teamCreate:'Criar equipe',teamSolo:'Jogar sozinho (sem equipe)',teamMembers:'membros',teamNamePlease:'Dê um nome à sua equipe.',modeSpeed:'Rodada rápida',modeSpeedHint:'responda rápido para ganhar pontos extras',modeStreak:'Sequência',modeStreakOn:'seguidas',modeStreakKeep:'continue assim!',modeStreakStart:'respostas seguidas multiplicam seus pontos',modeSurvival:'Sobrevivência',modeSurvivalHint:'um erro e você está fora',modeStillIn:'ainda no jogo',modeWager:'Rodada de apostas',modeWagerHint:'aposte antes de responder',outTitle:'Você está fora!',outSub:'Você sobreviveu a',outQ:'pergunta',outQs:'perguntas',outWatch:'Fique nesta tela — você continuará vendo cada pergunta.',wagerTitle:'Qual é a sua confiança?',wagerSub:'Aposte antes de responder. Apostas maiores rendem mais — mas custam se você errar.',wagerSafe:'Segura',wagerSafeNote:'Ganha 1 · não perde nada',wagerRisky:'Arriscada',wagerRiskyNote:'Ganha 2 · perde 1',wagerBold:'Ousada',wagerBoldNote:'Ganha 3 · perde 2',speedLocked:'Enviada em',streakRiding:'Você está numa sequência de',survivalHold:'Acerte para continuar no jogo…',wagerPlaced:'Você apostou',studyTitle:'Estudar',dayStreak:'dias seguidos',cardDue:'cartão pendente',cardsDue:'cartões pendentes',rightNow:'agora',allCaughtUp:'Está tudo em dia — estude mesmo assim para sair na frente.',stLearning:'Aprendendo',stFamiliar:'Conhecido',stMastered:'Dominado',modeClassicName:'Revisar',modeClassicDesc:'Vire os cartões e avalie-se. A repetição espaçada escolhe o próximo.',modeClockName:'Contra o relógio',modeClockDesc:'60 segundos. Quantos você acerta?',modeLadderName:'Suba a escada',modeLadderDesc:'Dez degraus, risco crescente. Duas ajudas. Garanta ou arrisque.',modeBoardName:'Tabuleiro de cartões',modeBoardDesc:'Escolha suas casas estilo game show — as mais caras são as que você esquece.',readyNow:'prontos agora',yourBest:'Seu recorde',gotItWrong:'Errei',gotItRight:'Acertei',correct:'corretos',newBest:'Novo recorde!',dayStreakShort:'dias seguidos',playAgain:'Jogar de novo',backToStudy:'Voltar a estudar',rung:'Degrau',skip:'Pular',bank:'Garantir',hintStarts:'Começa com',hintWords:'palavras',ladderCleared:'Você subiu a escada toda!',ladderBanked:'Garantido!',ladderFell:'De volta ao degrau seguro',reachedRung:'Você chegou ao degrau',safeHeld:'seu degrau seguro aguentou',boardHint:'Valores altos são os cartões que você conhece menos.',points:'pontos',boardCleared:'Tabuleiro concluído!',focusNoticed:'Você saiu da tela — seu professor verá isso.',submitFailed:'Não foi possível enviar — verifique sua conexão e tente novamente.',resultCopied:'Resultado copiado — cole onde quiser!',youAnswered:'✓ Você respondeu a esta pergunta',tryAgain:'Tentar de novo',oneTryLeft:'Resta uma tentativa.',triesLeft:'Restam {n} tentativas.',retakeTwice:'duas vezes',retakeNTimes:'até {n} vezes',retakeBest:'Você pode responder {tries}. Vale a sua melhor tentativa.',retakeLast:'Você pode responder {tries}. Vale a sua última tentativa.',retakeFirst:'Você pode responder {tries}, mas vale a sua primeira resposta.',queuedOne:'Sem ligação — a sua resposta está guardada e será enviada automaticamente.',queuedMany:'Sem ligação — as suas {n} respostas estão guardadas e serão enviadas automaticamente.',queueSent:'✓ Enviado. A sua resposta chegou.',queueGaveUp:'Não foi possível enviar a sua resposta. Avise o seu professor.'},
   it:{enterName:'Inserisci il tuo nome',nameOnce:'Da fare una sola volta per sessione.',yourName:'Il tuo nome',continue:'Continua →',enterNamePlease:'Inserisci il tuo nome.',submitAnswer:'Invia risposta',submitRating:'Invia valutazione',submitAnswers:'Invia risposte',submitted:'✓ Inviato!',alreadyAnswered:'Hai già risposto a questa domanda!',selectAll:'✓ Seleziona tutte quelle pertinenti',submitSurvey:'Invia sondaggio',submitQuiz:'Invia e vedi punteggio',thankYou:'Grazie!',recorded:'Le tue risposte sono state registrate.',qaTitle:'Domande del pubblico',qaSub:'Fai una domanda — o vota quelle da trattare.',ask:'Chiedi',typeQuestion:'Scrivi la tua domanda…',loading:'Caricamento…',responses:'risposte',question:'Domanda',typeAnswer:'Scrivi la tua risposta…',tapToFlip:'TOCCA PER GIRARE',answerFace:'RISPOSTA',showAnswer:'Mostra risposta',again:'Di nuovo',hard:'Difficile',good:'Bene',easy:'Facile',yourAnswer:'La tua risposta',correctWas:'Corretta',skipped:'(saltata)',joinTitle:'Partecipa a una sessione',joinSub:'Digita il codice mostrato accanto al codice QR.',joinBtn:'Partecipa →',joinShort:'Questo codice sembra troppo corto — controllalo e riprova.',joinNotFound:'Nessuna sessione trovata con questo codice — verifica con il tuo presentatore.',joinFail:'Impossibile verificare il codice — controlla la connessione.',seeOriginal:'Vedi originale',seeTranslation:'Vedi traduzione',teamTitle:'Unisciti a una squadra',teamSub:'Rispondete insieme — scegli la squadra del tuo tavolo o creane una.',teamNewLabel:'…o creane una nuova',teamFirst:'Crea la prima squadra',teamNew:'Nome della nuova squadra…',teamCreate:'Crea squadra',teamSolo:'Gioca da solo (senza squadra)',teamMembers:'membri',teamNamePlease:'Dai un nome alla tua squadra.',modeSpeed:'Round veloce',modeSpeedHint:'rispondi in fretta per punti bonus',modeStreak:'Serie',modeStreakOn:'di fila',modeStreakKeep:'continua così!',modeStreakStart:'le risposte di fila moltiplicano i tuoi punti',modeSurvival:'Sopravvivenza',modeSurvivalHint:'una sbagliata e sei fuori',modeStillIn:'ancora in gioco',modeWager:'Round di scommesse',modeWagerHint:'punta prima di rispondere',outTitle:'Sei fuori!',outSub:'Sei sopravvissuto a',outQ:'domanda',outQs:'domande',outWatch:'Resta su questa schermata — continuerai a vedere ogni domanda.',wagerTitle:'Quanto sei sicuro?',wagerSub:'Punta prima di rispondere. Puntate alte rendono di più, ma costano se sbagli.',wagerSafe:'Sicura',wagerSafeNote:'Vinci 1 · non perdi nulla',wagerRisky:'Rischiosa',wagerRiskyNote:'Vinci 2 · perdi 1',wagerBold:'Audace',wagerBoldNote:'Vinci 3 · perdi 2',speedLocked:'Inviata in',streakRiding:'Sei su una serie di',survivalHold:'Indovina per restare in gioco…',wagerPlaced:'Hai puntato',studyTitle:'Studia',dayStreak:'giorni di fila',cardDue:'carta da ripassare',cardsDue:'carte da ripassare',rightNow:'ora',allCaughtUp:'Sei in pari — studia lo stesso per portarti avanti.',stLearning:'In apprendimento',stFamiliar:'Conosciuta',stMastered:'Padroneggiata',modeClassicName:'Ripassa',modeClassicDesc:'Gira le carte e valutati. La ripetizione dilazionata sceglie la prossima.',modeClockName:'Contro il tempo',modeClockDesc:'60 secondi. Quante ne indovini?',modeLadderName:'Scala i gradini',modeLadderDesc:'Dieci gradini, posta crescente. Due aiuti. Incassa o rischia.',modeBoardName:'Tabellone di carte',modeBoardDesc:'Scegli le caselle in stile quiz TV — le più care sono quelle che dimentichi.',readyNow:'pronte ora',yourBest:'Il tuo record',gotItWrong:'Sbagliata',gotItRight:'Indovinata',correct:'corrette',newBest:'Nuovo record!',dayStreakShort:'giorni di fila',playAgain:'Gioca ancora',backToStudy:'Torna allo studio',rung:'Gradino',skip:'Salta',bank:'Incassa',hintStarts:'Inizia con',hintWords:'parole',ladderCleared:'Hai scalato tutta la scala!',ladderBanked:'Incassato!',ladderFell:'Torni al gradino sicuro',reachedRung:'Sei arrivato al gradino',safeHeld:'il tuo gradino sicuro ha retto',boardHint:'I valori alti sono le carte che conosci meno.',points:'punti',boardCleared:'Tabellone completato!',focusNoticed:'Hai lasciato lo schermo — il tuo insegnante lo vedrà.',submitFailed:'Invio non riuscito — controlla la connessione e riprova.',resultCopied:'Risultato copiato — incollalo dove vuoi!',youAnswered:'✓ Hai risposto a questa domanda',tryAgain:'Riprova',oneTryLeft:'Ti resta un tentativo.',triesLeft:'Ti restano {n} tentativi.',retakeTwice:'due volte',retakeNTimes:'fino a {n} volte',retakeBest:'Puoi rispondere {tries}. Conta il tuo tentativo migliore.',retakeLast:'Puoi rispondere {tries}. Conta il tuo ultimo tentativo.',retakeFirst:'Puoi rispondere {tries}, ma conta la tua prima risposta.',queuedOne:'Nessuna connessione — la tua risposta è salvata e verrà inviata automaticamente.',queuedMany:'Nessuna connessione — le tue {n} risposte sono salvate e verranno inviate automaticamente.',queueSent:'✓ Inviato. La tua risposta è arrivata.',queueGaveUp:'Non è stato possibile inviare la tua risposta. Avvisa il tuo insegnante.'},
 };
+/* 2026-10-01: a scanned link whose question isn't in the deck right now (removed, or about
+   to be published). Same register as the rest of this page. */
+Object.assign(I18N.es, { waitingTitle:'Esperando…', qUnavailable:'Esta pregunta no está disponible ahora mismo.<br>Quédate en esta página: se abrirá en cuanto tu presentador muestre una pregunta.' });
+Object.assign(I18N.de, { waitingTitle:'Warten…', qUnavailable:'Diese Frage ist gerade nicht verfügbar.<br>Bleib auf dieser Seite – sie öffnet sich, sobald dein Präsentator eine Frage zeigt.' });
+Object.assign(I18N.fr, { waitingTitle:'En attente…', qUnavailable:'Cette question n’est pas disponible pour le moment.<br>Restez sur cette page : elle s’ouvrira dès que votre présentateur affichera une question.' });
+Object.assign(I18N.pt, { waitingTitle:'Aguardando…', qUnavailable:'Esta pergunta não está disponível no momento.<br>Fique nesta página — ela abre assim que seu apresentador mostrar uma pergunta.' });
+Object.assign(I18N.it, { waitingTitle:'In attesa…', qUnavailable:'Questa domanda non è disponibile al momento.<br>Resta su questa pagina: si aprirà appena il tuo presentatore mostrerà una domanda.' });
 function t(key, fallback){ return (I18N[LANG] && I18N[LANG][key]) || fallback; }
 
 /* Everything a presenter typed, and everything a translation model returned, is
@@ -1093,7 +1121,8 @@ async function joinByCode(){
     try {
       const cur = await db.ref(`sessions/${code}/currentQuestion`).get();
       const cq = cur.exists() ? cur.val() : null;
-      if (cq && cq.status === 'active' && cq.qIndex != null && Number(cq.qIndex) >= 0) dest = '#' + code + '/' + Number(cq.qIndex);
+      if (cq && cq.status === 'active' && cq.qIndex != null && Number(cq.qIndex) >= 0)
+        dest = '#' + code + '/' + Number(cq.home != null ? cq.home : cq.qIndex);   // resolved on load
     } catch(e){}
     // Remember this tab joined by code → follow the presenter when they advance.
     try { sessionStorage.setItem('ql_follow_' + code, '1'); } catch(e){}
@@ -1116,20 +1145,27 @@ async function joinByCode(){
 // QR). Those scans stay pinned — following would drag the scanner off the slide
 // they're standing in front of.
 // The flag is sticky once earned: once you're in the live flow, you stay in it.
-async function followLive(){
-  if (QA_MODE || SURVEY_MODE || isNaN(Q_INDEX) || Q_INDEX < 0) return;
+let _following = false;       // one listener, however many times followLive is asked
+async function followLive(forceFollow){
+  if (QA_MODE || SURVEY_MODE || isNaN(Q_INDEX) || Q_INDEX < 0 || _following) return;
   let follow = false; try { follow = sessionStorage.getItem('ql_follow_' + SESSION) === '1'; } catch(e){}
+  // A scanned code whose question isn't in the deck: ride along with the presenter
+  // rather than wait on a screen that would never change.
+  if (forceFollow) { follow = true; try { sessionStorage.setItem('ql_follow_' + SESSION, '1'); } catch(e){} }
   if (!follow) {
     try {
       const cur = await db.ref(`sessions/${SESSION}/currentQuestion`).get();
       const cq  = cur.exists() ? cur.val() : null;
-      if (cq && cq.qIndex != null && Number(cq.qIndex) === Q_INDEX) {
+      // Is the question this phone scanned the live one? By link number when the presenter
+      // publishes one (positions differ after a reorder), else by position as before.
+      if (cq && (cq.home != null ? Number(cq.home) === Q_LINK : (cq.qIndex != null && Number(cq.qIndex) === Q_INDEX))) {
         follow = true;
         try { sessionStorage.setItem('ql_follow_' + SESSION, '1'); } catch(e){}
       }
     } catch(e){}
   }
   if (!follow) return;
+  _following = true;
   // Watch the whole node rather than just qIndex: currentQuestion.id IS the bucket the
   // presenter writes answers to, and guessing it from the index is exactly what broke
   // when a deck was reordered.
@@ -1138,6 +1174,13 @@ async function followLive(){
     if (!cq) return;
     if (cq.id) _liveQ = cq;
     const idx = cq.qIndex != null ? Number(cq.qIndex) : NaN;
+    /* The presenter MOVED the live question (qid.js / presenter syncLivePosition): same
+       question, new position. Don't reload it — that would wipe a half-made selection. */
+    if (!isNaN(idx) && idx >= 0 && idx !== Q_INDEX && cq.id && cq.id === STABLE_QID) {
+      Q_INDEX = idx; Q_LINK = cq.home != null ? Number(cq.home) : linkForIndex(idx);
+      try { history.replaceState(null, '', '#' + SESSION + '/' + Q_LINK); } catch(e){}
+      return;
+    }
     if (!isNaN(idx) && idx >= 0 && idx !== Q_INDEX) {
       goToQuestion(idx);   // IN-PLACE swap — no full page reload (fast + reliable on mobile)
     }
@@ -1155,6 +1198,8 @@ async function followLive(){
 function goToQuestion(idx){
   if (idx === Q_INDEX) return;
   Q_INDEX = idx;
+  _linkResolved = true;       // idx is a POSITION (from currentQuestion), already resolved
+  Q_LINK = linkForIndex(idx);
   focusResetForQuestion();   // per question, so a teacher sees WHICH one they left on
   STABLE_QID = (_liveQ && _liveQ.id && Number(_liveQ.qIndex) === idx)
     ? _liveQ.id
@@ -1166,7 +1211,7 @@ function goToQuestion(idx){
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
   // Keep the URL correct but DON'T trigger the hashchange→reload path (replaceState
   // doesn't fire hashchange), so the follow is instant.
-  try { history.replaceState(null, '', '#' + SESSION + '/' + idx); } catch(e){}
+  try { history.replaceState(null, '', '#' + SESSION + '/' + Q_LINK); } catch(e){}
   loadQuestion();
 }
 
@@ -1309,6 +1354,14 @@ function joinSession(fromRoster) {
 }
 
 // ─── LOAD QUESTION ────────────────────────────────────────────────────────────
+function renderWaitingForQuestion() {
+  render(`<div style="text-align:center;padding:30px 0 20px;">
+      <div style="font-size:40px;margin-bottom:12px;">⏳</div>
+      <h1 style="margin-bottom:8px;">${t('waitingTitle','Waiting...')}</h1>
+      <p class="subtitle">${t('qUnavailable','This question isn’t available right now.<br>Stay on this page — it opens as soon as your presenter shows a question.')}</p>
+      <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:10px 16px;font-size:13px;color:var(--muted);margin-top:12px;">
+        Session <strong style="color:var(--accent4);">${SESSION}</strong></div></div>`);
+}
 async function loadQuestion() {
   /* Identity comes first. A student part-way through picking their name or typing
    * their PIN must not have the screen pulled out from under them by the question
@@ -1319,6 +1372,16 @@ async function loadQuestion() {
   _currentRenderer = loadQuestion;
   render(`<div class="spinner"></div><p class="center" style="color:var(--muted);font-size:13px;">${t('loading','Loading...')}</p>`);
 
+  // A link number that isn't in this deck (removed, or published a moment from now) is
+  // never read as a position — that would open a DIFFERENT question. Wait and re-check.
+  if (!(await resolveLink())) {
+    renderWaitingForQuestion();
+    followLive(true);
+    // Not a real position: whatever question goes live next is "different" and gets opened.
+    if (Q_INDEX >= 0) Q_INDEX = -99;
+    setTimeout(loadQuestion, 3000);
+    return;
+  }
   // Load question definition from quiz_builder
   const qSnap = await db.ref(`quiz_builder/${SESSION}/questions/${Q_INDEX}`).get();
   if (!qSnap.exists()) {

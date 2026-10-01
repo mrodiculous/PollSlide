@@ -22,7 +22,7 @@
 -->
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="/errors.js?v=25c25f5f"></script>
-<script src="/qid.js?v=5e6ebfdc"></script>
+<script src="/qid.js?v=f6f81595"></script>
 <script src="/present-display.js?v=b01c9c51"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="/ps-env.js?v=717fca7b"></script>
@@ -1569,11 +1569,14 @@ function publishPresentSlide(s){
     const q=s&&s.question; const code=q&&q.sessionCode;
     if(!code||!slideHasPoll(s)) return;
     const idx=q.qIndex||0;
-    fbDb.ref('sessions/'+code+'/currentQuestion').set({
+    /* An IMPORTED slide's number is its source question's link number; phones following
+       along need that question's CURRENT position in the source deck. Native slides are
+       numbered by position (no homes map) — resolve() returns them unchanged. */
+    const go=(pos)=>fbDb.ref('sessions/'+code+'/currentQuestion').set({
       // The bucket id must match what attachLive() reads responses from, or the
       // slide would count answers the phone never wrote.
       id: PSQid.bucket(q, idx, code),
-      qIndex: idx, index: idx+1, total: deck.slides.filter(slideHasPoll).length,
+      qIndex: pos, index: pos+1, total: deck.slides.filter(slideHasPoll).length, home: idx,
       text: q.text||'', type: q.type||'multiple_choice',
       options: q.options||null,
       correctAnswer: (q.correctAnswer!==undefined&&q.correctAnswer!==null)?q.correctAnswer:null,
@@ -1581,6 +1584,11 @@ function publishPresentSlide(s){
       image: q.image||null, noTranslate: !!q.noTranslate,
       phase:'live', status:'active', launchedAt: Date.now(),
     }).catch(()=>{});
+    if(!q.imported){ go(idx); return; }
+    fbDb.ref('quiz_builder/'+code+'/homes').get().then(h=>{
+      const pos=PSQid.resolve(h&&h.exists()?h.val():null, idx);
+      go(pos>=0?pos:idx);
+    }).catch(()=>go(idx));
   }catch(e){ /* never let publishing break the show */ }
 }
 
@@ -1702,9 +1710,12 @@ function orgSelectPres(id){ const p=userPres[id]; const q=document.getElementByI
 // Imported questions KEEP their source sessionCode → same QR, same shared tally
 // (by design). They're flagged `imported` so publishDeck never re-codes them;
 // use Reset tallies for a fresh count.
+// qIndex on an imported slide is the source question's LINK NUMBER (qid.js, 2026-10-01) —
+// its QR keeps opening that question even if the source deck is reordered later.
 function _qToSlide(p,qq,qi){ const type=qq.type||'multiple_choice'; const kind=(type==='flashcard')?'study':(p.productType&&SLIDE_TYPES[p.productType]?p.productType:'poll');
-  if(kind==='study') return {id:nid(),kind:'study',question:{type:'flashcard',front:qq.front||qq.text||'',back:qq.back||'',sessionCode:p.sessionCode,qIndex:qi,imported:true}};
-  return {id:nid(),kind, question:Object.assign({},qq,{sessionCode:p.sessionCode,qIndex:qi,imported:true})}; }
+  const ln=PSQid.homeOf(qq,qi);
+  if(kind==='study') return {id:nid(),kind:'study',question:{type:'flashcard',front:qq.front||qq.text||'',back:qq.back||'',sessionCode:p.sessionCode,qIndex:ln,imported:true}};
+  return {id:nid(),kind, question:Object.assign({},qq,{sessionCode:p.sessionCode,qIndex:ln,imported:true})}; }
 function orgAddOne(){ const id=document.getElementById('orgPres').value,qi=parseInt(document.getElementById('orgQ').value,10); const p=userPres[id]; if(!p||isNaN(qi))return; deck.slides.push(_qToSlide(p,qArr(p.questions)[qi],qi)); currentIdx=deck.slides.length-1; closeModal('orgOverlay'); renderNav(); renderCanvas(); }
 function orgAddAll(){ const id=document.getElementById('orgPres').value; const p=userPres[id]; if(!p)return; qArr(p.questions).forEach((qq,qi)=>deck.slides.push(_qToSlide(p,qq,qi))); currentIdx=deck.slides.length-1; closeModal('orgOverlay'); renderNav(); renderCanvas(); }
 

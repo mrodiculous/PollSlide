@@ -185,6 +185,9 @@ function showLive(q) {
   const letters = ['A','B','C','D','E','F'];
   const correct = Array.isArray(q.correctAnswer) ? q.correctAnswer : [q.correctAnswer];
   const qIdx    = q.qIndex !== undefined ? q.qIndex : (q.index - 1);
+  /* The QR opens the question by its LINK NUMBER (published by the presenter as `home`,
+     2026-10-01), so it stays right after a reorder. Older publishers send none → position. */
+  _overlayLink = (q.home != null) ? q.home : qIdx;
 
   // Do NOT paint the correct answer green here — this runs the moment the question
   // goes live, so colouring the right bar would leak the answer to the room before
@@ -272,6 +275,7 @@ function showWait(msg) {
   `);
 }
 
+let _overlayLink = null;   // the live question's link number, for the QR
 function buildQR(qIdx) {
   if (!sessionCode) return '';
   const url = qIdx !== null && qIdx !== undefined
@@ -291,7 +295,12 @@ function setContent(html) {
   document.getElementById('mainContent').innerHTML = html;
   const el = document.getElementById('qrSmall');
   if (el && sessionCode) {
-    const qIdx = currentQId ? parseInt((currentQId||'').split('_')[0].replace('q','')) : null;
+    /* Was guessed by parsing the question id ("q3_stable…" → 3). Questions created since
+       stable ids ("qz…") parse to NaN, so their QR fell back to question 1 — the wrong one.
+       The live question's link number is published; use it, and keep the guess only as a
+       fallback for a publisher that sends none. */
+    const guess = currentQId ? parseInt((currentQId||'').split('_')[0].replace('q','')) : null;
+    const qIdx = (_overlayLink != null) ? _overlayLink : guess;
     const url  = qIdx !== null && !isNaN(qIdx)
       ? `${BASE_URL}#${sessionCode}/${qIdx}`
       : `${BASE_URL}#${sessionCode}/0`;

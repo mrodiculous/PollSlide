@@ -59,7 +59,7 @@ console.log('\nThe published pointer matches where the phone writes and the comp
 
   if (m) {
     const payloadSrc = m[0].replace(/^db\.ref[^{]*\.set\(/, '(').replace(/\)\.then$/, ')');
-    const build = new Function('session', 'qIdx', 'q', 'qId', 'total', 'return ' + payloadSrc + ';');
+    const build = new Function('session', 'qIdx', 'q', 'qId', 'total', 'home', 'return ' + payloadSrc + ';');
     const CODE = 'ABC1234';
     const deck = [
       { id: 'q0_stable', text: 'Q1', type: 'multiple_choice' },   // legacy — positional == real
@@ -74,6 +74,11 @@ console.log('\nThe published pointer matches where the phone writes and the comp
       ok(`Q${qIdx + 1}: id == phone-write bucket == companion-read bucket (answers register)`,
          p.id === PSQid.bucket(q, qIdx, CODE));
     }
+    // Link numbers (2026-10-01): the slide's QR number rides along, so a phone that joins by
+    // code lands on the question the slide shows even after the deck was reordered.
+    const moved = build(CODE, 0, deck[1], PSQid.bucket(deck[1], 0, CODE), 2, 1);
+    ok('publishes the link number the slide QR carried (position 0, link 1)', moved.home === 1 && moved.qIndex === 0);
+    ok('no link number given → it equals the position, as before', build(CODE, 1, deck[1], 'x', 2).home === 1);
     // It is a full .set (last-writer-wins), so whichever surface acted most recently drives.
     ok('the write is a plain .set — most-recent action wins (companion vs presenter)',
        /\.set\(\{/.test(m[0]) && !/transaction/.test(m[0]));

@@ -51,6 +51,26 @@ module.exports = async function handler(req, res) {
   if (who.email_verified === false) return res.status(403).json({ error: 'Verify your email address first' });
 
   try {
+    /* The account's OWN Stripe customer first (2026-09-30). stripe-webhook.js records it at
+       users/$uid/stripeCustomerId, and the uid comes from the verified token, so this is the
+       caller's customer by construction. Looking up by email alone broke for anyone who had
+       changed their sign-in email if Stripe's copy of it had not been updated. Email stays the
+       fallback for accounts that predate the recorded id. */
+    let customerId = null;
+    try {
+      const admin = require('firebase-admin');
+      const { getApp } = require('../lib/quota');
+      const snap = await admin.database(getApp()).ref('users/' + who.uid + '/stripeCustomerId').get();
+      const cid = snap.exists() ? String(snap.val() || '') : '';
+      if (cid) {
+        const c = await stripe.customers.retrieve(cid);
+        if (c && !c.deleted) customerId = c.id;
+      }
+    } catch (e) { /* fall back to the email lookup below */ }
+    if (customerId) {
+      const session = await stripe.billingPortal.sessions.create({ customer: customerId, return_url: APP_URL + '/presenter' });
+      return res.status(200).json({ url: session.url });
+    }
     const customers = await stripe.customers.list({ email, limit: 1 });
     if (!customers.data.length) {
       return res.status(404).json({

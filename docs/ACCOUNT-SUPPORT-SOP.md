@@ -87,12 +87,19 @@ move their content.
 **Self-service — reply with this:**
 > Avatar → **⚙️ Account settings**. **Download my data** gives you everything (presentations,
 > questions and answers). **Delete account** removes it permanently. A paid plan stops
-> renewing — no further charges.
+> renewing — no further charges. (Started a paid plan in the last 14 days? Reply before
+> deleting and we'll refund it in full.)
 
 **We do it for them:** verify (§0), then Admin → Users → their detail → **⚠ Delete account**.
 Deletion first sets any paid subscription to end at the close of the period already paid for
-(no further charges, no partial refund — as the Terms say). If Stripe can't be reached,
-nothing is deleted — try again. A team **member**'s seat is freed; a team **owner**'s team
+(no further charges — Terms, "Cancellation"). If Stripe can't be reached, nothing is
+deleted — try again.
+
+**Refund check BEFORE deleting (Terms, "Refunds"):** a **first-time** paid subscription has a
+**14-day money-back guarantee**. If their first payment was under 14 days ago, tell them and
+offer the full refund first (Stripe → the payment → Refund, to the same payment method) —
+deleting the account refunds nothing by itself. After 14 days payments are non-refundable
+except where the law requires it; if they cite a consumer right (EU/UK), check before refusing. A team **member**'s seat is freed; a team **owner**'s team
 ends with their plan, and members move to Free with all their work.
 
 **Data request under GDPR/CCPA:** verify, then ask them to use Download my data, or run it

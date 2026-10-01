@@ -56,5 +56,75 @@
 
     /* Was this id assigned by backfill (i.e. it encodes an original position)? */
     isLegacy: function (id) { return /^q\d+_stable$/.test(String(id || '')); },
+
+    /* ── LINK NUMBERS ("home"), 2026-10-01 ──────────────────────────────────
+     * A question's QR code / answer link is answer#CODE/<n>. <n> used to be the
+     * question's POSITION, so moving or deleting a question made codes already pasted
+     * into slides or printed open a DIFFERENT question. Putting the id in the link was
+     * rejected: every QR here is error-correction H with a logo, and today's links sit
+     * right at the version-5 limit — 7 more characters would make every new code denser
+     * and harder to scan from the back of a room.
+     *
+     * Instead each question carries a permanent number, `home`, and links keep exactly
+     * today's shape. The first time a deck is opened, every question's home is its
+     * CURRENT position — so every link and QR already in use stays byte-for-byte the
+     * same. After that the number travels with the question; a new question gets the
+     * next unused number (for a deck never reordered, that is its position anyway).
+     * The presenter publishes quiz_builder/$code/homes = { home → current position }
+     * so a phone can resolve a link with one tiny read. A deck with no `homes` map is
+     * resolved by position, exactly as before. */
+
+    /* Give every question a unique home. Returns true if anything changed. Idempotent.
+       No question has one yet → home = position (links unchanged). Otherwise a missing
+       or duplicated home (a later copy) gets the next unused number. */
+    ensureHomes: function (questions) {
+      var qs = (questions || []).filter(function (q) { return q && typeof q === 'object'; });
+      var ok = function (h) { return typeof h === 'number' && h >= 0 && Math.floor(h) === h; };
+      var changed = false;
+      if (!qs.some(function (q) { return ok(q.home); })) {
+        (questions || []).forEach(function (q, i) { if (q && typeof q === 'object') { q.home = i; changed = true; } });
+        return changed;
+      }
+      var seen = {}, max = -1;
+      qs.forEach(function (q) { if (ok(q.home)) max = Math.max(max, q.home); });
+      qs.forEach(function (q) {
+        if (ok(q.home) && !seen[q.home]) { seen[q.home] = true; return; }
+        q.home = ++max; seen[q.home] = true; changed = true;
+      });
+      return changed;
+    },
+
+    /* The number a question's link uses: its home, or (no homes yet) its position. */
+    homeOf: function (q, idx) {
+      return (q && typeof q.home === 'number' && q.home >= 0) ? q.home : idx;
+    },
+
+    /* { home → current position }, for quiz_builder/$code/homes. Keys are strings. */
+    homesMap: function (questions) {
+      var m = {};
+      (questions || []).forEach(function (q, i) { if (q && typeof q.home === 'number') m[String(q.home)] = i; });
+      return m;
+    },
+
+    /* A link number → the question's current position.
+       homes absent (null/undefined) → the number IS the position (decks from before
+       link numbers, and PresentSlide decks). homes present but no entry → -1: that
+       question was deleted — never fall back to "whatever is at that position now".
+       RTDB may hand an object with numeric keys back as an array; both index alike. */
+    resolve: function (homes, n) {
+      n = Number(n);
+      if (!(n >= 0)) return n;
+      if (homes == null || typeof homes !== 'object') return n;
+      var v = homes[n];
+      if (v == null) v = homes[String(n)];
+      return (v == null || !(Number(v) >= 0)) ? -1 : Number(v);
+    },
+
+    /* The reverse: a current position → its link number. */
+    linkFor: function (homes, idx) {
+      if (homes == null || typeof homes !== 'object') return idx;
+      for (var k in homes) { if (Object.prototype.hasOwnProperty.call(homes, k) && Number(homes[k]) === Number(idx)) return Number(k); }
+      return idx;
+    },
   };
 })();

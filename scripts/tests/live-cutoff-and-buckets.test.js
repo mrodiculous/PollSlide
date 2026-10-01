@@ -98,7 +98,10 @@ console.log('\nBUG A — the live cutoff survives a reload, but never outlives t
   const reset = src.match(/async function resetQuestionTally[\s\S]*?\n\}/);
   ok('presenter.html still has: resetQuestionTally', !!reset);
   if (reset) {
-    ok('a reset clears the persisted per-index start', /localStorage\.setItem\(`ql_liveStart_/.test(reset[0]));
+    // Since 2026-10-01 the start time is keyed by the question's bucket (liveStartKey), so a
+    // reorder can't hand one question another's start; the old per-position key is removed.
+    ok('a reset clears the persisted start (by question id, and the old per-position key)',
+       /localStorage\.setItem\(liveStartKey\(stableQId\)/.test(reset[0]) && /localStorage\.removeItem\(`ql_liveStart_/.test(reset[0]));
     ok('a reset clears the in-memory map too', /delete _qLaunchedAt\[stableQId\]/.test(reset[0]));
     ok('a reset clears this run\'s cutoff too', /removeItem\('ql_runStart_' \+ stableQId\)/.test(reset[0]));
   }
