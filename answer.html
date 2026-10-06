@@ -1126,7 +1126,7 @@ async function joinByCode(){
         dest = '#' + code + '/' + Number(cq.home != null ? cq.home : cq.qIndex);   // resolved on load
     } catch(e){}
     // Remember this tab joined by code → follow the presenter when they advance.
-    try { sessionStorage.setItem('ql_follow_' + code, '1'); } catch(e){}
+    try { sessionStorage.setItem('ql_follow_' + code, '1'); sessionStorage.setItem('ql_join_at_' + code, String(Date.now())); } catch(e){}
     location.hash = dest;                       // hashchange listener reloads into the session
     setTimeout(() => location.reload(), 250);   // belt & braces if the listener didn't fire
   } catch(e) {
@@ -1150,6 +1150,16 @@ let _following = false;       // one listener, however many times followLive is 
 async function followLive(forceFollow){
   if (QA_MODE || SURVEY_MODE || isNaN(Q_INDEX) || Q_INDEX < 0 || _following) return;
   let follow = false; try { follow = sessionStorage.getItem('ql_follow_' + SESSION) === '1'; } catch(e){}
+  /* NEVER JUMP TO A LEFT-OVER QUESTION (2026-10-06). The follow flag lasts as long as the
+     browser tab. A phone that followed an EARLIER session, then scans a QR code in the same
+     tab, used to jump straight to whatever currentQuestion held — often the last question
+     of a previous run (Rod, PowerPoint on the web: scanned Q1, landed on Q4). So when the
+     flag comes from earlier, the question already live when this page opened is not
+     followed; only a CHANGE is. Unchanged: a phone that just joined by code (it is sent to
+     the live question on purpose), a phone that scanned the live question, and a scanned
+     question that was deleted (forceFollow — it waits for the next one). */
+  let justJoined = false; try { justJoined = (Date.now() - Number(sessionStorage.getItem('ql_join_at_' + SESSION) || 0)) < 60000; } catch(e){}
+  const holdFirst = follow && !forceFollow && !justJoined;
   // A scanned code whose question isn't in the deck: ride along with the presenter
   // rather than wait on a screen that would never change.
   if (forceFollow) { follow = true; try { sessionStorage.setItem('ql_follow_' + SESSION, '1'); } catch(e){} }
@@ -1170,9 +1180,16 @@ async function followLive(forceFollow){
   // Watch the whole node rather than just qIndex: currentQuestion.id IS the bucket the
   // presenter writes answers to, and guessing it from the index is exactly what broke
   // when a deck was reordered.
+  let _firstFollow = true;
   db.ref(`sessions/${SESSION}/currentQuestion`).on('value', snap => {
     const cq = snap.exists() ? snap.val() : null;
+    const first = _firstFollow; _firstFollow = false;
     if (!cq) return;
+    if (first && holdFirst) {
+      const i0 = cq.qIndex != null ? Number(cq.qIndex) : NaN;
+      const sameQuestion = !!(cq.id && cq.id === STABLE_QID) || i0 === Q_INDEX;
+      if (!sameQuestion) return;     // left over from before this page opened — stay on the scanned question
+    }
     if (cq.id) _liveQ = cq;
     const idx = cq.qIndex != null ? Number(cq.qIndex) : NaN;
     /* The presenter MOVED the live question (qid.js / presenter syncLivePosition): same
