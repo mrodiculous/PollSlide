@@ -16,7 +16,7 @@
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=327d5d8c"></script>
+<script src="/ui-lang.js?v=daf2940e"></script>
 <script src="/tickets.js?v=edb362ec"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -281,6 +281,14 @@
   .q-item  { padding:9px 11px; border-radius:var(--radius-sm); cursor:pointer; transition:all 0.15s; margin-bottom:3px; display:flex; gap:9px; align-items:flex-start; border:1.5px solid transparent; }
   .q-item:hover { background:var(--surface2); }
   .q-item.sel  { background:rgba(108,99,255,0.14); border-color:rgba(108,99,255,0.3); }
+  /* Drag to reorder (2026-10-06) — only while editing, like ↑/↓ */
+  body:has(#centerPanel > [data-editor-mark]) .q-item { cursor:grab; }
+  .q-item.dragging { opacity:0.45; }
+  .q-item.drop-before, .pres-item.drop-before { box-shadow: inset 0 3px 0 var(--accent); }
+  .pres-item[draggable="true"] { cursor:grab; }
+  .pres-item.dragging { opacity:0.45; }
+  .pres-item.drop-after { box-shadow: inset 0 -3px 0 var(--accent); }
+  .q-item.drop-after  { box-shadow: inset 0 -3px 0 var(--accent); }
   /* .q-item.live removed — all questions are always live */
   .q-num  { width:22px; height:22px; border-radius:6px; background:var(--surface3); font-family:'Syne',sans-serif; font-weight:700; font-size:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:var(--muted); }
   .q-item.sel .q-num  { background:var(--accent); color:#fff; }
@@ -530,7 +538,7 @@
 
     <p style="text-align:center;font-size:13px;color:var(--muted);margin-top:8px;">
       <span id="authToggleText" data-i18n>New to PollSlide?</span>
-      <a id="authToggleLink" onclick="toggleAuthMode()" style="color:var(--accent);cursor:pointer;font-weight:600;">Create an account</a>
+      <a id="authToggleLink" onclick="toggleAuthMode()" style="color:var(--accent);cursor:pointer;font-weight:600;" data-i18n>Create an account</a>
     </p>
     <p style="text-align:center;font-size:12px;color:var(--muted);margin-top:10px;">
       <a onclick="resetPassword()" style="color:var(--muted);cursor:pointer;text-decoration:underline;">Forgot password?</a>
@@ -640,6 +648,7 @@
           <option value="recent" data-i18n>Recent</option>
           <option value="created" data-i18n>Newest</option>
           <option value="name">A–Z</option>
+          <option value="manual" data-i18n>My order</option>
         </select>
         <button class="icon-btn" id="selectModeBtn" onclick="toggleSelectMode()" title="Select several decks" data-i18n-title>☑</button>
       </div>
@@ -3011,6 +3020,13 @@ async function loadEmptyFolders() {
     emptyFolders = Array.isArray(v) ? v.filter(x => typeof x === 'string') : [];
   } catch (e) { emptyFolders = []; }
 }
+async function loadDeckOrder() {
+  if (!userId) return;
+  try {
+    const v = (await db.ref(`users/${userId}/deckOrder`).get()).val();
+    deckOrder = Array.isArray(v) ? v.filter(x => typeof x === 'string') : [];
+  } catch (e) { deckOrder = []; }
+}
 // Reflect saved sort/search state in the controls after the panel is in the DOM.
 function syncDeckToolbar() {
   const sel = document.getElementById('deckSort'); if (sel) sel.value = deckSort;
@@ -3351,6 +3367,7 @@ async function loadCollabDecks() {
 async function loadPresentations() {
   purgeOldTrash();   // clear trash older than 30 days (fire-and-forget)
   await loadEmptyFolders();   // folders that exist but hold nothing yet
+  await loadDeckOrder();      // "My order"
   refreshShareInbox();        // anything waiting under this email?
   try {
     const snap = await db.ref(`users/${userId}/presentations`).get();
@@ -4143,6 +4160,8 @@ function visibleDecks(decks, opts) {
 
   if (sort === 'name') {
     rows.sort(function (a, b) { return String(a.deck.name || '').localeCompare(String(b.deck.name || '')); });
+  } else if (sort === 'manual') {
+    rows.sort(manualDeckCompare(o.order));
   } else {
     var at = sort === 'created'
       ? function (d) { return d.createdAt || 0; }
@@ -4186,6 +4205,33 @@ function subfolders(decks, root, extra) {
 /* PURE. Turns rows + folders into the sections the list renders.
  * groupBy is an ARGUMENT — adding "group by type" later means adding a case here,
  * not a second renderer. */
+/* PURE. "My order" (2026-10-06): the user's saved deck order (users/$uid/deckOrder, a list
+ * of ids). Decks not in it yet — new ones — come first, newest first, until placed. */
+function manualDeckCompare(order) {
+  var rank = Object.create(null);
+  (Array.isArray(order) ? order : []).forEach(function (id, i) { if (!(id in rank)) rank[id] = i; });
+  return function (a, b) {
+    var ra = (a.id in rank) ? rank[a.id] : -1, rb = (b.id in rank) ? rank[b.id] : -1;
+    if (ra < 0 && rb < 0) return (b.deck.createdAt || 0) - (a.deck.createdAt || 0);
+    if (ra < 0) return -1;
+    if (rb < 0) return 1;
+    return ra - rb;
+  };
+}
+
+/* PURE. The new full order after the decks in one list were dragged into `moved` order.
+ * Every deck keeps its place except the ones in that list, which swap among the slots they
+ * already held — so reordering inside one folder never moves a deck in another folder. */
+function reorderDecks(decks, order, moved) {
+  var all = Object.keys(decks || {}).filter(function (id) { return !!decks[id]; })
+    .map(function (id) { return { id: id, deck: decks[id] }; })
+    .sort(manualDeckCompare(order)).map(function (r) { return r.id; });
+  var inList = Object.create(null);
+  (moved || []).forEach(function (id) { inList[id] = true; });
+  var queue = (moved || []).filter(function (id) { return all.indexOf(id) !== -1; });
+  return all.map(function (id) { return inList[id] ? queue.shift() : id; });
+}
+
 function groupDecks(rows, opts) {
   var o = opts || {};
   if (o.searching) {
@@ -4219,6 +4265,7 @@ function groupDecks(rows, opts) {
 let typeFilter    = localStorage.getItem('ql_type_filter') || 'all';
 let deckQuery     = '';
 let deckSort      = localStorage.getItem('ql_deck_sort') || 'recent';
+let deckOrder     = [];        // users/$uid/deckOrder — "My order" (2026-10-06)
 let currentFolder = normalizeFolder(localStorage.getItem('ql_current_folder') || '');
 let emptyFolders  = [];        // users/$uid/folders — folders with nothing in them yet
 let showArchived  = false;
@@ -4232,7 +4279,7 @@ function deckOrgState() {
     // Scoping it to the open folder hid archived decks that were filed anywhere —
     // which made the archive look permanently empty. Rows show their path instead.
     folder: showArchived ? undefined : currentFolder,
-    sort: deckSort, archived: showArchived,
+    sort: deckSort, archived: showArchived, order: deckOrder,
   };
 }
 
@@ -4270,7 +4317,10 @@ function toggleArchivedView() {
 
 // ── Search / sort ─────────────────────────────────────────────────────────
 function onDeckSearch(v) { deckQuery = v; renderPresList(); }
-function onDeckSort(v)   { deckSort = v; localStorage.setItem('ql_deck_sort', v); renderPresList(); }
+function onDeckSort(v)   {
+  deckSort = v; localStorage.setItem('ql_deck_sort', v); renderPresList();
+  if (v === 'manual') { try { if (!localStorage.getItem('ps_deck_order_tip')) { localStorage.setItem('ps_deck_order_tip', '1'); toast(tr('Drag decks to put them in your order.'), 'info'); } } catch (e) {} }
+}
 
 // ── The list ──────────────────────────────────────────────────────────────
 function renderPresList() {
@@ -4301,6 +4351,53 @@ function renderPresList() {
   }).join('');
   syncBulkBar();
   syncDeckToolbar();
+  if (deckDragOn()) wireDeckDrag(list);
+}
+
+/* "My order" drag (2026-10-06). Only with My order chosen, not while searching or selecting.
+   A deck moves within its own section (pinned stay pinned); the new order is saved to
+   users/$uid/deckOrder — your filing, never written onto the deck, so a shared deck's
+   owner is unaffected. */
+function deckDragOn() { return deckSort === 'manual' && !String(deckQuery).trim() && !selectMode && !showArchived; }
+let _deckDrag = null;
+function wireDeckDrag(list) {
+  list.querySelectorAll('.list-group').forEach(group => {
+    const rows = [...group.querySelectorAll('.pres-item[data-deck]')];
+    const clear = () => rows.forEach(r => r.classList.remove('drop-before', 'drop-after', 'dragging'));
+    rows.forEach(el => {
+      el.addEventListener('dragstart', e => {
+        _deckDrag = { id: el.dataset.deck, group };
+        el.classList.add('dragging');
+        try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', el.dataset.deck); } catch (err) {}
+      });
+      el.addEventListener('dragover', e => {
+        if (!_deckDrag || _deckDrag.group !== group) return;
+        e.preventDefault();
+        const r = el.getBoundingClientRect(), after = (e.clientY - r.top) > r.height / 2;
+        rows.forEach(x => { if (x !== el) x.classList.remove('drop-before', 'drop-after'); });
+        el.classList.toggle('drop-after', after); el.classList.toggle('drop-before', !after);
+      });
+      el.addEventListener('drop', e => {
+        if (!_deckDrag || _deckDrag.group !== group) return;
+        e.preventDefault();
+        const ids = rows.map(r => r.dataset.deck), from = ids.indexOf(_deckDrag.id);
+        const after = el.classList.contains('drop-after');
+        _deckDrag = null; clear();
+        if (from < 0) return;
+        const [m] = ids.splice(from, 1);
+        let to = ids.indexOf(el.dataset.deck); if (to < 0) return;
+        if (after) to++;
+        ids.splice(to, 0, m);
+        saveDeckOrder(reorderDecks(presentations, deckOrder, ids));
+      });
+      el.addEventListener('dragend', () => { _deckDrag = null; clear(); });
+    });
+  });
+}
+function saveDeckOrder(order) {
+  deckOrder = order;
+  renderPresList();
+  if (userId) db.ref(`users/${userId}/deckOrder`).set(order.length ? order : null).catch(() => toast(tr('Could not save your order — check your connection.'), 'warn'));
 }
 
 function emptyStateHtml(searching) {
@@ -4353,7 +4450,8 @@ function deckRow(id, p, opts) {
     ? `<span class="row-check ${selectedIds.has(id) ? 'on' : ''}" onclick="event.stopPropagation();toggleSelect('${escAttr(id)}')">${selectedIds.has(id) ? '✓' : ''}</span>`
     : `<div class="pres-icon">${PRODUCTS[t].icon}</div>`;
 
-  return `<div class="pres-item ${isA ? 'active' : ''}" onclick="${selectMode ? `toggleSelect('${escAttr(id)}')` : `selectPresentation('${escAttr(id)}')`}">
+  const drag = deckDragOn() ? ` draggable="true" data-deck="${escapeHtml(id)}"` : '';
+  return `<div class="pres-item ${isA ? 'active' : ''}"${drag} onclick="${selectMode ? `toggleSelect('${escAttr(id)}')` : `selectPresentation('${escAttr(id)}')`}">
     ${check}
     <div class="pres-meta">
       <div class="pres-name"><span class="pres-name-text">${escapeHtml(p.name || 'Untitled')}</span>${p.pinned ? '<span class="pin-star">★</span>' : ''}<span class="type-chip">${escapeHtml(t.charAt(0).toUpperCase() + t.slice(1))}</span>${isCollabDeck(id) ? '<span class="shared-tag">shared</span>' : ''}</div>
@@ -4664,7 +4762,19 @@ function applyUiLangControls() {
 function applyUiLang() {
   document.querySelectorAll('[data-i18n]').forEach(el => {
     if (el._psEn === undefined) el._psEn = el.textContent;
-    el.textContent = UI_LANG === 'en' ? el._psEn : tr(el._psEn);
+    else if (el.textContent !== el._psOut && el.textContent !== el._psEn) {
+      /* The page's own code has written new content here since (2026-10-06). This used to
+         put the element's ORIGINAL words back on every re-run — and it re-runs whenever
+         buttons are added — so for anyone not in English the top bar lost the open deck's
+         name ("Select a presentation"), the sign-in box flipped back to "Welcome back" in
+         sign-up mode, and the save status froze. Markup (the deck name) is left as written;
+         new plain text becomes the text to translate. English is unaffected either way. */
+      if (el.children.length) return;
+      el._psEn = el.textContent;
+    }
+    const out = UI_LANG === 'en' ? el._psEn : tr(el._psEn);
+    if (el.textContent !== out) el.textContent = out;
+    el._psOut = out;
   });
   applyUiLangControls();
   document.querySelectorAll('[data-i18n-title]').forEach(el => {
@@ -8392,7 +8502,7 @@ function renderQList() {
   list.innerHTML = questions.map((q,i)=>{
     const lock = questionLockedBy(q);
     return `
-    <div class="q-item ${i===selIdx?'sel':''} ${lock?'q-locked':''}" onclick="selectQ(${i})">
+    <div class="q-item ${i===selIdx?'sel':''} ${lock?'q-locked':''}" onclick="selectQ(${i})" draggable="true" data-qi="${i}">
       <div class="q-num">${i+1}</div>
       <div style="flex:1;">
         <div class="q-label">${(q.type==='flashcard'?q.front:q.text)||'<span style="color:var(--muted);font-style:italic;">Untitled</span>'}${lock?`<span class="q-lock-tag">✏️ ${escapeHtml(lock.name)}</span>`:''}</div>
@@ -8405,6 +8515,51 @@ function renderQList() {
   document.querySelectorAll('.q-item').forEach((el) => {
     el.addEventListener('mouseenter', () => el.querySelector('.icon-btn')?.style.setProperty('opacity', '1'));
     el.addEventListener('mouseleave', () => el.querySelector('.icon-btn')?.style.setProperty('opacity', '0'));
+  });
+  wireQDrag(list);
+}
+
+/* DRAG TO REORDER (question reordering C, 2026-10-06). Drag a question in the list to a new
+   place. Only while editing — the same place ↑/↓ live — because the live-results view has
+   the question's position baked into its buttons (Reset, Tally, Copy) and would act on the
+   wrong question after a move. A drag outside editing moves nothing and says how. The move
+   itself is moveQTo(): ↑/↓ generalised, with the same live bookkeeping, save and tip. */
+let _qDragFrom = null, _qDragTipShown = false;
+/* Is the question editor what the centre panel shows? renderEditor() leaves a hidden marker
+   in it; every other view replaces the panel's contents, which removes the marker. */
+function editorOnScreen() { return !!document.querySelector('#centerPanel > [data-editor-mark]'); }
+function wireQDrag(list) {
+  const items = list.querySelectorAll('.q-item[data-qi]');
+  const clear = () => items.forEach(el => el.classList.remove('drop-before', 'drop-after', 'dragging'));
+  items.forEach(el => {
+    el.addEventListener('dragstart', e => {
+      if (!editorOnScreen() || questions.length < 2) {
+        e.preventDefault();
+        if (!_qDragTipShown) { _qDragTipShown = true; toast(tr('To change the order, click “✏️ Edit this question”, then drag questions in the list.'), 'info'); }
+        return;
+      }
+      _qDragFrom = Number(el.dataset.qi);
+      el.classList.add('dragging');
+      try { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(_qDragFrom)); } catch (err) {}
+    });
+    el.addEventListener('dragover', e => {
+      if (_qDragFrom == null) return;
+      e.preventDefault();
+      const r = el.getBoundingClientRect(), after = (e.clientY - r.top) > r.height / 2;
+      items.forEach(x => { if (x !== el) x.classList.remove('drop-before', 'drop-after'); });
+      el.classList.toggle('drop-after', after); el.classList.toggle('drop-before', !after);
+    });
+    el.addEventListener('drop', e => {
+      if (_qDragFrom == null) return;
+      e.preventDefault();
+      const over = Number(el.dataset.qi), after = el.classList.contains('drop-after');
+      const from = _qDragFrom; _qDragFrom = null; clear();
+      // Where it lands in the array AFTER it has been taken out of its old place.
+      let to = over + (after ? 1 : 0);
+      if (from < to) to--;
+      moveQTo(from, to);
+    });
+    el.addEventListener('dragend', () => { _qDragFrom = null; clear(); });
   });
 }
 
@@ -8596,6 +8751,11 @@ function showSetup() {
 }
 
 function renderEditor(idx) {
+  renderEditorView(idx);
+  const cp = document.getElementById('centerPanel');
+  if (cp && !cp.querySelector(':scope > [data-editor-mark]')) cp.insertAdjacentHTML('beforeend', '<span data-editor-mark hidden></span>');
+}
+function renderEditorView(idx) {
   syncCenterMode(idx);
   const q       = questions[idx];
   const letters = ['A','B','C','D','E','F'];
@@ -9075,12 +9235,29 @@ function moveQ(idx,dir){
   selIdx=ni;saveBack();renderQList();renderEditor(ni);
   moveTipOnce();
 }
+/* Move one question from `from` to `to` (drag to reorder). The same steps as moveQ — the
+   live question is re-found by its id (or, with no id saved, its position is shifted the
+   way the array shifted), then save, list, editor, tip — so phones, the companion, links
+   and answers behave exactly as they do for ↑/↓. */
+function moveQTo(from, to) {
+  const n = questions.length;
+  if (!(from >= 0 && from < n && to >= 0 && to < n) || from === to) return;
+  const shift = i => (i === from ? to : (from < i && i <= to) ? i - 1 : (to <= i && i < from) ? i + 1 : i);
+  const [m] = questions.splice(from, 1);
+  questions.splice(to, 0, m);
+  if (liveQId) resyncLiveIdx();
+  else if (liveQIdx != null) liveQIdx = shift(liveQIdx);   // no id saved: as before
+  if (selIdx != null) selIdx = shift(selIdx);
+  saveBack(); renderQList();
+  if (selIdx != null && editorOnScreen()) renderEditor(selIdx);   // its position is baked into the editor
+  moveTipOnce();
+}
 /* The first time someone moves a question (2026-10-01): one short note on what moving does,
    with the full explainer a click away. Shown once per browser; it changes nothing. */
 function moveTipOnce() {
   try { if (localStorage.getItem('ps_move_tip')) return; localStorage.setItem('ps_move_tip', '1'); } catch (e) { return; }
   toast(tr('Moved. Its QR code still opens this question — its number now shows its new place.'), 'info',
-    { label: tr('How moving works'), timeout: 10000, onClick: () => window.open('https://pollslide.com/help#move-questions', '_blank', 'noopener') });
+    { label: tr('How moving works'), timeout: 10000, onClick: () => window.open('https://pollslide.com/reorder-questions', '_blank', 'noopener') });
 }
 function saveAndNext(idx){renderQList();if(idx+1<questions.length)selectQ(idx+1);else toast('All questions saved!','success');}
 

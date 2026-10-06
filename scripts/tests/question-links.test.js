@@ -80,7 +80,11 @@ function rest() {
   ok('slideshow editor: imported slides keep the source question\'s link number', /const ln=PSQid\.homeOf\(qq,qi\);/.test(S));
   ok('slideshow editor: an imported slide tells phones the question\'s CURRENT position', /PSQid\.resolve\(h&&h\.exists\(\)\?h\.val\(\):null, idx\)/.test(S) && /home: idx,/.test(S));
   ok('side-panel add-in: QR, notes marker and auto-detect use link numbers', /PSQid\.homeOf\(questions\[idx\], idx\)/.test(T) && /writeSlideNotesMetadata\(code, link\)/.test(T) && /const pos = PSQid\.resolve\(homes, qIdx\);/.test(T));
-  ok('PollSlide LIVE (in Microsoft review) is untouched', !/homes/.test(read('powerpoint-content/index.html')));
+  // A1 (2026-10-06): PollSlide LIVE follows a moved question by id and resolves notes markers
+  // through homes — behaviour tested in addin-follow-moved.test.js.
+  const L = read('powerpoint-content/index.html');
+  ok('PollSlide LIVE: a notes marker (link number) is resolved through homes', /const pos = PSQid\.resolve\(homes, n\.qIdx\);/.test(L));
+  ok('PollSlide LIVE: a moved question is found by its id; it publishes the link number', /PSQid\.bucket\(all\[k\], i, b\.code\) === b\.qid/.test(L) && /home: PSQid\.homeOf\(q, b\.qIdx\)/.test(L));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

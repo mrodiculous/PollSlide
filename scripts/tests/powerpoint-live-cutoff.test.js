@@ -369,8 +369,9 @@ console.log('\nThe question on the slide is never a cached copy');
   /* The binding stores a SNAPSHOT of the question taken when it was chosen. Reading it
      froze the slide at that moment: turning post-reveal on in the presenter never
      reached the slide, so post-reveal "never showed up". */
-  ok('the deck is refetched every time', /let q = null;\s*\n\s*try \{\s*\n\s*const s = await db\.ref\('quiz_builder\/'/.test(c));
-  ok('the snapshot is only a fallback', /if \(!q\) q = b\.q;/.test(c));
+  ok('the deck is refetched every time', /let q = null, gone = false;\s*\n\s*try \{\s*\n\s*const s = await db\.ref\('quiz_builder\/'/.test(c));
+  // A1 (2026-10-06): a question deleted from the deck is "not found", never the snapshot.
+  ok('the snapshot is only a fallback', /if \(!q && !gone\) q = b\.q;/.test(c));
   ok('the reason is recorded', /postReveal\.enabled false from before it was turned on/.test(c));
 }
 

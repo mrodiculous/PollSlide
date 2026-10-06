@@ -56,7 +56,7 @@ function helpTopics() {
 /* Stand-alone guide pages: the page's own heading, lead and main text. */
 const GUIDES = ['getting-started', 'account-help', 'team-setup', 'powerpoint-live', 'setup', 'integrations',
   'game-modes', 'study-games', 'loopslide', 'pollslide-for-keynote', 'pollslide-for-google-slides',
-  'pollslide-for-powerpoint', 'pricing', 'download', 'join', 'mac-update'];
+  'pollslide-for-powerpoint', 'pricing', 'download', 'join', 'mac-update', 'reorder-questions'];
 function guideTopics() {
   return GUIDES.filter(g => fs.existsSync(path.join(SITE, g + '.html'))).map(g => {
     const html = fs.readFileSync(path.join(SITE, g + '.html'), 'utf8');

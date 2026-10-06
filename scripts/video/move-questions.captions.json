@@ -1,0 +1,66 @@
+{
+ "_note": "One entry per scene, in order (move-questions.js). Narration of each language's own video (--lang); quoted labels are the app's translated labels (ui-lang.js). <lang>_say = spoken form (the URL). Register: es tú, de du, fr tu, pt European, it tu.",
+ "cues": [
+  {
+   "es": "Así se ponen las preguntas de una presentación de PollSlide en el orden en que quieres hacerlas, sin que deje de funcionar ningún código QR.",
+   "de": "So bringst du die Fragen eines PollSlide-Decks in die Reihenfolge, in der du sie stellen willst – und jeder QR-Code funktioniert weiter.",
+   "fr": "Voici comment mettre les questions d’une présentation PollSlide dans l’ordre où tu veux les poser, sans casser aucun QR code.",
+   "pt": "Veja como pôr as perguntas de uma apresentação PollSlide pela ordem em que as quer fazer, sem que nenhum código QR deixe de funcionar.",
+   "it": "Ecco come mettere le domande di una presentazione PollSlide nell’ordine in cui vuoi farle, senza che nessun codice QR smetta di funzionare."
+  },
+  {
+   "es": "Abre tu presentación, haz clic en una pregunta y luego en «Editar esta pregunta».",
+   "de": "Öffne dein Deck, klick auf eine Frage und dann auf „Diese Frage bearbeiten“.",
+   "fr": "Ouvre ta présentation, clique sur une question, puis sur « Modifier cette question ».",
+   "pt": "Abra a sua apresentação, clique numa pergunta e depois em «Editar esta pergunta».",
+   "it": "Apri la tua presentazione, fai clic su una domanda e poi su «Modifica questa domanda»."
+  },
+  {
+   "es": "Mientras editas, arrastra una pregunta de la lista a su nuevo sitio. La lista se actualiza al instante.",
+   "de": "Während du bearbeitest, zieh eine Frage in der Liste an ihren neuen Platz. Die Liste aktualisiert sich sofort.",
+   "fr": "Pendant que tu modifies, fais glisser une question de la liste à sa nouvelle place. La liste se met à jour tout de suite.",
+   "pt": "Enquanto edita, arraste uma pergunta da lista para o novo lugar. A lista atualiza-se de imediato.",
+   "it": "Mentre modifichi, trascina una domanda dell’elenco nel nuovo posto. L’elenco si aggiorna subito."
+  },
+  {
+   "es": "O usa los botones «Subir» y «Bajar» al final del editor. Cada clic la mueve un puesto.",
+   "de": "Oder nutze die Schaltflächen „Nach oben“ und „Nach unten“ unten im Editor. Jeder Klick verschiebt sie um einen Platz.",
+   "fr": "Ou utilise les boutons « Monter » et « Descendre » en bas de l’éditeur. Chaque clic la déplace d’une place.",
+   "pt": "Ou use os botões «Subir» e «Descer» no fundo do editor. Cada clique move-a um lugar.",
+   "it": "Oppure usa i pulsanti «Su» e «Giù» in fondo all’editor. Ogni clic la sposta di un posto."
+  },
+  {
+   "es": "Cada pregunta conserva su código QR y su enlace cuando la mueves, así que los códigos que ya están en tus diapositivas y fichas siguen abriendo la misma pregunta. Su número cambia para mostrar su nuevo puesto.",
+   "de": "Jede Frage behält beim Verschieben ihren QR-Code und Link. Codes, die schon auf deinen Folien und Arbeitsblättern sind, öffnen also weiter dieselbe Frage. Ihre Nummer zeigt jetzt ihren neuen Platz.",
+   "fr": "Chaque question garde son QR code et son lien quand tu la déplaces : les codes déjà sur tes diapositives et tes fiches ouvrent toujours la même question. Son numéro change pour montrer sa nouvelle place.",
+   "pt": "Cada pergunta mantém o seu código QR e a sua ligação quando a move, por isso os códigos que já estão nos diapositivos e nas fichas continuam a abrir a mesma pergunta. O número muda para mostrar o novo lugar.",
+   "it": "Ogni domanda conserva il suo codice QR e il suo link quando la sposti, quindi i codici già sulle tue slide e sulle tue schede aprono ancora la stessa domanda. Il suo numero cambia per indicare il nuovo posto."
+  },
+  {
+   "es": "Las respuestas siguen con su pregunta. Y si mueves la pregunta que se está mostrando durante una sesión en directo, tu público se queda en ella.",
+   "de": "Antworten bleiben bei ihrer Frage. Und wenn du während einer Live-Sitzung die Frage verschiebst, die gerade läuft, bleibt dein Publikum genau dort.",
+   "fr": "Les réponses restent avec leur question. Et si tu déplaces la question affichée pendant une session en direct, ton public reste dessus.",
+   "pt": "As respostas ficam com a sua pergunta. E, se mover a pergunta que está a ser mostrada durante uma sessão em direto, o público fica nela.",
+   "it": "Le risposte restano con la loro domanda. E se sposti la domanda in corso durante una sessione dal vivo, il tuo pubblico resta su di essa."
+  },
+  {
+   "es": "Tus presentaciones también pueden tener tu orden. Elige «Mi orden» en el menú de orden y arrástralas a donde quieras.",
+   "de": "Auch deine Decks können deine Reihenfolge haben. Wähl im Sortiermenü „Meine Reihenfolge“ und zieh sie, wohin du willst.",
+   "fr": "Tes présentations peuvent aussi suivre ton ordre. Choisis « Mon ordre » dans le menu de tri, puis fais-les glisser où tu veux.",
+   "pt": "As suas apresentações também podem ter a sua ordem. Escolha «A minha ordem» no menu de ordenação e arraste-as para onde quiser.",
+   "it": "Anche le tue presentazioni possono avere il tuo ordine. Scegli «Il mio ordine» nel menu di ordinamento, poi trascinale dove vuoi."
+  },
+  {
+   "es": "Eso es todo. Mueve las preguntas cuando quieras: tus códigos siguen funcionando. La guía completa está en pollslide.com/reorder-questions.",
+   "es_say": "Eso es todo. Mueve las preguntas cuando quieras: tus códigos siguen funcionando. La guía completa está en pollslide punto com, barra, reorder questions.",
+   "de": "Das war’s. Verschieb Fragen, wann immer du willst – deine Codes funktionieren weiter. Die ganze Anleitung findest du auf pollslide.com/reorder-questions.",
+   "de_say": "Das war’s. Verschieb Fragen, wann immer du willst – deine Codes funktionieren weiter. Die ganze Anleitung findest du auf pollslide punkt com, Schrägstrich, reorder questions.",
+   "fr": "C’est tout. Déplace tes questions quand tu veux : tes codes marchent toujours. Le guide complet est sur pollslide.com/reorder-questions.",
+   "fr_say": "C’est tout. Déplace tes questions quand tu veux : tes codes marchent toujours. Le guide complet est sur pollslide point com, barre oblique, reorder questions.",
+   "pt": "É tudo. Mova as perguntas sempre que quiser: os códigos continuam a funcionar. O guia completo está em pollslide.com/reorder-questions.",
+   "pt_say": "É tudo. Mova as perguntas sempre que quiser: os códigos continuam a funcionar. O guia completo está em pollslide ponto com, barra, reorder questions.",
+   "it": "Ecco fatto. Sposta le domande quando vuoi: i tuoi codici funzionano ancora. La guida completa è su pollslide.com/reorder-questions.",
+   "it_say": "Ecco fatto. Sposta le domande quando vuoi: i tuoi codici funzionano ancora. La guida completa è su pollslide punto com, barra, reorder questions."
+  }
+ ]
+}

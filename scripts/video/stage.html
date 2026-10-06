@@ -121,6 +121,30 @@ const D = (() => {
     if (typeof el.focus === 'function') el.focus({ preventScroll: true });
     el.click(); pin(); await sleep(opts.after == null ? 350 : opts.after); return el;
   }
+  /* Drag one element onto another (drag-to-reorder, 2026-10-06). Fires the page's own HTML5
+     drag events — dragstart, dragover (so its drop marker shows), drop, dragend — while the
+     cursor travels, so the video films the real feature, not a mock-up. `below` drops on the
+     lower half of the target (after it). */
+  async function drag(fromQ, toQ, f = 'app', opts = {}) {
+    const w = win(f), from = await point(fromQ, f, opts);
+    const dt = new w.DataTransfer();
+    const ev = (el, type, y) => { const r = el.getBoundingClientRect();
+      el.dispatchEvent(new w.DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, clientX: r.left + r.width / 2, clientY: y != null ? y : r.top + r.height / 2 })); };
+    ev(from, 'dragstart'); await sleep(250);
+    const to = await waitFor(toQ, f), r = to.getBoundingClientRect();
+    const y = opts.below ? r.top + r.height * 0.8 : r.top + r.height * 0.2;
+    const c = $('cursor'); c.classList.remove('hide');
+    const target = stagePos(to, f, 0, (y - (r.top + r.height / 2)));
+    const steps = 8;
+    for (let i = 1; i <= steps; i++) {
+      const p = { x: cur.x + (target.x - cur.x) / (steps - i + 1), y: cur.y + (target.y - cur.y) / (steps - i + 1) };
+      await move(p, 90);
+      ev(to, 'dragover', y);
+    }
+    await sleep(opts.hold == null ? 500 : opts.hold);
+    ev(to, 'drop', y); ev(from, 'dragend');
+    pin(); await sleep(opts.after == null ? 600 : opts.after);
+  }
   /* Type like a person. Some fields re-render the editor on every keystroke, which swaps the
      element out; the locator is re-run whenever that happens so typing carries on. */
   async function type(q, text, f = 'app', opts = {}) {
@@ -158,7 +182,7 @@ const D = (() => {
     await fetch('/__db/write', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ client: 'stage', ops }) });
     await sleep(150);
   }
-  return { sleep, load, find, waitFor, point, click, type, scroll, hideCursor, chip, card, layout, js, move, stagePos, frames, focus, unfocus, snap, db };
+  return { sleep, load, find, waitFor, point, click, drag, type, scroll, hideCursor, chip, card, layout, js, move, stagePos, frames, focus, unfocus, snap, db };
 })();
 window.D = D;
 setInterval(() => { if (window.scrollY || document.documentElement.scrollTop) window.scrollTo(0, 0); }, 50);   // belt and braces

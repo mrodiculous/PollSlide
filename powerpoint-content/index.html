@@ -332,12 +332,20 @@ async function resolveBinding(view){
 
   const n = await readNotesBinding();
   if (n && n.code && n.qIdx != null) {
-    /* The notes marker carries an index, not a bucket id. Resolve it the way every
-       other surface does, so a reordered deck still lands on the right answers. */
+    /* The notes marker carries a LINK NUMBER (qid.js "home" — the task pane writes
+       homeOf), not a bucket id. Turn it into the question's current position through
+       quiz_builder/$code/homes, exactly as phones and the companion do (no map → the
+       number is the position, as before; -1 → that question was deleted: don't guess).
+       Then resolve the bucket the way every other surface does. */
     try {
-      const snap = await db.ref('quiz_builder/'+n.code+'/questions/'+n.qIdx).get();
-      const q = snap.exists() ? snap.val() : null;
-      if (q) return { code:n.code, qIdx:n.qIdx, qid:PSQid.bucket(q,n.qIdx,n.code), text:q.text||'', q };
+      let homes = null;
+      try { const h = await db.ref('quiz_builder/'+n.code+'/homes').get(); homes = h.exists() ? h.val() : null; } catch(e){}
+      const pos = PSQid.resolve(homes, n.qIdx);
+      if (pos >= 0) {
+        const snap = await db.ref('quiz_builder/'+n.code+'/questions/'+pos).get();
+        const q = snap.exists() ? snap.val() : null;
+        if (q) return { code:n.code, qIdx:pos, qid:PSQid.bucket(q,pos,n.code), text:q.text||'', q };
+      }
     } catch(e){}
   }
 
@@ -720,12 +728,40 @@ async function goLive(b, editing){
      forever. That is why post-reveal "never showed" — the cached question still had
      postReveal.enabled false from before it was turned on. The snapshot is now only a
      fallback for when the deck cannot be read. */
-  let q = null;
+  let q = null, gone = false;
   try {
     const s = await db.ref('quiz_builder/'+b.code+'/questions/'+b.qIdx).get();
     q = s.exists() ? s.val() : null;
   } catch(e){}
-  if (!q) q = b.q;
+  /* FOLLOW A MOVED QUESTION (A1, 2026-10-06). The binding remembers the question's
+     position (qIdx) AND its identity (qid, the response bucket). After the presenter
+     moves or deletes questions, the question now at that position is a different one —
+     and this slide showed ITS text and options over the original question's answers.
+     So when they disagree, find the question by its id and update the binding; nothing
+     changes for a deck that was never reordered (the ids match and no extra read is
+     made). Question deleted from the deck → say so instead of showing a stranger. Deck
+     unreadable or gone → the snapshot taken when the question was chosen (right
+     question, right answers), exactly as before. */
+  if (b.qid && PSQid.bucket(q, b.qIdx, b.code) !== b.qid) {
+    let all;
+    try { const s = await db.ref('quiz_builder/'+b.code+'/questions').get(); all = s.exists() ? s.val() : null; }
+    catch(e){ all = undefined; }
+    if (all == null) q = null;           // can't read the deck, or it is gone → the snapshot, as before
+    else {
+      let at = -1;
+      if (all && typeof all === 'object')
+        for (const k of Object.keys(all)) {
+          const i = Number(k);
+          if (i >= 0 && all[k] && PSQid.bucket(all[k], i, b.code) === b.qid) { at = i; break; }
+        }
+      if (at >= 0) {
+        q = all[at];
+        b = Object.assign({}, b, { qIdx: at, text: q.text || '', q });
+        bound = b; cacheBinding(b);                        // remember the new position
+      } else { q = null; gone = true; }
+    }
+  }
+  if (!q && !gone) q = b.q;
   if (!q) { $('root').innerHTML = `<div class="pad"><h2>${tr('Question not found')}</h2><p>${tr('Open this slide in editing view and pick the question again.')}</p></div>`; return; }
 
   const qid = b.qid || PSQid.bucket(q, b.qIdx, b.code);
@@ -919,7 +955,7 @@ async function goLive(b, editing){
 function publishLiveQuestion(b, q, qid){
   const meRef = db.ref('sessions/'+b.code+'/currentQuestion');
   const build = () => ({
-    id: qid, qIndex: b.qIdx, index: (b.qIdx || 0) + 1,
+    id: qid, qIndex: b.qIdx, index: (b.qIdx || 0) + 1, home: PSQid.homeOf(q, b.qIdx),
     text: q.text || '', type: q.type || 'multiple_choice',
     options: q.options || null,
     correctAnswer: (q.correctAnswer !== undefined && q.correctAnswer !== null) ? q.correctAnswer : null,

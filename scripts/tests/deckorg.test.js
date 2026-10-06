@@ -35,6 +35,7 @@ vm.runInContext(source, ctx);
 const {
   folderParts, folderJoin, normalizeFolder, deckFolder, folderContains,
   deckSearchText, visibleDecks, subfolders, groupDecks, FOLDER_MAX_DEPTH,
+  manualDeckCompare, reorderDecks,
 } = ctx;
 
 let pass = 0, fail = 0;
@@ -165,6 +166,25 @@ ok('a deck with no questions is safe', deckSearchText(deck({})) === 'untitled');
 ok('questions stored as an object still search',
    deckSearchText(deck({ questions: { a: { text: 'Mitosis' } } })).includes('mitosis'));
 ok('subfolders of an empty map is safe', subfolders({}, '', []).length === 0);
+
+console.log('\n"My order" (2026-10-06)');
+const U3 = { folder: 'Biology 101/Unit 3' };
+ok('My order follows the saved list', ids(visibleDecks(DECKS, Object.assign({ sort: 'manual', order: ['d3', 'd1', 'd2'] }, U3))).join() === 'd3,d1,d2');
+ok('a deck not placed yet comes first (newest first)', ids(visibleDecks(DECKS, Object.assign({ sort: 'manual', order: ['d1'] }, U3))).join() === 'd3,d2,d1',
+   ids(visibleDecks(DECKS, Object.assign({ sort: 'manual', order: ['d1'] }, U3))));
+ok('no saved order → newest first', ids(visibleDecks(DECKS, Object.assign({ sort: 'manual' }, U3))).join() === 'd3,d2,d1');
+ok('ids of deleted decks in the saved order are harmless', ids(visibleDecks(DECKS, Object.assign({ sort: 'manual', order: ['gone', 'd2', 'd1', 'd3'] }, U3))).join() === 'd2,d1,d3');
+ok('pinned still float to the top in My order', ids(visibleDecks(DECKS, { folder: 'Biology 101/Unit 2', sort: 'manual', order: [] }))[0] === 'd4');
+ok('other sorts are unchanged by a saved order', ids(visibleDecks(DECKS, Object.assign({ sort: 'recent', order: ['d3', 'd2', 'd1'] }, U3))).join()
+   === ids(visibleDecks(DECKS, Object.assign({ sort: 'recent' }, U3))).join());
+const full0 = ['d1', 'd2', 'd3', 'd4', 'd5', 'd6', 'd7'];
+const full1 = reorderDecks(DECKS, full0, ['d3', 'd1', 'd2']);
+ok('reordering one folder keeps every other deck in its slot', full1.join() === 'd3,d1,d2,d4,d5,d6,d7', full1);
+const full2 = reorderDecks(DECKS, ['d5', 'd1', 'd7', 'd2', 'd3', 'd4', 'd6'], ['d2', 'd1', 'd3']);
+ok('…even when that folder\'s decks are spread through the order', full2.join() === 'd5,d2,d7,d1,d3,d4,d6', full2);
+const full3 = reorderDecks(DECKS, ['d1'], ['d2', 'd1']);
+ok('new decks get a saved place the first time anything is moved', full3.length === 7 && full3.indexOf('d2') < full3.indexOf('d1'), full3);
+ok('an unknown id in a move is ignored', reorderDecks(DECKS, full0, ['zz', 'd1']).filter(Boolean).length === 7);
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

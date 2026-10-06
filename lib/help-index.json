@@ -27,7 +27,7 @@
    "url": "https://pollslide.com/help#move-questions",
    "kind": "section",
    "title": "↕️ Move questions within a deck",
-   "text": "Put your questions in the order you want to ask them. Each question keeps its QR code and link when you move it. Click the question in the list on the left. Click “✏️ Edit this question”. At the bottom of the editor, click “↑ Up” or “↓ Down”. Each click moves it one place, and the list updates straight away. What happens when you move a question Its QR code and link still open the same question. That includes QR codes on your Keynote, PowerPoint and Google Slides slides, printed handouts, and the Mac companion. You don't need to copy anything again. Its number changes to match its new place. The question list, your audience's phones and your reports number questions by where they are in the deck now. A question you move from 2nd to 5th shows as “Question 5”, even if your slide still says “Question 2”. Answers stay with their question. Results, reports, leaderboards and exports are not affected. You can move questions during a live session. If you move the question that is showing, your audience stays on it and keeps what they have chosen. Deleting a question doesn't change the other questions' codes. Anyone who scans a deleted question's code is told it isn't available, then…",
+   "text": "Put your questions in the order you want to ask them. Each question keeps its QR code and link when you move it. ▶ Watch: put your questions in order in 1 minute Click the question in the list on the left. Click “✏️ Edit this question”. At the bottom of the editor, click “↑ Up” or “↓ Down”. Each click moves it one place, and the list updates straight away. Or, while you're editing, drag the question in the list on the left to its new place. Your decks, in your order: choose “My order” in the sort menu above your decks, then drag them where you want them. What happens when you move a question Its QR code and link still open the same question. That includes QR codes on your Keynote, PowerPoint and Google Slides slides, printed handouts, and the Mac companion. You don't need to copy anything again. Its number changes to match its new place. The question list, your audience's phones and your reports number questions by where they are in the deck now. A question you move from 2nd to 5th shows as “Question 5”, even if your slide still says “Question 2”. Answers stay with their question. Results, reports, leaderboards and exports are not affected. You can move questions during a live…",
    "titles": {
     "es": "↕️ Mover preguntas dentro de una presentación",
     "de": "↕️ Fragen in einer Präsentation verschieben",
@@ -1026,6 +1026,20 @@
     "fr": "Mettre à jour PollSlide Companion",
     "pt": "Atualizar o PollSlide Companion",
     "it": "Aggiorna PollSlide Companion"
+   }
+  },
+  {
+   "id": "page:reorder-questions",
+   "url": "https://pollslide.com/reorder-questions",
+   "kind": "page",
+   "title": "Put your questions in order",
+   "text": "Drag questions into the order you want to ask them. Their QR codes, links and answers move with them. The same steps, in writing Open the question editor. Open your deck, click a question, then click “✏️ Edit this question”. Drag it to its new place. While you're editing, drag any question in the list on the left and drop it where you want it. A line shows where it will land. Or use “↑ Up” and “↓ Down”. They're at the bottom of the editor. Each click moves the question one place. Put your decks in your order too. In the sort menu above your decks, choose “My order”, then drag your decks. Your order is saved to your account. New decks appear at the top until you place them, and pinned decks stay at the top. What stays the same QR codes and links still open the same question. That includes codes on your Keynote, PowerPoint and Google Slides slides, printed handouts and the Mac companion. You don't need to copy anything again. Answers stay with their question. Results, reports, leaderboards and exports are not affected. Live sessions carry on. If you move the question that is showing, your audience stays on it and keeps what they have chosen. PollSlide LIVE slides follow too. A PollSlide LIVE box on a PowerPoint slide finds its question in its new place by itself. Only the number changes. Questions are numbered by where they are now, so a question you move from 2nd to 5th shows…",
+   "titles": {
+    "es": "Pon tus preguntas en orden",
+    "de": "Bring deine Fragen in Reihenfolge",
+    "fr": "Mets tes questions dans l’ordre",
+    "pt": "Ponha as suas perguntas por ordem",
+    "it": "Metti le tue domande in ordine"
    }
   }
  ]
