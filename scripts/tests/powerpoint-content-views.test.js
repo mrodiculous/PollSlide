@@ -77,10 +77,10 @@ function run(scenario) {
   const f = path.join(os.tmpdir(), 'pslive-views-' + process.pid + '-' + Math.random().toString(36).slice(2) + '.html');
   fs.writeFileSync(f, html);
   try {
-    const dom = execFileSync(CHROME, ['--headless=new', '--disable-gpu', '--no-first-run', '--virtual-time-budget=8000',
-      '--dump-dom', 'file://' + f], { encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'ignore'] });
-    const m = dom.match(/<pre id="__out">([\s\S]*?)<\/pre>/);
-    return m ? JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')) : null;
+    /* Real time (2026-10-06): the add-in now announces only once the browser has measured it
+       on screen, which happens when it paints — never under --virtual-time-budget. */
+    const out = execFileSync(process.execPath, [path.join(__dirname, '_realtime-page.js'), f, '30000'], { encoding: 'utf8', timeout: 60000, stdio: ['ignore', 'pipe', 'ignore'] });
+    return out ? JSON.parse(out) : null;
   } finally { fs.unlinkSync(f); }
 }
 

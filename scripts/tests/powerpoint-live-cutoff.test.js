@@ -267,7 +267,7 @@ console.log('\nRevealing, and telling phones which question is live');
   /* The publisher's visibility listener must be detachable, or a goLive re-entry leaks a
      closure that keeps claiming for a dead run. */
   ok('the publisher is torn down with the run',
-     /_pubStop = \(\) => document\.removeEventListener\('visibilitychange', onVis\)/.test(c) &&
+     /_pubStop = \(\) => \{ document\.removeEventListener\('visibilitychange', onVis\); try \{ io && io\.disconnect\(\); \} catch\(err\)\{\} \}/.test(c) &&
      /if \(_pubStop\)\{ _pubStop\(\); _pubStop = null; \}/.test(c));
 
   /* Every WRITE to sessions/<code> is still either the follow pointer (currentQuestion,
@@ -279,11 +279,13 @@ console.log('\nRevealing, and telling phones which question is live');
     .map(m => m[0]);
   ok('there is at least one session write to check', sessionWrites.length > 0);
   ok('every session write is either currentQuestion or this question\'s qstate node',
-     sessionWrites.every(r => /\/currentQuestion'/.test(r) || /\/qstate\/'\+qid/.test(r)));
+     sessionWrites.every(r => /\/currentQuestion'/.test(r) || /\/qstate\/'\+qid/.test(r) || /\/qstate\/_pslive_diag\/'/.test(r)));   // + the temporary on-screen diagnostics (2026-10-06)
 
   /* First sight announces this question once (publishes the pointer + stamps qstate live
      to clear a stale reveal); the repeating tick must never write to the database. */
-  ok('the question is announced once per page-load', /if \(_announced !== qid\) \{/.test(c));
+  /* 2026-10-06: announce() runs when the object comes INTO VIEW; coming back to a slide only
+     re-claims the pointer — the qstate 'live' stamp still happens once per page-load. */
+  ok('the question is announced once per page-load', /if \(_announced === qid\) \{ claim\(\); return; \}/.test(c) && /_announced = qid;/.test(c));
   const tick = c.slice(c.indexOf('_tick = setInterval('));
   ok('the repeating tick never writes to the database',
      !/db\.ref/.test(tick.slice(0, tick.indexOf('}, 1000);'))));
@@ -404,13 +406,13 @@ console.log('\nThe slide speaks the same phase vocabulary as the rest of the pro
   /* goLive re-enters on every ActiveViewChanged. The once-per-question guard means the
      first-sight publish + qstate 'live' stamp happen once, not on every re-entry (which
      would drag the companion back to "answering" after a reveal). */
-  ok('a question is announced once per page-load', /if \(_announced !== qid\) \{/.test(c));
+  ok('a question is announced once per page-load', /if \(_announced === qid\) \{ claim\(\); return; \}/.test(c));
   ok('the guard is actually set', /_announced = qid;/.test(c));
   /* First sight stamps qstate live unconditionally, which clears any stale 'revealed' an
      earlier run left in this node — asserted as code, not a comment, so it cannot rot. */
   {
-    const guard = c.indexOf("if (_announced !== qid) {");
-    const body  = c.slice(guard, c.indexOf('\n  }', guard));
+    const guard = c.indexOf("if (_announced === qid) { claim(); return; }");
+    const body  = c.slice(guard, c.indexOf('\n  };', guard));
     ok('first sight stamps qstate live so a stale reveal cannot deadlock the slide',
        guard > -1 && /\.update\(\{ phase:'live', launchedAt: _launchedAt \}\)/.test(body));
   }

@@ -976,21 +976,68 @@ function publishLiveQuestion(b, q, qid){
 
   // First sight of this question: publish the follow pointer, and stamp qstate live to
   // clear any stale 'revealed' an earlier run left in this node. Once per question.
-  if (_announced !== qid) {
+  const announce = () => {
+    /* Stamped NOW, when it comes into view — not when the object started. A slide PowerPoint
+       loaded early would otherwise carry an older time and lose to the slide before it. */
+    _launchedAt = Date.now();
+    if (_announced === qid) { claim(); return; }                      // back on this slide
     _announced = qid;
     claim();
     ensureWriteAuth().then(() => db.ref('sessions/'+b.code+'/qstate/'+qid)
       .update({ phase:'live', launchedAt: _launchedAt })).catch(()=>{});
-  }
+  };
 
-  // Re-arm the visibility re-claim each goLive, detaching the previous handler first so a
-  // re-entry can never leak a listener.
+  /* ONLY THE SLIDE ON SCREEN SPEAKS (2026-10-06). PowerPoint for the web loads the slides
+     AHEAD of the one showing (measured: two ahead) and starts their objects. Each used to
+     announce itself the moment it started — and again on visibilitychange — so a slide
+     nobody could see took the follow pointer and phones jumped AHEAD (Rod: on Q3, phone went
+     to Q5). Now an object announces only while it is actually in the window
+     (IntersectionObserver against the top-level viewport, ≥ half of it showing), and again
+     each time it comes back into view. If it cannot tell, it stays SILENT: a phone that does
+     not move is recoverable, a phone sent to the wrong question is not.
+     No IntersectionObserver at all (very old browsers) → exactly the previous behaviour.
+     Desktop PowerPoint gives each object its own window, so it always reads as on screen
+     there and nothing changes. */
   if (_pubStop) { _pubStop(); _pubStop = null; }
+  const canSee = typeof IntersectionObserver === 'function';
+  let onScreen = canSee ? null : true;
+  let io = null;
+  if (canSee) {
+    io = new IntersectionObserver(entries => {
+      const e = entries[entries.length - 1];
+      const now = !!(e && e.isIntersecting && e.intersectionRatio >= 0.5);
+      diagSeen(b, qid, 'io', e, now);
+      const was = onScreen; onScreen = now;
+      if (now && was !== true) announce();
+    }, { threshold: [0, 0.25, 0.5, 0.75, 1] });
+    try { io.observe(document.body); } catch(err){ onScreen = true; announce(); }
+  } else announce();
   const onVis = () => {
-    if (document.visibilityState === 'visible') { _launchedAt = Date.now(); claim(); }
+    diagSeen(b, qid, 'vis', null, onScreen);
+    if (document.visibilityState === 'visible' && onScreen === true) { _launchedAt = Date.now(); claim(); }
   };
   document.addEventListener('visibilitychange', onVis);
-  _pubStop = () => document.removeEventListener('visibilitychange', onVis);
+  _pubStop = () => { document.removeEventListener('visibilitychange', onVis); try { io && io.disconnect(); } catch(err){} };
+}
+
+/* What each object saw, for diagnosing PowerPoint for the web (2026-10-06, temporary): did
+   the browser report it on screen, how much of it, where, and the page visibility. Kept at
+   sessions/$code/qstate/_pslive_diag/<object> — nothing reads it but support. At most 12
+   records per object, best effort, never blocks anything. */
+const _diagId = 'o' + Math.random().toString(36).slice(2, 8);
+let _diagN = 0;
+function diagSeen(b, qid, ev, e, onScreen){
+  if (_diagN >= 12) return; _diagN++;
+  try {
+    const r = e && e.boundingClientRect, rb = e && e.rootBounds;
+    const rec = { at: Date.now(), ev, q: String(qid).slice(0, 40), slide: b.qIdx, onScreen: onScreen === null ? 'unknown' : !!onScreen,
+      io: e ? !!e.isIntersecting : null, ratio: e ? Math.round(e.intersectionRatio * 100) / 100 : null,
+      isVisible: (e && 'isVisible' in e) ? !!e.isVisible : null,
+      box: r ? [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)] : null,
+      root: rb ? [Math.round(rb.width), Math.round(rb.height)] : null,
+      page: document.visibilityState, focus: (function(){ try { return document.hasFocus(); } catch(x){ return null; } })() };
+    ensureWriteAuth().then(() => db.ref('sessions/'+b.code+'/qstate/_pslive_diag/'+_diagId+'_'+_diagN).set(rec)).catch(()=>{});
+  } catch(err){}
 }
 
 /* This object publishes sessions/<code>/currentQuestion via publishLiveQuestion() above.
