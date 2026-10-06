@@ -813,7 +813,7 @@ async function goLive(b, editing){
   async function doReveal(){
     if (revealed) return;
     revealed = true;
-    try { await db.ref('sessions/'+b.code+'/qstate/'+qid+'/phase').set('revealed'); }
+    try { await ensureWriteAuth(); await db.ref('sessions/'+b.code+'/qstate/'+qid+'/phase').set('revealed'); }
     catch(e){ console.warn('reveal not published (showing it locally anyway)', e); }
     paint();
     armPostReveal();
@@ -827,7 +827,7 @@ async function goLive(b, editing){
     post = true;
     clearTimeout(_prTimer); _prTimer = null;
     document.getElementById('psPost')?.remove();
-    try { await db.ref('sessions/'+b.code+'/qstate/'+qid).update({ phase:'post_reveal', postRevealAt:null }); }
+    try { await ensureWriteAuth(); await db.ref('sessions/'+b.code+'/qstate/'+qid).update({ phase:'post_reveal', postRevealAt:null }); }
     catch(e){ console.warn('post-reveal not published (showing it locally anyway)', e); }
     paint();
   }
@@ -841,8 +841,8 @@ async function goLive(b, editing){
     if (!isFinite(d) || d <= 0) return;                       // 'manual'
     clearTimeout(_prTimer);
     _prTimer = setTimeout(doPostReveal, d * 1000);
-    db.ref('sessions/'+b.code+'/qstate/'+qid)
-      .update({ postRevealAt: Date.now() + d*1000 }).catch(()=>{});
+    ensureWriteAuth().then(() => db.ref('sessions/'+b.code+'/qstate/'+qid)
+      .update({ postRevealAt: Date.now() + d*1000 })).catch(()=>{});
   }
 
   const fn = ref.on('value', snap => {
@@ -968,10 +968,10 @@ function publishLiveQuestion(b, q, qid){
   });
   const claim = () => {
     const p = build();
-    meRef.transaction(cur => {
+    ensureWriteAuth().then(() => meRef.transaction(cur => {
       if (cur && Number(cur.launchedAt) > p.launchedAt) return;   // a newer frame owns it — do not steal
       return p;
-    }).catch(()=>{});
+    })).catch(err => console.warn('PollSlide LIVE: live question not published', err && (err.code || err.message)));
   };
 
   // First sight of this question: publish the follow pointer, and stamp qstate live to
@@ -979,8 +979,8 @@ function publishLiveQuestion(b, q, qid){
   if (_announced !== qid) {
     _announced = qid;
     claim();
-    db.ref('sessions/'+b.code+'/qstate/'+qid)
-      .update({ phase:'live', launchedAt: _launchedAt }).catch(()=>{});
+    ensureWriteAuth().then(() => db.ref('sessions/'+b.code+'/qstate/'+qid)
+      .update({ phase:'live', launchedAt: _launchedAt })).catch(()=>{});
   }
 
   // Re-arm the visibility re-claim each goLive, detaching the previous handler first so a
@@ -1034,7 +1034,7 @@ function addControls(redraw){
     `<button id="cMed" title="${tr('Show or hide option images')}">${SHOW_MEDIA?'\u{1F5BC}':'\u{1F6AB}'}</button>` +
     `<button id="cDk" title="${tr('Light or dark')}">${DARK?'\u2600':'\u{1F319}'}</button>` +
     `<button id="cRe">${tr('Change question')}</button>` +
-    `<button id="cSo"${auth && auth.currentUser ? '' : ' style="display:none"'}>${tr('Sign out')}</button>`;
+    `<button id="cSo"${signedIn() ? '' : ' style="display:none"'}>${tr('Sign out')}</button>`;
   document.body.appendChild(bar);
   document.getElementById('cSo').onclick = signOut;
   const bump = (d) => {
@@ -1056,7 +1056,7 @@ function addControls(redraw){
     bar.remove();
     document.getElementById('psReveal')?.remove();
     if (listener) { listener(); listener = null; }
-    if (auth.currentUser) showPicker(); else showSignIn();
+    if (signedIn()) showPicker(); else showSignIn();
   };
 }
 
@@ -1089,6 +1089,28 @@ function showSignIn(msg){
    while editing — never during a slide show, which shows results only. Signing out does
    not unlink the slide: its question keeps showing when presented. */
 const SIGNUP_URL = 'https://app.pollslide.com/presenter?signup=1';
+
+/* WHO MAY WRITE (2026-10-06). The database accepts the live pointer (currentQuestion) and
+   qstate only from a signed-in session ("auth != null"). This add-in used to rely on the
+   PowerPoint user being signed in — true until Sign out existed. Signed out, every slide's
+   publish was refused silently and phones stopped following. Now, when nobody is signed in
+   and something must be written, it signs in ANONYMOUSLY — exactly what companion.html does.
+   An anonymous session is never treated as "signed in" on screen: signedIn() is false, so
+   the sign-in screen, "Signed in as…" and Sign out all behave as signed out. */
+function signedIn(){ const u = auth && auth.currentUser; return !!(u && !u.isAnonymous); }
+let _anonP = null;
+function ensureWriteAuth(){
+  try { if (auth && auth.currentUser) return Promise.resolve(true); } catch(e){ return Promise.resolve(false); }
+  if (!_anonP) {
+    let signin;
+    try { signin = auth.signInAnonymously(); } catch(e){ return Promise.resolve(false); }
+    _anonP = Promise.race([
+      Promise.resolve(signin).then(() => true, err => { console.warn('PollSlide LIVE: anonymous sign-in failed — phones cannot follow', err && err.code); return false; }),
+      new Promise(r => setTimeout(() => r(false), 5000)),       // never hang a publish
+    ]).finally(() => { _anonP = null; });
+  }
+  return _anonP;
+}
 let _onSignIn = false;
 function openExternal(url){
   try {
@@ -1100,7 +1122,7 @@ function openExternal(url){
 }
 function acctLine(){
   const u = auth && auth.currentUser;
-  if (!u) return '';
+  if (!signedIn()) return '';
   return `<div class="acct"><span>${esc(tr('Signed in as {email}', { email: u.email || '' }))}</span><button id="so">${tr('Sign out')}</button></div>`;
 }
 function wireSignOut(){ const b = $('so'); if (b) b.onclick = signOut; }
@@ -1216,14 +1238,14 @@ Office.onReady(async () => {
            the presenter the edit controls back. */
         _announced = null;
         if (bound) goLive(bound, true);
-        else if (auth.currentUser) showPicker(); else showSignIn();
+        else if (signedIn()) showPicker(); else showSignIn();
       }
     });
   } catch(e){}
 
-  auth.onAuthStateChanged(u => { const so = document.getElementById('cSo'); if (so) so.style.display = u ? '' : 'none'; });
+  auth.onAuthStateChanged(u => { const so = document.getElementById('cSo'); if (so) so.style.display = (u && !u.isAnonymous) ? '' : 'none'; });
   if (bound) { goLive(bound, true); return; }   // true = editing, offer a way to change it
-  auth.onAuthStateChanged(u => { if (u) showPicker(); else showSignIn(); });
+  auth.onAuthStateChanged(u => { if (u && !u.isAnonymous) showPicker(); else showSignIn(); });
 });
 </script>
 </body>
