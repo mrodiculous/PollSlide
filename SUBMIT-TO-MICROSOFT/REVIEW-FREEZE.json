@@ -1,8 +1,8 @@
 {
-  "_note": "Microsoft is reviewing PollSlide LIVE (submitted 2026-10-01). The reviewer tests the LIVE add-in page, and the only way to change a submission is to cancel it. While this file exists, scripts/tests/addin-review-freeze.test.js fails if any of these files change. DELETE THIS FILE the day Microsoft approves (then ship queued add-in fixes, e.g. TODO.md question reordering A1). qidCore = hash of qid.js from 'bucket: function' up to the LINK NUMBERS block: the add-in loads the live qid.js, so the functions it uses must not change during review (additions after them are fine).",
-  "submittedAt": "2026-10-01",
+  "_note": "Microsoft is reviewing PollSlide LIVE again (first review 2026-10-05: Attention needed, policy 1100.5.7.1 sign-out link; fixed 2026-10-06 — sign in / sign up / sign out, see scripts/tests/addin-account-links.test.js). The reviewer tests the LIVE add-in page, and the only way to change a submission is to cancel it. While this file exists, scripts/tests/addin-review-freeze.test.js fails if any of these files change. DELETE THIS FILE the day Microsoft approves (then ship queued add-in fixes, e.g. TODO.md question reordering A1). qidCore = hash of qid.js from bucket: function up to the LINK NUMBERS block: the add-in loads the live qid.js, so the functions it uses must not change during review (additions after them are fine).",
+  "submittedAt": "2026-10-06 (resubmission)",
   "files": {
-    "powerpoint-content/index.html": "19f4df618582dea9de32808c07706f65bf6bf2971d8426d2d81964993def73b3",
+    "powerpoint-content/index.html": "93a1a473be935dce84f2ddddd350866043cdb6426218b9ee942447b4d0c93690",
     "powerpoint-content/manifest.xml": "e62ecab0682660d6168128c2257510e819823e039522792f87293b899f5eac52",
     "SUBMIT-TO-MICROSOFT/manifest.xml": "e62ecab0682660d6168128c2257510e819823e039522792f87293b899f5eac52"
   },

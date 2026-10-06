@@ -169,6 +169,7 @@ what is live.
 |---|---|
 | The add-in explains its value before asking to sign in (policy 1100.1.5) | The first screen says "Put live results on this slide" and what it does, before the sign-in fields |
 | If an account is needed, say how to get one; enterprise-only add-ins must say so (1100.5.7.3) | "No account? Create one free … no enterprise purchase or admin setup" on the first screen, in the manifest, the listing and the notes |
+| Sign in, sign up AND sign out links when an account is needed (1100.5.7.1) — **the reason the first submission came back (2026-10-05)** | Sign in + "Create a free account" link on the first screen; "Sign out" on the presentation list, the question list and the toolbar of a linked slide. Checked by `scripts/tests/addin-account-links.test.js` |
 | A working test account for the reviewer | appsource-review@pollslide.com with "Reviewer Demo" — checked by Admin → Launch checks |
 | Store name = manifest name, exactly | Both are `PollSlide LIVE — Results on Your Slide` |
 | Name: no Microsoft product name, no "free", title case | ✓ |

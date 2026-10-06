@@ -2399,6 +2399,15 @@ function toggleAuthMode() {
   const ac = document.getElementById('ageConfirm'); if (ac) ac.checked = false;
   authError('');
 }
+/* ?signup=1 opens straight on "Create your account" — the PowerPoint add-in's
+   "Create a free account" link (Microsoft policy 1100.5.7.1, 2026-10-06). Same as clicking
+   "Create an account"; without the parameter nothing changes. */
+function openSignupFromLink() {
+  try {
+    if (new URLSearchParams(location.search).get('signup') === '1' && authMode === 'signin' && document.getElementById('authTitle')) toggleAuthMode();
+  } catch (e) {}
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', openSignupFromLink); else openSignupFromLink();
 
 async function submitAuth() {
   const email = document.getElementById('authEmail').value.trim();

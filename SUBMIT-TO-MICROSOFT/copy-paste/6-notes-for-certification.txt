@@ -6,6 +6,12 @@ This is NOT an enterprise-only add-in. Any individual can create a free account 
 FIRST RUN
 In editing view the object explains what it does and offers sign-in. During Slide Show it shows results only, with no sign-in prompt: results are readable without an account, and a login box on a slide in front of an audience would not be usable.
 
+ACCOUNT LINKS — SIGN IN, SIGN UP, SIGN OUT (policy 1100.5.7.1)
+- Sign in: the first screen in editing view.
+- Sign up: "Create a free account" link on that same screen. It opens the PollSlide sign-up form (app.pollslide.com/presenter?signup=1) in the browser.
+- Sign out: once signed in, "Signed in as <email> · Sign out" is shown under the presentation list and the question list, and a "Sign out" button is on the toolbar of a slide that already shows a question (editing view). Signing out returns to the sign-in screen.
+Slide Show shows results only, with no account controls (see FIRST RUN).
+
 TEST ACCOUNT
   Email:    appsource-review@pollslide.com
   Password: 12345678
@@ -18,5 +24,6 @@ HOW TO TEST (about 2 minutes) — PowerPoint on the web is quickest
 4. To answer as the audience: open https://app.pollslide.com/presenter in another browser tab (same test account), open "Reviewer Demo", and open the question's live view — it shows the QR code and the answer link. Open that link (or scan the QR with a phone) and submit an answer.
 5. The count and bars on the slide update within a second or two.
 6. Start the Slide Show — the object keeps showing and updating the results.
+7. Leave the Slide Show. Click "Sign out" on the object's toolbar — you are back on the sign-in screen.
 
 Support: help@pollslide.com

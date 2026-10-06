@@ -100,7 +100,7 @@ const ENGLISH = ['Put live results', 'Sign in', 'No account?', 'Not linked', 'Le
 console.log('\n English stays word for word');
 for (const lang of ['en-US', 'en-GB', 'ja-JP', '']) {
   const a = run({ ...SCREENS.signin, lang }), b = run({ ...SCREENS.unlinked, lang });
-  ok(`${lang || '(none)'}: sign-in screen in English`, a && /Put live results on this slide/.test(a.text) && /Sign in/.test(a.text) && /No account\? Create one free/.test(a.text), a);
+  ok(`${lang || '(none)'}: sign-in screen in English`, a && /Put live results on this slide/.test(a.text) && /Sign in/.test(a.text) && /No account\? Create a free account — no enterprise purchase or admin setup needed\./.test(a.text), a);
   ok(`${lang || '(none)'}: slide show says "Not linked to a question"`, b && /Not linked to a question/.test(b.text), b);
 }
 const le = run({ ...SCREENS.live, lang: 'en-US' });
