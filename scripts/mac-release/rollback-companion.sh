@@ -38,11 +38,11 @@ hdiutil detach -quiet "$MNT"
 [ "$IV" = "$VER" ] || fail "The app inside says $IV, the folder says $VER."
 okm "the app inside is $IV"
 
-CUR=$(grep -oE 'Version [0-9]+\.[0-9]+(\.[0-9]+)? · Free · macOS' "$WEBSITE/download.html" | head -1 | awk '{print $2}')
+CUR=$(grep -oE 'id="appVersion">[0-9]+\.[0-9]+(\.[0-9]+)?<' "$WEBSITE/download.html" | head -1 | sed -E 's/.*>([0-9.]+)<.*/\1/')
 cp -p "$DMG" "$WEBSITE/PollSlideCompanion.dmg"
 okm "pollslide-website/PollSlideCompanion.dmg is now $1 (was $CUR)"
-/usr/bin/sed -i '' -E "s/Version [0-9]+\.[0-9]+(\.[0-9]+)? · Free · macOS/Version $VER · Free · macOS/" "$WEBSITE/download.html"
-grep -q "Version $VER · Free · macOS" "$WEBSITE/download.html" || fail "Could not set the version on download.html — edit it by hand."
+/usr/bin/sed -i '' -E "s#id=\"appVersion\">[0-9]+\.[0-9]+(\.[0-9]+)?<#id=\"appVersion\">$VER<#" "$WEBSITE/download.html"
+grep -q "id=\"appVersion\">$VER<" "$WEBSITE/download.html" || fail "Could not set the version on download.html — edit it by hand."
 okm "download.html says Version $VER"
 
 echo

@@ -86,11 +86,20 @@ module.exports = async function handler(req, res) {
   const alertsRaw = alertSnap.exists() ? alertSnap.val() : {};
   const open = Object.entries(alertsRaw)
     .map(([ts, a]) => ({ ts: Number(ts), ...a }))
-    .filter(a => a.status !== 'ack' && a.status !== 'closed')
+    // 'resolved' is what Admin → Legal writes when an alert is dealt with. This used to check
+    // only 'ack'/'closed', so every alert Rod had resolved kept coming back as "needs a look".
+    .filter(a => a.status !== 'ack' && a.status !== 'closed' && a.status !== 'resolved')
     .sort((a, b) => b.ts - a.ts);
 
+  /* Per-change decisions (Admin → Legal, 2026-10-07): a change marked "not relevant" or
+     "docs updated" is dealt with; "needs a doc update" is listed on its own until done. */
+  const decisionOf = (a, c) => (a.decisions && a.decisions[c.key] && a.decisions[c.key].decision) || null;
   const flatten = (pred) => open.flatMap(a =>
-    (a.changes || []).filter(pred).map(c => ({ ...c, ts: a.ts })));
+    (a.changes || []).filter(c => pred(c) && !['not_relevant', 'updated'].includes(decisionOf(a, c)) && decisionOf(a, c) !== 'needs_update')
+      .map(c => ({ key: c.key, label: c.label, url: c.url, kind: c.kind, ts: a.ts,
+        ...(c.diff ? { added: c.diff.addedCount, removed: c.diff.removedCount, noiseOnly: !!c.diff.noiseOnly } : {}) })));
+  const pendingUpdates = open.flatMap(a => (a.changes || []).filter(c => decisionOf(a, c) === 'needs_update')
+    .map(c => ({ key: c.key, label: c.label, url: c.url, kind: c.kind, ts: a.ts, note: (a.decisions[c.key].note || '').slice(0, 200) })));
 
   const lawChanges     = flatten(c => c.kind === 'regulation');
   const vendorChanges  = flatten(c => c.kind === 'vendor');
@@ -107,6 +116,7 @@ module.exports = async function handler(req, res) {
   if (lawChanges.length)    attention.push(`${lawChanges.length} law/regulator page(s) changed — review product practices AND legal docs`);
   if (ourChanges.length)    attention.push(`${ourChanges.length} of our own legal pages changed — confirm it matches a version bump you made`);
   if (vendorChanges.length) attention.push(`${vendorChanges.length} vendor policy change(s) — check whether Privacy/subprocessors need updating`);
+  if (pendingUpdates.length) attention.push(`${pendingUpdates.length} change(s) you marked "needs a doc update" — update the doc(s), then mark them done (and push re-consent if users must be told)`);
   if (staleSources.length)  attention.push(`${staleSources.length} watched source(s) not checked in 21+ days — the cron may be dead`);
   if (sweepStale)           attention.push('the self-audit (compliance-sweep) has not run in 45+ days');
   if (sweepTotals && sweepTotals.fail) attention.push(`${sweepTotals.fail} failing check(s) in the last self-audit`);
@@ -120,6 +130,7 @@ module.exports = async function handler(req, res) {
     open: {
       law: lawChanges, ours: ourChanges, vendor: vendorChanges, tracker: trackerChanges,
     },
+    pendingUpdates,
     selfAudit: sweep ? { ranAt: sweep.ranAt, totals: sweepTotals, stale: sweepStale } : null,
     attention,
     // Restated in the payload itself, because a JSON blob gets pasted into a ticket or a
@@ -144,6 +155,7 @@ module.exports = async function handler(req, res) {
         + section('Law / regulator pages that changed', lawChanges)
         + section('Our own legal pages that changed', ourChanges)
         + section('Vendor policies that changed', vendorChanges)
+        + section('Marked "needs a doc update" — still to do', pendingUpdates)
         + section('New-law trackers that moved (informational)', trackerChanges)
         + `<p>Watching ${sources.length} sources: `
         + Object.entries(byKind).map(([k, v]) => `${v.total} ${KIND_LABEL[k] || k}`).join(', ')

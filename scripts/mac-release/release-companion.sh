@@ -173,9 +173,11 @@ if [ $PUBLISH = 1 ]; then
   echo "5. Putting it on the website (local files only — nothing is pushed)"
   cp -p "$DEST/$DMGN" "$WEBSITE/PollSlideCompanion.dmg"
   okm "pollslide-website/PollSlideCompanion.dmg = $VER (build $BUILD)"
-  /usr/bin/sed -i '' -E "s/Version [0-9]+\.[0-9]+(\.[0-9]+)? · Free · macOS/Version $VER · Free · macOS/" "$WEBSITE/download.html"
-  grep -q "Version $VER · Free · macOS" "$WEBSITE/download.html" || fail "Could not set the version on download.html — edit it by hand."
+  /usr/bin/sed -i '' -E "s#id=\"appVersion\">[0-9]+\.[0-9]+(\.[0-9]+)?<#id=\"appVersion\">$VER<#" "$WEBSITE/download.html"
+  grep -q "id=\"appVersion\">$VER<" "$WEBSITE/download.html" || fail "Could not set the version on download.html — edit it by hand."
   okm "download.html says Version $VER"
+  # Slidekick's help map includes the download page — keep it in step (QA fails otherwise).
+  ( cd "$(dirname "$0")/../.." && node scripts/helpbot/build-index.js >/dev/null ) && okm "Slidekick help map refreshed" || echo "  ! run: node scripts/helpbot/build-index.js"
   echo
   echo "Next: push the website, download pollslide.com/PollSlideCompanion.dmg once to check it is"
   echo "$VER (purge it in Cloudflare if not), THEN Admin → System health → Mac companion → Announce $VER."

@@ -11,6 +11,8 @@
 //   adminTransferPlan    what moving one account's content into another would do
 //   adminTransferRun     do it (backup → copy → verify → remove)
 //   adminTransferUndo    put a transfer back from its backup
+//   adminSuspend         suspend / unsuspend an account (can't sign in; sessions ended)
+//   adminSignOutAll      sign an account out on every device
 //
 // Identity always comes from the verified token (see memory: endpoint-auth-hardening).
 // Every change is appended to admin/account_audit.
@@ -105,6 +107,7 @@ module.exports = async function handler(req, res) {
         tier: rec.tier || 'free', decks: Object.keys(rec.presentations || {}).length,
         classes: Object.keys(rec.classes || {}).length, workspaceId: rec.workspaceId || null,
         stripeCustomerId: rec.stripeCustomerId || null, pendingEmail: rec.pendingEmail || null,
+        suspended: rec.suspended || null,
       } });
     }
 
@@ -132,6 +135,32 @@ module.exports = async function handler(req, res) {
       await mail('email_changed', old, { newEmail: next, oldEmail: old, audience: 'old', bySupport: true });
       await mail('email_changed', next, { newEmail: next, oldEmail: old, audience: 'new', bySupport: true, switchedToPassword: toPassword });
       return res.status(200).json({ ok: true, done: r.done, problems: r.problems, switchedToPassword: toPassword });
+    }
+
+    /* ── Suspend / unsuspend, sign out everywhere (2026-10-07) ──
+       Suspend: Firebase "disabled" (no new sign-in) + every refresh token revoked (each device
+       is signed out within the hour, when its current token expires). It does NOT touch the
+       Stripe subscription — the Admin screen says so — and it never deletes anything: an
+       audience can still answer this person's QR codes. Admin accounts can't be suspended. */
+    if (action === 'adminSuspend' || action === 'adminSignOutAll') {
+      const uid = String(body.uid || '');
+      const reason = String(body.reason || '').slice(0, 300);
+      if (!uid) return res.status(400).json({ error: 'A uid is required.' });
+      if (!reason) return res.status(400).json({ error: 'Record why (e.g. "abuse report #123", "user asked — lost laptop").' });
+      let u;
+      try { u = await admin.auth(app).getUser(uid); } catch (e) { return res.status(404).json({ error: 'No such account.' }); }
+      if (ADMIN_EMAILS.includes((u.email || '').toLowerCase())) return res.status(400).json({ error: 'Admin accounts can\'t be suspended or signed out from here.' });
+      if (action === 'adminSignOutAll') {
+        await admin.auth(app).revokeRefreshTokens(uid);
+        await audit({ type: 'signed_out_everywhere', uid, email: u.email || '', reason });
+        return res.status(200).json({ ok: true });
+      }
+      const suspend = body.suspend !== false;
+      await admin.auth(app).updateUser(uid, { disabled: suspend });
+      if (suspend) await admin.auth(app).revokeRefreshTokens(uid);
+      await db.ref('users/' + uid + '/suspended').set(suspend ? { at: Date.now(), by: callerEmail, reason } : null);
+      await audit({ type: suspend ? 'account_suspended' : 'account_unsuspended', uid, email: u.email || '', reason });
+      return res.status(200).json({ ok: true, disabled: suspend });
     }
 
     if (action === 'adminTransferPlan') {

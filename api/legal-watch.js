@@ -12,6 +12,7 @@
 //   FIREBASE_* + NEXT_PUBLIC_APP_URL + RESEND_API_KEY (already set for other functions)
 const admin = require('firebase-admin');
 const crypto = require('crypto');
+const LD = require('../lib/legal-diff');
 
 function getApp() {
   if (admin.apps.length) return admin.apps[0];
@@ -134,7 +135,7 @@ async function checkOne(key, label, url) {
     const r = await fetch(url, { headers: { 'User-Agent': 'PollSlide-LegalWatch/1.0' }, redirect: 'follow' });
     if (!r.ok) return { key, label, url, ok: false, note: 'HTTP ' + r.status };
     const text = normalize(await r.text());
-    return { key, label, url, ok: true, hash: hashOf(text), len: text.length };
+    return { key, label, url, ok: true, hash: hashOf(text), len: text.length, text };
   } catch (e) {
     return { key, label, url, ok: false, note: e.message };
   }
@@ -159,10 +160,22 @@ module.exports = async function handler(req, res) {
     const prevSnap = await db.ref('admin/legal_watch/' + r.key).get();
     const prev = prevSnap.exists() ? prevSnap.val() : null;
     const kind = (WATCH[r.key] && WATCH[r.key].kind) || 'vendor';
+    /* WHAT changed (2026-10-07): the page's text is kept (gzipped) beside its hash, so the
+       next change can be shown as sentences added/removed instead of just "it changed".
+       Written only when the text is new or missing — not 51 large writes every week. The
+       first run after this ships has no earlier text, so that one change has no diff. */
+    let textSnap = null;
+    try { textSnap = await db.ref('admin/legal_watch_text/' + r.key).get(); } catch (e) {}
+    const prevText = textSnap && textSnap.exists() ? LD.unpack(textSnap.val().gz) : null;
     if (prev && prev.hash && prev.hash !== r.hash) {
-      changes.push({ key: r.key, label: r.label, url: r.url, kind });
+      const change = { key: r.key, label: r.label, url: r.url, kind };
+      if (prevText) { try { change.diff = LD.diff(prevText, r.text); } catch (e) {} }
+      changes.push(change);
     }
     await db.ref('admin/legal_watch/' + r.key).set({ hash: r.hash, url: r.url, label: r.label, kind, checkedAt: Date.now() });
+    if (!prevText || (prev && prev.hash !== r.hash)) {
+      try { await db.ref('admin/legal_watch_text/' + r.key).set({ gz: LD.pack(r.text), hash: r.hash, savedAt: Date.now() }); } catch (e) {}
+    }
   }
 
   // Trackers are informational: they move constantly and belong in the monthly digest,
@@ -178,7 +191,8 @@ module.exports = async function handler(req, res) {
       if (!urgent.length) throw new Error('tracker-only change — digest handles it');
       const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com';
       const kindTag = { ours: 'our page', vendor: 'vendor policy', regulation: '⚖️ LAW / REGULATION' };
-      const list = urgent.map(c => `<li><a href="${c.url}">${c.label}</a> — <em>${kindTag[c.kind] || c.kind}</em></li>`).join('');
+      const what = c => c.diff ? (c.diff.noiseOnly ? ' · <span style="color:#888">only dates/formatting changed</span>' : ` · ${c.diff.addedCount} sentence${c.diff.addedCount === 1 ? '' : 's'} added, ${c.diff.removedCount} removed`) : '';
+      const list = urgent.map(c => `<li><a href="${c.url}">${c.label}</a> — <em>${kindTag[c.kind] || c.kind}</em>${what(c)}</li>`).join('');
       await fetch(APP_URL + '/api/send-email', {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'x-internal-key': process.env.INTERNAL_API_KEY || '' },
         body: JSON.stringify({
@@ -187,12 +201,12 @@ module.exports = async function handler(req, res) {
           data: {
             subject: `⚖️ ${urgent.length} legal/policy page${urgent.length>1?'s':''} changed`,
             heading: 'Policy change detected',
-            body: `These watched pages changed since the last check:<ul>${list}</ul>Vendor changes: review whether your Privacy Policy needs updating. Law/regulation changes: review whether your <strong>product practices AND legal docs</strong> need updating, then push a policy update from Admin → Legal if users must be re-notified.`,
+            body: `These watched pages changed since the last check:<ul>${list}</ul>Vendor changes: review whether your Privacy Policy needs updating. Law/regulation changes: review whether your <strong>product practices AND legal docs</strong> need updating, then push a policy update from Admin → Legal if users must be re-notified. Admin → Legal shows exactly which sentences changed, an AI summary on request (not legal advice), and lets you record a decision per change.`,
           },
         }),
       });
     } catch (e) { /* alert is already logged to Firebase regardless */ }
   }
 
-  return res.status(200).json({ checked: results.length, changed: changes.length, urgent: urgent.length, informational: informational.length, changes, errors });
+  return res.status(200).json({ checked: results.length, changed: changes.length, urgent: urgent.length, informational: informational.length, changes, errors: errors.map(({ text, ...e }) => e) });
 };

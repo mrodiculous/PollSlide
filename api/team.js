@@ -15,6 +15,27 @@
 const admin = require('firebase-admin');
 const { setUserTier } = require('../lib/tier');
 const { ADMIN_EMAILS } = require('../lib/quota');
+const TT = require('../lib/team-transfer');
+const { tierForSubscription } = require('../lib/stripe-tier');
+
+/* What Stripe says one account pays for: { customerId, subs: [{ id, status, tier, metadata }] }.
+   Read for the owner-handover preview and re-read right before the transfer runs. */
+async function stripeBilling(db, uid) {
+  const out = { customerId: null, subs: [] };
+  const cust = (await db.ref('users/' + uid + '/stripeCustomerId').get()).val();
+  if (!cust) return out;
+  out.customerId = cust;
+  if (!process.env.STRIPE_SECRET_KEY) throw { code: 500, msg: 'Stripe is not configured on the server — cannot check billing.' };
+  const Stripe = require('stripe');
+  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2026-05-27.dahlia' });
+  const list = await stripe.subscriptions.list({ customer: cust, status: 'all', limit: 100 });
+  for (const sub of list.data) {
+    if (!TT.LIVE.includes(sub.status)) continue;
+    out.subs.push({ id: sub.id, status: sub.status, tier: await tierForSubscription(stripe, sub, { strict: true }), metadata: sub.metadata || {} });
+  }
+  out.stripe = stripe;
+  return out;
+}
 
 function getApp() {
   if (admin.apps.length) return admin.apps[0];
@@ -236,6 +257,67 @@ module.exports = async function handler(req, res) {
         for (const k of Object.keys(ws.invites || {})) await db.ref('team_invites/' + k).remove().catch(() => {});
         await db.ref('workspaces/' + wsId).remove();
         return res.status(200).json({ ok: true });
+      }
+      /* ── Team owner handover (2026-10-07) — see lib/team-transfer.js for the rule ──
+         adminTransferPlan: preview only, changes nothing. adminTransferOwner: re-checks
+         everything, then Stripe first (re-tag the subscription + customer), then the database
+         in one multi-path update; if the database write fails, the Stripe tags are put back. */
+      case 'adminTransferPlan':
+      case 'adminTransferOwner': {
+        requireSiteAdmin();
+        const ws = await wsData(wsId);
+        const toUid = String(uid || '');
+        const fromUid = ws && ws.ownerUid;
+        const moveBillingEmail = (req.body || {}).moveBillingEmail !== false;
+        const from = fromUid ? await stripeBilling(db, fromUid) : { subs: [] };
+        const to = toUid ? await stripeBilling(db, toUid) : { subs: [] };
+        const plan = TT.planTransfer({ ws, fromUid, toUid, from, to, moveBillingEmail });
+        const view = { ok: plan.ok, problems: plan.problems, steps: plan.steps, notes: plan.notes };
+        if (action === 'adminTransferPlan') return res.status(200).json({ ok: true, plan: view });
+        if ((req.body || {}).confirm !== 'TRANSFER') return res.status(400).json({ error: 'Type TRANSFER to confirm.' });
+        const reason = String((req.body || {}).reason || '').slice(0, 300);
+        if (!reason) return res.status(400).json({ error: 'Record who asked for this and how you verified it (SOP).' });
+        if (!plan.ok) return res.status(409).json({ error: plan.problems.join(' '), plan: view });
+
+        // 1) Stripe: re-tag the subscription and its customer to the new owner.
+        let stripeDone = false;
+        if (plan.moveSub) {
+          const stripe = from.stripe;
+          await stripe.subscriptions.update(plan.moveSub.id, { metadata: { ...plan.moveSub.metadata, firebase_uid: toUid } });
+          const cust = await stripe.customers.retrieve(plan.customerId);
+          await stripe.customers.update(plan.customerId, { metadata: { ...((cust && cust.metadata) || {}), firebase_uid: toUid },
+            ...(moveBillingEmail && plan.toEmail ? { email: plan.toEmail } : {}) });
+          stripeDone = true;
+        }
+        // 2) Database, all at once.
+        const upd = {
+          [`workspaces/${wsId}/ownerUid`]: toUid,
+          [`workspaces/${wsId}/members/${toUid}/role`]: 'owner',
+          [`workspaces/${wsId}/members/${fromUid}/role`]: 'admin',
+        };
+        if (plan.moveSub) Object.assign(upd, {
+          [`users/${toUid}/stripeCustomerId`]: plan.customerId, [`admin/users_index/${toUid}/stripeCustomerId`]: plan.customerId,
+          [`users/${fromUid}/stripeCustomerId`]: null, [`admin/users_index/${fromUid}/stripeCustomerId`]: null,
+        });
+        try { await db.ref('/').update(upd); }
+        catch (e) {
+          if (stripeDone) {   // put Stripe back so billing still points at the owner the database has
+            try {
+              await from.stripe.subscriptions.update(plan.moveSub.id, { metadata: { ...plan.moveSub.metadata, firebase_uid: fromUid } });
+              await from.stripe.customers.update(plan.customerId, { metadata: { firebase_uid: fromUid }, ...(moveBillingEmail && plan.fromEmail ? { email: plan.fromEmail } : {}) });
+            } catch (e2) { throw { code: 500, msg: 'Database update failed AND Stripe could not be put back — fix by hand: subscription ' + plan.moveSub.id + ' / customer ' + plan.customerId + ' must carry firebase_uid ' + fromUid + '.' }; }
+          }
+          throw { code: 500, msg: 'Database update failed; nothing was changed (Stripe was put back). ' + (e.message || '') };
+        }
+        // 3) Plans: both stay on the team plan (the new owner as payer, the old one as admin).
+        await setUserTier(db, toUid, ws.tier, { source: 'team', actor: who.email, reason: 'became team owner (handover)', ref: wsId });
+        await setUserTier(db, fromUid, ws.tier, { source: 'team', actor: who.email, reason: 'handed team ownership over', ref: wsId });
+        await db.ref('admin/account_audit').push({ at: Date.now(), by: callerEmail, type: 'team_owner_transferred', ws: wsId,
+          from: plan.fromEmail, to: plan.toEmail, billingMoved: !!plan.moveSub, subscription: plan.moveSub ? plan.moveSub.id : null, reason }).catch(() => {});
+        const note = `Team ownership of ${ws.name || 'your team'} moved from ${plan.fromEmail} to ${plan.toEmail}.` + (plan.moveSub ? ' The team subscription moved with it — same card and renewal date, nothing was charged.' : '');
+        await mail('notify', plan.toEmail, { subject: 'You now own your PollSlide team', heading: 'You are the team owner', body: note + ' You can now invite people and use "Manage billing" from your account menu.' });
+        await mail('notify', plan.fromEmail, { subject: 'Your PollSlide team has a new owner', heading: 'Team ownership handed over', body: note + ' You stay on the team as an admin. Questions? Reply to this email.' });
+        return res.status(200).json({ ok: true, plan: view });
       }
       case 'leave': {
         // A member leaves on their own — before, only an owner/admin could remove them.

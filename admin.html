@@ -563,10 +563,13 @@ async function acFindGo(){
       ${row('Content',u.decks+' decks · '+u.classes+' classes'+(u.workspaceId?' · in a team':''))}
       ${row('Created / last sign-in',esc(u.created||'—')+' / '+esc(u.lastSignIn||'—'))}
       ${u.pendingEmail?row('Waiting to confirm','<b>'+esc(u.pendingEmail)+'</b> (they asked to change to this)'):''}
-      ${u.disabled?row('Status','<b style="color:var(--accent2)">DISABLED</b>'):''}
+      ${u.disabled?row('Status','<b style="color:var(--accent2)">SUSPENDED</b>'+(u.suspended?' — '+esc(u.suspended.reason||'')+' <span style="color:var(--muted)">('+esc(u.suspended.by||'')+', '+timeAgo(u.suspended.at)+')</span>':'')):''}
     </table>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
       <button class="btn btn-ghost btn-sm" onclick="acReset()">Send password reset email</button>
+      <button class="btn btn-ghost btn-sm" onclick="acSignOutAll()" title="Ends their sign-in on every device (within the hour). Their account and content are untouched.">Sign out everywhere</button>
+      ${u.disabled?`<button class="btn btn-green btn-sm" onclick="acSuspend(false)">Unsuspend</button>`
+        :`<button class="btn btn-ghost btn-sm" style="color:var(--accent2);border-color:var(--accent2);" onclick="acSuspend(true)">Suspend…</button>`}
     </div>
     <div style="border-top:1px solid var(--border);padding-top:10px;">
       <div style="font-weight:600;margin-bottom:6px;">Change their sign-in email</div>
@@ -582,6 +585,20 @@ async function acFindGo(){
       <div id="acEmailOut" style="margin-top:8px;font-size:12.5px;"></div>
     </div>`;
   }catch(e){ out.innerHTML='<span style="color:var(--accent2)">'+esc(e.message)+'</span>'; }
+}
+/* Suspend / sign out everywhere (2026-10-07). Reasons are required and audited. */
+function acAskReason(q){ const r=(window.prompt(q,'')||'').trim(); if(!r) toast('A reason is required — nothing was changed.','danger'); return r; }
+async function acSignOutAll(){
+  if(!acUser) return;
+  const reason=acAskReason(`Sign ${acUser.email} out on every device?\n\nEach device is signed out within the hour. Nothing else changes.\n\nWhy? (kept in the audit log)`); if(!reason) return;
+  try{ await accountApi('adminSignOutAll',{uid:acUser.uid,reason}); toast('Signed out everywhere (within the hour).','success'); acLoadAudit(); }catch(e){ toast(e.message,'danger'); }
+}
+async function acSuspend(on){
+  if(!acUser) return;
+  const billing=acUser.stripeCustomerId&&on?'\n\n⚠ They have a Stripe customer: suspending does NOT stop billing. Cancel or pause their subscription in Stripe if that is intended.':'';
+  const reason=acAskReason(on?`Suspend ${acUser.email}?\n\nThey can't sign in, and every device is signed out within the hour. Nothing is deleted; audiences can still answer their QR codes.${billing}\n\nWhy? (kept in the audit log)`
+    :`Unsuspend ${acUser.email}? They can sign in again straight away.\n\nWhy? (kept in the audit log)`); if(!reason) return;
+  try{ await accountApi('adminSuspend',{uid:acUser.uid,reason,suspend:on}); toast(on?'Account suspended.':'Account unsuspended.','success'); acFindGo(); acLoadAudit(); }catch(e){ toast(e.message,'danger'); }
 }
 function acReset(){
   const email=acUser&&acUser.email; if(!email) return;
@@ -2064,6 +2081,59 @@ const OURS_KEYMAP={ours_terms:'terms',ours_privacy:'privacy',ours_cookies:'cooki
 // A watch key is a law/regulation if legal-watch tagged it, or by its reg_ prefix.
 function isRegChange(c){ return c && (c.kind==='regulation' || String(c.key||'').indexOf('reg_')===0); }
 
+/* ONE CHANGE, ACTIONABLE (2026-10-07). For each page the watcher found changed: what text
+   changed (lib/legal-diff.js — sentences added/removed), an AI summary on request
+   (/api/compliance-triage — local model first, then OpenAI; NOT legal advice), and Rod's
+   decision. Nothing here edits a legal document or notifies a user by itself: decisions are
+   records, and re-consent is still the explicit "Notify"/"Push" button. */
+const LEGAL_DECISIONS={not_relevant:'Not relevant',needs_update:'Needs a doc update',updated:'Docs updated'};
+function legalChangeRow(ts,a,c){
+  const d=c.diff, tri=a.triage&&a.triage[c.key], dec=a.decisions&&a.decisions[c.key];
+  const what=!d?`<span style="color:var(--muted)">changed — text not captured for this one (detected before the watcher kept page text); open the page to review</span>`
+    : d.noiseOnly?`<span style="color:var(--muted)">only dates/formatting changed</span>`
+    : `${d.addedCount} sentence${d.addedCount===1?'':'s'} added · ${d.removedCount} removed`;
+  const list=(arr,sign,col)=>(arr||[]).map(x=>`<div style="font-size:11.5px;line-height:1.45;margin:2px 0;color:${col};">${sign} ${esc(x)}</div>`).join('');
+  const details=d&&!d.noiseOnly?`<details style="margin:4px 0 2px;"><summary style="font-size:11.5px;cursor:pointer;color:var(--accent);">Show what changed</summary>
+      <div style="max-height:240px;overflow:auto;background:var(--surface2);border-radius:8px;padding:8px 10px;margin-top:4px;">
+        ${list(d.added,'+','#2e9d63')}${list(d.removed,'−','#d4554f')}
+        ${(d.addedCount>d.added.length||d.removedCount>d.removed.length)?`<div style="font-size:11px;color:var(--muted);margin-top:4px;">(first ${d.added.length+d.removed.length} shown — open the page for the rest)</div>`:''}
+      </div></details>`:'';
+  const relCol={none:'var(--muted)',low:'var(--accent4)',high:'#d4554f'};
+  const triHtml=tri?`<div style="font-size:12px;background:var(--surface2);border-radius:8px;padding:8px 10px;margin:4px 0;">
+      <b style="color:${relCol[tri.relevance]||'inherit'}">AI: ${tri.relevance==='high'?'likely matters':tri.relevance==='low'?'might matter':'probably not relevant'}</b> — ${esc(tri.summary)}
+      ${tri.why?`<div style="margin-top:3px;">${esc(tri.why)}</div>`:''}
+      ${tri.docs&&tri.docs.length?`<div style="margin-top:3px;">Docs to check: ${tri.docs.map(k=>esc((POLICY_DOCS[k]||{}).label||k)).join(', ')}</div>`:''}
+      ${tri.action?`<div style="margin-top:3px;"><i>Suggested:</i> ${esc(tri.action)}</div>`:''}
+      <div style="font-size:10.5px;color:var(--muted);margin-top:4px;">AI summary (${tri.source==='local'?'local model':tri.source==='cloud'?'OpenAI':'rule'}) — not legal advice. The decision is yours.</div></div>`
+    : (d&&!d.noiseOnly?`<button class="btn btn-ghost btn-sm" style="margin:4px 0;" id="tri_${ts}_${c.key}" onclick="triageLegalChange('${ts}','${c.key}')">✨ Summarise with AI</button>`:'');
+  const decHtml=dec?`<div style="font-size:11.5px;margin:4px 0;"><b>Decision:</b> ${LEGAL_DECISIONS[dec.decision]||dec.decision}${dec.note?` — ${esc(dec.note)}`:''} <span style="color:var(--muted)">(${esc(dec.by||'')}, ${timeAgo(dec.at)})</span></div>`:'';
+  const btn=(k,label)=>`<button class="btn btn-sm ${dec&&dec.decision===k?'btn-primary':'btn-ghost'}" onclick="decideLegalChange('${ts}','${c.key}','${k}')">${label}</button>`;
+  return `<div style="border-top:1px solid var(--border);padding:8px 0;">
+    <div style="font-size:12.5px;"><a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.label)}</a> <span style="color:var(--muted);font-size:11.5px;">— ${what}</span></div>
+    ${details}${triHtml}${decHtml}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px;">${btn('not_relevant','Not relevant')}${btn('needs_update','Needs a doc update')}${btn('updated','✓ Docs updated')}</div>
+  </div>`;
+}
+async function triageLegalChange(ts,key){
+  const b=document.getElementById('tri_'+ts+'_'+key); if(b){b.disabled=true;b.textContent='Summarising… (up to a minute)';}
+  try{
+    const t=await auth.currentUser.getIdToken();
+    const r=await fetch('/api/compliance-triage',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+t},body:JSON.stringify({alertTs:ts,key})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+  }catch(e){ toast('Summary failed: '+e.message,'danger'); }
+  loadPolicyPanel();
+}
+function decideLegalChange(ts,key,decision){
+  const ask=decision==='needs_update'?'Which doc(s), and what needs changing? (optional)':decision==='updated'?'What did you change? (optional — kept for the audit trail)':'Why is it not relevant? (optional)';
+  const note=(window.prompt(ask,'')||'').trim().slice(0,300);
+  db.ref('admin/legal_alerts/'+ts+'/decisions/'+key).set({decision,note,by:currentAdminEmail,at:Date.now()})
+    .then(()=>{
+      toast(decision==='updated'?'Recorded. If users must be told, use “Notify all users” (your own docs) or “Push update & notify all users” below.':'Decision recorded.','success');
+      loadPolicyPanel();
+    }).catch(e=>toast('Could not save: '+e.message,'danger'));
+}
+
 async function loadPolicyPanel(){
   const el=document.getElementById('policyPanel');if(!el)return;
   let cur={},alerts={};
@@ -2078,16 +2148,18 @@ async function loadPolicyPanel(){
     const ours=(a.changes||[]).filter(c=>OURS_KEYMAP[c.key]);
     const regs=(a.changes||[]).filter(c=>!OURS_KEYMAP[c.key]&&isRegChange(c));
     const vendor=(a.changes||[]).filter(c=>!OURS_KEYMAP[c.key]&&!isRegChange(c));
-    const oursHtml=ours.length?`<div style="font-size:12px;margin:4px 0;"><b>Your docs changed:</b> ${ours.map(c=>`<a href="${c.url}" target="_blank">${c.label}</a>`).join(', ')}</div>`:'';
-    const regsHtml=regs.length?`<div style="font-size:12px;margin:4px 0;color:var(--accent4);"><b>⚖️ Law / regulation changed</b> — review whether product practices or legal docs need updating: ${regs.map(c=>`<a href="${c.url}" target="_blank">${c.label}</a>`).join(', ')}</div>`:'';
-    const vendorHtml=vendor.length?`<div style="font-size:11px;color:var(--muted);margin:4px 0;">Vendor pages changed (no user re-consent needed): ${vendor.map(c=>c.label).join(', ')}</div>`:'';
+    const section=(title,list,color)=>list.length?`<div style="font-size:12px;margin:8px 0 4px;${color?'color:'+color+';':''}"><b>${title}</b></div>${list.map(c=>legalChangeRow(ts,a,c)).join('')}`:'';
+    const oursHtml=section('Your docs changed',ours);
+    const regsHtml=section('⚖️ Law / regulation changed — review product practices and legal docs',regs,'var(--accent4)');
+    const vendorHtml=section('Vendor policies changed (no user re-consent needed)',vendor);
     const canNotify=ours.length>0;
+    const decided=(a.changes||[]).every(c=>a.decisions&&a.decisions[c.key]&&['not_relevant','updated'].includes(a.decisions[c.key].decision));
     return `<div style="border:1px solid var(--border2);border-radius:10px;padding:12px;margin-bottom:10px;">
       <div style="font-size:12px;color:var(--muted);margin-bottom:2px;">Detected ${timeAgo(a.createdAt)}</div>
       ${oursHtml}${regsHtml}${vendorHtml}
       <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
         ${canNotify?`<button class="btn btn-sm btn-amber" onclick="notifyPolicyUpdate('${ts}')">Notify all users of this update</button>`:''}
-        <button class="btn btn-sm btn-ghost" onclick="resolveAlertOnly('${ts}')">Dismiss (no user impact)</button>
+        <button class="btn btn-sm ${decided?'btn-primary':'btn-ghost'}" onclick="resolveAlertOnly('${ts}')">${decided?'✓ All decided — close this alert':'Dismiss (no user impact)'}</button>
       </div>
     </div>`;
   }).join('') : `<div class="empty" style="margin-bottom:10px;">No open policy alerts from the legal watcher.</div>`;
@@ -2586,6 +2658,7 @@ async function loadTeamsPage(){
           <span style="flex:1;">${esc(m.email)}</span><span class="pill ${m.role==='owner'?'pill-pro':m.role==='admin'?'pill-team':'pill-free'}">${m.role}</span>
           ${m.role==='member'?`<button class="btn btn-xs btn-ghost" onclick="twSetRole('${w.id}','${uid}','admin')">Make admin</button>`:''}
           ${m.role==='admin'?`<button class="btn btn-xs btn-ghost" onclick="twSetRole('${w.id}','${uid}','member')">Make member</button>`:''}
+          ${m.role!=='owner'?`<button class="btn btn-xs btn-ghost" onclick="twTransferPreview('${w.id}','${uid}')" title="Hand team ownership (and its subscription) to this person">Make owner…</button>`:''}
           ${m.role!=='owner'?`<button class="btn btn-xs btn-ghost" onclick="twRemove('${w.id}','${uid}')">Remove</button>`:''}
         </div>`).join('')}
         ${invites.map(([k,inv])=>`<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12.5px;opacity:.8;">
@@ -2621,6 +2694,38 @@ async function loadTeamsPage(){
   }catch(e){el.innerHTML='Could not load workspaces: '+esc(e.message)+'<br><span style="font-size:12px;">The /api/team endpoint must be deployed and you must be signed in as an admin.</span>';}
 }
 function twToggle(id){twOpen[id]=!twOpen[id];loadTeamsPage();}
+
+/* TEAM OWNER HANDOVER (2026-10-07) — preview first (changes nothing), then confirm. The
+   server re-checks everything at confirm time; see lib/team-transfer.js for the rule
+   ("owner = payer": the existing subscription moves with ownership, nothing is charged). */
+async function twTransferPreview(wsId,uid){
+  const w=adminWorkspaces.find(x=>x.id===wsId)||{}; const toEmail=((w.members||{})[uid]||{}).email||uid;
+  document.getElementById('dpTitle').textContent='Make '+toEmail+' the team owner';
+  document.getElementById('dpBody').innerHTML='<div class="loader">Checking billing in Stripe…</div>';
+  document.getElementById('detailPanel').classList.add('open');
+  let plan;
+  try{ plan=(await adminTeamApi('adminTransferPlan',{wsId,uid})).plan; }
+  catch(e){ document.getElementById('dpBody').innerHTML='<div style="color:var(--accent2)">'+esc(e.message)+'</div>'; return; }
+  const li=a=>a.map(x=>'<li style="margin:3px 0;">'+esc(x)+'</li>').join('');
+  document.getElementById('dpBody').innerHTML=`<div class="dp-sec">
+    ${plan.problems.length?`<h3 style="color:var(--accent2)">Can't transfer yet</h3><ul style="font-size:12.5px;line-height:1.5;">${li(plan.problems)}</ul>`:''}
+    ${plan.steps.length?`<h3>What will happen</h3><ul style="font-size:12.5px;line-height:1.5;">${li(plan.steps)}</ul>`:''}
+    ${plan.notes.length?`<h3>Good to know</h3><ul style="font-size:12.5px;line-height:1.5;color:var(--muted);">${li(plan.notes)}</ul>`:''}
+    ${plan.ok?`<label style="display:flex;gap:6px;align-items:center;font-size:12.5px;margin:10px 0;"><input type="checkbox" id="twMoveEmail" checked> Send future receipts to ${esc(toEmail)}</label>
+      <input id="twReason" placeholder="Who asked, and how you verified it (required)" style="width:100%;margin-bottom:8px;">
+      <input id="twConfirm" placeholder="Type TRANSFER to confirm" style="width:100%;margin-bottom:8px;">
+      <button class="btn btn-amber" onclick="twTransferRun('${wsId}','${uid}')">Transfer ownership</button>`:''}
+  </div>`;
+}
+async function twTransferRun(wsId,uid){
+  const reason=(document.getElementById('twReason').value||'').trim(), confirmTxt=(document.getElementById('twConfirm').value||'').trim();
+  const moveBillingEmail=!!document.getElementById('twMoveEmail')?.checked;
+  try{
+    await adminTeamApi('adminTransferOwner',{wsId,uid,reason,confirm:confirmTxt,moveBillingEmail});
+    toast('Ownership transferred — both people were emailed.','success');
+    document.getElementById('detailPanel').classList.remove('open'); loadTeamsPage();
+  }catch(e){ toast(e.message,'danger'); }
+}
 async function twSetRole(wsId,uid,role){try{await adminTeamApi('setRole',{wsId,uid,role});toast('Role updated','success');loadTeamsPage();}catch(e){toast(e.message,'danger');}}
 function twRemove(wsId,uid){showConfirm('Remove member?','They lose team access immediately and drop to the Free plan.',async()=>{try{await adminTeamApi('remove',{wsId,uid});toast('Member removed','success');loadTeamsPage();}catch(e){toast(e.message,'danger');}});}
 async function twRevoke(wsId,k){try{await adminTeamApi('revoke',{wsId,emailKey:k});toast('Invite revoked','success');loadTeamsPage();}catch(e){toast(e.message,'danger');}}
@@ -2928,15 +3033,36 @@ function renderSEO(){
 
 const SEO_SEV = { error:{pill:'pill-danger', word:'Broken'}, warn:{pill:'pill-warn', word:'Worth fixing'}, info:{pill:'pill-free', word:'Note'} };
 
+/* Plain-language reasons the SEO check could not run (2026-10-07). It used to show the raw
+   JavaScript error ("TypeError: Cannot read properties of undefined…") whenever the reply was
+   not a complete report — a Cloudflare timeout page, a sign-in that had lapsed, a half reply. */
+function seoErrorMessage(status, kind, detail){
+  if(kind==='offline') return 'Could not reach the server — check your internet connection, then try again.';
+  if(status===401||status===403) return 'Your admin sign-in has lapsed — reload this page, sign in as help@pollslide.com, and run it again.';
+  if(status===404) return 'The SEO check is not deployed yet (/api/seo-status was not found).';
+  if(status===524||status===504||status===408) return 'The check took too long (it loads every public page) and the connection timed out. Try again in a minute — it usually finishes on a second run.';
+  if(status>=500) return 'The server hit an error while checking the pages'+(detail?': '+detail:'.')+' Try again in a minute; if it keeps happening, Admin → System health shows whether the site is up.';
+  if(kind==='notjson') return 'The server answered with something that is not a report (HTTP '+status+'). Usually a timeout page from Cloudflare — try again in a minute.';
+  if(kind==='incomplete') return 'The report came back incomplete'+(detail?' ('+detail+')':'')+'. Run it again; if it repeats, /api/seo-status needs a look.';
+  return 'Could not run the check'+(detail?': '+detail:'.');
+}
 async function runSEOScan(){
   const body=document.getElementById('seoBody');
   if(!body) return;
   body.innerHTML='Fetching the live pages…';
   try{
     const tk=await auth.currentUser.getIdToken();
-    const r=await fetch('/api/seo-status',{headers:{'Authorization':'Bearer '+tk}});
-    const d=await r.json();
-    if(!r.ok) throw new Error(d.error||('HTTP '+r.status));
+    let r;
+    try{ r=await fetch('/api/seo-status',{headers:{'Authorization':'Bearer '+tk}}); }
+    catch(e){ throw {friendly:seoErrorMessage(0,'offline')}; }
+    let d=null; try{ d=await r.json(); }catch(e){ d=null; }
+    if(!r.ok) throw {friendly:seoErrorMessage(r.status,d?'error':'notjson',d&&d.error)};
+    if(!d) throw {friendly:seoErrorMessage(r.status,'notjson')};
+    if(!d.summary||typeof d.summary!=='object') throw {friendly:seoErrorMessage(r.status,'incomplete','no summary')};
+    // Missing pieces degrade to "nothing to show", never a crash.
+    d.summary.issues=Array.isArray(d.summary.issues)?d.summary.issues:[];
+    d.pages=Array.isArray(d.pages)?d.pages:[]; d.checklist=Array.isArray(d.checklist)?d.checklist:[];
+    d.sitemap=d.sitemap||{count:0}; d.robots=d.robots||{exists:false};
     const s=d.summary;
 
     const badge=document.getElementById('seoBadge');
@@ -2953,7 +3079,7 @@ async function runSEOScan(){
       <div style="font-size:12px;margin-bottom:10px;">Checked <b>${esc(d.origin)}</b> · sitemap lists ${d.sitemap.count} URL${d.sitemap.count===1?'':'s'} · robots.txt ${d.robots.exists?'present':'MISSING'}</div>
       ${s.issues.length? s.issues.map(i=>`
         <div style="display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--border);">
-          <span class="pill ${SEO_SEV[i.severity].pill}" style="flex-shrink:0;">${SEO_SEV[i.severity].word}</span>
+          <span class="pill ${(SEO_SEV[i.severity]||SEO_SEV.info).pill}" style="flex-shrink:0;">${esc((SEO_SEV[i.severity]||{word:i.severity||'note'}).word)}</span>
           <div style="flex:1;min-width:0;">
             <div style="color:var(--text);">${esc(i.msg)}</div>
             ${i.fix?`<div style="font-size:12px;color:var(--muted);margin-top:2px;">${esc(i.fix)}</div>`:''}
@@ -2997,8 +3123,10 @@ async function runSEOScan(){
       </div>`).join('') +
       `<p style="font-size:12px;color:var(--muted);margin-top:12px;">These need your Google account, so they cannot be automated. Everything above this card is checked on every run.</p>`;
   }catch(e){
-    body.innerHTML=`<span style="color:var(--accent2);">Could not run the check: ${esc(String(e.message||e))}</span>
-      <div style="margin-top:6px;font-size:12px;">If this says 404, /api/seo-status has not been deployed yet.</div>`;
+    // A friendly reason when we know it; otherwise a plain sentence (the raw error goes to the console for support).
+    if(!(e&&e.friendly)) console.error('SEO check:',e);
+    body.innerHTML=`<span style="color:var(--accent2);">${esc(e&&e.friendly?e.friendly:seoErrorMessage(0,'other','the report could not be shown'))}</span>
+      <div style="margin-top:8px;"><button class="btn btn-ghost btn-sm" onclick="runSEOScan()">↻ Try again</button></div>`;
   }
 }
 

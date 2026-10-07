@@ -16,7 +16,7 @@
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=daf2940e"></script>
+<script src="/ui-lang.js?v=50269d19"></script>
 <script src="/tickets.js?v=edb362ec"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -737,7 +737,7 @@
       <div style="padding-top:28px;text-align:center;color:var(--muted);font-size:13px;">Launch a question<br>to see live results here.</div>
     </div>
     <div class="right-foot">
-      <div class="sect-title">Respondents (<span id="pCount">0</span>)</div>
+      <div class="sect-title"><span data-i18n>Respondents</span> (<span id="pCount">0</span>)</div>
       <div id="pList" style="max-height:180px;overflow-y:auto;">
         <div style="color:var(--muted);font-size:12px;" data-i18n>No responses yet.</div>
       </div>
@@ -4700,6 +4700,21 @@ function tr(en) {
   const v = d && d[String(en).trim()];
   return v == null ? en : v;
 }
+/* tr() for phrases with numbers in them (2026-10-07): trf('Scan for Q{n}', { n: 2 }). The
+   English is the template itself, so English output is exactly what it was before. */
+/* A word that means two things in English ("Back" = go back / the back of a card) gets its
+   own key, so translating one meaning never renames the other. English stays `en`. */
+function trk(key, en) {
+  if (UI_LANG === 'en') return en;
+  const d = window.PS_UI[UI_LANG];
+  const v = d && d[key];
+  return v == null ? en : v;
+}
+function trf(en, vars) {
+  let s = tr(en);
+  for (const k in (vars || {})) s = s.split('{' + k + '}').join(String(vars[k]));
+  return s;
+}
 
 /* ── CONTROLS RENDERED FROM JAVASCRIPT ────────────────────────────────────────
    The static markup carries 144 `data-i18n` tags. Every control built inside a
@@ -5576,8 +5591,8 @@ function syncCenterMode(idx) {
   const n = questions.length;
   if (!n) {
     bar.style.display = 'flex';
-    bar.innerHTML = '<span class="cm-tag setup">⚙️ Setup</span>' +
-      '<span class="cm-what">Add your first question — then ▶ Present when you\'re ready</span>';
+    bar.innerHTML = '<span class="cm-tag setup">' + escapeHtml(tr('⚙️ Setup')) + '</span>' +
+      '<span class="cm-what">' + escapeHtml(tr('Add your first question — then ▶ Present when you\'re ready')) + '</span>';
     return;
   }
 
@@ -5585,14 +5600,14 @@ function syncCenterMode(idx) {
   if (i == null || !questions[i]) { bar.style.display = 'none'; return; }
 
   const q = questions[i];
-  const pos = 'Question ' + (i + 1) + ' of ' + n;
+  const pos = trf('Question {n} of {m}', { n: i + 1, m: n });
   // A flashcard or a study set has no live audience view, so offering the switch
   // would be a promise the product can't keep.
   const canGoLive = !!pres.sessionCode && q.type !== 'flashcard' && presType(pres) !== 'study';
   bar.style.display = 'flex';
 
   if (editMode || !canGoLive) {
-    bar.innerHTML = '<span class="cm-tag edit">✏️ Editing</span>' +
+    bar.innerHTML = '<span class="cm-tag edit">' + escapeHtml(tr('✏️ Editing')) + '</span>' +
       '<span class="cm-what">' + escapeHtml(pos) + '</span>' +
       (canGoLive ? '<button class="cm-switch" onclick="doneEditing(' + i + ')">👁 See the live view</button>' : '');
   } else {
@@ -5601,12 +5616,12 @@ function syncCenterMode(idx) {
     // than implying a "launch" step that doesn't exist.
     const isLive = (liveQIdx === i);
     const where = (liveQIdx != null && liveQIdx !== i)
-      ? ' · your audience is on question ' + (liveQIdx + 1)
-      : ' · nothing is live yet';
+      ? trf(' · your audience is on question {n}', { n: liveQIdx + 1 })
+      : tr(' · nothing is live yet');
     bar.innerHTML = '<span class="cm-tag ' + (isLive ? 'live' : 'ready') + '">' +
-        (isLive ? '🟢 Live' : '👁 Preview') + '</span>' +
+        escapeHtml(isLive ? tr('🟢 Live') : tr('👁 Preview')) + '</span>' +
       '<span class="cm-what">' + escapeHtml(pos) +
-        (isLive ? ' · this is what your audience sees right now' : where) + '</span>' +
+        escapeHtml(isLive ? tr(' · this is what your audience sees right now') : where) + '</span>' +
       answerChip(q) +
       '<button class="cm-switch" onclick="editQuestion(' + i + ')">✏️ Edit this question</button>';
   }
@@ -5733,6 +5748,27 @@ async function loadMyGrants() {
 }
 function deckIsShared(id) { return isCollabDeck(id) || myGrantedDeckIds.has(id); }
 
+/* A collaborator reordered or deleted questions while this tab shows a question's LIVE view
+   (2026-10-07). The live view bakes the question's position into its buttons (Reset this
+   question, Tally, Copy as slide, the QR copy), so they kept pointing at the old position —
+   "↺ Reset this question" could clear a DIFFERENT question's answers. Results are drawn from
+   the question itself (listenResponses), so only the centre needs redrawing:
+     moved   → redraw the live view at its new position — drawing only: nothing is published
+               to phones and the reveal state is untouched;
+     deleted → say so, instead of leaving buttons that would act on another question. */
+function refreshLiveViewAfterRemote(selId, selAt, wasSel) {
+  const code = presentations[activePresId]?.sessionCode || '';
+  if (selAt >= 0) {
+    if (selAt === wasSel) return;                                  // same place: nothing is stale
+    renderLiveView(selAt, PSQid.bucket(questions[selAt], selAt, code), questions[selAt]);
+  } else if (selId) {
+    if (respListener) { respListener(); respListener = null; }
+    document.getElementById('centerPanel').innerHTML = `<div class="card"><div class="card-body" style="text-align:center;padding:28px;">
+      <div style="font-size:26px;margin-bottom:8px;">🗑</div>
+      <div style="font-weight:700;margin-bottom:6px;">${escapeHtml(tr('A collaborator deleted this question.'))}</div>
+      <div style="color:var(--muted);font-size:13px;">${escapeHtml(tr('Pick a question on the left to carry on.'))}</div></div></div>`;
+  }
+}
 function startCollab(id) {
   stopCollab();
   if (!userId || !id || !presentations[id]) return;
@@ -5780,6 +5816,7 @@ function startCollab(id) {
         selIdx = selAt >= 0 ? selAt : (wasSel != null && wasSel < questions.length) ? wasSel : (questions.length ? 0 : null);
         renderQList();
         if (selIdx != null && editMode) renderEditor(selIdx);
+        else if (document.getElementById('liveBar')) refreshLiveViewAfterRemote(selId, selAt, wasSel);
       }
       renderPresList();
     } finally { _applyingRemote = false; }
@@ -6664,14 +6701,14 @@ function renderLiveView(idx, qId, q) {
          same label and the same button twice, inches apart. What's LEFT is what
          genuinely belongs to this question and nowhere else. -->
     <div class="live-bar" id="liveBar">
-      <div style="flex:1;font-size:12px;color:var(--muted);">${typeLabels[q.type]||q.type}</div>
+      <div style="flex:1;font-size:12px;color:var(--muted);">${tr(typeLabels[q.type]||q.type)}</div>
       <button class="btn btn-ghost btn-sm" onclick="showQuestionTally(${idx})">📊 Tally</button>
       <button class="btn btn-reset btn-sm" onclick="resetQuestionTally(${idx})">↺ Reset this question</button>
     </div>
 
     <div class="card">
       <div class="card-hd">
-        <div class="card-title">Q${idx+1}: ${typeLabels[q.type]||q.type}</div>
+        <div class="card-title">${trf('Q{n}: {type}', { n: idx+1, type: tr(typeLabels[q.type]||q.type) })}</div>
         <button class="btn btn-ghost btn-sm" onclick="copyQuestionSlide(${idx})" title="Copy this question as a clean slide to paste into your presentation">📋 Copy as slide</button>
       </div>
       <div class="card-body">
@@ -6684,9 +6721,9 @@ function renderLiveView(idx, qId, q) {
     <div class="qr-block">
       <div id="qrInline_${idx}"></div>
       <div class="qr-info">
-        <h3>Scan for Q${idx+1}</h3>
-        <p>This QR links directly to this question only.</p>
-        <div style="font-size:11.5px;color:var(--muted);margin:4px 0 6px;line-height:1.5;">📱 No phone? Go to <b style="color:var(--accent);">pollslide.com/join</b> · code <b style="color:var(--accent);letter-spacing:.06em;">${presentations[activePresId]?.sessionCode||''}</b></div>
+        <h3>${trf('Scan for Q{n}', { n: idx+1 })}</h3>
+        <p>${tr('This QR links directly to this question only.')}</p>
+        <div style="font-size:11.5px;color:var(--muted);margin:4px 0 6px;line-height:1.5;">${tr('📱 No phone? Go to')} <b style="color:var(--accent);">pollslide.com/join</b> ${tr('· code')} <b style="color:var(--accent);letter-spacing:.06em;">${presentations[activePresId]?.sessionCode||''}</b></div>
         <div class="qr-url" onclick="copyURL(${idx})" title="Click to copy">${qUrl}</div>
         <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="copyQRBox(${idx})" title="Copy the QR + caption (incl. the laptop-join line) to paste into your presentation slide">📋 Copy QR box for slide</button>
       </div>
@@ -6873,7 +6910,7 @@ function listenResponses(qIdx, qId, q) {
     // This is what makes the product "just work" — old data can't leak through.
     const responses = allResponses.filter(r => (r.submittedAt || 0) >= liveStartedAt - RESP_CLOCK_SKEW_MS);
     const rc = document.getElementById('respCounter');
-    if (rc) rc.textContent = `${responses.length} response${responses.length!==1?'s':''}`;
+    if (rc) rc.textContent = `${responses.length} ${tr(responses.length!==1?'responses':'response')}`;
     // Start the reveal countdown on the first answer of THIS session.
     // Also fires for non-quiz (revealed=true from armReveal) so beginRevealCountdown
     // can start the post-reveal auto-advance timer on the first response.
@@ -7356,29 +7393,29 @@ function renderRevealControl(showControl) {
     let extra = '';
     if (q?.postReveal?.enabled) {
       if (postRevealPhase) {
-        extra = `<span style="color:#a78bfa;font-size:12px;font-weight:600;margin-left:8px;">✦ Post-Reveal active</span>`;
+        extra = `<span style="color:#a78bfa;font-size:12px;font-weight:600;margin-left:8px;">✦ ${tr('Post-Reveal active')}</span>`;
       } else if (postRevealCountdown > 0) {
         // Auto timer running — show live countdown
-        extra = `<span style="color:#a78bfa;font-size:12px;margin-left:8px;">Post-reveal in <strong id="postRevealAdvanceBadge" style="color:#a78bfa;">${postRevealCountdown}s</strong></span>`;
+        extra = `<span style="color:#a78bfa;font-size:12px;margin-left:8px;">${tr('Post-reveal in')} <strong id="postRevealAdvanceBadge" style="color:#a78bfa;">${postRevealCountdown}s</strong></span>`;
       } else {
         // Manual — show button
         extra = `<button onclick="doPostReveal()" style="background:linear-gradient(135deg,#a78bfa,#6c63ff);border:none;border-radius:7px;color:#fff;font-family:Syne,sans-serif;font-weight:700;font-size:11px;padding:5px 14px;cursor:pointer;margin-left:8px;">✦ Post-Reveal</button>`;
       }
     }
-    bar.innerHTML = `<span style="color:var(--accent3);font-size:12px;font-weight:600;">✓ Answer revealed</span>${extra}`;
+    bar.innerHTML = `<span style="color:var(--accent3);font-size:12px;font-weight:600;">✓ ${tr('Answer revealed')}</span>${extra}`;
     return;
   }
   if (!showControl) { bar.innerHTML = ''; return; }
   const btn = `<button onclick="doReveal()" style="background:var(--accent);border:none;border-radius:7px;color:#fff;font-family:Syne,sans-serif;font-weight:700;font-size:11px;padding:5px 11px;cursor:pointer;">Reveal now</button>`;
   if (revealSeconds === -1) {
     // Manual-only mode
-    bar.innerHTML = `<span style="font-size:12px;color:var(--muted);">Manual reveal</span>${btn}`;
+    bar.innerHTML = `<span style="font-size:12px;color:var(--muted);">${tr('Manual reveal')}</span>${btn}`;
   } else if (!revealArmed) {
     // Waiting for the first answer to start the countdown
-    bar.innerHTML = `<span style="font-size:12px;color:var(--muted);">⏳ Reveal starts on first answer</span>${btn}`;
+    bar.innerHTML = `<span style="font-size:12px;color:var(--muted);">⏳ ${tr('Reveal starts on first answer')}</span>${btn}`;
   } else {
     // Counting down — small live counter
-    bar.innerHTML = `<span style="font-size:12px;color:var(--muted);">Reveal in <strong id="revealCount" style="color:var(--accent4);">${revealRemaining}s</strong></span>${btn}`;
+    bar.innerHTML = `<span style="font-size:12px;color:var(--muted);">${tr('Reveal in')} <strong id="revealCount" style="color:var(--accent4);">${revealRemaining}s</strong></span>${btn}`;
   }
 }
 
@@ -7531,11 +7568,11 @@ function renderPList(responses) {
   if (pCount) pCount.textContent = responses.length;
   if (!pList) return;
   if (liveDetailHidden()) {
-    pList.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:2px 0;">${responses.length} ${responses.length === 1 ? 'person has' : 'people have'} answered · names show on reveal</div>`;
+    pList.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:2px 0;">${trf(responses.length === 1 ? '{n} person has answered · names show on reveal' : '{n} people have answered · names show on reveal', { n: responses.length })}</div>`;
     return;
   }
   if (!responses.length) {
-    pList.innerHTML = '<div style="color:var(--muted);font-size:12px;">No responses yet.</div>';
+    pList.innerHTML = '<div style="color:var(--muted);font-size:12px;">' + tr('No responses yet.') + '</div>';
     return;
   }
   // Before reveal: show only that the person answered (neutral dot), never right/wrong.
@@ -7544,7 +7581,7 @@ function renderPList(responses) {
     const scoreCell = revealed
       ? `<div class="p-score" style="color:${r.isCorrect===true?'var(--accent3)':r.isCorrect===false?'var(--accent2)':typeof r.isCorrect==='number'?'#f7b731':'var(--muted)'}">${r.isCorrect===true?'✓':r.isCorrect===false?'✗':(typeof r.isCorrect==='number'?Math.round(r.isCorrect*100)+'%':'·')}</div>`
       : `<div class="p-score" style="color:var(--accent3)">●</div>`;
-    const displayName = r.name && r.name.trim() ? r.name : 'Anonymous';
+    const displayName = r.name && r.name.trim() ? r.name : tr('Anonymous');
     return `<div class="p-row">
       <div class="p-av">${displayName[0].toUpperCase()}</div>
       <div class="p-name">${displayName}</div>
@@ -7561,7 +7598,7 @@ function renderRightPanel(q, responses) {
   // Post-reveal phase: swap the entire right panel to the post-reveal display
   if (postRevealPhase && q.postReveal?.enabled) {
     const label = {leaderboard:'Leaderboard',podium:'Podium',scorecard:'Score Card',explainer:'Explainer'}[q.postReveal.type] || 'Post-Reveal';
-    rs.innerHTML = `<div class="resp-big" id="liveRespCount">${responses.length} <span>responses · ${label}</span></div>${buildPostRevealContent(q, responses)}`;
+    rs.innerHTML = `<div class="resp-big" id="liveRespCount">${responses.length} <span>${tr('responses')} · ${tr(label)}</span></div>${buildPostRevealContent(q, responses)}`;
     return;
   }
 
@@ -7578,11 +7615,11 @@ function renderRightPanel(q, responses) {
       const _itexts = responses.map(r=>r.answer).filter(a=>a && a!=='__none__');
       window._psInsights = { question:q.text||'', texts:_itexts, language:(presentations[activePresId]||{}).language||'en' };
     }
-    rs.innerHTML = `<div class="resp-big" id="liveRespCount">${total} <span>${total===1?'response':'responses'}</span></div>
+    rs.innerHTML = `<div class="resp-big" id="liveRespCount">${total} <span>${tr(total===1?'response':'responses')}</span></div>
       <div style="margin-top:12px;padding:16px 14px;border:1px dashed var(--border2);border-radius:10px;text-align:center;color:var(--muted);font-size:12.5px;line-height:1.55;">
         <div style="font-size:20px;margin-bottom:6px;">🙈</div>
-        Results hidden until you reveal
-        <div style="font-size:11.5px;opacity:0.75;margin-top:3px;">so early answers don't sway the room</div>
+        ${tr('Results hidden until you reveal')}
+        <div style="font-size:11.5px;opacity:0.75;margin-top:3px;">${tr("so early answers don't sway the room")}</div>
       </div>`;
     return;
   }
@@ -7596,18 +7633,18 @@ function renderRightPanel(q, responses) {
       : '';
     setCopilotPayload(q, { texts:_itexts });
     if (q.displayMode === 'word_cloud') {
-      rs.innerHTML = `<div class="resp-big" id="liveRespCount">${total} <span>responses</span></div>${insightsBtn}${copilotBtnHtml()}${buildWordCloud(q, [], responses)}`;
+      rs.innerHTML = `<div class="resp-big" id="liveRespCount">${total} <span>${tr('responses')}</span></div>${insightsBtn}${copilotBtnHtml()}${buildWordCloud(q, [], responses)}`;
     } else {
-      rs.innerHTML = `<div class="resp-big" id="liveRespCount">${total} <span>responses</span></div>${insightsBtn}${copilotBtnHtml()}
-        ${total===0?'<div style="color:var(--muted);font-size:13px;">Waiting...</div>':
-          responses.map(r=>`<div class="txt-resp">${r.answer==='__none__'?'<em style="color:var(--muted)">No answer</em>':safeJ(r.answer)}<div class="from">— ${r.name}</div></div>`).join('')}`;
+      rs.innerHTML = `<div class="resp-big" id="liveRespCount">${total} <span>${tr('responses')}</span></div>${insightsBtn}${copilotBtnHtml()}
+        ${total===0?'<div style="color:var(--muted);font-size:13px;">' + tr('Waiting...') + '</div>':
+          responses.map(r=>`<div class="txt-resp">${r.answer==='__none__'?'<em style="color:var(--muted)">' + tr('No answer') + '</em>':safeJ(r.answer)}<div class="from">— ${r.name}</div></div>`).join('')}`;
     }
   } else if (q.type === 'rating') {
     const max=q.ratingMax||5; const counts={};
     for(let i=1;i<=max;i++) counts[i]=0;
     responses.forEach(r=>{try{const v=JSON.parse(r.answer);if(v)counts[v]=(counts[v]||0)+1;}catch(e){}});
     const avg=total>0?(Object.entries(counts).reduce((s,[k,v])=>s+(+k*v),0)/total).toFixed(1):'—';
-    rs.innerHTML=`<div class="resp-big">${total} <span>avg ${avg}</span></div>
+    rs.innerHTML=`<div class="resp-big">${total} <span>${tr('avg')} ${avg}</span></div>
       ${Object.entries(counts).map(([val,cnt])=>`<div class="bar-wrap">
         <div class="bar-label"><span class="bn">★ ${val}</span><span class="bv">${cnt}</span></div>
         <div class="bar-bg"><div class="bar-fill" style="width:${total>0?Math.round(cnt/total*100):0}%"></div></div>
@@ -7642,16 +7679,16 @@ function renderRightPanel(q, responses) {
         const speedLabel = (revealed && r.elapsed) ? `<span style="font-size:10px;color:var(--muted);margin-left:6px;">${(r.elapsed/1000).toFixed(1)}s</span>` : '';
         return `<div class="p-row">
           <div style="width:24px;text-align:center;font-size:13px;">${revealed?(rank<3?medals[rank]:'#'+(rank+1)):'•'}</div>
-          <div class="p-name">${r.name && r.name.trim() ? r.name : 'Player '+(rank+1)}${speedLabel}</div>
+          <div class="p-name">${r.name && r.name.trim() ? r.name : trf('Player {n}', { n: rank+1 })}${speedLabel}</div>
           ${scoreCell}
         </div>`;
-      }).join('') || '<div style="color:var(--muted);font-size:13px;">Waiting...</div>';
+      }).join('') || '<div style="color:var(--muted);font-size:13px;">' + tr('Waiting...') + '</div>';
     } else if (mode === 'number') {
       inner = counts.map(({i,count})=>`
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
           <div style="font-family:Syne,sans-serif;font-weight:800;font-size:30px;color:${(revealed&&correct.includes(i))?'var(--accent3)':'var(--accent)'};min-width:60px;">${count}</div>
           <div><div style="font-size:14px;font-weight:600;">${letters[i]}. ${(q.options[i]||{}).text||''}</div>
-          <div style="font-size:12px;color:var(--muted);">${pct(count)}% of votes</div></div>
+          <div style="font-size:12px;color:var(--muted);">${trf('{p}% of votes', { p: pct(count) })}</div></div>
         </div>`).join('');
     } else if (mode === 'column') {
       // Vertical column chart using inline SVG
@@ -7717,7 +7754,7 @@ function renderRightPanel(q, responses) {
       </div>`;}).join('');
     }
 
-    rs.innerHTML=`<div class="resp-big" id="liveRespCount">${total} <span>response${total!==1?'s':''}</span></div>${copilotBtnHtml()}${inner}`;
+    rs.innerHTML=`<div class="resp-big" id="liveRespCount">${total} <span>${tr(total!==1?'responses':'response')}</span></div>${copilotBtnHtml()}${inner}`;
   }
 }
 
@@ -7949,7 +7986,7 @@ async function showQuestionTally(qIdx) {
       <div style="margin-bottom:16px;">
         <div style="font-family:Syne,sans-serif;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--muted);margin-bottom:10px;">Text Responses (${responses.length})</div>
         ${responses.map(r=>`<div style="background:var(--surface2);border-left:2px solid var(--accent);border-radius:8px;padding:8px 12px;margin-bottom:7px;font-size:13px;">
-          ${r.answer==='__none__'?'<em style="color:var(--muted)">No answer</em>':safeJ(r.answer)}
+          ${r.answer==='__none__'?'<em style="color:var(--muted)">' + tr('No answer') + '</em>':safeJ(r.answer)}
           <div style="font-size:10px;color:var(--muted);margin-top:3px;">— ${r.name}</div>
         </div>`).join('')}
       </div>`;
@@ -8765,33 +8802,33 @@ function renderEditorView(idx) {
   if (q.type === 'flashcard') {
     document.getElementById('centerPanel').innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;">
-        <span style="font-family:Syne,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Card ${idx+1}</span>
+        <span style="font-family:Syne,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${trf('Card {n}', { n: idx+1 })}</span>
         <button class="btn btn-ghost btn-sm" style="color:var(--accent2);" onclick="deleteQ(${idx})">Delete</button>
       </div>
       <div class="card"><div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
         <div class="form-row" style="margin:0">
-          <label>Front <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(the prompt or term)</span></label>
+          <label>${tr('Front')} <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">${tr('(the prompt or term)')}</span></label>
           <textarea placeholder="e.g. What is the powerhouse of the cell?" oninput="updateQ(${idx},'front',this.value)">${q.front||''}</textarea>
         </div>
         <div class="form-row" style="margin:0">
-          <label>Back <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(the answer or definition)</span></label>
+          <label>${trk('Back (card side)', 'Back')} <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">${tr('(the answer or definition)')}</span></label>
           <textarea placeholder="e.g. The mitochondria" oninput="updateQ(${idx},'back',this.value)">${q.back||''}</textarea>
         </div>
         <div class="form-row" style="margin:0">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;text-transform:none;letter-spacing:0;">
             <input type="checkbox" ${q.noTranslate?'checked':''} onchange="updateQ(${idx},'noTranslate',this.checked)" style="width:15px;height:15px;accent-color:#6c63ff;flex-shrink:0;">
-            <span>🔒 Keep in original language <span style="font-size:10px;color:var(--muted);">(don't auto-translate — for wordplay, spelling or language cards)</span></span>
+            <span>${tr('🔒 Keep in original language')} <span style="font-size:10px;color:var(--muted);">${tr('(don\'t auto-translate — for wordplay, spelling or language cards)')}</span></span>
           </label>
         </div>
         <div class="form-row" style="margin:0">
-          <label>Card Type</label>
+          <label>${tr('Card Type')}</label>
           <select onchange="changeType(${idx},this.value)" style="width:100%;">
             <option value="flashcard" selected>Flashcard (front / back)</option>
             <option value="multiple_choice">Single Choice</option>
             <option value="free_text">Free Text</option>
           </select>
         </div>
-        <div style="font-size:11px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;">📚 Learners flip this card and rate how well they knew it — spaced repetition schedules the next review automatically.</div>
+        <div style="font-size:11px;color:var(--muted);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;">${tr('📚 Learners flip this card and rate how well they knew it — spaced repetition schedules the next review automatically.')}</div>
       </div></div>
     `;
     return;
@@ -8799,7 +8836,7 @@ function renderEditorView(idx) {
 
   const optHtml = (q.type==='multiple_choice'||q.type==='multiple_choice_multi') ? `
     <div class="form-row">
-      <label>Options <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(click ✓ to mark correct · 🖼 to add image/GIF)</span></label>
+      <label>${tr('Options')} <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">${tr('(click ✓ to mark correct · 🖼 to add image/GIF)')}</span></label>
       ${(q.options||[]).map((opt,i)=>{
         const isMulti=q.type==='multiple_choice_multi';
         const isC=isMulti?(Array.isArray(q.correctAnswer)?q.correctAnswer:[]).includes(i):q.correctAnswer===i;
@@ -8828,19 +8865,19 @@ function renderEditorView(idx) {
 
   const ratingHtml = q.type==='rating' ? `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-      <div><label>Max Rating</label>
+      <div><label>${tr('Max Rating')}</label>
         <select onchange="updateQ(${idx},'ratingMax',+this.value)" style="width:100%;">
           ${[3,4,5,6,7,8,9,10].map(n=>`<option value="${n}" ${(q.ratingMax||5)===n?'selected':''}>${n}</option>`).join('')}
         </select></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-      <div><label>Low Label</label><input type="text" placeholder="e.g. Poor" value="${(q.ratingLabels||{}).low||''}" oninput="updateQNested(${idx},'ratingLabels','low',this.value)"></div>
-      <div><label>High Label</label><input type="text" placeholder="e.g. Excellent" value="${(q.ratingLabels||{}).high||''}" oninput="updateQNested(${idx},'ratingLabels','high',this.value)"></div>
+      <div><label>${tr('Low Label')}</label><input type="text" placeholder="e.g. Poor" value="${(q.ratingLabels||{}).low||''}" oninput="updateQNested(${idx},'ratingLabels','low',this.value)"></div>
+      <div><label>${tr('High Label')}</label><input type="text" placeholder="e.g. Excellent" value="${(q.ratingLabels||{}).high||''}" oninput="updateQNested(${idx},'ratingLabels','high',this.value)"></div>
     </div>` : '';
 
   document.getElementById('centerPanel').innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;">
-      <span style="font-family:Syne,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">Question ${idx+1}</span>
+      <span style="font-family:Syne,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:var(--muted);">${trf('Question {n}', { n: idx+1 })}</span>
       <div style="display:flex;gap:7px;">
         <button class="btn btn-ghost btn-sm" style="color:var(--accent2);" onclick="deleteQ(${idx})">Delete</button>
         <button class="btn btn-reset btn-sm" onclick="resetQuestionTally(${idx})">↺ Reset</button>
@@ -8851,11 +8888,11 @@ function renderEditorView(idx) {
     <div class="card">
       <div class="card-body" style="display:flex;flex-direction:column;gap:12px;">
         <div class="form-row" style="margin:0">
-          <label>Question Text</label>
+          <label>${tr('Question Text')}</label>
           <textarea placeholder="Type your question here..." oninput="updateQ(${idx},'text',this.value)">${q.text||''}</textarea>
         </div>
         <div class="form-row" style="margin:0">
-          <label>Question Type</label>
+          <label>${tr('Question Type')}</label>
           <select onchange="changeType(${idx},this.value)" style="width:100%;">
             <option value="multiple_choice"       ${q.type==='multiple_choice'?'selected':''}>Single Choice</option>
             <option value="multiple_choice_multi" ${q.type==='multiple_choice_multi'?'selected':''}>Multiple Choice (select all)</option>
@@ -8867,18 +8904,18 @@ function renderEditorView(idx) {
         <div class="form-row" style="margin:0">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;text-transform:none;letter-spacing:0;">
             <input type="checkbox" ${q.noTranslate?'checked':''} onchange="updateQ(${idx},'noTranslate',this.checked)" style="width:15px;height:15px;accent-color:#6c63ff;flex-shrink:0;">
-            <span>🔒 Keep in original language <span style="font-size:10px;color:var(--muted);">(don't auto-translate for the audience — for wordplay, anagrams, spelling or "which word…" questions)</span></span>
+            <span>${tr('🔒 Keep in original language')} <span style="font-size:10px;color:var(--muted);">${tr('(don\'t auto-translate for the audience — for wordplay, anagrams, spelling or "which word…" questions)')}</span></span>
           </label>
         </div>
 
         ${q.type==='free_text' ? `
         <div class="form-row" style="margin:0">
-          <label>Expected answer <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(optional — enables ✨ AI grading of written answers in the report)</span></label>
+          <label>${tr('Expected answer')} <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">${tr('(optional — enables ✨ AI grading of written answers in the report)')}</span></label>
           <textarea placeholder="The model answer the AI grades responses against…" oninput="updateQ(${idx},'expected',this.value)">${q.expected||''}</textarea>
         </div>` : ''}
 
         <div class="form-row" style="margin:0">
-          <label>Question Media <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(optional image, GIF or video — shows above the question)</span></label>
+          <label>${tr('Question Media')} <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">${tr('(optional image, GIF or video — shows above the question)')}</span></label>
           <!-- Row 1: bring your own — URL / upload / GIF -->
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <input type="text" placeholder="Paste an image, GIF or video URL" value="${(q.image||'').replace(/"/g,'&quot;')}" oninput="updateQ(${idx},'image',this.value)" style="font-size:13px;flex:1;min-width:180px;">
@@ -8888,7 +8925,7 @@ function renderEditorView(idx) {
           </div>
           <!-- Row 2: or generate one with AI (style picker) -->
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
-            <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;">✨ Generate with AI</span>
+            <span style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;">✨ ${tr('Generate with AI')}</span>
             <select id="aiImgStyle_${idx}" title="AI image style" style="flex-shrink:0;font-size:12px;padding:7px 6px;border-radius:7px;">${aiStyleOptions()}</select>
             <button class="btn btn-ghost btn-sm" id="aiImgBtn_${idx}" onclick="generateQImage(${idx})" title="Generate an image with AI from this question" style="flex-shrink:0;padding:7px 12px;color:var(--accent);">Generate image</button>
           </div>
@@ -8896,7 +8933,7 @@ function renderEditorView(idx) {
         </div>
 
         <div class="form-row" style="margin:0 0 12px">
-          <label>Results Display</label>
+          <label>${tr('Results Display')}</label>
           <select onchange="updateQ(${idx},'displayMode',this.value)" style="width:100%;">
             <option value="bars"        ${(q.displayMode||'bars')==='bars'?'selected':''}>Bar chart (horizontal)</option>
             <option value="column"      ${q.displayMode==='column'?'selected':''}>Column chart (vertical)</option>
@@ -8909,7 +8946,7 @@ function renderEditorView(idx) {
         </div>
 
         <div class="form-row" style="margin:0">
-          <label>Answer Reveal <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(right/wrong stays hidden until reveal; a counter starts after the first answer)</span></label>
+          <label>${tr('Answer Reveal')} <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">${tr('(right/wrong stays hidden until reveal; a counter starts after the first answer)')}</span></label>
           <select onchange="updateQ(${idx},'revealDelay',this.value==='manual'?'manual':+this.value)" style="width:100%;">
             <option value="manual" ${(q.revealDelay==='manual'||q.revealDelay===-1)?'selected':''}>Manual only — I'll click "Reveal now"</option>
             <option value="10" ${q.revealDelay===10?'selected':''}>10 seconds after first answer</option>
@@ -8926,7 +8963,7 @@ function renderEditorView(idx) {
         <div class="form-row" style="margin:0 0 12px">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
             <input type="checkbox" ${q.postReveal?.enabled?'checked':''} onchange="updateQ(${idx},'postReveal',{...(questions[${idx}].postReveal||{}),enabled:this.checked});renderEditor(${idx});" style="width:15px;height:15px;accent-color:#6c63ff;">
-            Post-Reveal Step <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">(shown after answer is revealed — off by default)</span>
+            ${tr('Post-Reveal Step')} <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;">${tr('(shown after answer is revealed — off by default)')}</span>
           </label>
           ${q.postReveal?.enabled ? `
           <select onchange="updateQ(${idx},'postReveal',{...(questions[${idx}].postReveal||{}),type:this.value});renderEditor(${idx});" style="width:100%;margin-top:8px;">
@@ -8957,9 +8994,9 @@ function renderEditorView(idx) {
     <div class="qr-block">
       <div id="qrEditor_${idx}"></div>
       <div class="qr-info">
-        <h3>QR for Q${idx+1}</h3>
-        <p>Scan this to answer this specific question.</p>
-        <div style="font-size:11.5px;color:var(--muted);margin:4px 0 6px;line-height:1.5;">📱 No phone? Go to <b style="color:var(--accent);">pollslide.com/join</b> · code <b style="color:var(--accent);letter-spacing:.06em;">${presentations[activePresId]?.sessionCode||''}</b></div>
+        <h3>${trf('QR for Q{n}', { n: idx+1 })}</h3>
+        <p>${tr('Scan this to answer this specific question.')}</p>
+        <div style="font-size:11.5px;color:var(--muted);margin:4px 0 6px;line-height:1.5;">${tr('📱 No phone? Go to')} <b style="color:var(--accent);">pollslide.com/join</b> ${tr('· code')} <b style="color:var(--accent);letter-spacing:.06em;">${presentations[activePresId]?.sessionCode||''}</b></div>
         <div class="qr-url" onclick="copyURL(${idx})" title="Click to copy">${qUrl}</div>
       </div>
     </div>

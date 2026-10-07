@@ -86,6 +86,15 @@ function rest() {
   ok('PollSlide LIVE: a notes marker (link number) is resolved through homes', /const pos = PSQid\.resolve\(homes, n\.qIdx\);/.test(L));
   ok('PollSlide LIVE: a moved question is found by its id; it publishes the link number', /PSQid\.bucket\(all\[k\], i, b\.code\) === b\.qid/.test(L) && /home: PSQid\.homeOf\(q, b\.qIdx\)/.test(L));
 
+  /* 2026-10-07: a collaborator's reorder used to leave this tab's open LIVE view with buttons
+     baked to the old position ("↺ Reset this question" could clear another question). */
+  {
+    const P = read('presenter.html');
+    const f = P.slice(P.indexOf('function refreshLiveViewAfterRemote('), P.indexOf('function startCollab('));
+    ok('collaborator reorder: the open live view is redrawn at the question\'s new position', /refreshLiveViewAfterRemote\(selId, selAt, wasSel\)/.test(P) && /renderLiveView\(selAt, PSQid\.bucket\(questions\[selAt\], selAt, code\), questions\[selAt\]\)/.test(f));
+    ok('…drawing only: never publishes to phones or resets the reveal', f.length > 100 && !/publishLive|selectQ|showLiveOrEdit|armReveal|revealed\s*=/.test(f));
+    ok('…and a question deleted by a collaborator shows a notice, not stale buttons', /A collaborator deleted this question\./.test(f) && !/onclick=/.test(f));
+  }
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 }
