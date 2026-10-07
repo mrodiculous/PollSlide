@@ -128,7 +128,7 @@ win phrases like *"live poll in Keynote"*, *"Mentimeter alternative for PowerPoi
 ## 6. Log
 | Date | Indexed (Google) | Impressions / clicks (28d) | AI check: named by? | Notes |
 |---|---|---|---|---|
-| 2026-10-07 | *Rod to read from Search Console* | | none checked yet | Baseline. GPTBot/ClaudeBot/CCBot were blocked at Cloudflare → unblocked same day. IndexNow: 38 URLs accepted (202). |
+| 2026-10-07 | 14 indexed / 39 not (23 discovered-not-crawled, 6 alternate-canonical, 4×404, 3 crawled-not-indexed, 2 redirect, 1 duplicate); ~5 impressions/day since July | | none checked yet | Baseline. GPTBot/ClaudeBot/CCBot were blocked at Cloudflare → unblocked same day. IndexNow: 38 URLs accepted (202). |
 
 ---
 
