@@ -147,6 +147,7 @@ if [ -d "$SOURCE_DIR" ]; then
   [ "$SV" = "$VER" ] || echo "  ! the source folder says MARKETING_VERSION $SV, the app says $VER — check the source zip is the right one"
 else echo "  ! source folder not found ($SOURCE_DIR) — no source zip"; fi
 NOT="yes — DMG notarized by Apple and stapled; app accepted by Gatekeeper as Notarized Developer ID"
+if [ -n "$XA" ]; then ARCHLINE="PollSlideCompanion-$VER-build$BUILD.xcarchive (from $(basename "$XA"))"; else ARCHLINE="none found"; fi
 [ "${SKIP_NOTARIZE:-0}" = "1" ] && NOT="NO — TEST BUILD (SKIP_NOTARIZE=1). NOT FOR RELEASE."
 cat > "$DEST/RELEASE-INFO.txt" <<EOF
 PollSlide Companion $VER (build $BUILD)
@@ -155,7 +156,7 @@ File:       $DMGN   (SHA-256 in SHA256.txt)
 Signed:     $IDENTITY
 Notarized:  $NOT
 Runtime:    hardened, no get-task-allow, not sandboxed · $ARCHS
-Archive:    ${XA:+PollSlideCompanion-$VER-build$BUILD.xcarchive (from $(basename "$XA"))}${XA:-none found}
+Archive:    $ARCHLINE
 Source:     source-$VER-build$BUILD.zip
 
 What changed (write it here):
