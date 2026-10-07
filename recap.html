@@ -16,6 +16,8 @@
 <meta property="og:type" content="website">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="/errors.js?v=25c25f5f"></script>
+<script src="/ui-lang.js?v=1c095754"></script>
+<script src="/ui-tr.js?v=3f24378f"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
@@ -59,7 +61,7 @@
 </head>
 <body>
 <div class="wrap" id="app">
-  <div class="center"><div style="font-size:26px;margin-bottom:8px;">🎁</div>Loading the recap…</div>
+  <div class="center"><div style="font-size:26px;margin-bottom:8px;">🎁</div><span data-i18n>Loading the recap…</span></div>
 </div>
 
 <script>
@@ -84,7 +86,7 @@ const LOGO = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" widt
 function showError(msg){
   el('app').innerHTML = `<div class="logo">${LOGO}PollSlide</div>
     <div class="center"><div style="font-size:26px;margin-bottom:10px;">🔍</div>${esc(msg)}
-    <div style="margin-top:16px;"><a href="https://pollslide.com" style="color:var(--accent);text-decoration:none;">What is PollSlide? →</a></div></div>`;
+    <div style="margin-top:16px;"><a href="https://pollslide.com" style="color:var(--accent);text-decoration:none;">${tr('What is PollSlide? →')}</a></div></div>`;
 }
 
 function render(d){
@@ -97,64 +99,64 @@ function render(d){
     <div class="winner">
       <div class="crown">🏆</div>
       <div class="who">${isTeam?'👥 ':''}${esc(champion.name)}</div>
-      <div class="meta">${isTeam ? 'Winning team · '+champion.n+' player'+(champion.n===1?'':'s')+' · ' : 'Top scorer · '}${champion.score} point${champion.score===1?'':'s'}</div>
+      <div class="meta">${isTeam ? trp(champion.n, 'Winning team · {n} player', 'Winning team · {n} players')+' · ' : tr('Top scorer')+' · '}${trp(champion.score, '{n} point', '{n} points')}</div>
     </div>` : `
     <div class="winner" style="background:linear-gradient(135deg,rgba(108,99,255,0.16),rgba(67,233,123,0.10));border-color:rgba(108,99,255,0.35);">
       <div class="crown">🎉</div>
-      <div class="who">Thanks for taking part!</div>
-      <div class="meta">${d.respondents||0} people joined in</div>
+      <div class="who">${tr('Thanks for taking part!')}</div>
+      <div class="meta">${trf('{n} people joined in', { n: d.respondents||0 })}</div>
     </div>`;
 
   const stats = `<div class="stat-row">
-    <div class="stat"><b>${d.respondents||0}</b><span>${(d.respondents===1)?'person':'people'}</span></div>
-    <div class="stat"><b>${(d.questions||[]).length}</b><span>questions</span></div>
-    <div class="stat"><b>${d.responses||0}</b><span>answers</span></div>
+    <div class="stat"><b>${d.respondents||0}</b><span>${tr((d.respondents===1)?'person':'people')}</span></div>
+    <div class="stat"><b>${(d.questions||[]).length}</b><span>${tr('questions')}</span></div>
+    <div class="stat"><b>${d.responses||0}</b><span>${tr('answers')}</span></div>
   </div>`;
 
-  const summary = d.summary ? `<div class="summary"><strong>✨ In a nutshell:</strong> ${esc(d.summary)}</div>` : '';
+  const summary = d.summary ? `<div class="summary"><strong>${tr('✨ In a nutshell:')}</strong> ${esc(d.summary)}</div>` : '';
 
   const tough = d.toughest ? `<div class="tough">
-      <div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:#ff6584;margin-bottom:7px;">😬 THE ONE THAT FOOLED EVERYONE</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.06em;color:#ff6584;margin-bottom:7px;">😬 ${tr('THE ONE THAT FOOLED EVERYONE')}</div>
       <div style="font-weight:600;font-size:14.5px;line-height:1.45;">${esc(d.toughest.text)}</div>
-      <div style="font-size:12px;color:var(--muted);margin-top:6px;">Only ${d.toughest.correctPct}% got it right</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:6px;">${trf('Only {n}% got it right', { n: d.toughest.correctPct })}</div>
     </div>` : '';
 
   // Game mode played — labels match what the room saw live (💀 out, 🔥 best streak).
   const MODE_TAG = { speed:['⚡','Speed round'], streak:['🔥','Streak'], survival:['💀','Survival'], wager:['🎲','Wager round'] };
   const modeTag = MODE_TAG[d.gameMode] || null;
   const modeBadge = modeTag
-    ? `<div style="display:inline-block;font-size:11.5px;font-weight:700;padding:4px 11px;border-radius:20px;background:rgba(108,99,255,0.16);border:1px solid rgba(108,99,255,0.4);margin-bottom:14px;">${modeTag[0]} ${modeTag[1]}</div>`
+    ? `<div style="display:inline-block;font-size:11.5px;font-weight:700;padding:4px 11px;border-radius:20px;background:rgba(108,99,255,0.16);border:1px solid rgba(108,99,255,0.4);margin-bottom:14px;">${modeTag[0]} ${tr(modeTag[1])}</div>`
     : '';
 
   const lbRows = board.slice(0,10).map((p,i)=>{
     let extra = '';
-    if (!isTeam && p.alive === false) extra = '<span class="pill">💀 out</span>';
-    else if (!isTeam && p.streak) extra = `<span class="pill">🔥 best ${p.streak}</span>`;
+    if (!isTeam && p.alive === false) extra = '<span class="pill">'+tr('💀 out')+'</span>';
+    else if (!isTeam && p.streak) extra = `<span class="pill">🔥 ${trf('best {n}', { n: p.streak })}</span>`;
     return `
     <div class="lb-row${i<3?' top':''}">
       <div class="lb-rank">${['🥇','🥈','🥉'][i] || ('#'+(i+1))}</div>
-      <div class="lb-name"${(!isTeam && p.alive===false)?' style="opacity:.55;"':''}>${isTeam?'👥 ':''}${esc(p.name)}${isTeam?`<span class="pill">${p.n} player${p.n===1?'':'s'}</span>`:extra}</div>
+      <div class="lb-name"${(!isTeam && p.alive===false)?' style="opacity:.55;"':''}>${isTeam?'👥 ':''}${esc(p.name)}${isTeam?`<span class="pill">${trp(p.n, '{n} player', '{n} players')}</span>`:extra}</div>
       <div class="lb-score">${p.score}</div>
     </div>`;}).join('');
-  const lbBlock = (d.graded && board.length) ? `<div class="sect">${isTeam?'Team standings':'Leaderboard'}</div>${lbRows}` : '';
+  const lbBlock = (d.graded && board.length) ? `<div class="sect">${tr(isTeam?'Team standings':'Leaderboard')}</div>${lbRows}` : '';
 
   const qRows = (d.questions||[]).map(q=>`
     <div class="qrow">
       <div class="qtext">${esc(q.text)}</div>
       ${q.correctPct!==null && q.correctPct!==undefined ? `<div class="qbar-bg"><div class="qbar-fill" style="width:${Math.max(0,Math.min(100,q.correctPct))}%"></div></div>` : ''}
       <div class="qmeta">
-        <span>${q.n} answer${q.n===1?'':'s'}${q.topAnswer?' · most picked: '+esc(q.topAnswer):''}</span>
-        ${q.correctPct!==null && q.correctPct!==undefined ? `<span>${q.correctPct}% correct</span>` : ''}
+        <span>${trp(q.n, '{n} answer', '{n} answers')}${q.topAnswer?' · '+tr('most picked:')+' '+esc(q.topAnswer):''}</span>
+        ${q.correctPct!==null && q.correctPct!==undefined ? `<span>${trf('{n}% correct', { n: q.correctPct })}</span>` : ''}
       </div>
     </div>`).join('');
-  const qBlock = qRows ? `<div class="sect">Question by question</div><div class="card">${qRows}</div>` : '';
+  const qBlock = qRows ? `<div class="sect">${tr('Question by question')}</div><div class="card">${qRows}</div>` : '';
 
   const when = d.at ? new Date(d.at).toLocaleDateString(undefined,{ year:'numeric', month:'long', day:'numeric' }) : '';
 
   el('app').innerHTML = `
     <div class="logo">${LOGO}PollSlide</div>
-    <h1>${esc(d.title || 'Session recap')}</h1>
-    <div class="sub">${when ? when + ' · ' : ''}Here's how the room did 👇</div>
+    <h1>${esc(d.title || tr('Session recap'))}</h1>
+    <div class="sub">${when ? when + ' · ' : ''}${tr("Here's how the room did 👇")}</div>
     ${modeBadge}
     ${winnerCard}
     ${stats}
@@ -168,14 +170,13 @@ function render(d){
          ?ref tag lets us tell recap-driven signups apart from search/direct without any
          tracking cookie (see MARKETING-LAUNCH-KIT.md). -->
     <div style="background:linear-gradient(135deg,rgba(108,99,255,0.14),rgba(67,233,123,0.08));border:1px solid rgba(108,99,255,0.35);border-radius:16px;padding:20px 18px;margin-top:24px;text-align:center;">
-      <div style="font-family:'Syne',sans-serif;font-weight:900;font-size:18px;margin-bottom:6px;">Fancy running the next one?</div>
+      <div style="font-family:'Syne',sans-serif;font-weight:900;font-size:18px;margin-bottom:6px;">${tr('Fancy running the next one?')}</div>
       <p style="color:var(--muted);font-size:13.5px;line-height:1.6;margin-bottom:14px;">
-        This whole quiz was built and run with PollSlide — free, and your players just need their phones.
-        Set one up in about five minutes.
+        ${tr('This whole quiz was built and run with PollSlide — free, and your players just need their phones. Set one up in about five minutes.')}
       </p>
-      <a class="cta" style="margin-top:0;" href="https://pollslide.com/game-modes?ref=recap">Make your own quiz — free →</a>
+      <a class="cta" style="margin-top:0;" href="https://pollslide.com/game-modes?ref=recap">${tr('Make your own quiz — free →')}</a>
     </div>
-    <div class="foot">Made with <a href="https://pollslide.com/?ref=recap">PollSlide</a> · live polls, quizzes &amp; surveys for any presentation</div>
+    <div class="foot">${tr('Made with')} <a href="https://pollslide.com/?ref=recap">PollSlide</a> · live polls, quizzes &amp; surveys for any presentation</div>
   `;
 }
 

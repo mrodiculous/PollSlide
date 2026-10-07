@@ -98,7 +98,7 @@ win phrases like *"live poll in Keynote"*, *"Mentimeter alternative for PowerPoi
 | A1 | `llms.txt`: a plain summary of PollSlide and its key pages, for AI agents | Claude ✅ |
 | A2 | `robots.txt`: name the search and AI crawlers explicitly, keep `/presenter` out | Claude ✅ |
 | A3 | IndexNow key file + `scripts/seo/indexnow.js` (Bing → Copilot / ChatGPT search) | Claude ✅ build · Rod runs it after push |
-| A4 | **Cloudflare → AI Crawl Control / "Block AI bots": allow GPTBot, ClaudeBot, CCBot** on pollslide.com (the marketing site only, not the app) | **Rod** (security setting — Claude doesn't change it) |
+| A4 | **Cloudflare → AI Crawl Control / "Block AI bots": allow GPTBot, ClaudeBot, CCBot** on pollslide.com | ✅ Rod 2026-10-07 — live check: all crawlers 200 |
 | A5 | Search Console + Bing: **inspect and request indexing** for index, the 3 `pollslide-for-*` pages and the `vs-*` pages | **Rod** |
 
 ### Phase B — Be the quotable answer *(weeks 1–3)*
@@ -128,7 +128,7 @@ win phrases like *"live poll in Keynote"*, *"Mentimeter alternative for PowerPoi
 ## 6. Log
 | Date | Indexed (Google) | Impressions / clicks (28d) | AI check: named by? | Notes |
 |---|---|---|---|---|
-| 2026-10-07 | *Rod to read from Search Console* | | none checked yet | Baseline. GPTBot/ClaudeBot/CCBot blocked at Cloudflare. |
+| 2026-10-07 | *Rod to read from Search Console* | | none checked yet | Baseline. GPTBot/ClaudeBot/CCBot were blocked at Cloudflare → unblocked same day. IndexNow: 38 URLs accepted (202). |
 
 ---
 
@@ -230,4 +230,10 @@ Do one page per pass, in this order: `vs-mentimeter`, `vs-slido`, `vs-poll-every
 - **Record:** add a row to the log in §6.
 - **Act:** turn any new query that's getting impressions into a backlog item.
 
-**Progress:** R1 ✅ · R2 ☐ · R3 ☐ · R4 ☐ (needs Rod) · R5 ☐ · R6 ☐ · R7 starts week of 2026-10-12
+**Progress (2026-10-07):** R1 ✅ (+A4 Cloudflare ✅) · R2 ◐ vs-mentimeter rebuilt, awaiting Rod's OK on the competitor claims; then the other 5 · R3 ✅ (index, pricing, download, integrations all carry FAQPage) · R4 ☐ (needs Rod's profile URLs) · R5 ☐ · R6 ✅ `marketing/listings-pack.md` — Rod posts · R7 starts week of 2026-10-12
+
+### R1b — Content AI crawlers can read without JavaScript — ✅ 2026-10-07
+GPTBot/ClaudeBot/PerplexityBot read raw HTML; they don't run scripts. `/pricing` was 164 words to them (no plans, no prices, no FAQ).
+`scripts/seo/prerender-pricing.js` and `prerender-download.js` write the page's own JS-built content into the HTML between
+`<!-- prerender:… -->` markers (the page script still rebuilds it identically); `faq-schema.js` generates FAQPage from visible FAQs.
+`check.js` fails if any of these is stale or a key page shows < 400 words without JS. **Re-run them after editing PLANS/FAQS/faqs.**

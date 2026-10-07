@@ -42,7 +42,7 @@ console.log('\nAdmin messages stay until the user dismisses them');
 {
   const p = read('presenter.html');
   ok('no more 3.5s toast for admin messages', !/toast\('📬 Message from PollSlide: '/.test(p));
-  ok('messages open in a dismissable card', /function showAdminMessages\(list\)/.test(p) && /textContent = 'Got it'/.test(p));
+  ok('messages open in a dismissable card', /function showAdminMessages\(list\)/.test(p) && /textContent = (tr\()?'Got it'\)?/.test(p));
   ok('marked read only on dismissal', /btn\.onclick = \(\) => \{[\s\S]{0,200}inbox\/\$\{id\}\/read`\] = true/.test(p));
   ok('admin text is rendered as text, never HTML', /row\.textContent = m\.text/.test(p));
 }

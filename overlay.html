@@ -6,6 +6,8 @@
 <title>PollSlide — Overlay</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet">
 <script src="/errors.js?v=25c25f5f"></script>
+<script src="/ui-lang.js?v=1c095754"></script>
+<script src="/ui-tr.js?v=3f24378f"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root {
@@ -96,14 +98,14 @@
 <div class="hdr">
   <div class="logo">PollSlide</div>
   <div class="sess-tag" id="sessLabel">—</div>
-  <div class="status waiting" id="statusBadge">Connecting...</div>
+  <div class="status waiting" id="statusBadge"><span data-i18n>Connecting...</span></div>
 </div>
 
 <div id="mainContent" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
   <div class="setup">
     <div style="font-size:32px;">🎯</div>
-    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;">Keynote Overlay</div>
-    <p style="font-size:12px;color:var(--muted);">Enter your session code</p>
+    <div style="font-family:'Syne',sans-serif;font-size:16px;font-weight:800;"><span data-i18n>Keynote Overlay</span></div>
+    <p style="font-size:12px;color:var(--muted);"><span data-i18n>Enter your session code</span></p>
     <input type="text" id="codeIn" placeholder="ABC123" maxlength="10">
     <button onclick="connect()">Connect</button>
     <p id="setupErr" style="color:var(--accent2);font-size:11px;"></p>
@@ -208,7 +210,7 @@ function showLive(q) {
       <div class="q-text">${q.text}</div>
     </div>
     <div class="results" id="resultsArea">
-      <div class="resp-hd"><span class="resp-n" id="respN">0</span><span class="resp-lb">responses</span></div>
+      <div class="resp-hd"><span class="resp-n" id="respN">0</span><span class="resp-lb">${tr('responses')}</span></div>
       <div id="barsWrap">${barsHTML || '<div id="textList"></div>'}</div>
     </div>
     ${buildQR(qIdx)}
@@ -226,7 +228,7 @@ function showLive(q) {
       const tl = document.getElementById('textList');
       if (tl) tl.innerHTML = responses.slice(-5).map(r => `
         <div class="txt-resp">
-          ${r.answer==='__none__'?'<em style="color:var(--muted)">No answer</em>':safeJSON(r.answer)}
+          ${r.answer==='__none__'?'<em style="color:var(--muted)">'+tr('No answer')+'</em>':safeJSON(r.answer)}
           <div class="txt-from">— ${r.name}</div>
         </div>`).join('');
     } else if (q.options) {
@@ -246,7 +248,7 @@ function showLive(q) {
 
 function markRevealed() {
   const badge = document.getElementById('statusBadge');
-  if (badge) { badge.textContent = '✓ Revealed'; badge.className = 'status revealed'; }
+  if (badge) { badge.textContent = tr('✓ Revealed'); badge.className = 'status revealed'; }
   // Now it's safe to show the answer: green the correct bar(s), fade the rest.
   const correct = _overlayCorrect || [];
   const hasC = correct.length > 0 && correct.every(c => c != null);
@@ -269,7 +271,7 @@ function showWait(msg) {
     <div class="wait">
       <div class="wait-icon">⏳</div>
       <div class="wait-title">${msg}</div>
-      <div class="wait-sub">Questions appear here as soon<br>as the presenter launches them.</div>
+      <div class="wait-sub">${tr('Questions appear here as soon')}<br>${tr('as the presenter launches them.')}</div>
     </div>
     ${sessionCode ? buildQR(null) : ''}
   `);
@@ -286,7 +288,7 @@ function buildQR(qIdx) {
       <div id="qrSmall"></div>
       <div>
         <div class="qr-code-lbl">${sessionCode}</div>
-        <div class="qr-sub">${qIdx !== null && qIdx !== undefined ? `Scan for Q${qIdx+1}` : 'Scan to join'}</div>
+        <div class="qr-sub">${qIdx !== null && qIdx !== undefined ? trf('Scan for Q{n}', { n: qIdx+1 }) : tr('Scan to join')}</div>
       </div>
     </div>`;
 }

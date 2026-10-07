@@ -7,6 +7,8 @@
 <meta name="robots" content="noindex">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800;900&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="/errors.js?v=25c25f5f"></script>
+<script src="/ui-lang.js?v=1c095754"></script>
+<script src="/ui-tr.js?v=3f24378f"></script>
 <script src="/qid.js?v=f6f81595"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="/ps-env.js?v=717fca7b"></script>
@@ -41,7 +43,7 @@
 </head>
 <body>
 <div class="wrap" id="app">
-  <div class="center">Loading results…</div>
+  <div class="center"><span data-i18n>Loading results…</span></div>
 </div>
 
 <script>
@@ -94,19 +96,19 @@ function computeTally(questions, all, code) {
 function render(questions, all){
   const t = computeTally(questions, all, CODE);
   const medals = ['🥇','🥈','🥉'];
-  let html = '<h1>Results</h1><div class="sub">Session ' + esc(CODE) + '</div>';
-  html += '<div class="stat-row"><div class="stat"><b>' + t.respondents + '</b><span>' + (t.respondents===1?'person':'people') + '</span></div><div class="stat"><b>' + t.totalQuestions + '</b><span>questions</span></div></div>';
+  let html = '<h1>'+tr('Results')+'</h1><div class="sub">Session ' + esc(CODE) + '</div>';
+  html += '<div class="stat-row"><div class="stat"><b>' + t.respondents + '</b><span>' + (t.respondents===1?'person':'people') + '</span></div><div class="stat"><b>' + t.totalQuestions + '</b><span>'+tr('questions')+'</span></div></div>';
 
   if (t.hasCorrect) {
-    html += '<div class="sect">🏆 Leaderboard</div>';
-    if (!t.leaderboard.length) html += '<div class="center">No answers yet.</div>';
+    html += '<div class="sect">'+tr('🏆 Leaderboard')+'</div>';
+    if (!t.leaderboard.length) html += '<div class="center">'+tr('No answers yet.')+'</div>';
     else html += t.leaderboard.slice(0, 50).map((p, i) =>
       '<div class="lb-row' + (i<3?' top':'') + '"><div class="lb-rank">' + (i<3?medals[i]:'#'+(i+1)) + '</div><div class="lb-name">' + esc(p.name) + '</div><div class="lb-score">' + (Math.round(p.score*10)/10) + '</div></div>').join('');
   } else {
-    html += '<div class="sect">Responses</div>';
+    html += '<div class="sect">'+tr('Responses')+'</div>';
   }
 
-  html += '<div class="sect">By question</div><div class="card">';
+  html += '<div class="sect">'+tr('By question')+'</div><div class="card">';
   html += t.perQuestion.map(q => {
     const pct = q.correctPct;
     return '<div class="qrow"><div class="qtext">' + esc(q.text) + '</div>' +
@@ -116,27 +118,27 @@ function render(questions, all){
       '</div>';
   }).join('') + '</div>';
 
-  html += '<div class="center" style="padding:18px 0 0;font-size:12px;">Live results · updates automatically</div>';
+  html += '<div class="center" style="padding:18px 0 0;font-size:12px;">'+tr('Live results · updates automatically')+'</div>';
   shell(html);
 }
 
 function boot(){
-  if (!CODE) { shell('<div class="center">No session code. Scan the QR again or open<br><b>pollslide.com/results</b> with a code.</div>'); return; }
+  if (!CODE) { shell('<div class="center">'+tr('No session code. Scan the QR again or open')+'<br><b>pollslide.com/results</b> '+tr('with a code.')+'</div>'); return; }
   // Gate on the presenter's opt-in flag.
   db.ref('quiz_builder/' + CODE + '/resultsPublic').get().then(pub => {
     if (!(pub.exists() && pub.val())) {
-      shell('<div class="center">🔒 The results for this session aren\'t shared.<br><br>The presenter can turn on <b>"Let the audience see results"</b> to publish them here.</div>');
+      shell('<div class="center">🔒 The results for this session aren\'t shared.<br><br>'+tr('The presenter can turn on')+' <b>'+tr('"Let the audience see results"')+'</b> '+tr('to publish them here.')+'</div>');
       return;
     }
     db.ref('quiz_builder/' + CODE + '/questions').get().then(qs => {
       const questions = qs.exists() ? (Array.isArray(qs.val()) ? qs.val() : Object.values(qs.val())) : [];
-      if (!questions.length) { shell('<div class="center">No questions found for this session.</div>'); return; }
+      if (!questions.length) { shell('<div class="center">'+tr('No questions found for this session.')+'</div>'); return; }
       // Live-updating responses.
       db.ref('sessions/' + CODE + '/responses').on('value', snap => {
         render(questions, snap.exists() ? snap.val() : {});
       });
     });
-  }).catch(() => shell('<div class="center">Could not load results. Check your connection.</div>'));
+  }).catch(() => shell('<div class="center">'+tr('Could not load results. Check your connection.')+'</div>'));
 }
 boot();
 </script>

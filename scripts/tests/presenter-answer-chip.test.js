@@ -9,7 +9,8 @@ let pass = 0, fail = 0;
 const ok = (n, c, x) => c ? (pass++, console.log('  ✓ ' + n)) : (fail++, console.log('  ✗ ' + n + (x !== undefined ? '  → ' + JSON.stringify(x) : '')));
 const grab = name => { const i = src.indexOf('function ' + name + '('); let d = 0, j = src.indexOf('{', i);
   for (; j < src.length; j++) { if (src[j] === '{') d++; else if (src[j] === '}' && !--d) break; } return src.slice(i, j + 1); };
-const ctx = { escapeHtml: s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
+const ctx = { tr: s => s, trf: (s, v) => Object.keys(v || {}).reduce((o, k) => o.split('{' + k + '}').join(v[k]), s),   // the page's English
+  escapeHtml: s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
   localStorage: { v: {}, getItem(k) { return this.v[k] || null; }, setItem(k, v) { this.v[k] = v; } } };
 vm.createContext(ctx); vm.runInContext(grab('answerSummary') + grab('answerChip') + grab('toggleAnswerChip'), ctx);
 const A = q => ctx.answerSummary(q);

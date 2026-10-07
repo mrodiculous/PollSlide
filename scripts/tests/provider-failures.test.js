@@ -123,7 +123,7 @@ function call(providerStatus, providerBody) {
   const desc = '1990s British sitcoms — mix of easy and hard, include a couple on theme tunes, skip Only Fools and Horses';
   ok('a descriptive brief counts as a specific topic and is locked in full', !P.isBroadTopic(desc) && P.buildMessages({ topic: desc, type: 'quiz', count: 10 }).map(x => x.content).join('\n').includes('squarely about: ' + desc));
   ok('a descriptive grab-bag errs to specific — the questions must fit what was described', !P.isBroadTopic('general knowledge for my office party, mostly food and sport'));
-  ok('a short delivery is told to the teacher', /Polly wrote \$\{added\} of the \$\{data\.requested\}/.test(pres));
+  ok('a short delivery is told to the teacher', /Polly wrote \{a\} of the \{b\} you asked for[\s\S]{0,160}a: added, b: data\.requested/.test(pres));
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

@@ -21,6 +21,8 @@
 -->
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="/errors.js?v=25c25f5f"></script>
+<script src="/ui-lang.js?v=1c095754"></script>
+<script src="/ui-tr.js?v=3f24378f"></script>
 <script src="/qid.js?v=f6f81595"></script>
 <script src="/retakes.js?v=d187d4ee"></script>
 <script src="/gradebook.js?v=63a46ed6"></script>
@@ -80,40 +82,40 @@
   <div class="topbar">
     <div class="logo">
       <svg viewBox="0 0 100 100" width="24" height="24" style="border-radius:7px;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/></svg>
-      PollSlide Reports
+      <span data-i18n>PollSlide Reports</span>
     </div>
     <span id="acct" class="muted" style="font-size:12px;"></span>
-    <button class="btn btn-ghost" onclick="exportCSV()" id="csvBtn" disabled title="Every answer, one row each — for reading what people said">⤓ Answers</button>
-    <button class="btn btn-ghost" onclick="exportGradebook()" id="gradebookBtn" disabled title="One row per student, one column per question — the shape Google Classroom and Canvas import">🎓 Gradebook</button>
-    <button class="btn btn-ghost" onclick="makeRecap()" id="recapBtn" disabled title="Build a shareable recap page for one session — winner, toughest question and the highlights — then send the link to everyone who took part">🎁 Share recap</button>
+    <button data-i18n-title class="btn btn-ghost" onclick="exportCSV()" id="csvBtn" disabled title="Every answer, one row each — for reading what people said">⤓ Answers</button>
+    <button data-i18n-title class="btn btn-ghost" onclick="exportGradebook()" id="gradebookBtn" disabled title="One row per student, one column per question — the shape Google Classroom and Canvas import">🎓 Gradebook</button>
+    <button data-i18n-title class="btn btn-ghost" onclick="makeRecap()" id="recapBtn" disabled title="Build a shareable recap page for one session — winner, toughest question and the highlights — then send the link to everyone who took part">🎁 Share recap</button>
     <button class="btn btn-ghost" onclick="window.print()">🖨 Print</button>
     <button class="btn btn-ghost" id="signOutBtn" onclick="ppSignOut()" style="display:none;">Sign out</button>
   </div>
 
   <div class="filters" id="filters">
-    <div class="fld"><label>Presentation</label><select id="fPres" onchange="onPresChange()"><option value="">All</option></select></div>
-    <div class="fld"><label>Question</label><select id="fQ" onchange="render()"><option value="">All</option></select></div>
-    <div class="fld"><label>Respondent</label><input id="fResp" type="search" placeholder="name…" oninput="render()" style="width:150px;"></div>
-    <div class="fld"><label>From</label><input id="fFrom" type="date" onchange="render()"></div>
+    <div class="fld"><label><span data-i18n>Presentation</span></label><select id="fPres" onchange="onPresChange()"><option value="">All</option></select></div>
+    <div class="fld"><label><span data-i18n>Question</span></label><select id="fQ" onchange="render()"><option value="">All</option></select></div>
+    <div class="fld"><label><span data-i18n>Respondent</span></label><input data-i18n-ph id="fResp" type="search" placeholder="name…" oninput="render()" style="width:150px;"></div>
+    <div class="fld"><label><span data-i18n>From</span></label><input id="fFrom" type="date" onchange="render()"></div>
     <div class="fld"><label>To</label><input id="fTo" type="date" onchange="render()"></div>
-    <div class="fld"><label>Source</label><select id="fSrc" onchange="render()"><option value="">Live + History</option><option value="live">Live only</option><option value="archive">History only</option></select></div>
+    <div class="fld"><label><span data-i18n>Source</span></label><select id="fSrc" onchange="render()"><option value="">Live + History</option><option value="live">Live only</option><option value="archive">History only</option></select></div>
   </div>
 
   <div class="stats" id="stats"></div>
   <div class="tabs">
-    <div class="tab active" id="tab-summary" onclick="setView('summary')">Summary</div>
-    <div class="tab" id="tab-question" onclick="setView('question')">By question</div>
-    <div class="tab" id="tab-respondent" onclick="setView('respondent')">By respondent</div>
-    <div class="tab" id="tab-progress" onclick="setView('progress')" title="How each student is doing across every session, not just this one">Progress over time</div>
+    <div class="tab active" id="tab-summary" onclick="setView('summary')"><span data-i18n>Summary</span></div>
+    <div class="tab" id="tab-question" onclick="setView('question')"><span data-i18n>By question</span></div>
+    <div class="tab" id="tab-respondent" onclick="setView('respondent')"><span data-i18n>By respondent</span></div>
+    <div data-i18n-title class="tab" id="tab-progress" onclick="setView('progress')" title="How each student is doing across every session, not just this one"><span data-i18n>Progress over time</span></div>
   </div>
-  <div id="content"><div class="empty" id="loadingMsg">Sign in to load your reports.</div></div>
+  <div id="content"><div class="empty" id="loadingMsg"><span data-i18n>Sign in to load your reports.</span></div></div>
 </div>
 
 <!-- Sign-in overlay -->
 <div id="authOverlay" class="overlay" style="display:none;">
   <div class="card" style="width:min(380px,92vw);">
-    <h3>Sign in to PollSlide</h3>
-    <p class="muted" style="font-size:12px;margin-bottom:12px;">Use the same account as app.pollslide.com</p>
+    <h3><span data-i18n>Sign in to PollSlide</span></h3>
+    <p class="muted" style="font-size:12px;margin-bottom:12px;"><span data-i18n>Use the same account as app.pollslide.com</span></p>
     <input id="authEmail" type="email" placeholder="you@example.com" style="width:100%;margin-bottom:8px;">
     <input id="authPass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')ppSignIn()" style="width:100%;margin-bottom:10px;">
     <button class="btn btn-primary" style="width:100%;" onclick="ppSignIn()">Sign in</button>
@@ -191,7 +193,7 @@ function pushDataset(out, presId, presName, source, date, questions, responses){
 }
 
 async function loadAll(){
-  el('loadingMsg').textContent = 'Loading…';
+  el('loadingMsg').textContent = tr('Loading…');
   const out = []; PRES = {};
   const fx = window.__REPORT_FIXTURE;
   if (fx){
@@ -266,8 +268,9 @@ function attemptPill(r){
   const n = r && r.attempt;
   if (!(n > 1)) return '';
   const ord = n === 2 ? '2nd' : n === 3 ? '3rd' : n + 'th';
+  const label = (window.PS_TR && PS_TR.lang !== 'en') ? trf('Try {n}', { n: n }) : ord + ' try';   // ordinals don't translate word-for-word
   return ' <span class="pill" style="background:rgba(247,183,49,.16);color:var(--accent4);" ' +
-         'title="Graded from attempt ' + n + '">' + ord + ' try</span>';
+         'title="' + trf('Graded from attempt {n}', { n: n }) + '">' + label + '</span>';
 }
 function respondentKey(r){ return r.studentId || ('name:' + String(r.name||'').trim().toLowerCase()); }
 
@@ -292,7 +295,7 @@ function render(){
   if (!userId && !window.__REPORT_FIXTURE){ return; }
   const data = filtered();
   renderStats(data);
-  el('content').innerHTML = data.length===0 ? '<div class="empty">No responses match these filters.</div>'
+  el('content').innerHTML = data.length===0 ? '<div class="empty">'+tr('No responses match these filters.')+'</div>'
     : view==='summary' ? renderSummary(data) : view==='question' ? renderByQuestion(data)
     : view==='progress' ? renderProgress(data) : renderByRespondent(data);
 }
@@ -317,7 +320,7 @@ function renderSummary(data){
     const acc=graded.length?Math.round(p.recs.filter(r=>r.isCorrect===true).length/graded.length*100)+'%':'—';
     const qn=new Set(p.recs.map(r=>r.qIdx)).size;
     return `<div class="card"><h3>${esc(p.name)}</h3>
-      <div class="muted" style="font-size:12px;">${people} respondents · ${p.recs.length} responses · ${qn} questions · accuracy ${acc}</div></div>`;
+      <div class="muted" style="font-size:12px;">${trf('{a} respondents · {b} responses · {c} questions · accuracy {d}', { a: people, b: p.recs.length, c: qn, d: acc })}</div></div>`;
   }).join('');
 }
 function renderByQuestion(data){
@@ -333,7 +336,7 @@ function renderByQuestion(data){
       if (texts.length>=2){
         window._reportIns=window._reportIns||{};
         window._reportIns[gi]={question:q.qText||'', texts, language:'en'};
-        insightsUI=`<button onclick="reportInsights(${gi})" style="display:inline-flex;align-items:center;gap:6px;margin:10px 0 2px;padding:7px 13px;background:linear-gradient(120deg,#6c63ff,#a78bfa);border:none;color:#fff;border-radius:9px;font-weight:700;font-size:13px;cursor:pointer;">✨ AI Insights</button><div id="ri_${gi}"></div>`;
+        insightsUI=`<button onclick="reportInsights(${gi})" style="display:inline-flex;align-items:center;gap:6px;margin:10px 0 2px;padding:7px 13px;background:linear-gradient(120deg,#6c63ff,#a78bfa);border:none;color:#fff;border-radius:9px;font-weight:700;font-size:13px;cursor:pointer;">${tr('✨ AI Insights')}</button><div id="ri_${gi}"></div>`;
       }
     }
     if (q.options && q.options.length){
@@ -348,7 +351,7 @@ function renderByQuestion(data){
       <td>${r.isCorrect===true?'<span class="pill ok">✓</span>':r.isCorrect===false?'<span class="pill no">✗</span>':'<span class="muted">·</span>'}</td>
       <td class="muted">${r.elapsed?(r.elapsed/1000).toFixed(1)+'s':'—'}</td>
       <td class="muted">${r.date?new Date(r.date).toLocaleDateString():'—'}</td></tr>`).join('');
-    return `<div class="card"><h3>Q${q.qIdx+1}: ${esc(q.qText||'Untitled')} <span class="muted" style="font-weight:400;font-size:12px;">· ${esc(q.presName)} · ${total} responses</span></h3>
+    return `<div class="card"><h3>Q${q.qIdx+1}: ${esc(q.qText||tr('Untitled'))} <span class="muted" style="font-weight:400;font-size:12px;">· ${esc(q.presName)} · ${trf('{n} responses', { n: total })}</span></h3>
       ${body}
       ${insightsUI}
       <table style="margin-top:10px;"><thead><tr><th>Who</th><th>Answered</th><th>Correct</th><th>Time</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -547,12 +550,12 @@ function psDeltaBadge(delta) {
    • Names shown are the display names people already chose for the live session.       */
 async function makeRecap(){
   const data = filtered();
-  if (!data.length) { alert('No responses in the current filter — pick a presentation first.'); return; }
+  if (!data.length) { alert(tr('No responses in the current filter — pick a presentation first.')); return; }
   const presIds = [...new Set(data.map(r=>r.presId))];
-  if (presIds.length > 1) { alert('Choose ONE presentation in the filter above, then build the recap.'); return; }
+  if (presIds.length > 1) { alert(tr('Choose ONE presentation in the filter above, then build the recap.')); return; }
 
   const btn = el('recapBtn'); const old = btn.textContent;
-  btn.disabled = true; btn.textContent = '🎁 Building…';
+  btn.disabled = true; btn.textContent = tr('🎁 Building…');
   try {
     const presId = presIds[0];
     const title  = (PRES[presId] && PRES[presId].name) || data[0].presName || 'PollSlide session';
@@ -656,12 +659,12 @@ function showRecapDone(url){
   let m = el('recapModal');
   if (!m) { m = document.createElement('div'); m.id='recapModal'; m.className='overlay'; m.onclick=e=>{ if(e.target===m) m.style.display='none'; }; document.body.appendChild(m); }
   m.innerHTML = `<div class="card" style="width:min(520px,92vw);">
-    <h3>🎁 Recap ready to share</h3>
-    <p class="muted" style="font-size:12.5px;line-height:1.6;margin-bottom:10px;">Send this link to everyone who took part. Anyone with the link can view it — no sign-in needed.</p>
+    <h3>${tr('🎁 Recap ready to share')}</h3>
+    <p class="muted" style="font-size:12.5px;line-height:1.6;margin-bottom:10px;">${tr('Send this link to everyone who took part. Anyone with the link can view it — no sign-in needed.')}</p>
     <input id="recapUrl" readonly value="${esc(url)}" style="width:100%;margin-bottom:9px;font-size:12.5px;">
     <div style="display:flex;gap:8px;">
       <button class="btn btn-primary" style="flex:1;" onclick="copyRecap()">📋 Copy link</button>
-      <a class="btn btn-ghost" style="flex:1;text-align:center;text-decoration:none;" href="${esc(url)}" target="_blank">Open recap ↗</a>
+      <a class="btn btn-ghost" style="flex:1;text-align:center;text-decoration:none;" href="${esc(url)}" target="_blank">${tr('Open recap ↗')}</a>
     </div>
     <button class="btn btn-ghost" style="width:100%;margin-top:9px;" onclick="document.getElementById('recapModal').style.display='none'">Close</button>
   </div>`;
@@ -670,14 +673,14 @@ function showRecapDone(url){
 function copyRecap(){
   const i = el('recapUrl'); if(!i) return;
   i.select();
-  navigator.clipboard.writeText(i.value).then(()=>{ const b=event.target; const o=b.textContent; b.textContent='✓ Copied'; setTimeout(()=>b.textContent=o,1600); }).catch(()=>{});
+  navigator.clipboard.writeText(i.value).then(()=>{ const b=event.target; const o=b.textContent; b.textContent=tr('✓ Copied'); setTimeout(()=>b.textContent=o,1600); }).catch(()=>{});
 }
 
 /* ─── ✨ AI INSIGHTS in the report — themes + mood over a question's free-text answers ── */
 async function reportInsights(gi){
   const d=(window._reportIns||{})[gi]; if(!d) return;
   const box=el('ri_'+gi); if(!box) return;
-  box.innerHTML='<div class="muted" style="padding:8px 0;">✨ Polly is reading the responses…</div>';
+  box.innerHTML='<div class="muted" style="padding:8px 0;">'+tr('✨ Polly is reading the responses…')+'</div>';
   try{
     const token = (fbAuth && fbAuth.currentUser) ? await fbAuth.currentUser.getIdToken().catch(()=>null) : null;
     const r=await fetch('/api/insights',{ method:'POST',
@@ -686,19 +689,19 @@ async function reportInsights(gi){
     const j=await r.json().catch(()=>({error:'Bad response from server.'}));
     if(!r.ok||j.error){ box.innerHTML=`<div style="color:#ff6584;font-size:13px;padding:8px 0;">${esc(j.error||('HTTP '+r.status))}</div>`; return; }
     box.innerHTML=renderReportInsights(j);
-  }catch(e){ box.innerHTML='<div style="color:#ff6584;font-size:13px;padding:8px 0;">Could not reach the insights service.</div>'; }
+  }catch(e){ box.innerHTML='<div style="color:#ff6584;font-size:13px;padding:8px 0;">'+tr('Could not reach the insights service.')+'</div>'; }
 }
 function renderReportInsights(d){
   const sent=d.sentiment||{positive:0,neutral:0,negative:0};
   const sc={positive:'#43e97b',neutral:'#f7b731',negative:'#ff6584'};
   const bar=`<div style="display:flex;height:9px;border-radius:100px;overflow:hidden;margin:8px 0 4px;background:rgba(255,255,255,.08);">
       <div style="width:${sent.positive}%;background:${sc.positive}"></div><div style="width:${sent.neutral}%;background:${sc.neutral}"></div><div style="width:${sent.negative}%;background:${sc.negative}"></div></div>
-    <div style="font-size:11.5px;" class="muted">🟢 ${sent.positive}% positive · 🟡 ${sent.neutral}% neutral · 🔴 ${sent.negative}% negative</div>`;
+    <div style="font-size:11.5px;" class="muted">🟢 ${trf('{n}% positive', { n: sent.positive })} · 🟡 ${trf('{n}% neutral', { n: sent.neutral })} · 🔴 ${trf('{n}% negative', { n: sent.negative })}</div>`;
   const themes=(d.themes||[]).map(t=>`<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06);">
       <span style="font-size:13px;"><span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${sc[t.sentiment]||sc.neutral};margin-right:7px;"></span><b>${esc(t.label)}</b>${t.example?` <span class="muted" style="font-style:italic;">— “${esc(t.example)}”</span>`:''}</span>
-      <b style="color:#8b84ff;">${t.count}</b></div>`).join('') || '<div class="muted" style="font-size:12px;">No clear themes found.</div>';
+      <b style="color:#8b84ff;">${t.count}</b></div>`).join('') || '<div class="muted" style="font-size:12px;">'+tr('No clear themes found.')+'</div>';
   return `<div style="border:1px solid rgba(108,99,255,.35);background:rgba(108,99,255,.06);border-radius:10px;padding:13px 15px;margin:6px 0 2px;">
-    <div style="font-weight:700;margin-bottom:6px;">✨ AI Insights <span class="muted" style="font-weight:400;font-size:11.5px;">· ${d.count} responses${d.source==='local'?' · private AI':''}</span></div>
+    <div style="font-weight:700;margin-bottom:6px;">${tr('✨ AI Insights')} <span class="muted" style="font-weight:400;font-size:11.5px;">· ${trf('{n} responses', { n: d.count })}${d.source==='local'?' · '+tr('private AI'):''}</span></div>
     ${d.summary?`<div style="font-size:13.5px;line-height:1.5;margin-bottom:8px;">${esc(d.summary)}</div>`:''}
     ${bar}
     <div style="margin-top:10px;">${themes}</div>
@@ -728,15 +731,15 @@ function sparkline(scores){
 }
 
 const TREND_LABEL = {
-  improving: '<span class="pill" style="background:rgba(67,233,123,.16);color:var(--accent3);">improving</span>',
-  declining: '<span class="pill" style="background:rgba(255,101,132,.16);color:var(--accent2);">declining</span>',
-  steady:    '<span class="pill" style="background:rgba(144,144,184,.15);color:var(--muted);">steady</span>',
-  unknown:   '<span class="pill" style="background:rgba(144,144,184,.15);color:var(--muted);">not enough yet</span>',
+  improving: '<span class="pill" style="background:rgba(67,233,123,.16);color:var(--accent3);">'+tr('improving')+'</span>',
+  declining: '<span class="pill" style="background:rgba(255,101,132,.16);color:var(--accent2);">'+tr('declining')+'</span>',
+  steady:    '<span class="pill" style="background:rgba(144,144,184,.15);color:var(--muted);">'+tr('steady')+'</span>',
+  unknown:   '<span class="pill" style="background:rgba(144,144,184,.15);color:var(--muted);">'+tr('not enough yet')+'</span>',
 };
 
 function renderProgress(data){
   const students = PSProgress.byStudent(data);
-  if (!students.length) return '<div class="empty">No graded answers in this filter yet.</div>';
+  if (!students.length) return '<div class="empty">'+tr('No graded answers in this filter yet.')+'</div>';
   const sum = PSProgress.classSummary(students);
   const attn = PSProgress.needsAttention(students, 5);
   const noIds = students.some(s => !s.studentId);
@@ -745,30 +748,29 @@ function renderProgress(data){
 
   return `
   <div class="stats">
-    ${stat(sum.students, 'students')}
-    ${stat(sum.average != null ? sum.average+'%' : '—', 'class average')}
-    ${stat(sum.sittings, 'sittings')}
-    ${stat(sum.improving||0, 'improving')}
-    ${sum.declining ? stat('<span style="color:var(--accent2);">'+sum.declining+'</span>', 'declining') : ''}
+    ${stat(sum.students, tr('students'))}
+    ${stat(sum.average != null ? sum.average+'%' : '—', tr('class average'))}
+    ${stat(sum.sittings, tr('sittings'))}
+    ${stat(sum.improving||0, tr('improving'))}
+    ${sum.declining ? stat('<span style="color:var(--accent2);">'+sum.declining+'</span>', tr('declining')) : ''}
   </div>
 
   ${noIds ? `<div class="card" style="border-color:rgba(247,183,49,.35);">
-    <div style="font-size:12.5px;color:var(--muted);">Some students here have no class ID, so they are matched on the name they typed —
-    a different spelling becomes a different person and their history splits.
-    <b style="color:var(--text);">Assign the deck to a class</b> to track people properly.</div></div>` : ''}
+    <div style="font-size:12.5px;color:var(--muted);">${tr('Some students here have no class ID, so they are matched on the name they typed — a different spelling becomes a different person and their history splits.')}
+    <b style="color:var(--text);">${tr('Assign the deck to a class')}</b> ${tr('to track people properly.')}</div></div>` : ''}
 
   ${attn.length ? `<div class="card">
-    <h3>Worth a look</h3>
-    <p class="muted" style="font-size:12px;margin-bottom:8px;">Not a ranking — just who to check on. Someone dropping comes before someone consistently low, because a drop is news.</p>
+    <h3>${tr('Worth a look')}</h3>
+    <p class="muted" style="font-size:12px;margin-bottom:8px;">${tr('Not a ranking — just who to check on. Someone dropping comes before someone consistently low, because a drop is news.')}</p>
     ${attn.map(s=>`<div style="display:flex;align-items:center;gap:9px;padding:6px 0;">
       <span style="flex:1;">${esc(s.name)}</span>
       ${TREND_LABEL[s.trend.direction]}
-      <span class="muted" style="font-size:12px;">latest ${s.latest}%</span>
+      <span class="muted" style="font-size:12px;">${trf('latest {n}%', { n: s.latest })}</span>
     </div>`).join('')}
   </div>` : ''}
 
   <div class="card">
-    <h3>Every student</h3>
+    <h3>${tr('Every student')}</h3>
     <table><thead><tr>
       <th>Student</th><th>Sittings</th><th>Average</th><th>Best</th><th>Latest</th><th>Over time</th><th>Trend</th>
     </tr></thead><tbody>
@@ -783,9 +785,7 @@ function renderProgress(data){
     </tr>`).join('')}
     </tbody></table>
     <p class="muted" style="font-size:11.5px;margin-top:8px;">
-      A direction needs at least ${PSProgress.MIN_FOR_TREND} sittings, and a move smaller than
-      ${PSProgress.NOISE_BAND} points reads as steady — scores bounce for reasons that have nothing to do with learning.
-      Hover a row for the reasoning.
+      ${trf('A direction needs at least {a} sittings, and a move smaller than {b} points reads as steady — scores bounce for reasons that have nothing to do with learning. Hover a row for the reasoning.', { a: PSProgress.MIN_FOR_TREND, b: PSProgress.NOISE_BAND })}
     </p>
   </div>`;
 }
@@ -801,7 +801,7 @@ function renderByRespondent(data){
     const rows=p.recs.map(r=>`<tr><td class="muted">${esc(r.presName)}</td><td>Q${r.qIdx+1}: ${esc(String(r.qText).slice(0,40))}</td>
       <td>${esc(answerText(r,r.answer))}${attemptPill(r)}${offlinePill(r)}</td>
       <td>${r.isCorrect===true?'<span class="pill ok">✓</span>':r.isCorrect===false?'<span class="pill no">✗</span>':'<span class="muted">·</span>'}</td></tr>`).join('');
-    return `<div class="card"><h3>${esc(p.name)} <span class="muted" style="font-weight:400;font-size:12px;">· ${p.recs.length} answers · score ${score}</span></h3>
+    return `<div class="card"><h3>${esc(p.name)} <span class="muted" style="font-weight:400;font-size:12px;">· ${trf('{a} answers · score {b}', { a: p.recs.length, b: score })}</span></h3>
       <table><thead><tr><th>Presentation</th><th>Question</th><th>Answer</th><th>Correct</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }).join('');
 }
@@ -835,9 +835,9 @@ function exportCSV(){
  * wrong it says which filter to set. */
 function exportGradebook(){
   const data=filtered();
-  if(!data.length){ alert('No responses in the current filter.'); return; }
+  if(!data.length){ alert(tr('No responses in the current filter.')); return; }
   const presIds=[...new Set(data.map(r=>r.presId))];
-  if(presIds.length>1){ alert('Choose ONE presentation in the filter above — a gradebook is one deck\'s marks, and two decks\' questions cannot share a row.'); return; }
+  if(presIds.length>1){ alert(tr('Choose ONE presentation in the filter above — a gradebook is one deck\'s marks, and two decks\' questions cannot share a row.')); return; }
   const title=(PRES[presIds[0]]&&PRES[presIds[0]].name)||data[0].presName||'PollSlide';
   const g=PSGradebook.buildGradebook(data);
   if(!g.questions.length){
@@ -847,7 +847,7 @@ function exportGradebook(){
   download(PSGradebook.gradebookCSV(data,{title}), PSGradebook.fileName(title));
   // Say what was left out. A silent export is one a teacher has to audit by hand.
   const note=g.warnings.length?'\n\n'+g.warnings.join('\n'):'';
-  setTimeout(()=>alert(`Gradebook exported.\n\n${g.rows.length} student${g.rows.length===1?'':'s'} × ${g.questions.length} question${g.questions.length===1?'':'s'}.${note}`),150);
+  setTimeout(()=>alert(tr('Gradebook exported.')+'\n\n'+trp(g.rows.length, '{n} student', '{n} students')+' × '+trp(g.questions.length, '{n} question.', '{n} questions.')+note),150);
 }
 
 /* ─── Auth ─────────────────────────────────────────────────────────────────── */
@@ -859,11 +859,11 @@ function initFirebase(){
     el('signOutBtn').style.display = u?'':'none';
     el('acct').textContent = u?(u.email||''):'';
     el('authOverlay').style.display = u?'none':'flex';
-    if (u){ loadAll(); } else { el('loadingMsg').textContent='Sign in to load your reports.'; }
+    if (u){ loadAll(); } else { el('loadingMsg').textContent=tr('Sign in to load your reports.'); }
   });
 }
 function ppSignIn(){ const e=el('authEmail').value.trim(),p=el('authPass').value; el('authErr').textContent='';
-  if(!e||!p){ el('authErr').textContent='Email and password required.'; return; }
+  if(!e||!p){ el('authErr').textContent=tr('Email and password required.'); return; }
   fbAuth.signInWithEmailAndPassword(e,p).catch(x=>{ el('authErr').textContent=x.message; }); }
 function ppSignOut(){ if(fbAuth)fbAuth.signOut(); RECORDS=[]; render(); }
 

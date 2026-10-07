@@ -51,6 +51,15 @@ else for (const m of read('llms.txt').matchAll(/\]\(https:\/\/pollslide\.com([^)
 const keyFile = fs.readdirSync(SITE).find(f => /^[0-9a-f]{32}\.txt$/.test(f));
 if (!keyFile || read(keyFile).trim() !== keyFile.slice(0, 32)) fail('IndexNow key file missing or wrong content');
 
+// ── content that AI crawlers can read without running JavaScript (GPTBot/ClaudeBot/Perplexity don't)
+const { spawnSync } = require('child_process');
+for (const [script, args] of [['prerender-pricing.js', ['--check']], ['prerender-download.js', ['--check']], ['faq-schema.js', ['--check', 'index.html', 'integrations.html', 'vs-mentimeter.html']]]) {
+  const r = spawnSync(process.execPath, [path.join(__dirname, script), ...args], { encoding: 'utf8', env: { ...process.env, WEBSITE_DIR: SITE } });
+  if (r.status !== 0) fail((r.stderr || r.stdout).trim().split('\n').pop());
+}
+const noJsWords = f => fs.readFileSync(path.join(SITE, f), 'utf8').replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<!--(?!\s*prerender)[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' ').split(/\s+/).filter(Boolean).length;
+for (const f of ['index.html', 'pricing.html', 'download.html', 'integrations.html']) if (noJsWords(f) < 400) fail(`${f}: only ${noJsWords(f)} words visible without JavaScript — AI crawlers see an empty page`);
+
 // ── runbook TODOs (not failures — the open work in SEO-AI-DISCOVERY-SOP.md Part 2)
 for (const n of Object.keys(pages).filter(n => n.startsWith('vs-'))) {
   const p = pages[n];

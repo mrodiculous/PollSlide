@@ -32,7 +32,7 @@ else {
   ok('the page is in the sitemap', /pollslide\.com\/getting-started</.test(fs.readFileSync(path.join(SITE, 'sitemap.xml'), 'utf8')));
 }
 const pres = fs.readFileSync(path.join(ROOT, 'presenter.html'), 'utf8');
-ok('the app welcome screen links to the video', /href="https:\/\/pollslide\.com\/getting-started"[^>]*>▶ 2-min video</.test(pres));
+ok('the app welcome screen links to the video', /href="https:\/\/pollslide\.com\/getting-started"[^>]*>(\$\{tr\(')?▶ 2-min video('\)\})?</.test(pres));
 const scenes = require(path.join(ROOT, 'scripts', 'video', 'getting-started.js')).scenes;
 const caps = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts', 'video', 'getting-started.captions.json'), 'utf8')).cues;
 ok('every narrated scene has its translations', caps.length === scenes.length, [caps.length, scenes.length]);

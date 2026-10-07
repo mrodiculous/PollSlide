@@ -14,9 +14,14 @@ const P = fs.readFileSync(path.join(ROOT, 'presenter.html'), 'utf8');
 
 console.log('\nEvery tr()/trf() string in the presenter has all five translations');
 const keys = new Set();
-for (const m of P.matchAll(/\btrf?\('((?:[^'\\]|\\.)*)'/g)) keys.add(m[1].replace(/\\'/g, "'").trim());
-for (const m of P.matchAll(/\btr\([a-zA-Z.!=<>\d ]+\?\s*'([^']+)'\s*:\s*'([^']+)'\)/g)) { keys.add(m[1]); keys.add(m[2]); }
-for (const m of P.matchAll(/\btrk\('([^']+)'/g)) keys.add(m[1]);
+// Every quoted string handed to tr/trf/trp/trk (both arms of a ?: too), evaluated as JS reads it.
+const lit = q => Function('"use strict";return ' + q)();
+const STR = `'(?:[^'\\\\]|\\\\.)*'|"(?:[^"\\\\]|\\\\.)*"`;
+for (const m of P.matchAll(new RegExp(`\\btr[fpk]?\\(([^()]*?)(?:\\)|,)`, 'g'))) {
+  for (const q of (m[1].match(new RegExp(STR, 'g')) || [])) keys.add(lit(q).trim());
+}
+for (const m of P.matchAll(new RegExp(`\\btrp\\([^,]+,\\s*(${STR})\\s*,\\s*(${STR})`, 'g'))) { keys.add(lit(m[1]).trim()); keys.add(lit(m[2]).trim()); }
+keys.delete('');
 ok('found the presenter strings (' + keys.size + ')', keys.size > 100, keys.size);
 for (const l of LANGS) {
   const miss = [...keys].filter(k => UI[l][k] == null);
@@ -42,6 +47,27 @@ ok('…and fill placeholders in a translated string', (() => {
   const f = new Function('window', 'UI_LANG', 'tr', trSrc + '; return trf("Question {n} of {m}",{n:2,m:5});');
   return f(window, 'es', s => UI.es[s] || s) === UI.es['Question {n} of {m}'].replace('{n}', 2).replace('{m}', 5);
 })());
+
+console.log('\nThe other app pages translate too (Present studio, reports, results, recap, overlay)');
+for (const page of ['present.html', 'report.html', 'results.html', 'recap.html', 'overlay.html']) {
+  const S = fs.readFileSync(path.join(ROOT, page), 'utf8');
+  const iLang = S.indexOf('/ui-lang.js'), iTr = S.indexOf('/ui-tr.js'), iInline = S.search(/<script>(?!\s*<\/script>)/);
+  ok(page + ': loads the dictionary, then the translator, before its own code', iLang > 0 && iTr > iLang && iTr < iInline);
+  const ks = new Set();
+  for (const m of S.matchAll(new RegExp(`\\btr[fpk]?\\(([^()]*?)(?:\\)|,)`, 'g'))) for (const q of (m[1].match(new RegExp(STR, 'g')) || [])) ks.add(lit(q).trim());
+  for (const m of S.matchAll(new RegExp(`\\btrp\\([^,]+,\\s*(${STR})\\s*,\\s*(${STR})`, 'g'))) { ks.add(lit(m[1]).trim()); ks.add(lit(m[2]).trim()); }
+  ks.delete('');
+  const miss = [...ks].filter(k => LANGS.some(l => UI[l][k] == null) && !['⤢ Zoom'].includes(k));
+  ok(page + ': every tr() string has all five translations (' + ks.size + ')', miss.length === 0, miss);
+}
+const UT = fs.readFileSync(path.join(ROOT, 'ui-tr.js'), 'utf8');
+ok('ui-tr.js follows the presenter\'s language choice, then the browser', /ps_ui_lang/.test(UT) && /navigator\.language/.test(UT));
+ok('ui-tr.js returns the English untouched in English, and never overwrites a page\'s own tr()', /if \(lang === 'en'\) return en;/.test(UT) && /typeof window\.tr !== 'function'/.test(UT));
+ok('ui-tr.js leaves [data-noi18n] (names, deck titles) alone', /NO_TR = '\[data-noi18n\]'/.test(UT));
+const PR = fs.readFileSync(path.join(ROOT, 'present.html'), 'utf8');
+ok('Present studio: "deck" is a presentation, never a pack of cards', !/'more\.deck':'(Baraja|Jeu|Baralho|Mazzo)'/.test(PR));
+ok('the present-screen button bar never covers a button with the logo', /function fitPresentBar\(/.test(P) && /setTimeout\(fitPresentBar, 60\)/.test(P));
+ok('the post-reveal countdown writes only the number (it used to say "Post-reveal in" twice)', !/textContent = `Post-reveal in \$\{postRevealCountdown\}s`/.test(P));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
