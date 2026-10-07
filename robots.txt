@@ -1,0 +1,5 @@
+# app.pollslide.com is the product, not the marketing site — nothing here is meant for search
+# results (marketing lives on pollslide.com). Without this, crawlers filed app screens as
+# "crawled – not indexed" in Search Console. (2026-10-07)
+User-agent: *
+Disallow: /

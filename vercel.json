@@ -65,5 +65,12 @@
         }
       ]
     }
+  ],
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/presenter",
+      "permanent": false
+    }
   ]
 }
