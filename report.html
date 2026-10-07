@@ -21,7 +21,7 @@
 -->
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="/errors.js?v=25c25f5f"></script>
-<script src="/ui-lang.js?v=1c095754"></script>
+<script src="/ui-lang.js?v=41a34cc2"></script>
 <script src="/ui-tr.js?v=3f24378f"></script>
 <script src="/qid.js?v=f6f81595"></script>
 <script src="/retakes.js?v=d187d4ee"></script>
@@ -320,7 +320,7 @@ function renderSummary(data){
     const acc=graded.length?Math.round(p.recs.filter(r=>r.isCorrect===true).length/graded.length*100)+'%':'—';
     const qn=new Set(p.recs.map(r=>r.qIdx)).size;
     return `<div class="card"><h3>${esc(p.name)}</h3>
-      <div class="muted" style="font-size:12px;">${trf('{a} respondents · {b} responses · {c} questions · accuracy {d}', { a: people, b: p.recs.length, c: qn, d: acc })}</div></div>`;
+      <div class="muted" style="font-size:12px;">${trp(people, '{n} respondent', '{n} respondents')} · ${trp(p.recs.length, '{n} response', '{n} responses')} · ${trp(qn, '{n} question', '{n} questions')} · ${trf('accuracy {d}', { d: acc })}</div></div>`;
   }).join('');
 }
 function renderByQuestion(data){
@@ -650,7 +650,7 @@ async function makeRecap(){
     const url = location.origin + '/recap#' + rid;
     showRecapDone(url);
   } catch(e) {
-    alert('Could not build the recap: ' + (e && e.message ? e.message : e));
+    alert(tr('Could not build the recap: ') + (e && e.message ? e.message : e));
   } finally {
     btn.disabled = false; btn.textContent = old;
   }
@@ -841,7 +841,7 @@ function exportGradebook(){
   const title=(PRES[presIds[0]]&&PRES[presIds[0]].name)||data[0].presName||'PollSlide';
   const g=PSGradebook.buildGradebook(data);
   if(!g.questions.length){
-    alert('Nothing to grade here yet.\n\n'+g.warnings.join('\n')+'\n\nSet a correct answer on at least one question, then export again.');
+    alert(tr('Nothing to grade here yet.\n\n')+g.warnings.join('\n')+tr('\n\nSet a correct answer on at least one question, then export again.'));
     return;
   }
   download(PSGradebook.gradebookCSV(data,{title}), PSGradebook.fileName(title));

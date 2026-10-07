@@ -22,7 +22,7 @@
 -->
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="/errors.js?v=25c25f5f"></script>
-<script src="/ui-lang.js?v=1c095754"></script>
+<script src="/ui-lang.js?v=41a34cc2"></script>
 <script src="/ui-tr.js?v=3f24378f"></script>
 <script src="/qid.js?v=f6f81595"></script>
 <script src="/present-display.js?v=b01c9c51"></script>
@@ -800,7 +800,7 @@ function buildHistoryMenu(){ const m=document.getElementById('historyMenu'); if(
 function historyRevert(idx){ if(idx<0||idx>=_undo.length)return; closeMenus();
   const target=_undo[idx];
   _redo.length=0; _undo.push({j:JSON.stringify(deck), l:'Before revert', ts:Date.now()});
-  _restore(target.j); toast('Reverted to before "'+target.l+'"'); }
+  _restore(target.j); toast(tr('Reverted to before "')+target.l+'"'); }
 let currentIdx = -1;
 let _uid=0; const nid=()=>'sl_'+(++_uid);
 
@@ -1014,7 +1014,7 @@ function setNoTranslate(v){
   renderCanvas(); scheduleSave(); schedulePublish();
 }
 function setCorrect(oi){ deck.slides[currentIdx].question.correctAnswer=oi; renderCanvas(); scheduleSave(); schedulePublish(); }
-function setDisplay(v){ const s=deck.slides[currentIdx]; if(s&&s.question){ s.question.displayMode=v; scheduleSave(); toast('Results shown as: '+v); } }
+function setDisplay(v){ const s=deck.slides[currentIdx]; if(s&&s.question){ s.question.displayMode=v; scheduleSave(); toast(tr('Results shown as: ')+v); } }
 /* Per-element resize (question / response / QR). Stored on s.sz and applied as CSS
    vars (--q/-r/-qr-scale) in both editor and present. Auto-fit still guarantees the
    slide never overflows, so enlarging one element gracefully shrinks the whole block. */
@@ -1106,7 +1106,7 @@ function wireSlideResize(){
     };
   });
 }
-function toggleSkip(){ const s=deck.slides[currentIdx]; if(!s)return; s.skip=!s.skip; if(!s.skip)delete s.skip; renderCanvas(); renderNav(); scheduleSave(); toast(s.skip?'⏭ Slide will be skipped when presenting':'Slide back in the show'); }
+function toggleSkip(){ const s=deck.slides[currentIdx]; if(!s)return; s.skip=!s.skip; if(!s.skip)delete s.skip; renderCanvas(); renderNav(); scheduleSave(); toast(s.skip?tr('⏭ Slide will be skipped when presenting'):tr('Slide back in the show')); }
 function setTransition(v){ const s=deck.slides[currentIdx]; if(s){ s.transition=v; scheduleSave(); } }
 function setSlideTheme(v){ const s=deck.slides[currentIdx]; if(!s)return; pushUndo(tr('Slide theme')); if(v&&THEMES[v]) s.theme=v; else delete s.theme; renderCanvas(); renderNav(); scheduleSave(); }
 // QR caption tells the truth: live → "Scan to answer"; not yet published → why.
@@ -1155,7 +1155,7 @@ function onMediaEl(file){ if(!file)return; const s=deck.slides[currentIdx]; if(!
   const r=new FileReader(); r.onload=e=>{ pushUndo(trf('Add {what}', { what: tr(kind) }));
     ensureEls(s).push({type:kind,x:kind==='video'?28:30,y:kind==='video'?24:44,w:kind==='video'?44:40,src:e.target.result});
     selSet.clear(); selEl=s.elements.length-1; renderCanvas(); scheduleSave();
-    if(file.size>4*1024*1024) toast('Added — large media may not autosave; export or keep this window open.'); };
+    if(file.size>4*1024*1024) toast(tr('Added — large media may not autosave; export or keep this window open.')); };
   r.readAsDataURL(file); document.getElementById('mediaInput').value=''; }
 function onBgImg(file){ if(!file)return; const s=deck.slides[currentIdx]; if(!s)return; const r=new FileReader();
   r.onload=e=>{ pushUndo(tr('Background image')); s.bgImg=e.target.result; if(s.bgDim==null)s.bgDim=.35; renderCanvas(); renderNav(); scheduleSave(); };
@@ -1351,7 +1351,7 @@ const TEXT_PRESETS={ title:{size:6.4,weight:800}, heading:{size:4.6,weight:800},
 function fmtLH(v){ const e=_fmtEl(); if(!e)return; e.lh=+v; const n=_selTxtNode(); if(n)n.style.lineHeight=v; scheduleSave(); }
 function fmtPreset(k){ const e=_fmtEl(); if(!e||!TEXT_PRESETS[k])return; pushUndo(tr('Text style')); Object.assign(e,TEXT_PRESETS[k]); renderCanvas(); scheduleSave(); }
 function fmtBullet(){ const e=_fmtEl(); if(!e)return; pushUndo(e.bullet?'Remove bullets':'Bullet list'); e.bullet=!e.bullet; renderCanvas(); scheduleSave(); }
-function fmtLink(){ const e=_fmtEl(); if(!e)return; const v=prompt('Link URL (empty to remove):', e.href||'https://');
+function fmtLink(){ const e=_fmtEl(); if(!e)return; const v=prompt(tr('Link URL (empty to remove):'), e.href||'https://');
   if(v===null)return; const url=v.trim(); if(url&&url!=='https://'){ e.href=/^https?:\/\//i.test(url)?url:'https://'+url; } else delete e.href;
   renderCanvas(); scheduleSave(); }
 function fmtImgFit(){ const e=_fmtEl(); if(!e)return; e.fit=(e.fit==='cover')?'auto':'cover'; renderCanvas(); scheduleSave(); }
@@ -1389,8 +1389,8 @@ function grpSel(on){ const ids=selIndices(); const s0=deck.slides[currentIdx]; i
   if(on){ const g='g'+Date.now(); ids.forEach(gi=>{ if(s0.elements[gi])s0.elements[gi].grp=g; }); toast(tr('Grouped')); }
   else ids.forEach(gi=>{ if(s0.elements[gi])delete s0.elements[gi].grp; });
   renderFmtBar(); scheduleSave(); }
-function fmtBuild(){ const e=_fmtEl(); if(!e)return; e.build=!e.build; renderFmtBar(); scheduleSave(); toast(e.build?'✦ Builds in on click while presenting':'Build removed'); }
-function fmtLock(){ const e=_fmtEl(); if(!e)return; e.locked=!e.locked; renderFmtBar(); scheduleSave(); toast(e.locked?'🔒 Locked — drag/delete disabled':'🔓 Unlocked'); }
+function fmtBuild(){ const e=_fmtEl(); if(!e)return; e.build=!e.build; renderFmtBar(); scheduleSave(); toast(e.build?tr('✦ Builds in on click while presenting'):tr('Build removed')); }
+function fmtLock(){ const e=_fmtEl(); if(!e)return; e.locked=!e.locked; renderFmtBar(); scheduleSave(); toast(e.locked?tr('🔒 Locked — drag/delete disabled'):'🔓 Unlocked'); }
 function fmtCenterH(){ const ids=selIndices(); const s0=deck.slides[currentIdx]; if(!ids.length||!s0)return;
   ids.forEach(gi=>{ const e=s0.elements[gi]; if(!e||e.locked)return; e.x=+(50-e.w/2).toFixed(2);
     const n=document.querySelector(`#canvasSlide .el[data-i="${gi}"]`); if(n)n.style.left=e.x+'%'; }); scheduleSave(); }
@@ -1414,7 +1414,7 @@ async function renderPdfData(blob){ const lib=await ensurePdf(); const pdf=await
   for(let i=1;i<=pdf.numPages;i++){ const pg=await pdf.getPage(i); const vp=pg.getViewport({scale:1.5}); const c=document.createElement('canvas'); c.width=vp.width;c.height=vp.height; await pg.render({canvasContext:c.getContext('2d'),viewport:vp}).promise;
     deck.slides.push({id:nid(),kind:'image',img:c.toDataURL('image/jpeg',.82)}); }
   currentIdx=deck.slides.length-1; renderNav(); renderCanvas(); save(); return pdf.numPages; }
-async function onPdf(file){ if(!file)return; toast(tr('Reading PDF…')); try{ const n=await renderPdfData(file); toast(n+' slides imported'); }catch(e){ toast(tr('Could not read that PDF')); } }
+async function onPdf(file){ if(!file)return; toast(tr('Reading PDF…')); try{ const n=await renderPdfData(file); toast(trf('{n} slides imported', { n })); }catch(e){ toast(tr('Could not read that PDF')); } }
 // PowerPoint/Keynote → server converts to PDF → render pixel-faithfully. Falls back
 // to a clear "export to PDF" message when conversion isn't configured/available.
 /* PowerPoint / Keynote import was removed from the UI. The endpoint (api/convert-deck.js)
@@ -1670,7 +1670,7 @@ async function pollyDeck(topic,count){
 async function illustrateDeck(queue,tok){
   const cap=Math.min(queue.length,6);
   for(let i=0;i<cap;i++){
-    toast('✨ Polly is illustrating '+(i+1)+'/'+cap+'…');
+    toast(tr('✨ Polly is illustrating ')+(i+1)+'/'+cap+'…');
     try{
       const r=await fetch('/api/polly-image',{method:'POST',headers:Object.assign({'Content-Type':'application/json'},tok?{'Authorization':'Bearer '+tok}:{}),
         body:JSON.stringify({ prompt:queue[i].prompt, size:'1024x1024' })});
@@ -1935,7 +1935,7 @@ async function openCloudDecks(){ closeMenus();
   try{ const s0=await fbDb.ref('users/'+userId+'/presentDecks').get(); list=s0.exists()?(s0.val()||{}):{}; }catch(e){}
   const ids=Object.keys(list); if(!ids.length){ toast(tr('No cloud decks yet — use “Save deck to cloud”.')); return; }
   const menu=ids.map((id,n)=>(n+1)+'. '+(list[id].title||id)+' ('+new Date(list[id].updatedAt||0).toLocaleDateString()+')').join('\n');
-  const pick=prompt('Open which deck?\n'+menu+'\n\nEnter a number:',''); const n=parseInt(pick,10);
+  const pick=prompt(tr('Open which deck?\n')+menu+'\n\nEnter a number:',''); const n=parseInt(pick,10);
   if(!n||n<1||n>ids.length)return;
   try{ const d=JSON.parse(list[ids[n-1]].json); pushUndo(tr('Open cloud deck')); deck=d; deck.cloudId=ids[n-1];
     currentIdx=deck.slides.length?0:-1; clearSel();
@@ -1973,7 +1973,7 @@ async function shareDeck(){ closeMenus();
     deck.shareId=sid; save();
     const url=location.origin+location.pathname+'#share='+sid;
     try{ await navigator.clipboard.writeText(url); toast(tr('🔗 Link copied — anyone with it can open this deck')); }
-    catch(e){ prompt('Copy your share link:',url); }
+    catch(e){ prompt(tr('Copy your share link:'),url); }
   }catch(e){ toast(tr('Sharing needs the updated database rules — see MANUAL-CHECKLIST.')); }
 }
 async function loadSharedDeck(sid){
@@ -2066,7 +2066,7 @@ function delComment(i){ const s0=deck.slides[currentIdx]; if(!s0||!s0.comments)r
 /* ─── NAMED VERSIONS (cloud restore points) ───────────────────────────────────*/
 async function saveVersion(){ closeMenus();
   if(typeof fbDb==='undefined'||!fbDb||!userId){ toast(tr('Sign in to save versions.')); toggleAuth(); return; }
-  const name=prompt('Name this version:','Before big changes'); if(!name)return;
+  const name=prompt(tr('Name this version:'),'Before big changes'); if(!name)return;
   if(!deck.cloudId) deck.cloudId='deck_'+Date.now();
   let j; try{ j=JSON.stringify(deck); }catch(e){ toast(tr('Deck too complex.')); return; }
   if(j.length>9*1024*1024){ toast(tr('Deck over 9 MB — trim media first.')); return; }
@@ -2078,7 +2078,7 @@ async function openVersions(){ closeMenus();
   let vs={}; try{ const s0=await fbDb.ref('users/'+userId+'/presentDecks/'+deck.cloudId+'/versions').get(); vs=s0.exists()?(s0.val()||{}):{}; }catch(e){}
   const keys=Object.keys(vs).sort().reverse(); if(!keys.length){ toast(tr('No versions yet — use "Save named version".')); return; }
   const menu=keys.map((k,n)=>(n+1)+'. '+(vs[k].name||k)+' — '+new Date(vs[k].at||+k).toLocaleString()).join('\n');
-  const pick=prompt('Restore which version?\n'+menu+'\n\nEnter a number:',''); const n=parseInt(pick,10);
+  const pick=prompt(tr('Restore which version?\n')+menu+'\n\nEnter a number:',''); const n=parseInt(pick,10);
   if(!n||n<1||n>keys.length)return;
   try{ pushUndo(tr('Restore version')); const d=JSON.parse(vs[keys[n-1]].json); const cid=deck.cloudId; deck=d; deck.cloudId=cid;
     currentIdx=deck.slides.length?0:-1; clearSel(); applyThemeTo(document.documentElement,deck.theme);

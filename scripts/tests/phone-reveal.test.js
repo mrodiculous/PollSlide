@@ -1,0 +1,32 @@
+#!/usr/bin/env node
+/* The phone says Correct / Partly right / Not quite once the presenter reveals (2026-10-07).
+ * Verified end to end on the stage server (correct, wrong, next question, reload after
+ * answering, presenter reset). This guards the properties that make it safe to add to a
+ * live audience page. Run: node scripts/tests/phone-reveal.test.js */
+const fs = require('fs'), path = require('path');
+const ROOT = path.resolve(__dirname, '..', '..');
+let pass = 0, fail = 0;
+const ok = (n, c, x) => c ? (pass++, console.log('  ✓ ' + n)) : (fail++, console.log('  ✗ ' + n + (x !== undefined ? '  → ' + JSON.stringify(x) : '')));
+const A = fs.readFileSync(path.join(ROOT, 'answer.html'), 'utf8');
+const P = fs.readFileSync(path.join(ROOT, 'presenter.html'), 'utf8');
+const block = A.slice(A.indexOf('let _rvRef = null'), A.indexOf('function goToQuestion(idx){'));
+
+console.log('\nPhone: did I get it right?');
+ok('the feature exists', /function renderRevealResult\(/.test(block) && /function startRevealWatch\(/.test(block));
+ok('it is READ-ONLY — no set/update/push/remove/transaction anywhere in it', !/\.(set|update|push|remove|transaction)\(/.test(block.replace(/classList\.remove/g, '').replace(/el\.remove\(\)/g, '')));
+ok('it listens to this question\'s own qstate phase, keyed by the bucket the answer went to', /qstate\/\$\{qid\}\/phase/.test(block) && /const qid = _rvQid = STABLE_QID/.test(block));
+ok('…which is the node and the word the presenter writes on reveal', /qstate\/\$\{liveQId\}`\)\.update\(update\)/.test(P) && /phase: 'revealed'/.test(P) && /_rvPhase === 'revealed' \|\| _rvPhase === 'post_reveal'/.test(block));
+ok('only graded multiple-choice questions get a verdict (polls, surveys, open text untouched)', /function _rvGradable\(q\)/.test(block) && /if \(!SESSION \|\| !STABLE_QID \|\| !_rvGradable\(questionData\)\) \{ stopRevealWatch\(\); return; \}/.test(block));
+ok('the listener is stopped when the phone moves to another question', /function goToQuestion\(idx\)\{\n  if \(idx === Q_INDEX\) return;\n  stopRevealWatch\(\);/.test(A));
+ok('it starts only after the bucket is derived from quiz_builder (the bucket invariant)', /STABLE_QID = PSQid\.bucket\(questionData, Q_INDEX, SESSION\); \} catch \(e\) \{\}\n  startRevealWatch\(\);/.test(A));
+ok('a stale callback for an old question is ignored', /if \(qid !== STABLE_QID\) return; _rvPhase = snap\.val\(\)/.test(block) && /if \(qid !== STABLE_QID \|\| !\(_rvPhase/.test(block));
+ok('a reset (phase back to live) takes the banner away', /if \(!shown\) \{ if \(el\) el\.remove\(\); return; \}/.test(block));
+ok('the verdict is the phone\'s own score, kept at submit (no wait on the write)', /_rvMine = \{ isCorrect \};/.test(A));
+ok('after a reload it reads its own response back, not anyone else\'s', /responses\/\$\{qid\}\/\$\{participantId\}/.test(block));
+ok('the answer text is escaped before it is shown', /esc\(\(\(q\.options \|\| \[\]\)\[i\] \|\| \{\}\)\.text/.test(block));
+ok('it is re-applied after every redraw that could wipe it', (A.match(/reapplyReveal\(\);/g) || []).length >= 4);
+for (const l of ['es', 'de', 'fr', 'pt', 'it']) ok(l + ': the verdict and the already-answered screen are translated', new RegExp(`Object\\.assign\\(I18N\\.${l}, \\{ rvCorrect:`).test(A) && /alreadyAnswered:/.test(A));
+ok('the already-answered screen no longer hard-codes English', /t\('alreadyAnswered'/.test(A) && /t\('nextQr'/.test(A));
+
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);

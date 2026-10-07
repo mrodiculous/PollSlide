@@ -141,6 +141,13 @@
   .status-box.submitted { background:rgba(67,233,123,0.08); border:1px solid rgba(67,233,123,0.2); color:var(--accent3); }
   .status-box.closed    { background:rgba(247,183,49,0.08);  border:1px solid rgba(247,183,49,0.2);  color:var(--accent4); }
   .status-box.error     { background:rgba(255,101,132,0.08); border:1px solid rgba(255,101,132,0.2); color:var(--accent2); }
+  /* "Did I get it right?" — shown on the phone once the presenter reveals (2026-10-07). */
+  .status-box.rv-ok   { background:rgba(67,233,123,0.14);  border:1px solid rgba(67,233,123,0.45);  color:var(--accent3); font-weight:700; }
+  .status-box.rv-part { background:rgba(247,183,49,0.12);  border:1px solid rgba(247,183,49,0.4);   color:var(--accent4); font-weight:700; }
+  .status-box.rv-no   { background:rgba(255,101,132,0.10); border:1px solid rgba(255,101,132,0.35); color:var(--accent2); font-weight:700; }
+  .status-box .rv-ans { display:block; margin-top:6px; font-weight:500; font-size:13px; color:var(--text); }
+  .option.rv-correct { border-color:#43e97b; background:rgba(67,233,123,0.14); }
+  .option.rv-dim { opacity:0.45; }
 
   .spinner { width:28px; height:28px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; margin:0 auto 14px; }
   @keyframes spin { to{transform:rotate(360deg)} }
@@ -409,6 +416,11 @@ Object.assign(I18N.es, { waitingTitle:'Esperando…', qUnavailable:'Esta pregunt
 Object.assign(I18N.de, { waitingTitle:'Warten…', qUnavailable:'Diese Frage ist gerade nicht verfügbar.<br>Bleib auf dieser Seite – sie öffnet sich, sobald dein Präsentator eine Frage zeigt.' });
 Object.assign(I18N.fr, { waitingTitle:'En attente…', qUnavailable:'Cette question n’est pas disponible pour le moment.<br>Restez sur cette page : elle s’ouvrira dès que votre présentateur affichera une question.' });
 Object.assign(I18N.pt, { waitingTitle:'Aguardando…', qUnavailable:'Esta pergunta não está disponível no momento.<br>Fique nesta página — ela abre assim que seu apresentador mostrar uma pergunta.' });
+Object.assign(I18N.es, { rvCorrect:'¡Correcto!', rvPartial:'Casi: parcialmente correcto', rvWrong:'Esta vez no', rvAnswer:'Respuesta:', alreadyAnswered:'✓ ¡Esta pregunta ya está respondida!', nextQr:'Escanea el QR de la siguiente pregunta cuando el presentador avance.' });
+Object.assign(I18N.de, { rvCorrect:'Richtig!', rvPartial:'Fast – teilweise richtig', rvWrong:'Diesmal nicht', rvAnswer:'Antwort:', alreadyAnswered:'✓ Diese Frage ist schon beantwortet!', nextQr:'Scanne den QR-Code der nächsten Frage, wenn es weitergeht.' });
+Object.assign(I18N.fr, { rvCorrect:'Correct !', rvPartial:'Presque — en partie juste', rvWrong:'Pas cette fois', rvAnswer:'Réponse :', alreadyAnswered:'✓ Réponse déjà envoyée pour cette question !', nextQr:'Le QR de la question suivante arrive quand le présentateur avance.' });
+Object.assign(I18N.pt, { rvCorrect:'Certo!', rvPartial:'Quase — parcialmente certo', rvWrong:'Desta vez não', rvAnswer:'Resposta:', alreadyAnswered:'✓ Esta pergunta já foi respondida!', nextQr:'O QR da pergunta seguinte aparece quando o apresentador avançar.' });
+Object.assign(I18N.it, { rvCorrect:'Giusto!', rvPartial:'Quasi: in parte giusto', rvWrong:'Non questa volta', rvAnswer:'Risposta:', alreadyAnswered:'✓ Hai già risposto a questa domanda!', nextQr:'Scansiona il QR della prossima domanda quando il presentatore va avanti.' });
 Object.assign(I18N.it, { waitingTitle:'In attesa…', qUnavailable:'Questa domanda non è disponibile al momento.<br>Resta su questa pagina: si aprirà appena il tuo presentatore mostrerà una domanda.' });
 function t(key, fallback){ return (I18N[LANG] && I18N[LANG][key]) || fallback; }
 
@@ -1213,8 +1225,73 @@ async function followLive(forceFollow){
 // Advance to a new live question WITHOUT reloading the page. A full reload re-inited
 // Firebase, re-authed, and re-fetched everything on every advance — slow and flaky on
 // phones (Rod: "taking forever, had to reload"). This swaps the question in place.
+/* ── "Did I get it right?" (2026-10-07) ─────────────────────────────────────────
+ * When the presenter reveals a graded question, the phone now says Correct / Partly right /
+ * Not quite and shows the right answer. Before, the reveal reached everything except the
+ * person who answered: they were left on "✓ Submitted!".
+ *
+ * READ-ONLY and additive. It listens to sessions/<code>/qstate/<bucket>/phase — the node
+ * presenter.html and the PowerPoint add-in already write ('revealed', then 'post_reveal';
+ * a reset writes 'live', which takes the banner away again). It never writes anything,
+ * never changes how an answer is submitted, scored or bucketed, and the bucket is the same
+ * STABLE_QID the answer was written to (see the session-state contract). The verdict is the
+ * phone's own stored response (isCorrect was already computed on submit); a phone that
+ * reloads after answering reads it back from responses/<bucket>/<participantId>. Polls,
+ * surveys and questions without a correct answer are untouched: nothing is attached. */
+let _rvRef = null, _rvQid = null, _rvPhase = null, _rvMine = null;
+function _rvGradable(q) {
+  if (!q || (q.type !== 'multiple_choice' && q.type !== 'multiple_choice_multi')) return false;
+  const c = q.correctAnswer;
+  return !(c === null || c === undefined || c === '' || (Array.isArray(c) && !c.length));
+}
+function stopRevealWatch() {
+  if (_rvRef) { try { _rvRef.off(); } catch (e) {} }
+  _rvRef = null; _rvQid = null; _rvPhase = null; _rvMine = null;
+  const el = document.getElementById('revealResult'); if (el) el.remove();
+}
+function startRevealWatch() {
+  if (!SESSION || !STABLE_QID || !_rvGradable(questionData)) { stopRevealWatch(); return; }
+  if (_rvRef && _rvQid === STABLE_QID) return;
+  stopRevealWatch();
+  const qid = _rvQid = STABLE_QID;
+  try {
+    _rvRef = db.ref(`sessions/${SESSION}/qstate/${qid}/phase`);
+    _rvRef.on('value', snap => { if (qid !== STABLE_QID) return; _rvPhase = snap.val(); renderRevealResult(); }, () => {});
+  } catch (e) { _rvRef = null; }
+}
+function reapplyReveal() { if (_rvPhase) renderRevealResult(); }
+async function renderRevealResult() {
+  const qid = STABLE_QID, q = questionData;
+  const shown = (_rvPhase === 'revealed' || _rvPhase === 'post_reveal') && _rvGradable(q);
+  document.querySelectorAll('.option.rv-correct, .option.rv-dim').forEach(o => o.classList.remove('rv-correct', 'rv-dim'));
+  let el = document.getElementById('revealResult');
+  if (!shown) { if (el) el.remove(); return; }
+  let mine = _rvMine;
+  if (!mine && participantId) {
+    try { const s = await db.ref(`sessions/${SESSION}/responses/${qid}/${participantId}`).get(); if (s.exists()) mine = _rvMine = s.val(); } catch (e) {}
+  }
+  if (qid !== STABLE_QID || !(_rvPhase === 'revealed' || _rvPhase === 'post_reveal')) return;
+  const letters = ['A','B','C','D','E','F','G','H'];
+  const right = (Array.isArray(q.correctAnswer) ? q.correctAnswer : [q.correctAnswer]).map(Number).filter(n => !isNaN(n));
+  const answerText = right.map(i => letters[i] + '. ' + esc(((q.options || [])[i] || {}).text || '')).join(' · ');
+  const v = mine ? mine.isCorrect : undefined;
+  const cls = v === true ? 'rv-ok' : (typeof v === 'number' && v > 0) ? 'rv-part' : (mine ? 'rv-no' : 'submitted');
+  const head = v === true ? '✓ ' + t('rvCorrect', 'Correct!')
+             : (typeof v === 'number' && v > 0) ? '◐ ' + t('rvPartial', 'Partly right')
+             : mine ? '✗ ' + t('rvWrong', 'Not quite') : '';
+  const html = `<div id="revealResult" class="status-box ${cls}" style="margin-top:14px;" role="status" aria-live="polite">${head}` +
+               `<span class="rv-ans">${t('rvAnswer', 'Answer:')} ${answerText}</span></div>`;
+  el = document.getElementById('revealResult');
+  if (el) el.outerHTML = html;
+  else (document.getElementById('qBody') || document.getElementById('app')).insertAdjacentHTML('beforeend', html);
+  // On a single-choice screen the options are still there: light up the right one.
+  right.forEach(i => { const o = document.getElementById('opt' + i); if (o) o.classList.add('rv-correct'); });
+  document.querySelectorAll('.option[id^="opt"]').forEach(o => { if (!o.classList.contains('rv-correct')) o.classList.add('rv-dim'); });
+}
+
 function goToQuestion(idx){
   if (idx === Q_INDEX) return;
+  stopRevealWatch();
   Q_INDEX = idx;
   _linkResolved = true;       // idx is a POSITION (from currentQuestion), already resolved
   clearTimeout(_waitRetry);   // a pending re-check must not redraw this question mid-answer
@@ -1455,6 +1532,7 @@ async function loadQuestion() {
      other surface also reads, so deriving from it makes them agree no matter what pointer
      the driver publishes. */
   try { STABLE_QID = PSQid.bucket(questionData, Q_INDEX, SESSION); } catch (e) {}
+  startRevealWatch();   // read-only: shows Correct / Not quite when the presenter reveals
 
   // Check if this participant already answered this question
   // Response is stored at: sessions/SESSION/responses/STABLE_QID/participantId
@@ -1632,6 +1710,7 @@ function showQuestion(q) {
     ${wagerGate || `<div id="qBody">${body}</div>`}
   `);
 
+  reapplyReveal();
   // Start countdown if timer set. In wager mode the clock starts once the bet is placed,
   // so nobody loses their speed/answer window while deciding how much to risk.
   if (q.timer && q.timer > 0 && !(GAME_MODE === 'wager' && !_wagerLocked)) startTimer(q.timer);
@@ -1704,6 +1783,7 @@ function toggleOpt(i) {
     submitToDb([i]);
     document.getElementById('qBody').insertAdjacentHTML('beforeend',
       '<div class="status-box submitted" style="margin-top:14px;">' + t('submitted','✓ Submitted!') + '</div>');
+    reapplyReveal();
   } else {
     if (selectedOptions.has(i)) { selectedOptions.delete(i); document.getElementById(`opt${i}`).classList.remove('selected'); }
     else { selectedOptions.add(i); document.getElementById(`opt${i}`).classList.add('selected'); }
@@ -1730,6 +1810,7 @@ function submitAnswer() {
   submitToDb(answer);
   document.getElementById('qBody').innerHTML =
     '<div class="status-box submitted">' + t('submitted','✓ Submitted!') + '</div>' + submittedModeNoteHtml();
+  reapplyReveal();
 }
 
 // A line of mode flavour right after answering, so the phone feels part of the game
@@ -1809,6 +1890,7 @@ async function submitToDb(answer) {
      ReferenceError, the inner handler swallowed it, and the offline queue silently
      never received anything. Everything looked fine right up until the wifi failed. */
   const attempt = _attemptsUsed + 1;
+  _rvMine = { isCorrect };   // the phone's own verdict, so a reveal shows it without waiting for the write
   const record = {
       participantId,
       name: participantName,
@@ -1894,11 +1976,12 @@ function showSessionFull() {
 function showAlreadyAnswered() {
   render(`
     <div class="logo"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="22" height="22" style="flex-shrink:0;"><rect width="100" height="100" rx="22" fill="#0d0d18"/><rect x="18" y="58" width="16" height="24" rx="4" fill="#ff6584"/><rect x="42" y="42" width="16" height="40" rx="4" fill="#f7b731"/><rect x="66" y="22" width="16" height="60" rx="4" fill="#6c63ff"/><polygon points="72,32 72,40 78,36" fill="rgba(255,255,255,0.8)"/></svg>PollSlide</div>
-    <div class="status-box submitted">✓ You already answered this question!</div>
+    <div class="status-box submitted">${t('alreadyAnswered','✓ You already answered this question!')}</div>
     <p class="center" style="color:var(--muted);font-size:13px;margin-top:8px;">
-      Scan the next question's QR when the presenter moves on.
+      ${t('nextQr',"Scan the next question's QR when the presenter moves on.")}
     </p>
   `);
+  reapplyReveal();
 }
 
 /* They have answered, and the teacher allows another go. Show what they said, say

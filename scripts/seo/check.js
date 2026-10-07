@@ -53,7 +53,7 @@ if (!keyFile || read(keyFile).trim() !== keyFile.slice(0, 32)) fail('IndexNow ke
 
 // ── content that AI crawlers can read without running JavaScript (GPTBot/ClaudeBot/Perplexity don't)
 const { spawnSync } = require('child_process');
-for (const [script, args] of [['prerender-pricing.js', ['--check']], ['prerender-download.js', ['--check']], ['faq-schema.js', ['--check', 'index.html', 'integrations.html', 'vs-mentimeter.html']]]) {
+for (const [script, args] of [['prerender-pricing.js', ['--check']], ['prerender-download.js', ['--check']], ['faq-schema.js', ['--check', 'index.html', 'integrations.html', 'vs-mentimeter.html', 'vs-slido.html', 'vs-kahoot.html', 'vs-poll-everywhere.html', 'vs-ahaslides.html', 'vs-wooclap.html']]]) {
   const r = spawnSync(process.execPath, [path.join(__dirname, script), ...args], { encoding: 'utf8', env: { ...process.env, WEBSITE_DIR: SITE } });
   if (r.status !== 0) fail((r.stderr || r.stdout).trim().split('\n').pop());
 }

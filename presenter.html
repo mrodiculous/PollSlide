@@ -16,7 +16,7 @@
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=1c095754"></script>
+<script src="/ui-lang.js?v=41a34cc2"></script>
 <script src="/tickets.js?v=edb362ec"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -1283,7 +1283,7 @@ async function buyCredits(n, ev) {
     const why = (data && data.error) || 'API not deployed yet';
     if (typeof showCheckoutError === 'function') showCheckoutError(why, data && data.fix);
     if (data && data.fix) console.warn('Credit checkout config error:', why, '\nFix:', data.fix);
-    toast('Credit checkout error: ' + why, 'danger');
+    toast(tr('Credit checkout error: ') + why, 'danger');
   } catch (e) {
     if (btn) { btn.innerHTML = orig; btn.disabled = false; }
     if (typeof showCheckoutError === 'function') showCheckoutError('Could not reach the checkout endpoint.', String(e && e.message || e));
@@ -1385,7 +1385,7 @@ auth.onAuthStateChanged(user => {
         sessionStorage.removeItem('ps_upgrade_success');
         setTimeout(function() {
           const planName = upgradedPlan.charAt(0).toUpperCase() + upgradedPlan.slice(1);
-          toast('🎉 Welcome to ' + planName + '! Your plan is now active.', 'success');
+          toast(trf('🎉 Welcome to {plan}! Your plan is now active.', { plan: planName }), 'success');
         }, 1800);
       }
     } catch(e) {}
@@ -1395,7 +1395,7 @@ auth.onAuthStateChanged(user => {
       if (boughtCredits) {
         sessionStorage.removeItem('ps_credits_success');
         setTimeout(function() {
-          toast('⚡ ' + boughtCredits + ' Polly credits added — they never expire!', 'success');
+          toast('⚡ ' + boughtCredits + tr(' Polly credits added — they never expire!'), 'success');
           refreshCreditBadge();
         }, 1800);
       }
@@ -1425,7 +1425,7 @@ auth.onAuthStateChanged(user => {
         const next = ['pro','team','white','team_small','team_large'].includes(nt) ? nt : 'free';
         if (next === userTier) return;
         userTier = next;
-        try { toast('Your plan is now ' + (TIERS[normalizeTier(next)] || TIERS.free).name + '.', 'success'); } catch(e) {}
+        try { toast(trf('Your plan is now {plan}.', { plan: (TIERS[normalizeTier(next)] || TIERS.free).name }), 'success'); } catch(e) {}
       });
     }).catch(() => { userTier = 'free'; loadPresentations(); });
 
@@ -1980,7 +1980,7 @@ function acceptCopilot(i, launchNow) {
   renderQList(); renderEditor(idx); scheduleSave();
   closeCopilot();
   if (launchNow) { launchQuestion(idx); toast(tr('🎯 Follow-up launched — the room is answering it now.'), 'success'); }
-  else { toast('🎯 Follow-up added as question ' + (idx + 1) + '.', 'success'); }
+  else { toast(trf('🎯 Follow-up added as question {n}.', { n: idx + 1 }), 'success'); }
 }
 
 // ─── ✨ AI INSIGHTS ───────────────────────────────────────────────────────────
@@ -2231,7 +2231,7 @@ function openPlanPicker() {
       // Server refused a 2nd subscription → send them to the portal to switch instead.
       if (data && data.alreadySubscribed) {
         restore();
-        toast(data.message || 'You already have a subscription — opening billing to switch plans.', 'info');
+        toast(data.message || tr('You already have a subscription — opening billing to switch plans.'), 'info');
         try { openBillingPortal(); } catch(e) {}
         return;
       }
@@ -2245,11 +2245,11 @@ function openPlanPicker() {
         // Actionable Stripe-config error — almost always a price with no lookup key on it.
         // The fix is a dashboard change, so it is shown in full rather than summarised.
         console.warn('Checkout config error:', data.error, '\nFix:', data.fix);
-        showErr(data.error || 'This plan is not set up in Stripe yet.', data.fix);
+        showErr(data.error || tr('This plan is not set up in Stripe yet.'), data.fix);
         toast(tr('This plan isn\'t set up in Stripe yet — details are in the panel.'), 'danger');
       } else {
         showErr(tr('Checkout error'), data.error || 'Unknown error');
-        toast('Checkout error: ' + (data.error || 'Unknown error'), 'danger');
+        toast(tr('Checkout error: ') + (data.error || tr('Unknown error')), 'danger');
       }
     } catch(e) {
       restore();
@@ -2380,7 +2380,7 @@ async function startCheckout() {
     if (data.url) {
       window.location.href = data.url; // redirect to Stripe hosted checkout
     } else {
-      toast('Could not start checkout: ' + (data.error || 'Unknown error'), 'danger');
+      toast(tr('Could not start checkout: ') + (data.error || tr('Unknown error')), 'danger');
       if (btn) { btn.textContent = tr('Continue to checkout →'); btn.disabled = false; }
     }
   } catch(e) {
@@ -2462,7 +2462,7 @@ async function signInGoogle() {
 async function resetPassword() {
   const email = document.getElementById('authEmail').value.trim();
   if (!email) { authError('Enter your email above, then click Forgot password.'); return; }
-  try { await auth.sendPasswordResetEmail(email); alert('Password reset email sent to ' + email); authError(''); }
+  try { await auth.sendPasswordResetEmail(email); alert(tr('Password reset email sent to ') + email); authError(''); }
   catch(e) { authError(friendlyAuthError(e.code)); }
 }
 
@@ -3171,7 +3171,7 @@ function openClassManager(preselectDeckId) {
 function closeClassManager() { const m = document.getElementById('classModal'); if (m) m.remove(); }
 
 async function createClass() {
-  const name = (prompt('Class name — e.g. "Biology 101, Period 3":') || '').trim();
+  const name = (prompt(tr('Class name — e.g. "Biology 101, Period 3":')) || '').trim();
   if (!name) return;
   const cid = 'cl_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6);
   classes[cid] = { name: name.slice(0,80), createdAt: Date.now(), students: {} };
@@ -3250,7 +3250,7 @@ async function saveRoster(cid) {
   if (r.added.length)    bits.push(r.added.length + ' added');
   if (r.rejoined.length) bits.push(r.rejoined.length + ' back');
   if (r.left.length)     bits.push(r.left.length + ' removed');
-  toast(bits.length ? '👥 ' + bits.join(' · ') : 'Class list unchanged', 'success');
+  toast(bits.length ? '👥 ' + bits.join(' · ') : tr('Class list unchanged'), 'success');
   renderPresList();
 }
 
@@ -3270,9 +3270,9 @@ async function setVerifyMode(cid, mode) {
   if (userId) await db.ref(`users/${userId}/classes/${cid}/verifyMode`).set(mode).catch(()=>{});
   for (const p of Object.values(presentations)) if (p.classId === cid) await publishRosterFor(p);
   openRosterEditor(cid);
-  toast(mode === 'pin' ? '🔢 Students will choose their own PIN'
-      : mode === 'code' ? '🎟️ Issue codes below, then hand them out'
-      : '✉️ Codes will be emailed — add each student\'s address', 'success');
+  toast(mode === 'pin' ? tr('🔢 Students will choose their own PIN')
+      : mode === 'code' ? tr('🎟️ Issue codes below, then hand them out')
+      : tr('✉️ Codes will be emailed — add each student\'s address'), 'success');
 }
 
 // Only students without one get a code, so re-running never invalidates a list
@@ -3308,7 +3308,7 @@ async function resetStudentPin(cid) {
     await db.ref(`users/${userId}/classes/${cid}/students/${sid}`).update({ pinHash: null, pinSalt: null, pinSetAt: null });
     if (c && c.students && c.students[sid]) { delete c.students[sid].pinHash; delete c.students[sid].pinSalt; }
     toast(trf('PIN cleared for {name}', { name }), 'success');
-  } catch (e) { toast('Could not clear it: ' + e.message, 'danger'); }
+  } catch (e) { toast(tr('Could not clear it: ') + e.message, 'danger'); }
 }
 
 async function assignDeckToClass(deckId, cid) {
@@ -3457,7 +3457,7 @@ async function createPresentation(thenPolly = false) {
   if (current >= limit) {
     showUpgradePrompt(
       trf("You've reached the {plan} plan limit of {n} presentations.", { plan: tierLimits().name, n: limit }),
-      'Upgrade to Pro for unlimited presentations.'
+      tr('Upgrade to Pro for unlimited presentations.')
     );
     return;
   }
@@ -3487,8 +3487,8 @@ async function createPresentation(thenPolly = false) {
   } catch (e) {
     delete presentations[id];
     renderPresList();
-    toast('Could not create it — ' + (e && e.message ? e.message : 'the save failed') +
-          '. Check your connection and try again.', 'danger');
+    toast(tr('Could not create it — ') + (e && e.message ? e.message : tr('the save failed')) +
+          tr('. Check your connection and try again.'), 'danger');
     if (window.psReportError) psReportError('createPresentation write failed: ' + (e && e.message));
     return;
   }
@@ -4560,8 +4560,8 @@ async function toggleFocusTrack(id) {
   if (p.sessionCode) db.ref(`quiz_builder/${p.sessionCode}/focusTrack`).set(on).catch(()=>{});
   renderPresList();
   toast(on
-    ? '👁 Students will be told on screen if they leave, and it appears in your report.'
-    : 'Screen-leaving is no longer tracked or reported.', 'success');
+    ? tr('👁 Students will be told on screen if they leave, and it appears in your report.')
+    : tr('Screen-leaving is no longer tracked or reported.'), 'success');
 }
 
 
@@ -4626,7 +4626,7 @@ async function createFromStarter(id) {
   const owned = Object.keys(presentations).filter(pid => isDeckOwner(pid)).length;
   if (owned >= limit) {
     showUpgradePrompt(trf("You've reached the {plan} plan limit of {n} presentations.", { plan: tierLimits().name, n: limit }),
-                      'Upgrade to Pro for unlimited presentations.');
+                      tr('Upgrade to Pro for unlimited presentations.'));
     return;
   }
   const id2 = 'pres_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -5179,7 +5179,7 @@ async function fetchDeckGifs(deckId) {
   await publishDeckGifs(deckId);
   openGifModal(deckId);
   if (done) toast(trp(done, 'Added {n} GIF. Review them before you present.', 'Added {n} GIFs. Review them before you present.'), 'success');
-  else toast(firstError || 'No GIFs found for these questions.', 'warn');
+  else toast(firstError || tr('No GIFs found for these questions.'), 'warn');
 }
 
 /* The text a GIF for the ANSWER should be about. Multiple choice stores an index, so
@@ -5213,7 +5213,7 @@ async function researchGif(deckId, qIdx, slot, term) {
                                    still: g.still || '', id: g.id || '' });
     scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
     toast(trf('Found a GIF for "{q}".', { q: clean }), 'success');
-  } catch (e) { toast('Could not search: ' + (e.message||e), 'warn'); }
+  } catch (e) { toast(tr('Could not search: ') + (e.message||e), 'warn'); }
 }
 
 async function reshuffleGif(deckId, qIdx, slot) {
@@ -5234,7 +5234,7 @@ async function reshuffleGif(deckId, qIdx, slot) {
     gifSlotWrite(q, slot, g.url, { term, source: g.source || '', alt: g.alt || '',
                                    still: g.still || '', id: g.id || '' });
     scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
-  } catch (e) { toast('Could not search: ' + (e.message||e), 'warn'); }
+  } catch (e) { toast(tr('Could not search: ') + (e.message||e), 'warn'); }
 }
 
 async function removeGif(deckId, qIdx, slot) {
@@ -5256,7 +5256,7 @@ async function clearDeckGifs(deckId) {
   });
   scheduleSave(); await publishDeckGifs(deckId); openGifModal(deckId);
   toast(removed ? trp(removed, 'Removed {n} fetched GIF. Your own pictures are untouched.', 'Removed {n} fetched GIFs. Your own pictures are untouched.')
-                : 'No fetched GIFs to remove.', 'success');
+                : tr('No fetched GIFs to remove.'), 'success');
 }
 
 // Push the questions (carrying their media URLs) to the node the audience reads.
@@ -5337,7 +5337,7 @@ async function toggleArchive(id) {
   const now = !p.archived;
   await setDeckField(id, 'archived', now ? true : null);
   renderPresList();
-  toast(now ? '📦 Archived — find it under Archived' : 'Restored', 'success');
+  toast(now ? tr('📦 Archived — find it under Archived') : 'Restored', 'success');
 }
 
 // ── Folders ───────────────────────────────────────────────────────────────
@@ -5373,7 +5373,7 @@ async function createFolder() {
 
 async function renameFolder(path) {
   const parts = folderParts(path);
-  const name = (prompt('Rename folder:', parts[parts.length - 1]) || '').trim();
+  const name = (prompt(tr('Rename folder:'), parts[parts.length - 1]) || '').trim();
   if (!name || name === parts[parts.length - 1]) return;
   if (name.includes('/')) { toast(tr('Folder names can’t contain “/”.'), 'danger'); return; }
   const next = folderJoin(parts.slice(0, -1).concat([name]));
@@ -5911,7 +5911,7 @@ async function openCollabModal(id) {
 function closeCollabModal() { const m = document.getElementById('collabModal'); if (m) m.remove(); }
 
 async function revokeCollab(id, collabUid) {
-  if (!confirm('Remove their access to this deck?\n\nIt takes effect immediately — if they have it open, their next change will be refused.')) return;
+  if (!confirm(tr('Remove their access to this deck?\n\nIt takes effect immediately — if they have it open, their next change will be refused.'))) return;
   try { await shareApi('revokeCollab', { presId: id, collabUid }); openCollabModal(id); toast(tr('Access removed'), 'success'); }
   catch (e) { toast(e.message, 'danger'); }
 }
@@ -5986,7 +5986,7 @@ async function acceptShare(shareId) {
     refreshShareInbox();
   } catch (e) {
     // A plan-limit refusal deserves the upgrade path, not a red toast.
-    if (/plan holds/i.test(e.message)) { closeInbox(); showUpgradePrompt(e.message, 'Upgrade for unlimited decks.'); }
+    if (/plan holds/i.test(e.message)) { closeInbox(); showUpgradePrompt(e.message, tr('Upgrade for unlimited decks.')); }
     else toast(e.message, 'danger');
   }
 }
@@ -6335,7 +6335,7 @@ function togglePresentTally() {
   if (userId) db.ref(deckPath(activePresId) + '/showTallyCard').set(!!pres.showTallyCard).catch(()=>{});
   syncPresentTallyBtn();
   if (_presentIdx !== null && _presentIdx < questions.length) renderPresentSlide(_presentIdx); // refresh Next→ label
-  toast(pres.showTallyCard ? 'Final Results card ON — press → after the last question.' : 'Final Results card off.', pres.showTallyCard ? 'success' : 'info');
+  toast(pres.showTallyCard ? tr('Final Results card ON — press → after the last question.') : tr('Final Results card off.'), pres.showTallyCard ? 'success' : 'info');
 }
 function syncPresentTallyBtn() {
   const b = document.getElementById('presentTallyBtn');
@@ -8068,7 +8068,7 @@ function addQuestion() {
 
 // ─── POLLY AI — draft questions for the ACTIVE product (poll/survey/quiz/study) ─
 function openPolly() {
-  if (!activePresId) { toast('Pick or create a ' + PRODUCTS[activeProduct].name.replace('Slide','').toLowerCase() + ' first.', 'danger'); return; }
+  if (!activePresId) { toast(trf('Pick or create a {what} first.', { what: tr(PRODUCTS[activeProduct].name.replace('Slide','').toLowerCase()) }), 'danger'); return; }
   const p = PRODUCTS[activeProduct];
   document.getElementById('pollyTitle').textContent = `✨ Polly · ${tr(p.name)}`;
   document.getElementById('pollySub').textContent = trf("Give Polly a topic and she'll draft {what} you can drop straight in.", { what: tr(p.short).toLowerCase() });
@@ -8129,8 +8129,8 @@ function toggleTeamMode() {
     db.ref(`quiz_builder/${pres.sessionCode}/retakes`).set(pres.retakes ? PSRetakes.retakePolicy(pres.retakes) : null).catch(()=>{});
   syncTeamModeBtn();
   toast(pres.teamMode
-    ? '👥 Team play ON — the audience will pick or create a team when they join. Leaderboards rank teams (average member score).'
-    : '👥 Team play off — everyone answers individually again.', pres.teamMode ? 'success' : 'info');
+    ? tr('👥 Team play ON — the audience will pick or create a team when they join. Leaderboards rank teams (average member score).')
+    : tr('👥 Team play off — everyone answers individually again.'), pres.teamMode ? 'success' : 'info');
 }
 
 // ===== PS_GAME_MODES_START (kept VERBATIM in live.html — edit both together) =====
@@ -8464,7 +8464,7 @@ async function runPolly() {
     }
     if (r.status === 429 || data.overLimit) {   // monthly quota reached (server-enforced)
       goBtn.disabled = false; status.style.display = 'none';
-      toast(data.error || 'Monthly Polly limit reached.', 'warn');
+      toast(data.error || tr('Monthly Polly limit reached.'), 'warn');
       try { closePolly(); openPlanPicker(); } catch(e) {}
       return;
     }
@@ -9198,7 +9198,7 @@ async function generateQImage(idx) {
     const d = await r.json().catch(() => ({}));
     if (r.status === 429 || d.overLimit) {   // monthly quota reached (server-enforced)
       if (btn) { btn.disabled = false; btn.textContent = tr('Generate image'); }
-      toast(d.error || 'Monthly Polly limit reached.', 'warn');
+      toast(d.error || tr('Monthly Polly limit reached.'), 'warn');
       try { openPlanPicker(); } catch(e) {}
       return;
     }
@@ -9881,7 +9881,7 @@ async function openBillingPortal() {
       if (!showCheckoutError(msg, detail)) toast(msg, 'warn');
     } else {
       const msg = 'Could not open the billing portal.';
-      if (!showCheckoutError(msg, 'Email help@pollslide.com and we will sort it out.')) toast(msg + ' Email help@pollslide.com', 'danger');
+      if (!showCheckoutError(msg, 'Email help@pollslide.com and we will sort it out.')) toast(msg + tr(' Email help@pollslide.com'), 'danger');
     }
   } catch(e) {
     const msg = 'Could not reach the billing portal.';
@@ -10122,14 +10122,14 @@ async function teamResend(k){
   const ws=currentWorkspace; if(!ws||!teamCanManage()) return;
   const res = await teamApi('resend', { wsId:ws.id, emailKey:k });
   if (res.ok) { toast(tr('Invite email sent again'),'success'); return; }
-  toast(res.error || 'Could not resend right now — try again in a minute.','danger');
+  toast(res.error || tr('Could not resend right now — try again in a minute.'),'danger');
 }
 
 async function teamLeave(){
   const ws=currentWorkspace; if(!ws || teamMyRole()==='owner') return;
-  if (!confirm('Leave '+(ws.data.name||'this team')+'? You keep all your presentations, and your account goes back to the Free plan.')) return;
+  if (!confirm(trf('Leave {name}? You keep all your presentations, and your account goes back to the Free plan.', { name: ws.data.name || tr('this team') }))) return;
   const res = await teamApi('leave', { wsId:ws.id });
-  if (!res.ok) { toast(res.error || 'Could not leave right now — try again in a minute.','danger'); return; }
+  if (!res.ok) { toast(res.error || tr('Could not leave right now — try again in a minute.'),'danger'); return; }
   currentWorkspace = null;
   document.getElementById('teamModal').classList.add('hidden');
   toast(tr('You left the team. Your presentations are all still here.'),'success');
@@ -10164,7 +10164,7 @@ async function teamInvite(){
   if (invites[k]) { errEl.textContent=tr('Already invited.'); return; }
   if (Object.keys(members).length + Object.keys(invites).length >= (TIERS[ws.data.tier]||TIERS.team_small).maxMembers) { errEl.textContent=tr('No seats left.'); return; }
   const res = await teamApi('invite', { wsId:ws.id, email, role });
-  if (res.ok)    { await reloadWorkspace(); renderTeamPanel(); toast('Invite sent to '+email,'success'); return; }
+  if (res.ok)    { await reloadWorkspace(); renderTeamPanel(); toast(tr('Invite sent to ')+email,'success'); return; }
   if (res.error) { errEl.textContent = res.error; return; }
   // Fallback: direct write (API not deployed yet)
   const inv = { email, role, invitedBy:currentUser?.email||'', createdAt:Date.now() };
@@ -10172,7 +10172,7 @@ async function teamInvite(){
   try {
     await db.ref('workspaces/'+ws.id+'/invites/'+k).set(inv);
     await db.ref('team_invites/'+k).set({ wsId:ws.id, wsName:ws.data.name, role, invitedBy:inv.invitedBy, createdAt:inv.createdAt });
-    toast('Invite sent to '+email,'success');
+    toast(tr('Invite sent to ')+email,'success');
   } catch(e){ errEl.textContent=tr('Could not send invite.'); }
   renderTeamPanel();
 }
@@ -10220,7 +10220,7 @@ async function acceptPendingInvite(){
   try {
     const token = await currentUser.getIdToken();
     const r = await fetch('/api/team', { method:'POST', headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+token }, body: JSON.stringify({ action:'accept' }) });
-    if (r.ok) { const d = await r.json(); if (d && d.ok) { userTier = d.tier || userTier; toast('You joined '+(d.wsName||'the team')+'!','success'); return; } }
+    if (r.ok) { const d = await r.json(); if (d && d.ok) { userTier = d.tier || userTier; toast(trf('You joined {name}!', { name: d.wsName || tr('the team') }),'success'); return; } }
     else if (r.status === 404) { return; } // no pending invite — nothing to do
     // any other status (incl. API not deployed) → fall through to direct path
   } catch(e) { /* network/not-deployed → fall through */ }
@@ -10240,7 +10240,7 @@ async function acceptPendingInvite(){
     await db.ref('users/'+userId+'/workspaceId').set(inv.wsId);
     await db.ref('users/'+userId+'/tier').set(ws.tier).catch(()=>{}); // inherit team access
     userTier = ws.tier;
-    toast('You joined '+(ws.name||'the team')+'!','success');
+    toast(trf('You joined {name}!', { name: ws.name || tr('the team') }),'success');
   } catch(e){}
 }
 
