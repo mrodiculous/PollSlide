@@ -426,6 +426,18 @@ function toggleMedia() {
  * this question's own state node revealed, which is what the phones and the PowerPoint
  * add-in already listen to. Graded questions only. A transaction that never steps BACK:
  * a node already in 'post_reveal' is left alone. A failed write changes nothing here. */
+/* The companion must never FOLLOW its own saved reveal (2026-10-08 fix, v314). It saves
+ * 'revealed' for the phones only. Reading it back made every question it had revealed
+ * before (a rehearsal, an earlier run) open already revealed with the answer showing —
+ * the presenter and add-in reset a question to 'live' when they launch it; the companion
+ * never does. Ours = tagged (companionAt === revealedAt), or a node nobody launched (no
+ * launchedAt — what an untagged v311–v313 companion write looks like). A reveal from the
+ * presenter / add-in (launched node, revealedAt not ours) is still followed, as before v311. */
+function companionOwnReveal(src) {
+  if (!src || src.phase !== 'revealed') return false;
+  if (src.companionAt && Number(src.companionAt) === Number(src.revealedAt)) return true;
+  return !src.launchedAt;
+}
 function publishCompanionReveal() {
   const q = curQ, qid = curQId, session = sessionCode;
   if (!phaseRef || !session || !qid || !q) return;
@@ -434,7 +446,8 @@ function publishCompanionReveal() {
   if (ca === null || ca === undefined || ca === '' || (Array.isArray(ca) && !ca.length)) return;
   _authReady.then(() => db.ref(`sessions/${session}/qstate/${qid}`).transaction(cur => {
     if (cur && cur.phase === 'post_reveal') return;            // never step back
-    return Object.assign({}, cur || {}, { phase: 'revealed', revealedAt: Date.now() });
+    const at = Date.now();   // companionAt === revealedAt marks it as OURS (see companionOwnReveal)
+    return Object.assign({}, cur || {}, { phase: 'revealed', revealedAt: at, companionAt: at });
   })).catch(() => {});
 }
 
@@ -637,7 +650,8 @@ function showTargetedQuestion(session, link) {
       }
       if (!src) return; // nothing applicable yet → stay on live results
       const unrevealed = followRemoteReset(src, curQ);
-      const newPhase = src.phase || 'live';
+      // Our own saved reveal is for phones only — follow it only if we revealed locally.
+      const newPhase = (src === _stQ && companionOwnReveal(src)) ? (revealed ? 'revealed' : 'live') : (src.phase || 'live');
       const oldPrAt = (curQ && curQ.postRevealAt) || null;
       const newPrAt = src.postRevealAt || null;
       // Presenter's hide-until-reveal preference (published on the live question).

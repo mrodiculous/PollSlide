@@ -39,7 +39,8 @@ const pub = C.slice(C.indexOf('function publishCompanionReveal()'), C.indexOf('f
 ok('the companion publishes its reveal', pub.length > 50);
 ok('…only in QR-targeted mode, for graded multiple choice', /if \(!phaseRef \|\| !session \|\| !qid \|\| !q\) return;/.test(pub) && /multiple_choice_multi/.test(pub) && /Array\.isArray\(ca\) && !ca\.length/.test(pub));
 ok('…to the same qstate bucket the phone reads, after auth', /_authReady\.then\(\(\) => db\.ref\(`sessions\/\$\{session\}\/qstate\/\$\{qid\}`\)\.transaction\(/.test(pub));
-ok('…in a transaction that never steps post_reveal back to revealed', /if \(cur && cur\.phase === 'post_reveal'\) return;/.test(pub) && /phase: 'revealed', revealedAt: Date\.now\(\)/.test(pub));
+ok('…in a transaction that never steps post_reveal back to revealed, tagged as ours', /if \(cur && cur\.phase === 'post_reveal'\) return;/.test(pub) && /phase: 'revealed', revealedAt: at, companionAt: at/.test(pub));
+ok('the companion NEVER follows its own saved reveal (v314: questions opened already revealed)', /function companionOwnReveal\(src\)/.test(C) && /Number\(src\.companionAt\) === Number\(src\.revealedAt\)/.test(C) && /return !src\.launchedAt;/.test(C) && /\(src === _stQ && companionOwnReveal\(src\)\) \? \(revealed \? 'revealed' : 'live'\)/.test(C));
 ok('…and is called at both companion reveal points (button + countdown end)', (C.match(/publishCompanionReveal\(\);/g) || []).length === 2 && /fireConfetti\(\); renderAll\(\); publishCompanionReveal\(\);/.test(C));
 const PC = fs.readFileSync(path.join(ROOT, 'powerpoint-content', 'index.html'), 'utf8');
 ok('PowerPoint LIVE (frozen, unchanged) already writes the phase word the phone reads', /qstate/.test(PC) && /'revealed'/.test(PC));
