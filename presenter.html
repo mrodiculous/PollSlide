@@ -7207,7 +7207,8 @@ function _doRevealNow() {
   // Must include postReveal here because the question may have been edited after publishLive ran.
   const code = presentations[activePresId]?.sessionCode;
   if (code) {
-    const update = { phase: 'revealed', postReveal: qPR?.postReveal || null, postRevealAt: postRevealAt };
+    // revealedAt: phones use it to tell THIS run's reveal from a stale one left in qstate (2026-10-08).
+    const update = { phase: 'revealed', revealedAt: Date.now(), postReveal: qPR?.postReveal || null, postRevealAt: postRevealAt };
     db.ref(`sessions/${code}/currentQuestion`).update(update).catch(e => console.error('doReveal Firebase err:', e));
     // Mirror to this question's own state node so its companion reacts even if it's
     // not the "current" question (Keynote/PowerPoint per-slide QR workflow).

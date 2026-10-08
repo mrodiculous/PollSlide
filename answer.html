@@ -1239,6 +1239,12 @@ async function followLive(forceFollow){
  * reloads after answering reads it back from responses/<bucket>/<participantId>. Polls,
  * surveys and questions without a correct answer are untouched: nothing is attached. */
 let _rvRef = null, _rvQid = null, _rvPhase = null, _rvMine = null;
+/* A reveal left over from an EARLIER run must never show (2026-10-08): qstate outlives a
+ * session, so a quiz revealed last week and run again from Keynote would otherwise hand a
+ * participant the answer the moment they answered. A reveal counts only if this phone SAW the
+ * question go from not-revealed to revealed while it was open, or the reveal is stamped
+ * (revealedAt) after this phone's own answer — the reload-after-answering case. */
+let _rvSawOpen = false, _rvAt = 0;
 function _rvGradable(q) {
   if (!q || (q.type !== 'multiple_choice' && q.type !== 'multiple_choice_multi')) return false;
   const c = q.correctAnswer;
@@ -1246,7 +1252,7 @@ function _rvGradable(q) {
 }
 function stopRevealWatch() {
   if (_rvRef) { try { _rvRef.off(); } catch (e) {} }
-  _rvRef = null; _rvQid = null; _rvPhase = null; _rvMine = null;
+  _rvRef = null; _rvQid = null; _rvPhase = null; _rvMine = null; _rvSawOpen = false; _rvAt = 0;
   const el = document.getElementById('revealResult'); if (el) el.remove();
 }
 function startRevealWatch() {
@@ -1255,8 +1261,15 @@ function startRevealWatch() {
   stopRevealWatch();
   const qid = _rvQid = STABLE_QID;
   try {
-    _rvRef = db.ref(`sessions/${SESSION}/qstate/${qid}/phase`);
-    _rvRef.on('value', snap => { if (qid !== STABLE_QID) return; _rvPhase = snap.val(); renderRevealResult(); }, () => {});
+    _rvRef = db.ref(`sessions/${SESSION}/qstate/${qid}`);
+    _rvRef.on('value', snap => {
+      if (qid !== STABLE_QID) return;
+      const st = snap.val() || {};
+      _rvPhase = st.phase || null;
+      _rvAt = Number(st.revealedAt) || 0;
+      if (_rvPhase !== 'revealed' && _rvPhase !== 'post_reveal') _rvSawOpen = true;   // seen open → a later reveal is THIS run's
+      renderRevealResult();
+    }, () => {});
   } catch (e) { _rvRef = null; }
 }
 function reapplyReveal() { if (_rvPhase) renderRevealResult(); }
@@ -1271,6 +1284,9 @@ async function renderRevealResult() {
     try { const s = await db.ref(`sessions/${SESSION}/responses/${qid}/${participantId}`).get(); if (s.exists()) mine = _rvMine = s.val(); } catch (e) {}
   }
   if (qid !== STABLE_QID || !(_rvPhase === 'revealed' || _rvPhase === 'post_reveal')) return;
+  // Only a reveal from THIS run (see above). Otherwise show nothing at all.
+  const thisRun = _rvSawOpen || (_rvAt && mine && mine.submittedAt && _rvAt >= Number(mine.submittedAt) - 5000);
+  if (!thisRun) { el = document.getElementById('revealResult'); if (el) el.remove(); return; }
   const letters = ['A','B','C','D','E','F','G','H'];
   const right = (Array.isArray(q.correctAnswer) ? q.correctAnswer : [q.correctAnswer]).map(Number).filter(n => !isNaN(n));
   const answerText = right.map(i => letters[i] + '. ' + esc(((q.options || [])[i] || {}).text || '')).join(' · ');
@@ -1890,7 +1906,7 @@ async function submitToDb(answer) {
      ReferenceError, the inner handler swallowed it, and the offline queue silently
      never received anything. Everything looked fine right up until the wifi failed. */
   const attempt = _attemptsUsed + 1;
-  _rvMine = { isCorrect };   // the phone's own verdict, so a reveal shows it without waiting for the write
+  _rvMine = { isCorrect, submittedAt: Date.now() };   // the phone's own verdict, so a reveal shows it without waiting for the write
   const record = {
       participantId,
       name: participantName,

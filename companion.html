@@ -419,12 +419,32 @@ function toggleMedia() {
   renderAll();
 }
 
+/* Tell the audience's phones when THIS app reveals (2026-10-08). The companion reveals on its
+ * own — its countdown or its Reveal button — and used to keep that to itself, so in a
+ * Keynote + companion session the phones never learned the answer had been shown.
+ * Now, in QR-targeted mode only (the presenter tab drives reveals in follow mode), it marks
+ * this question's own state node revealed, which is what the phones and the PowerPoint
+ * add-in already listen to. Graded questions only. A transaction that never steps BACK:
+ * a node already in 'post_reveal' is left alone. A failed write changes nothing here. */
+function publishCompanionReveal() {
+  const q = curQ, qid = curQId, session = sessionCode;
+  if (!phaseRef || !session || !qid || !q) return;
+  if (q.type !== 'multiple_choice' && q.type !== 'multiple_choice_multi') return;
+  const ca = q.correctAnswer;
+  if (ca === null || ca === undefined || ca === '' || (Array.isArray(ca) && !ca.length)) return;
+  _authReady.then(() => db.ref(`sessions/${session}/qstate/${qid}`).transaction(cur => {
+    if (cur && cur.phase === 'post_reveal') return;            // never step back
+    return Object.assign({}, cur || {}, { phase: 'revealed', revealedAt: Date.now() });
+  })).catch(() => {});
+}
+
 function forceReveal() {
   if (!revealed) {
     revealed = true;
     if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
     fireConfetti();
     renderAll();
+    publishCompanionReveal();
   }
   const btn = document.getElementById('revealBtn');
   if (btn) { btn.classList.add('active'); btn.style.color = 'var(--accent3)'; }
@@ -749,7 +769,7 @@ function beginRevealCountdown() {
     revealRemaining--;
     const el = document.getElementById('revealCount');
     if (el) el.textContent = Math.max(0, revealRemaining) + 's';
-    if (revealRemaining <= 0) { revealed = true; clearInterval(revealTimer); revealTimer = null; fireConfetti(); renderAll(); }
+    if (revealRemaining <= 0) { revealed = true; clearInterval(revealTimer); revealTimer = null; fireConfetti(); renderAll(); publishCompanionReveal(); }
   }, 1000);
 }
 
