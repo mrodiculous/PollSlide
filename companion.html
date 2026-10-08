@@ -642,6 +642,15 @@ function showTargetedQuestion(session, link) {
     // that only writes currentQuestion), but only if currentQuestion is actually THIS
     // question (id or index match) so a different current question can't bleed in.
     let _stQ = null, _stCur = null;
+    /* ONLY A REVEAL THAT HAPPENS WHILE THIS QUESTION IS ON SCREEN COUNTS (v315, 2026-10-08).
+       `.on('value')` fires first with whatever is already STORED — and what is stored is
+       usually a reveal from an earlier run, a rehearsal, or this companion's own earlier
+       visit. Following that opened unanswered questions already revealed with the answer
+       showing (Rod, v311–v314). So the first value from each source is only a baseline; a
+       stored reveal is followed only once it CHANGES from that baseline (presenter /
+       add-in revealing now). Same rule the PowerPoint add-in has used since 2026-09. */
+    let _q0 = undefined, _c0 = undefined;
+    const _rk = x => x ? [x.phase || 'live', x.revealedAt || '', x.postRevealAt || '', x.launchedAt || '', x.resetAt || ''].join('|') : '-';
     function applyTargetedState() {
       let src = _stQ;
       if (!src && _stCur && ((_stCur.id && _stCur.id === curQId) ||
@@ -650,10 +659,15 @@ function showTargetedQuestion(session, link) {
       }
       if (!src) return; // nothing applicable yet → stay on live results
       const unrevealed = followRemoteReset(src, curQ);
-      // Our own saved reveal is for phones only — follow it only if we revealed locally.
-      const newPhase = (src === _stQ && companionOwnReveal(src)) ? (revealed ? 'revealed' : 'live') : (src.phase || 'live');
+      // Our own saved reveal is for phones only, and anything stored before we arrived is
+      // an earlier run — follow either only if we revealed locally.
+      const rawPhase = src.phase || 'live';
+      const stale = (rawPhase === 'revealed' || rawPhase === 'post_reveal') &&
+                    _rk(src) === (src === _stQ ? _q0 : _c0);
+      const ignore = stale || (src === _stQ && companionOwnReveal(src));
+      const newPhase = ignore ? (revealed ? 'revealed' : 'live') : rawPhase;
       const oldPrAt = (curQ && curQ.postRevealAt) || null;
-      const newPrAt = src.postRevealAt || null;
+      const newPrAt = ignore ? null : (src.postRevealAt || null);
       // Presenter's hide-until-reveal preference (published on the live question).
       const newHide = (src.hideResults !== undefined) ? !!src.hideResults : hideResults;
       if (curQ) {
@@ -670,9 +684,9 @@ function showTargetedQuestion(session, link) {
       }
     }
     phaseRef = db.ref(`sessions/${session}/qstate/${qId}`);
-    phaseRef.on('value', s => { _stQ = s.val(); applyTargetedState(); });
+    phaseRef.on('value', s => { _stQ = s.val(); if (_q0 === undefined) _q0 = _rk(_stQ); applyTargetedState(); });
     phaseRef2 = db.ref(`sessions/${session}/currentQuestion`);
-    phaseRef2.on('value', s => { _stCur = s.val(); applyTargetedState(); });
+    phaseRef2.on('value', s => { _stCur = s.val(); if (_c0 === undefined) _c0 = _rk(_stCur); applyTargetedState(); });
   }).catch(() => showWaiting(T('Could not load this question.')));
 }
 

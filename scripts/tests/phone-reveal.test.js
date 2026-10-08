@@ -40,8 +40,11 @@ ok('the companion publishes its reveal', pub.length > 50);
 ok('…only in QR-targeted mode, for graded multiple choice', /if \(!phaseRef \|\| !session \|\| !qid \|\| !q\) return;/.test(pub) && /multiple_choice_multi/.test(pub) && /Array\.isArray\(ca\) && !ca\.length/.test(pub));
 ok('…to the same qstate bucket the phone reads, after auth', /_authReady\.then\(\(\) => db\.ref\(`sessions\/\$\{session\}\/qstate\/\$\{qid\}`\)\.transaction\(/.test(pub));
 ok('…in a transaction that never steps post_reveal back to revealed, tagged as ours', /if \(cur && cur\.phase === 'post_reveal'\) return;/.test(pub) && /phase: 'revealed', revealedAt: at, companionAt: at/.test(pub));
-ok('the companion NEVER follows its own saved reveal (v314: questions opened already revealed)', /function companionOwnReveal\(src\)/.test(C) && /Number\(src\.companionAt\) === Number\(src\.revealedAt\)/.test(C) && /return !src\.launchedAt;/.test(C) && /\(src === _stQ && companionOwnReveal\(src\)\) \? \(revealed \? 'revealed' : 'live'\)/.test(C));
+ok('the companion NEVER follows its own saved reveal (v314: questions opened already revealed)', /function companionOwnReveal\(src\)/.test(C) && /Number\(src\.companionAt\) === Number\(src\.revealedAt\)/.test(C) && /return !src\.launchedAt;/.test(C) && /const ignore = stale \|\| \(src === _stQ && companionOwnReveal\(src\)\);/.test(C) && /const newPhase = ignore \? \(revealed \? 'revealed' : 'live'\) : rawPhase;/.test(C));
 ok('…and is called at both companion reveal points (button + countdown end)', (C.match(/publishCompanionReveal\(\);/g) || []).length === 2 && /fireConfetti\(\); renderAll\(\); publishCompanionReveal\(\);/.test(C));
+ok('the companion follows only a reveal that CHANGES while the question is on screen — a stored one is an earlier run (v315)', /let _q0 = undefined, _c0 = undefined;/.test(C) && /if \(_q0 === undefined\) _q0 = _rk\(_stQ\);/.test(C) && /if \(_c0 === undefined\) _c0 = _rk\(_stCur\);/.test(C) && /_rk\(src\) === \(src === _stQ \? _q0 : _c0\)/.test(C));
+ok('…the change key includes launchedAt, so an add-in reveal (phase word only, after its live stamp) is still followed', /x\.launchedAt \|\| '', x\.resetAt \|\| ''/.test(C));
+ok('…an ignored reveal carries no stale post-reveal countdown', /const newPrAt = ignore \? null : \(src\.postRevealAt \|\| null\);/.test(C));
 const PC = fs.readFileSync(path.join(ROOT, 'powerpoint-content', 'index.html'), 'utf8');
 ok('PowerPoint LIVE (frozen, unchanged) already writes the phase word the phone reads', /qstate/.test(PC) && /'revealed'/.test(PC));
 
