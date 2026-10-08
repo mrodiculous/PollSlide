@@ -44,5 +44,13 @@ ok('…and is called at both companion reveal points (button + countdown end)', 
 const PC = fs.readFileSync(path.join(ROOT, 'powerpoint-content', 'index.html'), 'utf8');
 ok('PowerPoint LIVE (frozen, unchanged) already writes the phase word the phone reads', /qstate/.test(PC) && /'revealed'/.test(PC));
 
+console.log('\nPresentSlide reaches the phone too (2026-10-08)');
+const PR = fs.readFileSync(path.join(ROOT, 'present.html'), 'utf8');
+const ppub = PR.slice(PR.indexOf('function publishPresentReveal(s)'), PR.indexOf('function publishPresentReveal(s)') + 1200);
+ok('PresentSlide publishes its reveal from doReveal, for poll/quiz slides only (a study flip never publishes)', /else if\(slideHasPoll\(s\)\)\{_revealed=true; publishPresentReveal\(s\);\}/.test(PR) && /if\(s\.kind==='study'\)\{_revealed=!_revealed;\}/.test(PR));
+ok('…graded multiple choice with a session only', /if\(!code\) return;/.test(ppub) && /multiple_choice_multi/.test(ppub) && /Array\.isArray\(ca\)&&!ca\.length/.test(ppub));
+ok('…to the same bucket attachLive() counts answers from', /const qid=PSQid\.bucket\(q,\(q\.qIndex\|\|0\),code\);/.test(ppub) && /qId=PSQid\.bucket\(s\.question,\(s\.question\.qIndex\|\|0\),code\)/.test(PR));
+ok('…in a transaction that never steps post_reveal back, and never throws into the show', /if\(cur&&cur\.phase==='post_reveal'\) return;/.test(ppub) && /phase:'revealed', revealedAt: Date\.now\(\)/.test(ppub) && /\.catch\(\(\)=>\{\}\);\n  \}catch\(e\)\{\}/.test(ppub));
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

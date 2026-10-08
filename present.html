@@ -1613,7 +1613,25 @@ function paintLive(s){ const st=document.getElementById('pStage'); st.querySelec
   while(node.firstChild) st.insertBefore(node.firstChild, st.querySelector('.p-logo'));
   const box=st.querySelector('.qr-card .qrbox'); if(box)renderQR(box, answerUrl(s));
   scheduleFit(st); }
-function doReveal(){ const s=deck.slides[presentIdx]; if(!s)return; if(s.kind==='study'){_revealed=!_revealed;} else if(slideHasPoll(s)){_revealed=true;} else return; renderPresentSlide(presentIdx); }
+function doReveal(){ const s=deck.slides[presentIdx]; if(!s)return; if(s.kind==='study'){_revealed=!_revealed;} else if(slideHasPoll(s)){_revealed=true; publishPresentReveal(s);} else return; renderPresentSlide(presentIdx); }
+/* Tell the phones the answer is out (2026-10-08), so each one shows Correct / Not quite +
+ * the right answer — the same signal presenter.html, the Mac companion and PowerPoint LIVE
+ * send. Written to the bucket attachLive() counts from (= the one the phone answered into).
+ * Graded multiple choice only; a transaction that never steps post_reveal back; failure
+ * is silent — it must never break the show. */
+function publishPresentReveal(s){
+  try{
+    if(typeof fbDb==='undefined'||!fbDb) return;
+    const q=s&&s.question, code=q&&q.sessionCode; if(!code) return;
+    if(q.type!=='multiple_choice'&&q.type!=='multiple_choice_multi') return;
+    const ca=q.correctAnswer; if(ca===null||ca===undefined||ca===''||(Array.isArray(ca)&&!ca.length)) return;
+    const qid=PSQid.bucket(q,(q.qIndex||0),code);
+    fbDb.ref('sessions/'+code+'/qstate/'+qid).transaction(cur=>{
+      if(cur&&cur.phase==='post_reveal') return;
+      return Object.assign({}, cur||{}, { phase:'revealed', revealedAt: Date.now() });
+    }).catch(()=>{});
+  }catch(e){}
+}
 
 /* ─── Polly modal (per-type) ──────────────────────────────────────────────────*/
 let _pollyType='deck';
