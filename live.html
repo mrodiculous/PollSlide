@@ -676,6 +676,10 @@ function subscribeCurrentQuestion() {
     // Same question — only phase changed; don't reset the full UI
     if (currentQ && currentQ.id === q.id) {
       const newPhase = q.phase || 'live';
+      // Presenter tally reset (2026-10-08): a NEWER resetAt redraws the question fresh and
+      // un-revealed. A bare phase:'live' is not enough — the PowerPoint add-in writes that on
+      // re-claim while its own slide stays revealed.
+      if (Number(q.resetAt) > _liveResetSeen && newPhase === 'live') { presentPhase = 'live'; showQuestion(q); return; }
       const hideChanged = !!q.hideResults !== !!currentQ.hideResults;
       if (newPhase !== presentPhase || hideChanged) {
         presentPhase = newPhase;
@@ -709,7 +713,9 @@ function showWaiting() {
 }
 
 // ── Show active question ──────────────────────────────────────────────────────
+let _liveResetSeen = 0;   // newest presenter tally-reset stamp this question has honoured
 function showQuestion(q) {
+  _liveResetSeen = Math.max(_liveResetSeen, Number(q.resetAt) || 0);
   stopWarmup(); const _wc = document.getElementById('warmupCard'); if (_wc) _wc.style.display = 'none';
   currentQ = q;
   const idx  = q.qIndex !== undefined ? q.qIndex : (q.index ? q.index - 1 : 0);

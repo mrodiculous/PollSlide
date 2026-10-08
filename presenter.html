@@ -6060,6 +6060,7 @@ async function doResetAll() {
   if (respListener) { respListener(); respListener = null; }
   Object.values(respListeners).forEach(off => off());
   respListeners = {};
+  const wasLive = liveQIdx;
   liveQIdx = null; liveQId = null;
   clearRightPanel();
 
@@ -6073,7 +6074,7 @@ async function doResetAll() {
       const code = pres.sessionCode;
       if (!code) continue;
       // Delete ALL responses for this presentation's session
-      jobs.push(db.ref(`sessions/${code}/responses`).remove());
+      jobs.push(db.ref(`sessions/${code}/responses`).remove().then(() => clearRevealState(code)));
     }
     await Promise.all(jobs);
     // Reset every question's session-start timestamp so all cleared states are clean
@@ -6085,6 +6086,7 @@ async function doResetAll() {
       });
     }
     renderQList();
+    if (wasLive !== null && wasLive === selIdx && !editorOnScreen()) showLiveOrEdit(wasLive);
     toast(tr('All tallies cleared across every presentation. Questions remain live.'), 'success');
   } catch(e) { toast(tr('Reset failed. Check connection.'), 'danger'); }
 }
@@ -6106,13 +6108,16 @@ async function doReset() {
     if (respListener) { respListener(); respListener = null; }
     Object.values(respListeners).forEach(off => off());
     respListeners = {};
+    const wasLive = liveQIdx;
     liveQIdx = null; liveQId = null;
     await db.ref(`sessions/${code}/responses`).remove();
+    await clearRevealState(code);
     if (questions.length > 0) {
       await db.ref(`quiz_builder/${code}/questions`).set(questions);
     }
     clearRightPanel();
     renderQList();
+    if (wasLive !== null && wasLive === selIdx && !editorOnScreen()) showLiveOrEdit(wasLive);   // redraw it un-revealed, still live
     toast(tr('Tallies reset for this presentation. Questions remain live.'), 'success');
   } catch(e) { toast(tr('Reset failed. Check connection.'), 'danger'); }
 }
@@ -6144,6 +6149,7 @@ async function doResetPres() {
     if (respListener) { respListener(); respListener = null; }
     Object.values(respListeners).forEach(off => off());
     respListeners = {};
+    const wasLive = targetId === activePresId ? liveQIdx : null;
     liveQIdx = null; liveQId = null;
     localStorage.removeItem('ql_liveQIdx_' + code);
     localStorage.removeItem('ql_liveQId_' + code);
@@ -6152,12 +6158,14 @@ async function doResetPres() {
     await archiveResponses(pres);
     await db.ref(`sessions/${code}/responses`).remove();
     await db.ref(`sessions/${code}/qa`).remove(); // clear audience Q&A for the next event too
+    await clearRevealState(code);
     if (qs.length > 0) {
       await db.ref(`quiz_builder/${code}/questions`).set(qs);
     }
 
     // Step 3: Now update UI — Firebase is already empty so re-attaching listeners is safe
     if (targetId === activePresId) {
+      clearRightPanel();   // local reveal state too, not just the panel text
       const rs = document.getElementById('rightScroll');
       const rc = document.getElementById('respCounter');
       const pc = document.getElementById('pCount');
@@ -6167,6 +6175,7 @@ async function doResetPres() {
       if (pc) pc.textContent = '0';
       if (pl) pl.innerHTML = '<div style="color:var(--muted);font-size:12px;">'+tr('No responses yet.')+'</div>';
       renderQList();
+      if (wasLive !== null && wasLive === selIdx && !editorOnScreen()) showLiveOrEdit(wasLive);
     }
     toast(trf('"{name}" tally reset. Questions remain live.', { name: pres.name }), 'success');
   } catch(e) { toast(tr('Reset failed. Check connection.'), 'danger'); }
@@ -7775,6 +7784,32 @@ async function showTally() {
   showPresTally(activePresId);
 }
 
+// ─── A TALLY RESET ALSO ENDS THE REVEAL (2026-10-08) ────────────────────────────
+// Clearing answers used to leave phase:'revealed' behind, so the Mac companion, the big
+// screen and phones kept showing the answer for a question nobody has answered yet.
+// Writes phase:'live' + a fresh resetAt to every existing qstate node in this session (or
+// just one bucket) and to currentQuestion. resetAt is the ONLY un-reveal signal the
+// companion and live.html follow — a bare phase:'live' is not one, because the PowerPoint
+// add-in re-claims currentQuestion with phase:'live' while its own slide stays revealed.
+// Updates existing nodes only (never creates one); skips the Final-card tally; silent on error.
+async function clearRevealState(code, onlyQid) {
+  if (!code) return;
+  try {
+    const at = Date.now(), upd = {};
+    const qs = (await db.ref(`sessions/${code}/qstate`).get()).val() || {};
+    Object.keys(qs).forEach(k => {
+      if ((onlyQid && k !== onlyQid) || !qs[k] || typeof qs[k] !== 'object') return;
+      upd[`qstate/${k}/phase`] = 'live'; upd[`qstate/${k}/revealedAt`] = null;
+      upd[`qstate/${k}/postRevealAt`] = null; upd[`qstate/${k}/resetAt`] = at;
+    });
+    const cq = (await db.ref(`sessions/${code}/currentQuestion`).get()).val();
+    if (cq && cq.id && !cq.showTally && (!onlyQid || cq.id === onlyQid)) {
+      upd['currentQuestion/phase'] = 'live'; upd['currentQuestion/postRevealAt'] = null; upd['currentQuestion/resetAt'] = at;
+    }
+    if (Object.keys(upd).length) await db.ref(`sessions/${code}`).update(upd);
+  } catch (e) {}
+}
+
 // ─── PER-QUESTION RESET ──────────────────────────────────────────────────────
 async function resetQuestionTally(qIdx) {
   if (!activePresId) return;
@@ -7786,6 +7821,7 @@ async function resetQuestionTally(qIdx) {
     if (respListeners[qIdx]) { respListeners[qIdx](); delete respListeners[qIdx]; }
     // Step 2: Delete responses from Firebase (clears tally) — question STAYS live
     await db.ref(`sessions/${code}/responses/${stableQId}`).remove();
+    await clearRevealState(code, stableQId);   // …and the answer is no longer out
     // Step 3: Reset this question's session start so the cleared state is clean.
     // All three stores, or the reset only half-happens: _qLaunchedAt kept the
     // pre-reset value, so the next launchQuestion re-published the OLD launchedAt to

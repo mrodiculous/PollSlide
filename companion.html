@@ -610,6 +610,7 @@ function showTargetedQuestion(session, link) {
     if (curQId !== qId) {
       curQId = qId;
       resetReveal(qObj);
+      _seenResetAt = null;
       viewMode = qObj.displayMode || 'bars';
       hideResults = !!q.hideResults;   // honor presenter's hide-until-reveal from the first paint
       presentPhase = 'live';
@@ -635,6 +636,7 @@ function showTargetedQuestion(session, link) {
         src = _stCur;
       }
       if (!src) return; // nothing applicable yet → stay on live results
+      const unrevealed = followRemoteReset(src, curQ);
       const newPhase = src.phase || 'live';
       const oldPrAt = (curQ && curQ.postRevealAt) || null;
       const newPrAt = src.postRevealAt || null;
@@ -644,7 +646,7 @@ function showTargetedQuestion(session, link) {
         curQ = Object.assign({}, curQ, { phase: newPhase, postRevealAt: newPrAt });
         if (src.postReveal) curQ.postReveal = src.postReveal;
       }
-      if (newPhase !== presentPhase || newPrAt !== oldPrAt || newHide !== hideResults) {
+      if (unrevealed || newPhase !== presentPhase || newPrAt !== oldPrAt || newHide !== hideResults) {
         hideResults = newHide;
         presentPhase = newPhase;
         if (presentPhase === 'revealed' || presentPhase === 'post_reveal') {
@@ -697,12 +699,14 @@ function watchLiveQuestion() {
       showMedia = false; // reset media to OFF for each new question
       viewMode = q.displayMode || 'bars';
       presentPhase = q.phase || 'live';
+      _seenResetAt = Number(q.resetAt) || 0;
       liveStartedAt = q.launchedAt || Date.now();
       watchResponses(q.id);
     } else {
       // Same question — just track the latest phase. curQ is replaced with the full
       // currentQuestion snapshot below (it already carries phase + postReveal), so no
       // separate merge is needed here.
+      followRemoteReset(q, q);
       presentPhase = q.phase || 'live';
     }
     // Sync local revealed flag from presenter's phase — critical for
@@ -746,6 +750,22 @@ function watchResponses(qId) {
 }
 
 // ── Reveal logic (mirrors presenter) ──
+/* Un-reveal on a presenter tally reset (2026-10-08). The reset stamps resetAt (with
+ * phase:'live') on qstate + currentQuestion; this page used to only ever go INTO revealed,
+ * so it stayed stuck showing the answer. Only a NEWER resetAt counts — never a bare
+ * phase:'live', which the PowerPoint add-in writes on re-claim while its slide stays
+ * revealed. The first value seen for a question is just the baseline. Reset per question. */
+let _seenResetAt = null;
+function followRemoteReset(src, q) {
+  const r = Number(src && src.resetAt) || 0;
+  if (_seenResetAt === null) { _seenResetAt = r; return false; }
+  if (!r || r <= _seenResetAt) return false;
+  _seenResetAt = r;
+  if ((src.phase || 'live') !== 'live' || !q) return false;
+  resetReveal(q); presentPhase = 'live';
+  if (curQ) curQ = Object.assign({}, curQ, { phase: 'live', postRevealAt: null });
+  return true;
+}
 function resetReveal(q) {
   revealed = false; revealArmed = false;
   if (revealTimer) { clearInterval(revealTimer); revealTimer = null; }
