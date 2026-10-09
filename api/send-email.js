@@ -26,6 +26,9 @@
 //   • anything else → 401/403.
 
 const crypto = require('crypto');
+// Physical postal address for the email footer (CAN-SPAM requires one on commercial email).
+// Set PS_POSTAL_ADDRESS in Vercel; nothing is shown until it is set, so no placeholder ships.
+const POSTAL_ADDRESS = (process.env.PS_POSTAL_ADDRESS || '').trim();
 const admin = require('firebase-admin');
 const { verifyToken, tokenFrom, getApp, configured, ADMIN_EMAILS } = require('../lib/quota');
 
@@ -82,6 +85,7 @@ function baseLayout(title, body, ctaUrl, ctaText, lang) {
 <!-- Footer -->
 <tr><td style="padding:20px 32px;background:#f9f9fc;border-top:1px solid #e8e8f0;text-align:center;font-size:12px;color:#9090b8;line-height:1.8;">
   PollSlide Technologies LLC<br>
+  ${POSTAL_ADDRESS ? esc(POSTAL_ADDRESS) + '<br>' : ''}
   <a href="https://pollslide.com/privacy" style="color:#9090b8;">Privacy Policy</a> &middot;
   <a href="https://pollslide.com/terms" style="color:#9090b8;">Terms of Service</a> &middot;
   <a href="mailto:help@pollslide.com" style="color:#9090b8;">help@pollslide.com</a>
@@ -300,6 +304,7 @@ const TEMPLATES = {
         <h2 style="font-size:18px;font-weight:800;margin:26px 0 8px;color:#15152a;">Next: invite your team</h2>
         <p style="font-size:15px;color:#5a5a78;margin:0 0 14px;">You're the team's <strong>owner</strong>. Open PollSlide, click your avatar (top right) → <strong>👥 Team admin</strong>, and invite people by email. They get your plan the moment they sign in — and you pay for everyone.</p>
         ${videoBlock('team-setup', 'Watch: set up your team in 2 minutes', 'invite people, roles, seats and billing.')}` : ''}
+        <p style="font-size:13px;color:#5a5a78;line-height:1.6;margin:18px 0 0;"><strong>About renewal:</strong> your plan renews automatically at the end of each billing period — monthly or yearly, as you chose at checkout — at the price shown there, until you cancel. To cancel, open PollSlide and go to <strong>Plan &amp; billing → Manage billing</strong>. Your plan stays active until the end of the period you have paid for, and you are not charged again.</p>
       `, 'https://app.pollslide.com/presenter', (data.planKey === 'team_small' || data.planKey === 'team_large') ? 'Invite your team →' : 'Open PollSlide')
     };
   },
@@ -319,6 +324,7 @@ const TEMPLATES = {
         <tr><td style="padding:10px 16px;font-size:14px;color:#5a5a78;">Date</td>
             <td style="padding:10px 16px;font-size:14px;text-align:right;">${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</td></tr>
       </table>
+      <p style="font-size:13px;color:#5a5a78;line-height:1.6;margin:18px 0 0;"><strong>About renewal:</strong> your plan renews automatically at the end of each billing period — monthly or yearly, as you chose at checkout — at the price shown there, until you cancel. To cancel, open PollSlide and go to <strong>Plan &amp; billing → Manage billing</strong>. Your plan stays active until the end of the period you have paid for, and you are not charged again.</p>
       <p style="font-size:13px;color:#9090b8;margin:18px 0 0;">Questions about billing? Reply to this email or contact <a href="mailto:help@pollslide.com" style="color:${BRAND_COLOR};">help@pollslide.com</a></p>
     `, null, null)
   }),

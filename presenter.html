@@ -4,9 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>PollSlide — Presenter</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link href="/fonts/fonts.css?v=9f799e41" rel="stylesheet">
 <script src="/errors.js?v=25c25f5f"></script>
 <script src="/present-display.js?v=b01c9c51"></script>
 <script src="/qid.js?v=f6f81595"></script>
@@ -16,7 +14,7 @@
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=41a34cc2"></script>
+<script src="/ui-lang.js?v=bcbf8752"></script>
 <script src="/tickets.js?v=edb362ec"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -1458,6 +1456,7 @@ auth.onAuthStateChanged(user => {
     // Re-consent: if an admin has pushed a newer policy version than this user has
     // accepted, show the review-and-accept banner. Dormant until a version exists.
     checkPolicyConsent(userId);
+    checkSignupConsent(userId);
   } else {
     // Safari ITP fix: if we were just signed in, wait 3s before signing out
     // because Safari may briefly clear auth persistence then restore it.
@@ -2193,14 +2192,21 @@ function openPlanPicker() {
           ? '<div style="font-size:10px;color:'+D.accent3+';margin-bottom:12px;">Save $' + ((p.mo-p.yr)*12) + '/yr</div>'
           : '<div style="font-size:10px;height:16px;margin-bottom:12px;"></div>') +
         '<button onclick="' + ctaOnclick + '" style="width:100%;padding:10px;border-radius:10px;font-family:Syne,sans-serif;font-weight:700;font-size:12px;margin-bottom:14px;' + ctaStyle + '">' + ctaText + '</button>' +
+        // Auto-renewal disclosure right under the button that starts checkout (California ARL, 2026-10-09).
+        ((!isCurrent && !isEnterprise && !isDowngradeToFree && price > 0)
+          ? '<div style="font-size:10.5px;line-height:1.4;color:'+D.muted+';margin:-8px 0 12px;">' + psRenewNote(pickerBilling === 'annual', price, p.yr) + '</div>'
+          : '') +
         '<div style="height:1px;background:'+D.border+';margin-bottom:12px;"></div>' +
         feats + miss;
       cardsEl.appendChild(card);
     });
 
+    // Mark EVERY render's box. Only the first was marked, so the second Monthly/Annual
+    // toggle found no marked box and appended a second picker beside the first.
+    box.dataset.ppBox = '1';
     const existing = overlay.querySelector('[data-pp-box]');
     if (existing) existing.replaceWith(box);
-    else { box.dataset.ppBox = '1'; overlay.appendChild(box); }
+    else overlay.appendChild(box);
     // Fill in the live credit balance (async read; the '…' placeholder shows meanwhile).
     aiUsage().then(u => { const el = document.getElementById('ppCreditBal'); if (el) el.textContent = u.credits; }).catch(()=>{});
   }
@@ -2338,6 +2344,16 @@ async function submitEnterpriseLead() {
   }
 }
 
+/* Auto-renewal terms shown next to every button that starts a subscription checkout
+   (California Automatic Renewal Law, 2026-10-09): what it costs, that it renews until
+   cancelled, and where to cancel. Cancelling in the Stripe portal takes effect at the end
+   of the paid period. */
+function psRenewNote(annual, monthly, annualMonthly) {
+  return annual
+    ? trf('Billed ${total} a year. Renews automatically every year until you cancel. Cancel anytime in Plan & billing.', { total: annualMonthly * 12 })
+    : trf('Billed ${price} a month. Renews automatically every month until you cancel. Cancel anytime in Plan & billing.', { price: monthly });
+}
+
 let _selectedPlan = null;
 function selectPlanOption(plan) {
   _selectedPlan = plan;
@@ -2355,7 +2371,8 @@ function selectPlanOption(plan) {
   if (info) {
     const planName = (TIERS[plan] && TIERS[plan].name) || (plan.charAt(0).toUpperCase() + plan.slice(1));
     info.style.display = 'block';
-    info.innerHTML = '<strong>' + planName + ':</strong> $' + price + period + (annual ? ' · Save $' + ((p.m - p.a) * 12) + '/year' : '');
+    info.innerHTML = '<strong>' + planName + ':</strong> $' + price + period + (annual ? ' · Save $' + ((p.m - p.a) * 12) + '/year' : '') +
+      '<div style="font-size:11px;color:var(--muted);margin-top:4px;line-height:1.4;">' + psRenewNote(annual, p.m, p.a) + '</div>';
   }
   if (btn) btn.style.display = 'block';
 }
@@ -2429,6 +2446,7 @@ async function submitAuth() {
   }
   try {
     if (authMode === 'signup') {
+      _signupConsentGiven = 'email';   // ticked above; recorded by checkSignupConsent on sign-in
       await auth.createUserWithEmailAndPassword(email, pass);
       // Seed the accepted policy version so brand-new users aren't immediately shown a
       // "we've updated our policy" banner — they accept the current terms at signup.
@@ -2455,6 +2473,7 @@ async function signInGoogle() {
     authError('Please confirm you are at least 16 and agree to the Terms & Privacy Policy.'); return;
   }
   const provider = new firebase.auth.GoogleAuthProvider();
+  if (authMode === 'signup') _signupConsentGiven = 'google';   // ticked above
   try { await auth.signInWithPopup(provider); }
   catch(e) { if (e.code !== 'auth/popup-closed-by-user') authError(friendlyAuthError(e.code)); }
 }
@@ -9667,6 +9686,80 @@ function showAdminMessages(list) {
   wrap.appendChild(card);
   document.body.appendChild(wrap);
   btn.focus();
+}
+
+// ─── SIGNUP CONSENT GATE (2026-10-09) ─────────────────────────────────────────
+// Every new account confirms "I'm at least 16 and agree to the Terms and Privacy Policy"
+// before using PollSlide. The Create-account screen asks with a checkbox, but "Sign in with
+// Google" on the Welcome-back screen silently CREATED an account for a new Google user
+// with no confirmation at all. Now: any account created on/after SIGNUP_GATE_FROM without
+// a users/$uid/signupConsent record gets this blocking dialog — wherever it came from, and
+// again after a reload until answered. Declining deletes the brand-new, empty account.
+// Accounts created before the cutoff are never asked (they signed up under the old flow).
+const SIGNUP_GATE_FROM = Date.UTC(2026, 9, 9);   // 9 Oct 2026
+let _signupConsentGiven = null;                  // 'email' | 'google' when the checkbox was ticked
+
+function recordSignupConsent(uid, via){
+  const now = Date.now();
+  const updates = {};
+  updates['users/'+uid+'/signupConsent'] = { age16: true, termsAndPrivacy: true, at: now, via: via };
+  return db.ref('app_config/policy/version').get().then(function(pv){
+    if (pv.exists()) updates['users/'+uid+'/acceptedPolicyVersion'] = Number(pv.val());
+  }).catch(function(){}).then(function(){ return db.ref('/').update(updates); });
+}
+
+function checkSignupConsent(uid){
+  if (!uid || !auth.currentUser) return;
+  if (_signupConsentGiven) { const via = _signupConsentGiven; _signupConsentGiven = null; recordSignupConsent(uid, via).catch(function(){}); return; }
+  let created = 0;
+  try { created = Date.parse(auth.currentUser.metadata && auth.currentUser.metadata.creationTime) || 0; } catch(e) {}
+  if (!created || created < SIGNUP_GATE_FROM) return;
+  db.ref('users/'+uid+'/signupConsent').get().then(function(snap){
+    if (!snap.exists()) showSignupConsentGate(uid);
+  }).catch(function(){});
+}
+
+function showSignupConsentGate(uid){
+  if (document.getElementById('signupConsentGate')) return;
+  const wrap = document.createElement('div');
+  wrap.id = 'signupConsentGate';
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:200001;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:20px;';
+  wrap.innerHTML = `
+    <div role="dialog" aria-modal="true" aria-labelledby="scgTitle" style="background:var(--surface);border:1px solid var(--border2);border-radius:18px;max-width:440px;width:100%;padding:28px;box-shadow:0 24px 60px rgba(0,0,0,0.5);">
+      <div style="font-size:30px;margin-bottom:10px;">👋</div>
+      <div id="scgTitle" style="font-family:Syne,sans-serif;font-weight:800;font-size:20px;margin-bottom:8px;">${tr('One step before you start')}</div>
+      <p style="color:var(--muted);font-size:14px;line-height:1.6;margin:0 0 16px;">${tr('This Google account is new to PollSlide, so we have just created your account.')}</p>
+      <label style="display:flex;align-items:flex-start;gap:9px;font-size:13.5px;line-height:1.5;cursor:pointer;margin-bottom:18px;text-transform:none;letter-spacing:normal;font-weight:400;color:var(--text);">
+        <input type="checkbox" id="scgChk" style="margin-top:3px;flex-shrink:0;">
+        <span><span>${tr("I'm at least 16 years old, and I agree to the")}</span> <a href="https://pollslide.com/terms" target="_blank" rel="noopener" style="color:var(--accent);">${tr('Terms')}</a> <span>${tr('and')}</span> <a href="https://pollslide.com/privacy" target="_blank" rel="noopener" style="color:var(--accent);">${tr('Privacy Policy')}</a>.</span>
+      </label>
+      <div id="scgErr" style="color:var(--accent2);font-size:12.5px;min-height:16px;margin-bottom:8px;"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;">
+        <button id="scgNo" style="padding:11px 16px;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:11px;font-family:Syne,sans-serif;font-weight:700;font-size:13px;cursor:pointer;">${tr('Cancel and delete this account')}</button>
+        <button id="scgYes" style="padding:11px 22px;background:var(--accent);border:none;color:#fff;border-radius:11px;font-family:Syne,sans-serif;font-weight:700;font-size:14px;cursor:pointer;">${tr('Continue')}</button>
+      </div>
+    </div>`;
+  document.body.appendChild(wrap);
+  const err = function(m){ const e = document.getElementById('scgErr'); if (e) e.textContent = m; };
+  document.getElementById('scgYes').onclick = function(){
+    if (!document.getElementById('scgChk').checked) { err(tr('Please confirm you are at least 16 and agree to the Terms & Privacy Policy.')); return; }
+    recordSignupConsent(uid, 'google-signin').then(function(){ wrap.remove(); })
+      .catch(function(){ err(tr('Could not record acceptance. Please try again.')); });
+  };
+  document.getElementById('scgNo').onclick = function(){
+    const u = auth.currentUser;
+    const done = function(){ wrap.remove(); toast(tr('No account was kept. You have been signed out.'), 'success'); };
+    if (!u) { done(); return; }
+    // The same server-side deletion Account settings uses — removes the database records
+    // as well as the sign-in, so nothing of a declined account is left behind.
+    u.getIdToken(true).then(function(tok){
+      return fetch('/api/delete-account', { method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+        body: JSON.stringify({ uid: uid }) });
+    }).then(function(r){ if (!r.ok) throw new Error('delete failed'); return auth.signOut().catch(function(){}); })
+      .then(done)
+      .catch(function(){ u.delete().then(done).catch(function(){ auth.signOut().then(done).catch(done); }); });
+  };
 }
 
 // ─── POLICY RE-CONSENT BANNER ─────────────────────────────────────────────────
