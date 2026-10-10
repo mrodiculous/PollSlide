@@ -1,4 +1,4 @@
-// PollSlide — AI provider status (read-only, secret-free).
+// PollSlide — AI provider status (read-only, secret-free, ADMIN-ONLY since 2026-10-10).
 // Powers the admin "AI / Polly Management" panel so you can SEE, at a glance:
 //   • which providers are configured for each job (text / summaries / images)
 //   • whether your local Mac (Ollama tunnel) is actually awake & reachable right now
@@ -7,6 +7,8 @@
 // so it's safe even if the endpoint is hit directly.
 //
 // GET /api/ai-status  ->  { text:{...}, summaries:{...}, images:{...}, local:{...} }
+
+const { verifyToken, tokenFrom, ADMIN_EMAILS } = require('../lib/quota');
 
 const OPENAI_API_KEY    = process.env.OPENAI_API_KEY;
 const OPENAI_TEXT_MODEL = process.env.OPENAI_TEXT_MODEL || 'gpt-4o-mini';
@@ -62,7 +64,18 @@ async function probeOpenAI() {
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', process.env.NEXT_PUBLIC_APP_URL || 'https://app.pollslide.com');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
+
+  /* ADMINS ONLY (2026-10-10). This was open to anyone: no keys, but it named every AI
+     vendor and model behind Polly — and the rule is that users never learn which AI
+     answered. Only admin.html calls it, so it now takes the same admin token the
+     Security page does. */
+  const tok = tokenFrom(req);
+  if (!tok) return res.status(401).json({ error: 'No auth token' });
+  let who;
+  try { who = await verifyToken(tok); } catch (e) { return res.status(401).json({ error: 'Invalid auth token' }); }
+  if (!ADMIN_EMAILS.includes(who.email)) return res.status(403).json({ error: 'Admins only' });
 
   const localLLM   = await probe(LOCAL_LLM_URL);
   const localImage = await probe(LOCAL_IMAGE_URL);

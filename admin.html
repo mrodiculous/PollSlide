@@ -1556,15 +1556,26 @@ async function renderTickets(){
     // Waiting on us first, then whatever moved most recently — a follow-up on an old
     // ticket must not sit at the bottom under its original createdAt.
     const byActivity=(a,b)=>T.lastActivity(b[1])-T.lastActivity(a[1]);
-    const open=tickets.filter(([,t])=>T.isOpen(t)).sort((a,b)=>(T.needsResponse(b[1])-T.needsResponse(a[1]))||byActivity(a,b));
+    /* PRIORITY SUPPORT (2026-10-10). Team and Pro plans are sold with "Priority support",
+       but a ticket never showed its sender's plan, so there was no way to give it. Each
+       ticket now carries a plan badge, and among tickets waiting on us, paying plans come
+       first: Enterprise, Team Large, Team Small, Pro, then Free. Order within a plan is
+       unchanged (most recent activity first). A team member carries the team's tier. */
+    const PRIO={enterprise:4,team_large:3,team_small:2,pro:1,free:0};
+    const tierOf=t=>{ const x=(allUsers[t.uid]||{}).tier||'free'; return PRIO[x]===undefined?'free':x; };
+    const prio=t=>PRIO[tierOf(t)];
+    const open=tickets.filter(([,t])=>T.isOpen(t)).sort((a,b)=>(T.needsResponse(b[1])-T.needsResponse(a[1]))||(prio(b[1])-prio(a[1]))||byActivity(a,b));
     const done=tickets.filter(([,t])=>!T.isOpen(t)).sort(byActivity);
     const waiting=open.filter(([,t])=>T.needsResponse(t)).length;
     const row=([id,t])=>{
       const resolved=!T.isOpen(t), needs=T.needsResponse(t), c=T.replyCounts(t), last=T.lastActivity(t);
       const from=(allUsers[t.uid]||{}).email||t.email||'Unknown';
+      const tr_=tierOf(t), tierCls=tr_==='enterprise'?'pill-enterprise':tr_==='pro'?'pill-pro':(tr_==='team_small'||tr_==='team_large')?'pill-team':'pill-free';
+      const tierName={enterprise:'Enterprise',team_large:'Team Large',team_small:'Team Small',pro:'Pro',free:'Free'}[tr_];
+      const planPill=`<span class="pill ${tierCls}" title="${prio(t)>0?'Paying plan — priority support':'Free plan'}">${prio(t)>0?'★ ':''}${tierName}</span>`;
       return `<div data-ticket-id="${esc(id)}" style="padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;${needs?'box-shadow:inset 3px 0 0 var(--accent2);':''}">
         <div style="display:flex;justify-content:space-between;gap:8px;"><span style="font-weight:500;font-size:13px;${resolved?'color:var(--muted);':''}">${esc(t.subject||'(no subject)')}</span>
-          <span style="display:flex;gap:5px;flex-shrink:0;">${needs?'<span class="pill pill-danger" title="The user spoke last">needs reply</span>':''}<span class="pill ${resolved?'pill-resolved':'pill-open'}">${resolved?'resolved':'open'}</span></span></div>
+          <span style="display:flex;gap:5px;flex-shrink:0;">${planPill}${needs?'<span class="pill pill-danger" title="The user spoke last">needs reply</span>':''}<span class="pill ${resolved?'pill-resolved':'pill-open'}">${resolved?'resolved':'open'}</span></span></div>
         <div style="font-size:11px;color:var(--muted);margin-top:2px;">${esc(from)} · 💬 ${c.total} repl${c.total===1?'y':'ies'}${c.user?` (${c.user} from user)`:''} · ${last?timeAgo(last):'—'}</div>
       </div>`;
     };
@@ -2376,7 +2387,7 @@ async function loadAIStatus(){
   const el=document.getElementById('aiStatus'); if(!el) return;
   el.innerHTML='<div class="loader">Checking providers…</div>';
   let s;
-  try { const r=await fetch('/api/ai-status'); s=await r.json(); if(!s||!s.text) throw new Error('bad'); }
+  try { const t=await auth.currentUser.getIdToken(); const r=await fetch('/api/ai-status',{headers:{'Authorization':'Bearer '+t}}); s=await r.json(); if(!s||!s.text) throw new Error('bad'); }
   catch(e){ el.innerHTML='<p style="color:var(--accent2);font-size:13px;">Could not reach <code>/api/ai-status</code>. Deploy the latest build, then click Refresh.</p>'; return; }
   const pill=(bg,fg,txt)=>`<span style="display:inline-block;padding:2px 9px;border-radius:100px;font-size:11px;font-weight:600;background:${bg};color:${fg};">${txt}</span>`;
   const stat=(p)=>{
@@ -4041,7 +4052,7 @@ const RUNBOOK = [
       steps:[
         'This never breaks a session: questions, results, reveal, leaderboards, reports and CSV are all AI-free.',
         'Check the providers:',
-        {cmd:'curl -s https://app.pollslide.com/api/ai-status | python3 -m json.tool'},
+        'Open <b>AI / Polly</b> in this admin panel and press <b>↻ Refresh</b> — it shows every provider and whether it is reachable. (The status check needs your admin sign-in, so it no longer runs from a terminal.)',
         'Fix whichever provider is down using the "🤖 Polly / AI is down" section below.',
         'Confirm it happened by looking at that user in <b>Users → (open user) → 🎫 Polly credits & log</b> — co-pilot runs are logged with kind:copilot.',
       ] },
@@ -4068,8 +4079,8 @@ const RUNBOOK = [
       cause:'The Mac LLM tunnel is misrouted or asleep. Polly is supposed to fall back to OpenAI automatically, so a HARD error usually means the OpenAI backup key is invalid too.',
       steps:[
         'Check both providers at a glance:',
-        {cmd:'curl -s https://app.pollslide.com/api/ai-status | python3 -m json.tool'},
-        'Read <b>text.local</b> and <b>text.openai</b> in the result.',
+        'Open <b>AI / Polly</b> in this admin panel and press <b>↻ Refresh</b> — it shows every provider and whether it is reachable. (The status check needs your admin sign-in, so it no longer runs from a terminal.)',
+        'Read the <b>local Mac</b> and <b>OpenAI</b> rows for text.',
         '<b>text.local.reachable = false, status 404</b> → the Mac tunnel is misrouted → see "Mac tunnel misrouted" below.',
         '<b>text.openai.reachable = false / status 401</b> → the backup key is dead → update <b>OPENAI_API_KEY</b> in Vercel → Settings → Environment Variables, then redeploy.',
         'Polly works as long as EITHER local (200) OR openai is reachable. You only get a hard error when BOTH are down.',
@@ -4173,7 +4184,6 @@ const RB_LINKS = [
   { label:'System Health', on:"showPage('health')" },
   { label:'AI / Polly', on:"showPage('ai')" },
   { label:'Security scan', on:"showPage('security')" },
-  { label:'AI status (JSON) ↗', href:'https://app.pollslide.com/api/ai-status' },
   { label:'Vercel ↗', href:'https://vercel.com/dashboard' },
   { label:'Firebase ↗', href:'https://console.firebase.google.com/project/echonest-live-survey/database' },
   { label:'Stripe ↗', href:'https://dashboard.stripe.com' },
