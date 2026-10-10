@@ -3,7 +3,7 @@
 Living punch list. Updated as things land. Owner-only items are things only Rod can do
 (they need a console login, a card, or a lawyer).
 
-Last updated: 2026-10-01 (question reordering planned)
+Last updated: 2026-10-10 (security fix verified, "Made with PollSlide", phone language QA)
 
 ---
 
@@ -17,6 +17,17 @@ Last updated: 2026-10-01 (question reordering planned)
 | ✅ | Leaderboards score people, not devices | `psStandings` folds a student's two devices; a second device is not a free retry. |
 | ✅ | Attempts / retakes | `retakes.js`. Off by default. Teacher picks tries (2/3/5) and which attempt is graded (best/last/first). Every attempt kept at `sessions/$code/attempts`. |
 | ✅ | Gradebook CSV export | `gradebook.js`. One row per student. A blank is not a zero; ungraded questions excluded; formula-injection neutralised (this also fixed the existing answers export). |
+
+## 2026-10-10 — security, growth line, language QA
+
+| | Item | Notes |
+|---|---|---|
+| ✅ | **Audience text can never become markup** | `audience-safe.js`, loaded right after the database SDK on all 16 app pages. Verified against the **real Firebase 10.7.1 compat SDK** in Chromium (val, exportVal, child().val, forEach) — not just the stage stand-in. Now also covers LoopSlide's `loop_answers`/`loop_scores`/`loop_react`. Locked by `scripts/tests/audience-safe.test.js` (50 checks, incl. "every page loads the guard straight after the database script"). |
+| 📝 | No database rule rejecting `<` `>` | Deliberately: it would reject honest answers like "x < 5". The read-side guard is the protection. |
+| ⏸ | PowerPoint LIVE add-in (`powerpoint-content/`) not patched | Frozen for Microsoft review. Add `audience-safe.js` after approval. |
+| ⬜ | **`quiz_builder/$code` is writable by any signed-in account** | Including the anonymous sign-in the Mac companion uses — anyone with a room code could overwrite that session's questions. Needs an owner stamp + rule change, rolled out without breaking live sessions, collaborators or the companion. Queued as its own task. |
+| ✅ | **"Made with PollSlide — run your own, free"** | Last line of the phone's answer card, only after someone answers. 11 languages, right-to-left for Arabic. Links to `pollslide.com/?ref=phone`. Paid plans can switch it off: Account settings → Audience phones (`users/$uid/settings/hideMadeWith`, published per session as `quiz_builder/$code/madeWithOff`). Free always shows it. |
+| ✅ | Phone hard-coded English removed | 32 strings (self-paced quiz/survey, score screen + share text, study-session end, Q&A errors) now in all 11 languages. Every phone key present in every language (142/142). |
 
 ## Next up — found during the 2026-08-31 review
 

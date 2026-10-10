@@ -14,7 +14,7 @@
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=ced1d8c8"></script>
+<script src="/ui-lang.js?v=cb53c73d"></script>
 <script src="/tickets.js?v=edb362ec"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -1251,7 +1251,7 @@
 <script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <!-- Audience text can never become markup: must load right after the database SDK. -->
-<script src="/audience-safe.js?v=c2b0a002"></script>
+<script src="/audience-safe.js?v=db05f20b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 <script>
@@ -1328,6 +1328,12 @@ function normalizeTier(t) {
   return TIERS[t] ? t : 'free';
 }
 let userTier = 'free';
+/* "Made with PollSlide" on audience phones (2026-10-10). After someone answers, their phone
+   shows one small line linking to pollslide.com — every session quietly shows the product
+   to the room. Paid plans may switch it off (Account settings → Audience phones); on Free
+   it always shows. Published per session as quiz_builder/<code>/madeWithOff. */
+let hideMadeWith = false;
+function madeWithOff() { return !!hideMadeWith && normalizeTier(userTier) !== 'free'; }
 function tierLimits() { return TIERS[normalizeTier(userTier)] || TIERS.free; }
 
 // ── Polly AI monthly quota ──────────────────────────────────────────────────
@@ -1514,6 +1520,7 @@ auth.onAuthStateChanged(user => {
     } catch(e) {}
     // Load the user's plan tier, then reconcile team membership (accept any pending
     // invite for this email; downgrade if removed from a workspace) before loading.
+    db.ref(`users/${userId}/settings/hideMadeWith`).once('value').then(s => { hideMadeWith = s.val() === true; }).catch(() => {});
     db.ref(`users/${userId}/tier`).once('value').then(async snap => {
       const t = snap.val();
       userTier = ['pro','team','white','team_small','team_large'].includes(t) ? t : 'free';
@@ -2670,6 +2677,15 @@ async function openAccountSettings(focus) {
           <button class="btn btn-ghost btn-sm" onclick="closeAccountSettings();openPlanPicker()" data-i18n>✨ See plans & upgrade</button>`}
     </div>
 
+    <div style="${card}" id="acctMadeWithCard">
+      <div style="${h}" data-i18n>${tr('Audience phones')}</div>
+      <label style="display:flex;gap:9px;align-items:flex-start;font-size:13px;line-height:1.5;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);cursor:${tierKey === 'free' ? 'default' : 'pointer'};">
+        <input type="checkbox" id="acctMadeWith" style="margin-top:3px;" ${(tierKey === 'free' || !hideMadeWith) ? 'checked' : ''} ${tierKey === 'free' ? 'disabled' : ''} onchange="acctSetMadeWith(this.checked)">
+        <span data-i18n>${tr('Show “Made with PollSlide” on phones after people answer')}</span>
+      </label>
+      <div style="${note};margin-top:6px;" data-i18n>${tierKey === 'free' ? tr('Paid plans can turn this off.') : tr('One small line at the bottom of the phone, after someone answers. Changes apply to every deck the next time you open or present it.')}</div>
+    </div>
+
     <div style="${card}" id="acctEmailCard">
       <div style="${h}" data-i18n>${tr('Change email address')}</div>
       ${pending ? `<div id="acctPending" style="background:rgba(247,183,49,.12);border:1px solid rgba(247,183,49,.35);border-radius:9px;padding:9px 11px;font-size:12.5px;line-height:1.5;margin-bottom:9px;">
@@ -2722,6 +2738,17 @@ async function openAccountSettings(focus) {
   if (focus === 'delete') setTimeout(() => document.getElementById('acctDeleteCard')?.scrollIntoView({ block: 'center' }), 60);
 }
 function closeAccountSettings() { const m = document.getElementById('acctModal'); if (m) m.remove(); }
+async function acctSetMadeWith(show) {
+  if (normalizeTier(userTier) === 'free') return;          // the checkbox is disabled on Free anyway
+  hideMadeWith = !show;
+  try {
+    await db.ref(`users/${userId}/settings/hideMadeWith`).set(hideMadeWith || null);
+    // Apply straight away to the deck that is open, so a session already running follows.
+    const pres = activePresId && presentations[activePresId];
+    if (pres && pres.sessionCode) db.ref(`quiz_builder/${pres.sessionCode}/madeWithOff`).set(madeWithOff() || null).catch(()=>{});
+    toast(tr('Saved'), 'success');
+  } catch (e) { toast(tr('Something went wrong. Please try again.'), 'danger'); }
+}
 /* Each section answers inside itself, right under the button that was pressed — a message at
    the bottom of the window scrolled people away from what they were doing. */
 function acctSay(msg, kind, where) {
@@ -3565,6 +3592,7 @@ async function saveCurrentPresentation() {
       await db.ref(`quiz_builder/${pres.sessionCode}/language`).set(pres.language || 'en');
       await db.ref(`quiz_builder/${pres.sessionCode}/teamMode`).set(!!pres.teamMode);
       await db.ref(`quiz_builder/${pres.sessionCode}/focusTrack`).set(!!pres.focusTrack);
+      db.ref(`quiz_builder/${pres.sessionCode}/madeWithOff`).set(madeWithOff() || null).catch(()=>{});
       db.ref(`quiz_builder/${pres.sessionCode}/retakes`).set(pres.retakes ? PSRetakes.retakePolicy(pres.retakes) : null).catch(()=>{});
       await publishRosterFor(pres);
     }
@@ -3720,6 +3748,7 @@ function selectPresentation(id) {
     db.ref(`quiz_builder/${pres.sessionCode}/productType`).set(presType(pres)).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/teamMode`).set(!!pres.teamMode).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/focusTrack`).set(!!pres.focusTrack).catch(()=>{});
+    db.ref(`quiz_builder/${pres.sessionCode}/madeWithOff`).set(madeWithOff() || null).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/retakes`).set(pres.retakes ? PSRetakes.retakePolicy(pres.retakes) : null).catch(()=>{});
   }
 
