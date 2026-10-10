@@ -17,6 +17,7 @@ const { setUserTier } = require('../lib/tier');
 const { ADMIN_EMAILS } = require('../lib/quota');
 const TT = require('../lib/team-transfer');
 const { tierForSubscription } = require('../lib/stripe-tier');
+const TeamHub = require('../lib/team-hub');
 
 /* What Stripe says one account pays for: { customerId, subs: [{ id, status, tier, metadata }] }.
    Read for the owner-handover preview and re-read right before the transfer runs. */
@@ -247,6 +248,7 @@ module.exports = async function handler(req, res) {
         }
         for (const k of Object.keys(ws.invites || {})) await db.ref('team_invites/' + k).remove().catch(() => {});
         await db.ref('workspaces/' + wsId).remove();
+        await db.ref('team_library/' + wsId).remove().catch(() => {});   // the team's library goes with the team
         return res.status(200).json({ ok: true });
       }
       case 'adminDelete': {
@@ -256,6 +258,7 @@ module.exports = async function handler(req, res) {
         for (const mUid of Object.keys(ws.members || {})) await detachMember(wsId, mUid, ws);
         for (const k of Object.keys(ws.invites || {})) await db.ref('team_invites/' + k).remove().catch(() => {});
         await db.ref('workspaces/' + wsId).remove();
+        await db.ref('team_library/' + wsId).remove().catch(() => {});   // the team's library goes with the team
         return res.status(200).json({ ok: true });
       }
       /* ── Team owner handover (2026-10-07) — see lib/team-transfer.js for the rule ──
@@ -360,8 +363,15 @@ module.exports = async function handler(req, res) {
         await db.ref('team_invites/' + ek).remove();
         return res.status(200).json({ ok: true });
       }
-      default:
+      default: {
+        /* Team hub (2026-10-10): shared library, usage analytics, bulk member tools.
+           All of it lives in lib/team-hub.js so it can be tested and staged; it reuses this
+           file's own mail() and detachMember() so a bulk action does exactly what the
+           one-at-a-time action does. Returns null for an action it does not know. */
+        const r = await TeamHub.handle(db, { callerUid, callerEmail, isSiteAdmin, mail, detachMember }, req.body || {});
+        if (r) return res.status(r.status).json(r.body);
         return res.status(400).json({ error: 'Unknown action' });
+      }
     }
   } catch (e) {
     const code = Number.isInteger(e.code) ? e.code : 500;
