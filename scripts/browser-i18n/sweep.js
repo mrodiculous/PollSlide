@@ -13,7 +13,7 @@ const fs = require('fs'), path = require('path');
 let chromium; try { ({ chromium } = require('playwright')); } catch (e) { ({ chromium } = require(require('child_process').execSync('npm root -g').toString().trim() + '/playwright')); }
 const BASE = process.env.BASE || 'http://localhost:8138/';
 const OUT = process.env.OUT || '/tmp/i18n-shots';
-const LANGS = ['en','es','de','fr','pt','it','nl','ja','zh','ar','hi'];
+const LANGS = (process.env.LANGS || 'en,es,de,fr,pt,it,nl,ja,zh,ar,hi').split(',');
 const STUB = fs.readFileSync(path.join(__dirname, 'stub-firebase.js'), 'utf8');
 const PAGES = (process.env.PAGES || 'presenter.html,present.html,live.html,results.html,report.html,recap.html,overlay.html,answer.html,companion.html,loop.html,play.html,screen.html,tv.html,rules.html').split(',');
 // Same in every language on purpose: names, addresses, codes, units, emoji-only labels.
