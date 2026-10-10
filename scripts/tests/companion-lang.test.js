@@ -45,12 +45,14 @@ ok('Portuguese is European (no você, ecrã/telemóvel not tela/celular)', !/\b(
 // The Mac app's source lives outside this repo (Rod's Mac); checked when it is there.
 const MAC = path.resolve(os.homedir(), 'Downloads', 'PollSlide', 'xCode App Companion Pollslide', 'PollSlideCompanion', 'PollSlideCompanion');
 if (fs.existsSync(path.join(MAC, 'L10n.swift'))) {
-  console.log('\nMac app (1.3.5)');
-  /* The Mac APP's own menus are in six languages (English + these five); the hosted companion
-     PAGE is in eleven. Everything in this block compares against the app's Swift source, so
-     it must use the app's list — with the page's ten, it demanded Dutch/Japanese/… menu text
-     the app has never had. (Only this Mac has the Swift source, so the cloud run skipped it.) */
-  const LANGS = ['es', 'de', 'fr', 'pt', 'it'];
+  console.log('\nMac app');
+  /* The app's own list of languages is the source of truth here (L10n.supported): six up to
+     1.3.5, eleven from 1.3.6. Everything in this block compares against the app's Swift
+     source, so it reads the list from there instead of repeating it. (Only this Mac has the
+     Swift source, so a cloud run skips this block.) */
+  const SUP = (fs.readFileSync(path.join(MAC, 'L10n.swift'), 'utf8').match(/static let supported = \[([^\]]*)\]/) || [, ''])[1];
+  const LANGS = [...SUP.matchAll(/"([a-z]{2})"/g)].map(m => m[1]).filter(l => l !== 'en');
+  ok('the app speaks at least the five original languages besides English', ['es', 'de', 'fr', 'pt', 'it'].every(l => LANGS.includes(l)), LANGS);
   const L = fs.readFileSync(path.join(MAC, 'L10n.swift'), 'utf8');
   const A = fs.readFileSync(path.join(MAC, 'PollSlideCompanionApp.swift'), 'utf8');
   const P = fs.readFileSync(path.join(MAC, 'PairingView.swift'), 'utf8');
@@ -58,7 +60,7 @@ if (fs.existsSync(path.join(MAC, 'L10n.swift'))) {
   const uses = [...new Set([...(A + P).matchAll(/L10n\.(?:t|long)\("((?:[^"\\]|\\.)*)"/g)].map(m => m[1]))];
   const gaps = [];
   for (const l of LANGS) { const b = block(l); for (const k of uses) if (!b.includes(`"${k}":`)) gaps.push(l + ': ' + k); }
-  ok(`every app string (${uses.length}) is in all five languages`, uses.length > 30 && gaps.length === 0, gaps);
+  ok(`every app string (${uses.length}) is in all ${LANGS.length} languages`, uses.length > 30 && gaps.length === 0, gaps);
   ok('no English left hard-coded in the menu, dialogs or pairing window',
     !/NSMenuItem\(title: "[A-Za-z]/.test(A) && !/messageText = "(?!PollSlide Companion \\\()/.test(A) && !/addButton\(withTitle: "/.test(A) && !/Text\("(?!PollSlide")[A-Za-z0-9]/.test(P) && !/statusMessage = "[A-Za-z]/.test(P));
   ok('follows the Mac unless the user picks a language (Language menu, Automatic first)', /Locale\.preferredLanguages/.test(L) && /static var current: String \{ choice \?\? system \}/.test(L) && /Automatic \(this Mac’s language\)/.test(A) && /@objc func chooseLanguage/.test(A));
@@ -71,6 +73,10 @@ if (fs.existsSync(path.join(MAC, 'L10n.swift'))) {
   // app's own (translated) labels, or the instructions name a button that is not there.
   const quoted = { es: ['Desconectar cuenta (volver a conectar)', 'Conectar con PollSlide'], de: ['Konto trennen (neu verbinden)', 'Mit PollSlide verbinden'],
     fr: ['Déconnecter le compte (reconnecter)', 'Se connecter à PollSlide'], pt: ['Desligar conta (voltar a ligar)', 'Ligar ao PollSlide'], it: ['Scollega account (ricollega)', 'Collegati a PollSlide'] };
+  // Languages added later (nl, ja, zh, ar, hi in 1.3.6): take the label from the app itself —
+  // the check that matters is that the PAGE quotes whatever the app really shows.
+  const appLabel = (l, en) => { const m = block(l).match(new RegExp('"' + en.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '": "((?:[^"\\\\]|\\\\.)*)"')); return m ? m[1] : '(missing in app: ' + en + ')'; };
+  for (const l of LANGS) if (!quoted[l]) quoted[l] = [appLabel(l, 'Disconnect Account (Re-pair)'), appLabel(l, 'Connect to PollSlide')];
   const noAcct = Object.keys(de.D.de).find(k => k.startsWith('No account linked.'));
   const bad = [];
   for (const l of LANGS) for (const lab of quoted[l]) { if (!block(l).includes(`: "${lab}"`)) bad.push(l + ' app lacks ' + lab); if (!de.D[l][noAcct].includes(lab)) bad.push(l + ' page lacks ' + lab); }
@@ -82,12 +88,13 @@ if (fs.existsSync(path.join(MAC, 'L10n.swift'))) {
     const si = fs.readFileSync(SITEI, 'utf8');
     const lab = JSON.parse(si.slice(si.indexOf('const APP_LABELS = ') + 19, si.indexOf(';\n  const Q = {')));
     const off = [];
-    for (const l of LANGS) for (const [en, tr] of Object.entries(lab[l])) if (!block(l).includes(`"${en}": "${tr}"`)) off.push(`${l}: ${en} → ${tr}`);
+    for (const l of LANGS.filter(l => lab[l])) for (const [en, tr] of Object.entries(lab[l]))   // the site is in fewer languages than the app
+      if (!block(l).includes(`"${en}": "${tr}"`)) off.push(`${l}: ${en} → ${tr}`);
     ok('the website\'s Mac-app labels match the app word for word', Object.keys(lab.de).length >= 10 && off.length === 0, off);
   }
   global.window = { PS_UI: {} }; require(path.join(ROOT, 'ui-lang.js'));
   const pk = 'Nothing opens by itself: in the menu bar (top right of your screen), click the bar-chart icon, then "Disconnect Account (Re-pair)" — that opens the "Connect to PollSlide" window.';
-  const pbad = LANGS.filter(l => !(window.PS_UI[l][pk] || '').includes(quoted[l][0]) || !(window.PS_UI[l][pk] || '').includes('Disconnect Account (Re-pair)'));
+  const pbad = LANGS.filter(l => window.PS_UI[l]).filter(l => !(window.PS_UI[l][pk] || '').includes(quoted[l][0]) || !(window.PS_UI[l][pk] || '').includes('Disconnect Account (Re-pair)'));
   ok('the presenter\'s "Connect Mac App" box names both: the translated label and the English one (1.3.4)', pbad.length === 0, pbad);
 } else console.log('  (Mac app source not on this machine — skipped)');
 

@@ -22,7 +22,12 @@ const ID = args.find(a => !a.startsWith('--') && !['--voice', '--rate', '--lang'
    separate spoken form, e.g. "es_say", for things like email addresses), and the best
    installed voice for it. Written as <id>-<lang>.mp4 with its own <id>-<lang>.vtt. */
 const LANG = flag('lang', 'en');
-const LOCALE = { en: 'en_US', es: 'es_ES', de: 'de_DE', fr: 'fr_FR', pt: 'pt_PT', it: 'it_IT' }[LANG];
+/* es → Mexican Spanish first (Rod, 2026-10-10: "I like the Mexican Spanish better than the Spain
+   Spanish"); es_ES / es_US are the fallbacks. nl, ja, zh, ar, hi added the same day — the voices
+   are installed, but the APP is not in those languages yet, so record them only once it is
+   (otherwise the narration is Dutch over an English screen). */
+const LOCALE = { en: 'en_US', es: 'es_MX', de: 'de_DE', fr: 'fr_FR', pt: 'pt_PT', it: 'it_IT',
+                 nl: 'nl_NL', ja: 'ja_JP', zh: 'zh_CN', ar: 'ar_001', hi: 'hi_IN' }[LANG];
 if (!LOCALE) { console.error('Unknown --lang ' + LANG); process.exit(1); }
 /* Zoe (Premium) since 2026-09-27 (Rod downloaded it). Falls back to Samantha on a Mac without it.
    No rate by default: premium voices sound most natural at their own pace. */
@@ -30,13 +35,14 @@ const INSTALLED = execFileSync('say', ['-v', '?']).toString();
 /* Best voice for a language: a Premium voice if one is downloaded, then Enhanced, then the
    standard voice we chose for that language. Premium voices sound far more natural — download
    them in System Settings → Accessibility → Spoken Content → System voice → Manage Voices. */
-const FALLBACK = { es_ES: 'Mónica', de_DE: 'Anna', fr_FR: 'Thomas', pt_PT: 'Joana', it_IT: 'Alice' };
+const FALLBACK = { es_MX: 'Paulina', es_ES: 'Mónica', de_DE: 'Anna', fr_FR: 'Thomas', pt_PT: 'Joana', it_IT: 'Alice',
+                   nl_NL: 'Xander', ja_JP: 'Kyoko', zh_CN: 'Tingting', ar_001: 'Majed', hi_IN: 'Lekha' };
 /* Spanish may also use a high-quality Latin American voice: the scripts are written in
    neutral Spanish, and a natural es_MX voice beats the robotic standard es_ES one. Not done
    for Portuguese — the text is European Portuguese, and a Brazilian voice would misread it. */
-const ALSO = { es_ES: ['es_MX', 'es_US'] };
+const ALSO = { es_MX: ['es_ES', 'es_US'], nl_NL: ['nl_BE'] };
 function bestVoice(locale) {
-  const all = INSTALLED.split('\n').map(l => { const m = /^(.+?)\s+([a-z]{2}_[A-Z]{2})\s+#/.exec(l); return m ? { name: m[1].trim(), loc: m[2] } : null; }).filter(Boolean);
+  const all = INSTALLED.split('\n').map(l => { const m = /^(.+?)\s+([a-z]{2}_(?:[A-Z]{2}|\d{3}))\s+#/.exec(l); return m ? { name: m[1].trim(), loc: m[2] } : null; }).filter(Boolean);
   const rows = all.filter(r => r.loc === locale), alt = all.filter(r => (ALSO[locale] || []).includes(r.loc));
   const pick = (list, re) => (list.find(r => re.test(r.name)) || {}).name;
   return pick(rows, /\(Premium\)/) || pick(rows, /\(Enhanced\)/) || pick(alt, /\(Premium\)/) || pick(alt, /\(Enhanced\)/)

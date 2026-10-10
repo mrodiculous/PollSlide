@@ -8,13 +8,14 @@
 <script src="/errors.js?v=25c25f5f"></script>
 <script src="/present-display.js?v=b01c9c51"></script>
 <script src="/qid.js?v=f6f81595"></script>
+<script src="/lang-detect.js?v=0f13ddb6"></script>
 <script src="/roster.js?v=88b6f2d4"></script>
 <script src="/retakes.js?v=d187d4ee"></script>
 <script src="/gifs.js?v=ed7add18"></script>
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=3909522b"></script>
+<script src="/ui-lang.js?v=672e446e"></script>
 <script src="/tickets.js?v=edb362ec"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -2756,6 +2757,7 @@ function retakeTeacherText(pol) {
 function trMenu(l) {
   let m;
   if ((m = /^Class: (.*)$/.exec(l))) return trf('Class: {name}', { name: m[1] });
+  if ((m = /^Language: (.*)$/.exec(l))) return trf('Language: {name}', { name: m[1] });
   if ((m = /^Retakes: (\d+) tries, (best|last|first) counts$/.exec(l))) return trf('Retakes: {n} tries, ' + m[2] + ' counts', { n: m[1] });
   return tr(l);
 }
@@ -3623,6 +3625,7 @@ async function saveCurrentPresentation() {
     // later reorder can never orphan its answers.
     PSQid.backfill(Array.isArray(pres.questions) ? pres.questions : []);
     PSQid.ensureHomes(Array.isArray(pres.questions) ? pres.questions : []);
+    autoDeckLanguage(pres);   // the deck's language follows what is written in it
     // Save full presentation record
     await db.ref(deckPath(activePresId)).set(pres);
     // ALSO mirror questions to quiz_builder/sessionCode so participants can find them by QR.
@@ -3752,6 +3755,12 @@ function selectPresentation(id) {
   // never block opening a deck.
   pres.lastOpenedAt = Date.now();
   if (userId && isDeckOwner(id)) db.ref(deckPath(id) + '/lastOpenedAt').set(pres.lastOpenedAt).catch(() => {});
+  // A deck written before 2026-10-10 may still carry the wrong language; put it right on
+  // open, and tell the phones, so presenting it straight away already works.
+  if (userId && isDeckOwner(id) && autoDeckLanguage(pres)) {
+    db.ref(deckPath(id)).update({ language: pres.language, languageBy: 'auto' }).catch(() => {});
+    if (pres.sessionCode) ensureClaim(pres.sessionCode, id).then(() => db.ref(`quiz_builder/${pres.sessionCode}/language`).set(pres.language)).catch(() => {});
+  }
 
   // "+ New" and the setup panel follow the selected deck's type. The list FILTER
   // (typeFilter) is left alone — jumping the filter around under someone who is
@@ -4720,6 +4729,7 @@ function openDeckMenu(id, ev) {
       { icon: '🔁', label: PSRetakes.shortLabel(p.retakes), act: `openRetakeModal('${escAttr(id)}')` },
     ]),
     { icon: '🎞', label: gifMenuLabel(p.gifs), act: `openGifModal('${escAttr(id)}')` },
+    { icon: '🌐', label: 'Language: ' + LANGUAGES[p.language || 'en'], act: `openDeckLanguage('${escAttr(id)}')` },
     { icon: '📤', label: 'Share a copy…', act: `openDeckShareModal('${escAttr(id)}')` },
     // Team plans: put your own deck in the team's shared library (Team hub).
     ...((!isCollabDeck(id) && ['team_small','team_large'].includes(normalizeTier(userTier)))
@@ -8596,11 +8606,57 @@ function groupTeams(rows) {
   return [...grouped, ...solo].sort((a, b) => (b.score - a.score) || (a.elapsed - b.elapsed));
 }
 
+/* THE DECK'S LANGUAGE FOLLOWS WHAT IS WRITTEN IN IT (2026-10-10).
+ * It used to be set only by the picker inside the Polly dialog, so a deck typed by hand in
+ * Spanish stayed "English" and the phones were told the wrong source language (Rod, presenting
+ * in Spanish with an English interface). lang-detect.js reads the questions; when it is SURE
+ * and the presenter has not chosen a language themselves, the deck is switched and they are
+ * told, with a one-click way to change it. Returns true when it changed something. */
+function autoDeckLanguage(pres) {
+  try {
+    if (!pres || typeof PSLangDetect === 'undefined') return false;
+    if (pres.languageBy === 'user') return false;
+    const d = PSLangDetect.detect(PSLangDetect.deckTexts(pres.questions));
+    if (!d.lang || !d.confident || d.lang === (pres.language || 'en')) return false;
+    if (!LANGUAGES[d.lang]) return false;
+    pres.language = d.lang; pres.languageBy = 'auto';
+    const id = pres.id || activePresId;
+    toast('🌐 ' + trf('Deck language set to {lang} — that is what the questions are written in.', { lang: LANGUAGES[d.lang] }), 'info',
+      { label: tr('Change'), onClick: () => openDeckLanguage(id) });
+    return true;
+  } catch (e) { return false; }
+}
+/* Choose a deck's language by hand (deck ⋯ menu → Language). */
+function openDeckLanguage(id) {
+  const p = presentations[id]; if (!p) return;
+  let m = document.getElementById('deckLangModal');
+  if (!m) { m = document.createElement('div'); m.id = 'deckLangModal'; m.className = 'overlay';
+            m.onclick = e => { if (e.target === m) m.remove(); }; document.body.appendChild(m); }
+  const cur = p.language || 'en';
+  m.innerHTML = `<div class="modal" style="max-width:440px;">
+    <h2 style="margin-bottom:4px;">🌐 ${tr('Deck language')}</h2>
+    <p style="color:var(--muted);font-size:12.5px;line-height:1.5;margin-bottom:14px;">${tr('The language your questions are written in. Each phone translates from it into its own language.')}</p>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px;">
+      ${Object.entries(LANGUAGES).map(([code, name]) => `<button class="btn ${code === cur ? 'btn-primary' : 'btn-ghost'}" style="justify-content:flex-start;" onclick="pickDeckLanguage('${escAttr(id)}','${code}')">${escapeHtml(name)}${code === cur ? ' ✓' : ''}</button>`).join('')}
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-top:16px;"><button class="btn btn-ghost" onclick="document.getElementById('deckLangModal').remove()">${tr('Close')}</button></div>
+  </div>`;
+}
+function pickDeckLanguage(id, code) {
+  const p = presentations[id]; if (!p || !LANGUAGES[code]) return;
+  p.language = code; p.languageBy = 'user';
+  if (isDeckOwner(id) || id === activePresId) db.ref(deckPath(id)).update({ language: code, languageBy: 'user' }).catch(() => {});
+  if (p.sessionCode) ensureClaim(p.sessionCode, id).then(() => db.ref(`quiz_builder/${p.sessionCode}/language`).set(code)).catch(() => {});
+  const m = document.getElementById('deckLangModal'); if (m) m.remove();
+  toast(trf('Deck language: {lang}', { lang: LANGUAGES[code] }), 'success');
+}
+
 // Persist the deck's language; it's published to quiz_builder on save so the
 // audience answer page localizes to match.
 function setPresLanguage(code) {
   if (!activePresId || !LANGUAGES[code]) return;
   presentations[activePresId].language = code;
+  presentations[activePresId].languageBy = 'user';   // chosen by hand: never auto-changed again
   scheduleSave();
   if (presentations[activePresId].sessionCode) {
     db.ref(`quiz_builder/${presentations[activePresId].sessionCode}/language`).set(code).catch(()=>{});
