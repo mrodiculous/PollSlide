@@ -714,6 +714,18 @@ function showWaiting() {
   syncWarmup();   // waiting room = warm-up trivia time (if enabled on this device)
 }
 
+/* Which response bucket is this live question's? (fixed 2026-10-10)
+ * sessions/<code>/currentQuestion.id IS the bucket already — every publisher writes the
+ * full "<question id>_<code>". v182 (2026-08-26) passed that pointer through PSQid.bucket,
+ * which appended the code a SECOND time, so this page listened at "<id>_<code>_<code>",
+ * where no phone ever writes: the big screen sat on "Waiting for responses…" while the
+ * answers came in. Use the pointer as it is; only an id that is not yet a bucket (an old
+ * publisher) is turned into one. */
+function liveBucket(q, idx) {
+  const id = (q && q.id) ? String(q.id) : '';
+  return id.endsWith('_' + sessionCode) ? id : PSQid.bucket(q, idx, sessionCode);
+}
+
 // ── Show active question ──────────────────────────────────────────────────────
 let _liveResetSeen = 0;   // newest presenter tally-reset stamp this question has honoured
 function showQuestion(q) {
@@ -721,7 +733,7 @@ function showQuestion(q) {
   stopWarmup(); const _wc = document.getElementById('warmupCard'); if (_wc) _wc.style.display = 'none';
   currentQ = q;
   const idx  = q.qIndex !== undefined ? q.qIndex : (q.index ? q.index - 1 : 0);
-  const qId  = PSQid.bucket(q, idx, sessionCode);
+  const qId  = liveBucket(q, idx);
   const code = sessionCode;
 
   // Reset reveal state for new question
@@ -803,7 +815,7 @@ function doReveal() {
   // Re-render chart with correct answer highlights
   if (currentQ && responsesListener) {
     const idx = currentQ.qIndex !== undefined ? currentQ.qIndex : (currentQ.index ? currentQ.index - 1 : 0);
-    const qId = PSQid.bucket(currentQ, idx, sessionCode);
+    const qId = liveBucket(currentQ, idx);
     db.ref(`sessions/${sessionCode}/responses/${qId}`).get().then(snap => {
       const all = snap.exists() ? Object.values(snap.val()) : [];
       renderChart(currentQ, liveStartedAt > 0 ? all.filter(r=>(r.submittedAt||0)>=liveStartedAt) : all);
