@@ -15,7 +15,7 @@
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=18ed09e0"></script>
+<script src="/ui-lang.js?v=2e1c1e43"></script>
 <script src="/tickets.js?v=edb362ec"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -826,7 +826,7 @@
       <span style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);" data-i18n>Live Results</span>
       <div style="display:flex;align-items:center;gap:8px;">
         <span id="respCounter" style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent);font-size:12px;">—</span>
-        <button data-i18n-title onclick="toggleLiveDetail()" id="liveDetailBtn" title="Live results are showing — click to hide them until you reveal" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">👁</button>
+        <button onclick="toggleLiveDetail()" id="liveDetailBtn" title="Live results are showing — click to hide them until you reveal" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">👁</button>
         <button onclick="toggleSfx()" id="sfxBtn" title="Sound effects on/off" data-i18n-title style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">🔊</button>
         <button onclick="toggleMaximize()" id="maxBtn" title="Maximize results (great for projecting)" data-i18n-title style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">⛶</button>
       </div>
@@ -6173,12 +6173,12 @@ function openInbox() {
     <div style="border:1px solid var(--border);border-radius:11px;padding:12px 14px;margin-bottom:9px;">
       <div style="font-family:Syne,sans-serif;font-weight:700;font-size:14px;">${escapeHtml(sh.title)}</div>
       <div style="color:var(--muted);font-size:11.5px;margin-top:2px;">
-        ${trf('from {who}', { who: escapeHtml(sh.from) })} · ${trp(sh.questionCount, '{n} question', '{n} questions')} · ${escapeHtml((sh.productType || 'poll'))}
+        ${trf('from {who}', { who: escapeHtml(sh.from) })} · ${trp(sh.questionCount, '{n} question', '{n} questions')} · ${escapeHtml(tr(sh.productType || 'poll'))}
       </div>
       <div style="font-size:11.5px;margin-top:5px;color:${sh.role === 'edit' ? 'var(--accent)' : 'var(--muted)'};">
         ${sh.role === 'edit'
-          ? '🤝 Build it together — you both edit the same deck. They stay the owner.'
-          : '📤 A copy for you to keep and change. Their version stays as it is.'}
+          ? tr('🤝 Build it together — you both edit the same deck. They stay the owner.')
+          : tr('📤 A copy for you to keep and change. Their version stays as it is.')}
       </div>
       ${sh.note ? `<div style="border-left:3px solid var(--accent);padding-left:10px;margin-top:8px;font-size:12.5px;color:var(--text);">${escapeHtml(sh.note)}</div>` : ''}
       <div style="display:flex;gap:7px;margin-top:11px;">
@@ -7805,9 +7805,11 @@ function syncLiveDetailBtn() {
   const b = document.getElementById('liveDetailBtn');
   if (!b) return;
   b.textContent = showLiveDetail ? '👁' : '🙈';
-  b.title = showLiveDetail
+  // Set here in the presenter's language: it changes with the state, so the tagged-title
+  // pass (which remembers one English title) would put the wrong one back (2026-10-11).
+  b.title = tr(showLiveDetail
     ? 'Live results are showing — click to hide them until you reveal'
-    : 'Results stay hidden until you reveal — click to show them live';
+    : 'Results stay hidden until you reveal — click to show them live');
   b.style.color = showLiveDetail ? 'var(--text)' : 'var(--muted)';
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', syncLiveDetailBtn);

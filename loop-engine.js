@@ -31,7 +31,7 @@
      phones show each player their own language, the TV shows `screenLang` ('auto' = the
      TV browser's own language). Question content in other languages comes from the
      auto-translation stored at loop_i18n/<CODE>/<lang> (api/loop-translate.js). */
-  const LANGS = ['en', 'es', 'de', 'fr', 'pt', 'it'];
+  const LANGS = ['en', 'es', 'de', 'fr', 'pt', 'it', 'nl', 'ja', 'zh', 'ar', 'hi'];
   const TEAM_MAX = 12;
   // The only reactions a phone can send to a public screen — fixed, so nothing can be abused.
   const REACTIONS = ['👏', '🔥', '😂', '😮', '❤️', '🎉'];

@@ -31,7 +31,8 @@ const LOCAL_MODEL = process.env.LOCAL_TRANSLATE_MODEL || 'gemma4:latest';
 const CF = (process.env.CF_ACCESS_CLIENT_ID && process.env.CF_ACCESS_CLIENT_SECRET)
   ? { 'CF-Access-Client-Id': process.env.CF_ACCESS_CLIENT_ID, 'CF-Access-Client-Secret': process.env.CF_ACCESS_CLIENT_SECRET } : {};
 
-const NAMES = { en: 'English', es: 'Spanish', de: 'German', fr: 'French', pt: 'European Portuguese', it: 'Italian' };
+const NAMES = { en: 'English', es: 'Spanish', de: 'German', fr: 'French', pt: 'European Portuguese', it: 'Italian',
+  nl: 'Dutch', ja: 'Japanese (polite です/ます form)', zh: 'Simplified Chinese', ar: 'Modern Standard Arabic', hi: 'Hindi (polite आप form)' };
 const REGISTER = {
   es: 'Address players informally (tú).', de: 'Address players informally (du, never Sie).',
   fr: 'Address players informally (tu, never vous).', it: 'Address players informally (tu).',
