@@ -80,7 +80,7 @@ function fakeDb(init) {
         presentDecks: { pd1: { title: 'Slides' } } },
       neu: { email: 'me@gmail.com', presentations: { x1: { name: 'Mine', sessionCode: 'CODEX' } }, folders: ['Home'] },
     },
-    quiz_builder: { CODE1: { ownerUid: 'old', classId: 'c1', questions: [] }, CODE2: { questions: [] }, CODE3: { ownerUid: 'old' } },
+    quiz_builder: { CODE1: { ownerUid: 'old', owner: 'old', deck: 'd1', classId: 'c1', questions: [] }, CODE2: { questions: [] }, CODE3: { ownerUid: 'old', owner: 'old', deck: 'd3' } },
     sessions: { CODE1: { responses: { qa_CODE1: { r1: { answer: '"0"' } } } } },
     deckGrants: { old: { d3: { someone: 'edit' } } },
     loop_slots: { old: { 0: 'LOOPA' } },
@@ -104,12 +104,17 @@ function fakeDb(init) {
   ok('a class still used by a deck that stays is copied, not moved (its sign-in keeps working)', t.read('users/old/classes/c2/name') === '8A' && t.read('users/neu/classes/c2/name') === '8A');
   ok('the shared deck stayed with the old account, still shared', t.read('users/old/presentations/d3/name') === 'Shared' && t.read('quiz_builder/CODE3/ownerUid') === 'old');
   ok('plan, billing and credits stayed with the account', t.read('users/old/tier') === 'pro' && t.read('users/old/stripeCustomerId') === 'cus_9' && t.read('users/old/aiCredits') === 40 && !t.read('users/neu/tier'));
+  // Session ownership (owner-only rule, 2026-10-10): the right to save a session's questions moves with its deck.
+  ok('the moved deck\'s session is now owned by the new account (they can still save and publish it)', t.read('quiz_builder/CODE1/owner') === 'neu' && t.read('quiz_builder/CODE1/deck') === 'd1' && run.sessionOwners === 1, t.read('quiz_builder/CODE1'));
+  ok('a session nobody had claimed is left unclaimed, for the new owner\'s presenter to claim at sign-in', t.read('quiz_builder/CODE2/owner') === undefined || t.read('quiz_builder/CODE2/owner') === null);
+  ok('the shared deck that stayed keeps its session with the old account', t.read('quiz_builder/CODE3/owner') === 'old');
   const bk = t.read('admin/account_transfers/' + run.id);
   ok('a full backup was written first, and marked done', bk && bk.status === 'done' && bk.backup.presentations.d1.name === 'Unit 1' && bk.classLinks.CODE1 === 'old', bk && bk.status);
 
   await A.transferUndo(t, run.id);
   ok('undo puts everything back where it was', t.read('users/old/presentations/d1/sessionCode') === 'CODE1' && !t.read('users/neu/presentations/d1')
     && t.read('users/old/classes/c1/name') === '7B' && t.read('quiz_builder/CODE1/ownerUid') === 'old' && t.read('users/neu/presentations/x1/name') === 'Mine');
+  ok('undo hands session ownership back too', t.read('quiz_builder/CODE1/owner') === 'old');
   let twice = false; try { await A.transferUndo(t, run.id); } catch (e) { twice = true; }
   ok('an undo cannot be applied twice', twice);
 
