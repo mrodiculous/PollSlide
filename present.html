@@ -22,8 +22,8 @@
 -->
 <link href="/fonts/fonts.css?v=9f799e41" rel="stylesheet">
 <script src="/errors.js?v=25c25f5f"></script>
-<script src="/ui-lang.js?v=672e446e"></script>
-<script src="/ui-tr.js?v=3f24378f"></script>
+<script src="/ui-lang.js?v=fc648163"></script>
+<script src="/ui-tr.js?v=3b17788b"></script>
 <script src="/qid.js?v=f6f81595"></script>
 <script src="/present-display.js?v=b01c9c51"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
@@ -637,7 +637,7 @@
 
 <script>
 /* ─── Flags + i18n (English source; t() falls back to English) ─────────────────*/
-const LANG_NAMES = { en:'English', es:'Español', de:'Deutsch', fr:'Français', pt:'Português', it:'Italiano' };
+const LANG_NAMES = { en:'English', es:'Español', de:'Deutsch', fr:'Français', pt:'Português', it:'Italiano', nl:'Nederlands', ja:'日本語', zh:'中文', ar:'العربية', hi:'हिन्दी' };
 /* One language for the whole app (2026-10-07): the presenter's choice, read by ui-tr.js (ps_ui_lang,
    else the browser). This page used to keep its own (ps_user_lang), so it could disagree. */
 let LANG = (window.PS_TR && PS_TR.lang) || localStorage.getItem('ps_user_lang') || 'en'; if(!LANG_NAMES[LANG]) LANG='en';
@@ -675,6 +675,31 @@ const I18N = { en:{
   'present.responses':'{n} risposte', 'present.flip':'Premi → per girare', 'present.scan':'Inquadra per rispondere',
   'present.nocam':'Nessuna fotocamera?',
   'more.deck':'Presentazione', 'more.settings':'Impostazioni', 'more.reset':'Azzera i conteggi', 'more.language':'Lingua'
+}, nl:{
+  'present.live':'● LIVE', 'present.revealed':'✓ Antwoord onthuld', 'present.waiting':'Wachten op antwoorden…',
+  'present.responses':'{n} antwoorden', 'present.flip':'Druk op → om te draaien', 'present.scan':'Scan om te antwoorden',
+  'present.nocam':'Geen camera?',
+  'more.deck':'Presentatie', 'more.settings':'Instellingen', 'more.reset':'Tellingen resetten', 'more.language':'Taal'
+}, ja:{
+  'present.live':'● ライブ', 'present.revealed':'✓ 正解を発表しました', 'present.waiting':'回答を待っています…',
+  'present.responses':'回答 {n} 件', 'present.flip':'→ キーでめくる', 'present.scan':'スキャンして回答',
+  'present.nocam':'カメラがない場合',
+  'more.deck':'プレゼンテーション', 'more.settings':'設定', 'more.reset':'集計をリセット', 'more.language':'言語'
+}, zh:{
+  'present.live':'● 直播中', 'present.revealed':'✓ 答案已揭晓', 'present.waiting':'等待回答…',
+  'present.responses':'{n} 个回答', 'present.flip':'按 → 翻面', 'present.scan':'扫码作答',
+  'present.nocam':'没有摄像头？',
+  'more.deck':'演示文稿', 'more.settings':'设置', 'more.reset':'重置统计', 'more.language':'语言'
+}, ar:{
+  'present.live':'● مباشر', 'present.revealed':'✓ كُشفت الإجابة', 'present.waiting':'في انتظار الردود…',
+  'present.responses':'{n} ردود', 'present.flip':'اضغط → للقلب', 'present.scan':'امسح للإجابة',
+  'present.nocam':'لا توجد كاميرا؟',
+  'more.deck':'العرض التقديمي', 'more.settings':'الإعدادات', 'more.reset':'إعادة ضبط الحصائل', 'more.language':'اللغة'
+}, hi:{
+  'present.live':'● लाइव', 'present.revealed':'✓ जवाब का खुलासा हो गया', 'present.waiting':'जवाबों का इंतज़ार है…',
+  'present.responses':'{n} जवाब', 'present.flip':'पलटने के लिए → दबाएँ', 'present.scan':'जवाब देने के लिए स्कैन करें',
+  'present.nocam':'कैमरा नहीं है?',
+  'more.deck':'प्रस्तुति', 'more.settings':'सेटिंग्स', 'more.reset':'गिनतियाँ रीसेट करें', 'more.language':'भाषा'
 } };
 function t(k,v){ let s=(I18N[LANG]&&I18N[LANG][k])||I18N.en[k]||k; if(v)for(const x in v)s=s.replace('{'+x+'}',v[x]); return s; }
 function initLang(){ const sel=document.getElementById('langSel'); sel.innerHTML=Object.entries(LANG_NAMES).map(([c,n])=>`<option value="${c}" ${c===LANG?'selected':''}>${n}</option>`).join(''); applyI18n(); }
@@ -685,7 +710,7 @@ function applyI18n(){
     const v=(I18N[LANG]&&I18N[LANG][k])||I18N.en[k];
     if(v!=null) el.textContent=v;
   });
-  document.documentElement.lang=LANG;
+  document.documentElement.lang=LANG; if(window.PSLangDir)PSLangDir(LANG);
 }
 function setLang(l){ if(!LANG_NAMES[l])return; LANG=l;
   try { localStorage.setItem('ps_user_lang',l); localStorage.setItem('ps_ui_lang',l); } catch(e) {}

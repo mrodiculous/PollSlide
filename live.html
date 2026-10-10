@@ -10,7 +10,7 @@
 <script src="/errors.js?v=25c25f5f"></script>
 <script src="/qid.js?v=f6f81595"></script>
 <script src="/present-display.js?v=b01c9c51"></script>
-<script src="/ui-lang.js?v=672e446e"></script>
+<script src="/ui-lang.js?v=fc648163"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
@@ -517,7 +517,7 @@ function startWatching(code) {
 
    Dictionary is shared with presenter.html (ui-lang.js), keyed by the exact English.  */
 let BIG_LANG = 'en';
-const BIG_LANGS = { en:1, es:1, de:1, fr:1, pt:1, it:1 };
+const BIG_LANGS = { en:1, es:1, de:1, fr:1, pt:1, it:1, nl:1, ja:1, zh:1, ar:1, hi:1 };
 
 function bigTr(en) {
   if (BIG_LANG === 'en') return en;
@@ -535,7 +535,7 @@ function applyBigLang() {
     if (el._psT === undefined) el._psT = el.getAttribute('title') || '';
     el.setAttribute('title', BIG_LANG === 'en' ? el._psT : bigTr(el._psT));
   });
-  document.documentElement.lang = BIG_LANG;
+  document.documentElement.lang = BIG_LANG; if (window.PSLangDir) PSLangDir(BIG_LANG);
 }
 
 function setBigLang(code) {

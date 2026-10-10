@@ -27,7 +27,7 @@ const ok = (name, cond, extra) => cond
 const win = {};
 new Function('window', fs.readFileSync(path.join(ROOT, 'ui-lang.js'), 'utf8'))(win);
 const D = win.PS_UI;
-const LANGS = ['es', 'de', 'fr', 'pt', 'it'];
+const LANGS = ['es', 'de', 'fr', 'pt', 'it', 'nl', 'ja', 'zh', 'ar', 'hi'];
 
 console.log('\nThe dictionary is complete and consistent');
 ok('all five languages are present', LANGS.every(l => D[l] && typeof D[l] === 'object'), Object.keys(D || {}));

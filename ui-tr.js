@@ -17,7 +17,8 @@
  * Never defines a name a page already has. */
 (function () {
   'use strict';
-  var LANGS = { en: 'English', es: 'Español', de: 'Deutsch', fr: 'Français', pt: 'Português', it: 'Italiano' };
+  var LANGS = { en: 'English', es: 'Español', de: 'Deutsch', fr: 'Français', pt: 'Português', it: 'Italiano',
+                nl: 'Nederlands', ja: '日本語', zh: '中文', ar: 'العربية', hi: 'हिन्दी' };
   var lang = (function () {
     try {
       var saved = localStorage.getItem('ps_ui_lang');
@@ -106,6 +107,6 @@
   if (typeof window.trf !== 'function') window.trf = trf;
   if (typeof window.trp !== 'function') window.trp = trp;
   if (typeof window.trk !== 'function') window.trk = trk;
-  var start = function () { try { document.documentElement.lang = lang; } catch (e) {} apply(document); watch(); };
+  var start = function () { try { document.documentElement.lang = lang; if (window.PSLangDir) PSLangDir(lang); } catch (e) {} apply(document); watch(); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
 })();

@@ -15,7 +15,7 @@
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=672e446e"></script>
+<script src="/ui-lang.js?v=fc648163"></script>
 <script src="/tickets.js?v=edb362ec"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -4895,7 +4895,7 @@ async function createFromStarter(id) {
    somebody has to remember — an untagged element is untouchable by construction.
    This is why there is no text-node walker here, though it would have been less work:
    a walker that mistakes a teacher's deck title for UI copy would translate it.       */
-const UI_LANGS = { en:'English', es:'Español', de:'Deutsch', fr:'Français', pt:'Português', it:'Italiano' };
+const UI_LANGS = { en:'English', es:'Español', de:'Deutsch', fr:'Français', pt:'Português', it:'Italiano', nl:'Nederlands', ja:'日本語', zh:'中文', ar:'العربية', hi:'हिन्दी' };
 /* Follow the browser on first visit, the way every other surface already does:
  * i18n.js does it for the marketing site and help, answer.html does it for students'
  * phones. Only the presenter didn't, so a Spanish-speaking teacher signed in and got an
@@ -5024,7 +5024,7 @@ function applyUiLang() {
     if (el._psPh === undefined) el._psPh = el.getAttribute('placeholder') || '';
     el.setAttribute('placeholder', UI_LANG === 'en' ? el._psPh : tr(el._psPh));
   });
-  document.documentElement.lang = UI_LANG;
+  document.documentElement.lang = UI_LANG; if (typeof PSLangDir === 'function') PSLangDir(UI_LANG);
 }
 
 function setUiLang(code) {
