@@ -7,12 +7,14 @@
 <meta name="robots" content="noindex">
 <link href="/fonts/fonts.css?v=9f799e41" rel="stylesheet">
 <script src="/errors.js?v=25c25f5f"></script>
-<script src="/ui-lang.js?v=bcbf8752"></script>
+<script src="/ui-lang.js?v=ced1d8c8"></script>
 <script src="/ui-tr.js?v=3f24378f"></script>
 <script src="/qid.js?v=f6f81595"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<!-- Audience text can never become markup: must load right after the database SDK. -->
+<script src="/audience-safe.js?v=c2b0a002"></script>
 <style>
   :root{--bg:#0d0d18;--surface:rgba(255,255,255,0.05);--surface2:rgba(255,255,255,0.08);--border:rgba(255,255,255,0.10);--text:#f4f4fc;--muted:#9090b8;--accent:#6c63ff;--accent3:#43e97b;--accent4:#f7b731;--accent2:#ff6584;}
   *{box-sizing:border-box;}

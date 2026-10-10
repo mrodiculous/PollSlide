@@ -214,6 +214,13 @@
    "text": "Two people editing one deck, live. Use it when you're writing a quiz with a colleague rather than handing one over — and it works whether or not you share a team, a workspace or a plan. Open the deck's ⋯ menu and choose 🤝 Build it together… Enter their email address and send the invite. They accept under 📥 Shared with me . The deck appears in their list marked shared . It stays in your library — they're working on your copy, not a duplicate of it. A strip above the deck list shows who else is in the deck right now. When one of you opens a question, it's marked in the other's list so you can't type over each other. Work on different questions and you'll both see the changes appear. 👑 You stay the owner The deck never leaves your library. Collaborators can edit its questions, but they can't delete it, archive it, or file it into their folders. 🚫 Ending it is instant Open 🤝 Build it together… and remove them. Access is checked on every single change, so it stops immediately — even if they have the deck open. 🚪 They can leave too A collaborator can step away whenever they like. Nothing is deleted, and you can invite them back. Together, or a copy? Choose Build it together when…"
   },
   {
+   "id": "teamhub",
+   "url": "https://pollslide.com/help#teamhub",
+   "kind": "section",
+   "title": "👥 Your team's library, usage and bulk tools",
+   "text": "Three tabs inside Team admin, for teams on a Team plan. Open your avatar menu and choose Team admin. Library: add one of your decks, or a single question, so everyone on your team can use it. Anyone on the team can press Use this deck to get their own copy, or Add to my deck to drop a question into the deck they have open. Usage: owners and admins see how much each member uses PollSlide, with decks built, decks run live, responses and people reached. Bulk tools, on Team Large: paste a whole list of emails, check it, then send every invite at once. You can also resend or revoke every pending invite, remove several members together, and download the member list. 📚 A copy, never the original Using a deck from the library gives you your own copy with its own QR code and results. Nobody's edits or answers ever mix, and the person who added it keeps theirs untouched. 🔒 Counts, never answers Usage shows totals for each member. It never shows what anyone in an audience answered, and never an audience member's name. 📈 The org-wide view Team Large adds a 90-day trend, your most-answered decks and a CSV export. Team Small sees the last 30 days. You can also add a deck straight from its ⋯…"
+  },
+  {
    "id": "progress",
    "url": "https://pollslide.com/help#progress",
    "kind": "section",

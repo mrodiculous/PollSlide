@@ -14,7 +14,7 @@
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=bcbf8752"></script>
+<script src="/ui-lang.js?v=ced1d8c8"></script>
 <script src="/tickets.js?v=edb362ec"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -498,6 +498,105 @@
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration:0.01ms !important; animation-iteration-count:1 !important; transition-duration:0.01ms !important; scroll-behavior:auto !important; }
   }
+/* ── TEAM HUB (2026-10-10): library, usage, bulk tools. Prefix th-. ── */
+.th-tabs{display:flex;gap:4px;padding:10px 16px 0;border-bottom:1px solid var(--border);}
+.th-tab{background:none;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:Syne,sans-serif;font-weight:700;font-size:13px;padding:8px 12px 10px;cursor:pointer;border-radius:8px 8px 0 0;transition:color .2s,background .2s;}
+.th-tab:hover{color:var(--text);background:var(--surface2);}
+.th-tab.on{color:var(--text);border-bottom-color:var(--accent);}
+.th-wrap{padding:14px 18px 18px;display:flex;flex-direction:column;gap:12px;}
+.th-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.th-h{font-family:Syne,sans-serif;font-weight:800;font-size:15px;padding:12px 18px 2px;}
+.th-lab{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:8px;}
+.th-sub,.th-meta{font-size:11.5px;color:var(--muted);line-height:1.45;}
+.th-empty{padding:34px 22px;text-align:center;color:var(--muted);font-size:13px;line-height:1.6;}
+.th-empty b{color:var(--text);font-size:14px;}
+.th-note{font-size:11.5px;color:var(--muted);line-height:1.5;padding:2px 2px 0;}
+.th-panel{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:13px 14px;}
+.th-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;}
+.th-bulk{padding:4px 18px 10px;display:flex;flex-direction:column;gap:10px;border-top:1px solid var(--border2);margin-top:6px;}
+.th-bulk .th-h{padding:12px 0 0;}
+.th-ta,.th-wrap input[type=search]{width:100%;margin:0;font-size:13px;font-family:inherit;background:var(--surface);color:var(--text);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;outline:none;transition:border-color .2s,box-shadow .2s;}
+.th-ta{resize:vertical;min-height:62px;}
+.th-ta:focus,.th-wrap input[type=search]:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(108,99,255,.18);}
+.th-ta::placeholder,.th-wrap input[type=search]::placeholder{color:var(--muted);}
+.th-lock{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px;border-radius:14px;border:1px dashed var(--border2);background:linear-gradient(135deg,rgba(108,99,255,.10),rgba(255,101,132,.06));font-size:13px;}
+.th-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;}
+.th-chip{font-size:11.5px;padding:4px 9px;border-radius:100px;border:1px solid var(--border2);color:var(--muted);}
+.th-chip b{color:var(--text);font-weight:600;}
+.th-chip.ok{border-color:rgba(67,233,123,.5);background:rgba(67,233,123,.10);}
+.th-chip.warn{border-color:rgba(247,183,49,.5);background:rgba(247,183,49,.10);}
+.th-chip.bad{border-color:rgba(255,101,132,.5);background:rgba(255,101,132,.10);}
+.th-checks{display:flex;flex-direction:column;gap:2px;max-height:150px;overflow-y:auto;}
+.th-check{display:flex;align-items:center;gap:9px;font-size:13px;padding:5px 4px;border-radius:8px;cursor:pointer;text-transform:none;letter-spacing:normal;font-weight:500;color:var(--text);}
+.th-check:hover{background:var(--surface);}
+.th-check input{width:15px;height:15px;accent-color:#6c63ff;flex-shrink:0;margin:0;}
+.th-check span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.th-check i{font-style:normal;font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;}
+.th-fchips{display:flex;flex-wrap:wrap;gap:6px;}
+.th-fchip{background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:100px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s;}
+.th-fchip:hover{color:var(--text);border-color:var(--border2);}
+.th-fchip.on{background:rgba(108,99,255,.18);border-color:var(--accent);color:var(--text);}
+.th-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;align-items:start;}
+.th-card{position:relative;background:var(--surface2);border:1px solid var(--border);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:10px;transition:transform .25s cubic-bezier(.16,1,.3,1),border-color .25s,box-shadow .25s;}
+.th-card:hover{transform:translateY(-3px);border-color:rgba(108,99,255,.55);box-shadow:0 14px 34px rgba(108,99,255,.16);}
+.th-card-top,.th-prow-top,.th-top{display:flex;align-items:center;gap:10px;}
+.th-ico{width:38px;height:38px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:19px;flex-shrink:0;background:linear-gradient(135deg,rgba(108,99,255,.22),rgba(255,101,132,.14));}
+.th-ico.sm{width:30px;height:30px;font-size:15px;border-radius:9px;}
+.th-title{font-family:Syne,sans-serif;font-weight:700;font-size:14px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;}
+.th-title.sm{font-size:13px;-webkit-line-clamp:1;}
+.th-prev{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;}
+.th-prev li{font-size:12px;color:var(--muted);padding-left:10px;border-left:2px solid var(--border2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.th-foot{display:flex;flex-direction:column;gap:9px;margin-top:auto;}
+.th-by{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.th-acts{display:flex;gap:6px;align-items:center;}
+.th-acts .btn{padding:6px 10px;font-size:12px;white-space:nowrap;}
+.th-acts .icon-btn{margin-left:auto;flex-shrink:0;}
+.th-inside{margin:0;padding:8px 0 0 18px;display:flex;flex-direction:column;gap:9px;font-size:12.5px;border-top:1px solid var(--border);max-height:240px;overflow-y:auto;}
+.th-opts{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;}
+.th-opts span{font-size:11.5px;padding:2px 8px;border-radius:7px;background:var(--surface);border:1px solid var(--border);color:var(--muted);}
+.th-opts span.right{border-color:rgba(67,233,123,.55);color:var(--text);}
+.th-picker{background:var(--surface2);border:1px solid rgba(108,99,255,.4);border-radius:14px;padding:13px 14px;display:flex;flex-direction:column;gap:8px;max-height:300px;overflow-y:auto;}
+.th-prow{border-top:1px solid var(--border);padding-top:8px;}
+.th-prow .btn{padding:6px 10px;font-size:12px;white-space:nowrap;}
+.th-qs{margin:8px 0 2px 40px;display:flex;flex-direction:column;gap:4px;}
+.th-q{display:flex;align-items:center;gap:8px;font-size:12.5px;}
+.th-q span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.th-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:10px;}
+.th-tile{background:var(--surface2);border:1px solid var(--border);border-radius:14px;padding:13px 14px;}
+.th-big{font-family:Syne,sans-serif;font-weight:800;font-size:26px;line-height:1.05;color:var(--text);}
+.th-big span{font-size:14px;color:var(--muted);font-weight:700;}
+.th-tlab{font-size:12px;font-weight:600;margin-top:5px;color:var(--text);}
+.th-tsub{font-size:11px;color:var(--muted);}
+.th-trend{width:100%;height:96px;display:block;}
+.th-axis{stroke:var(--border2);stroke-width:1;}
+.th-barr{fill:var(--accent);opacity:.82;transition:opacity .15s;pointer-events:none;}
+.th-barr.on{opacity:1;}
+.th-axisrow{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--muted);margin-top:6px;}
+.th-axisrow span:nth-child(2){color:var(--text);font-weight:600;text-align:center;}
+.th-mix{display:flex;gap:2px;height:14px;border-radius:5px;overflow:hidden;}
+.th-mix span{min-width:4px;border-radius:3px;}
+.th-legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:9px;font-size:12px;color:var(--muted);}
+.th-legend span{display:inline-flex;align-items:center;gap:6px;}
+.th-legend i{width:10px;height:10px;border-radius:3px;display:inline-block;}
+.th-legend b{color:var(--text);font-weight:700;}
+.th-table{width:100%;border-collapse:collapse;font-size:12.5px;min-width:560px;}
+.th-table th{text-align:left;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding:7px 10px;border-bottom:1px solid var(--border);white-space:nowrap;}
+.th-table td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:middle;white-space:nowrap;}
+.th-table tr:last-child td{border-bottom:none;}
+.th-table .n{text-align:right;font-variant-numeric:tabular-nums;}
+.th-mem{display:flex;align-items:center;gap:9px;}
+.th-av{width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;flex-shrink:0;}
+.th-em{font-weight:600;max-width:210px;overflow:hidden;text-overflow:ellipsis;}
+.th-magw{display:flex;align-items:center;justify-content:flex-end;gap:8px;}
+.th-mag{display:inline-block;height:6px;border-radius:0 3px 3px 0;background:var(--accent);opacity:.75;max-width:70px;min-width:0;flex:0 1 auto;}
+.th-top{padding:8px 0;border-top:1px solid var(--border);}
+.th-top:first-of-type{border-top:none;}
+.th-rank{font-family:Syne,sans-serif;font-weight:800;font-size:13px;color:var(--muted);width:16px;text-align:center;}
+.th-topn{font-size:11.5px;color:var(--muted);text-align:right;white-space:nowrap;}
+.th-topn b{color:var(--text);font-size:13px;}
+@media (max-width:640px){ .th-wrap{padding:12px;} .th-grid{grid-template-columns:1fr;} .th-lock{flex-direction:column;align-items:flex-start;} }
+@media (prefers-reduced-motion: reduce){ .th-card,.th-tab,.th-fchip{transition:none;} .th-card:hover{transform:none;} }
+
 </style>
 <link rel="icon" type="image/svg+xml" href="https://pollslide.com/logo.svg">
 <link rel="icon" type="image/x-icon" href="https://pollslide.com/favicon.ico">
@@ -822,13 +921,18 @@
 
 <!-- Team Admin Panel -->
 <div class="overlay hidden" id="teamModal" onclick="if(event.target===this)document.getElementById('teamModal').classList.add('hidden')">
-  <div class="modal" style="max-width:560px;padding:0;overflow:hidden;">
+  <div class="modal" id="teamModalBox" style="max-width:560px;padding:0;overflow:hidden;transition:max-width .3s cubic-bezier(.16,1,.3,1);">
     <div style="padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;">
       <div style="min-width:0;">
         <h2 style="margin:0 0 2px;" data-i18n>👥 Team admin</h2>
         <p style="margin:0;font-size:12px;color:var(--muted);" id="teamSub" data-i18n>Manage members and invites for your workspace.</p>
       </div>
       <div id="teamSeats" style="flex-shrink:0;font-family:Syne,sans-serif;font-weight:800;font-size:13px;background:var(--surface2);border:1px solid var(--border2);border-radius:100px;padding:6px 12px;">—</div>
+    </div>
+    <div class="th-tabs" id="teamTabs">
+      <button class="th-tab on" data-tab="members" onclick="teamShowTab('members')" data-i18n>👥 Members</button>
+      <button class="th-tab" data-tab="library" onclick="teamShowTab('library')" data-i18n>📚 Library</button>
+      <button class="th-tab" data-tab="usage" id="teamTabUsage" onclick="teamShowTab('usage')" data-i18n>📈 Usage</button>
     </div>
     <div id="teamBody" style="max-height:62vh;overflow-y:auto;padding:6px 0;">
       <div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;" data-i18n>Loading workspace…</div>
@@ -1146,6 +1250,8 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<!-- Audience text can never become markup: must load right after the database SDK. -->
+<script src="/audience-safe.js?v=c2b0a002"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 <script>
@@ -4532,6 +4638,9 @@ function openDeckMenu(id, ev) {
     ]),
     { icon: '🎞', label: gifMenuLabel(p.gifs), act: `openGifModal('${escAttr(id)}')` },
     { icon: '📤', label: 'Share a copy…', act: `openDeckShareModal('${escAttr(id)}')` },
+    // Team plans: put your own deck in the team's shared library (Team hub).
+    ...((!isCollabDeck(id) && ['team_small','team_large'].includes(normalizeTier(userTier)))
+      ? [{ icon: '📚', label: 'Add to team library', act: `teamLibAddFromMenu('${escAttr(id)}')` }] : []),
     ...(isCollabDeck(id)
       ? [{ icon: '🚪', label: 'Leave this shared deck', act: `leaveCollab('${escAttr(id)}')`, danger: true }]
       : [{ icon: '🤝', label: 'Build it together…', act: `openCollabModal('${escAttr(id)}')` }]),
@@ -10181,12 +10290,13 @@ async function ensureTeamSetup(){
   if (others <= 0) setTimeout(openTeamPanel, 1400);
 }
 
-async function openTeamPanel(){
+async function openTeamPanel(tab){
   if (typeof closeUserMenu === 'function') closeUserMenu();
   document.getElementById('teamModal').classList.remove('hidden');
   document.getElementById('teamBody').innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;">'+tr('Loading workspace…')+'</div>';
   await loadOrCreateWorkspace();
-  renderTeamPanel();
+  // Members is the panel exactly as it always was; Library and Usage are the Team hub tabs.
+  teamShowTab(['library','usage'].includes(tab) ? tab : 'members');
 }
 
 function renderTeamPanel(){
@@ -10246,6 +10356,7 @@ function renderTeamPanel(){
     + memHtml
     + (invHtml ? `<div style="font-size:11px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--muted);padding:12px 18px 6px;">${tr('Pending invites')}</div>`+invHtml : '')
     + inviteForm + leave;
+  teamRenderBulk();   // ⚡ bulk member tools, appended under the list (Team hub)
 }
 
 async function teamResend(k){
@@ -10340,6 +10451,375 @@ async function teamSetRole(uid, role){
   if (ws.data.members && ws.data.members[uid]) ws.data.members[uid].role = role;
   await db.ref('workspaces/'+ws.id+'/members/'+uid+'/role').set(role).catch(()=>{});
   renderTeamPanel();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// TEAM HUB (2026-10-10) — the three Team-plan features that were sold before they existed:
+//   📚 Library  shared question & deck library        (every team)
+//   📈 Usage    usage analytics / org-wide analytics  (every team / Team Large)
+//   ⚡ Bulk     bulk member management                (Team Large)
+// All server work is lib/team-hub.js via /api/team — no database rules involved.
+// ADDITIVE: the Members tab is the panel exactly as it was; renderTeamPanel() only gained
+// one line that appends the bulk tools underneath. Nothing here runs until Team admin opens.
+// ════════════════════════════════════════════════════════════════════════════
+let teamTab = 'members';
+const _hub = { lib: { items: [], q: '', filter: 'all', adding: false, pick: null, loaded: false }, usage: null };
+
+/* One call shape for every hub action. Unlike teamApi() it keeps the status and the
+   whole reply, because "that is part of Team Large" (402) is an answer, not a failure. */
+async function teamHub(action, payload) {
+  const ws = currentWorkspace; if (!ws) throw new Error(tr('Open Team admin again.'));
+  let r, d = {};
+  try {
+    const token = await currentUser.getIdToken();
+    r = await fetch('/api/team', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+      body: JSON.stringify(Object.assign({ action, wsId: ws.id }, payload || {})) });
+    d = await r.json().catch(() => ({}));
+  } catch (e) { throw new Error(tr('No connection. Check your internet and try again.')); }
+  if (r.ok && d && d.ok) return d;
+  const err = new Error((d && d.error) || tr('That did not work. Try again in a minute.'));
+  err.status = r.status; err.data = d || {};
+  throw err;
+}
+function teamIsLarge() { return currentWorkspace && currentWorkspace.data && currentWorkspace.data.tier === 'team_large'; }
+const thNum = n => Number(n || 0).toLocaleString();
+function thIcon(type) { return (PRODUCTS[type] || PRODUCTS.poll).icon; }
+function thTypeName(type) { return tr((PRODUCTS[type] || PRODUCTS.poll).short); }
+function thMsg(html) { document.getElementById('teamBody').innerHTML = `<div class="th-empty">${html}</div>`; }
+
+function teamShowTab(tab) {
+  teamTab = tab;
+  document.querySelectorAll('#teamTabs .th-tab').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+  const box = document.getElementById('teamModalBox');
+  if (box) box.style.maxWidth = tab === 'members' ? '560px' : '900px';
+  const usageTab = document.getElementById('teamTabUsage');
+  if (usageTab) usageTab.style.display = teamCanManage() ? '' : 'none';
+  // The header (team name + seats) is the same on every tab; renderTeamPanel only sets it for Members.
+  const ws = currentWorkspace;
+  if (ws) {
+    const used = Object.keys(ws.data.members || {}).length + Object.keys(ws.data.invites || {}).length;
+    document.getElementById('teamSeats').textContent = used + ' / ' + (TIERS[ws.data.tier] || TIERS.team_small).maxMembers + ' seats';
+    document.getElementById('teamSub').textContent = ws.data.name;
+  }
+  if (tab === 'library') return renderTeamLibrary();
+  if (tab === 'usage') return renderTeamUsage(false);
+  renderTeamPanel();
+}
+
+// ── ⚡ BULK MEMBER TOOLS (under the Members list) ────────────────────────────
+function teamRenderBulk() {
+  const body = document.getElementById('teamBody'); const ws = currentWorkspace;
+  if (!body || !ws || teamTab !== 'members' || !teamCanManage()) return;
+  const old = document.getElementById('teamBulk'); if (old) old.remove();
+  const wrap = document.createElement('div'); wrap.id = 'teamBulk'; wrap.className = 'th-bulk';
+  const members = ws.data.members || {}, invites = ws.data.invites || {};
+  if (!teamIsLarge()) {
+    wrap.innerHTML = `<div class="th-lock"><div><b>⚡ ${tr('Bulk member tools')}</b><div class="th-sub">${tr('Paste a whole list of emails, remove several people at once, resend every pending invite. Part of Team Large.')}</div></div>
+      <button class="btn btn-ghost" onclick="document.getElementById('teamModal').classList.add('hidden');openPlanPicker()">${tr('See Team Large')}</button></div>`;
+    body.appendChild(wrap); return;
+  }
+  const removable = Object.entries(members).filter(([uid, m]) => uid !== userId && m.role !== 'owner' && (m.role !== 'admin' || teamMyRole() === 'owner'));
+  const nInv = Object.keys(invites).length;
+  wrap.innerHTML = `
+    <div class="th-h">⚡ ${tr('Bulk member tools')}</div>
+    <div class="th-panel">
+      <div class="th-lab">${tr('Invite many at once')}</div>
+      <textarea id="thBulkText" rows="3" placeholder="${escapeHtml(tr('Paste emails — from a spreadsheet, an email, anywhere. Commas, spaces or one per line.'))}" class="th-ta"></textarea>
+      <div class="th-row">
+        <select id="thBulkRole" style="margin:0;width:auto;"><option value="member">${tr('Member')}</option><option value="admin">${tr('Admin')}</option></select>
+        <button class="btn btn-ghost" onclick="teamBulkCheck()">${tr('Check the list')}</button>
+        <span class="th-sub" style="margin-left:auto;">${tr('Nothing is sent until you confirm.')}</span>
+      </div>
+      <div id="thBulkOut"></div>
+    </div>
+    ${nInv ? `<div class="th-panel"><div class="th-lab">${trp(nInv, '{n} pending invite', '{n} pending invites', { n: nInv })}</div>
+      <div class="th-row"><button class="btn btn-ghost" onclick="teamBulkResend()">${tr('Resend all')}</button>
+      <button class="btn btn-ghost" style="color:var(--accent2);" onclick="teamBulkRevoke()">${tr('Revoke all')}</button></div></div>` : ''}
+    ${removable.length ? `<div class="th-panel"><div class="th-lab">${tr('Remove several members')}</div>
+      <div class="th-checks">${removable.map(([uid, m]) => `<label class="th-check"><input type="checkbox" value="${escapeHtml(uid)}" onchange="teamBulkCount()"><span>${escapeHtml(m.email || '')}</span><i>${escapeHtml(m.role || '')}</i></label>`).join('')}</div>
+      <div class="th-row"><button class="btn btn-ghost" id="thBulkRemoveBtn" style="color:var(--accent2);" disabled onclick="teamBulkRemove()">${tr('Remove selected')}</button>
+      <span class="th-sub">${tr('They keep their own decks and go back to the Free plan.')}</span></div></div>` : ''}
+    <div class="th-row" style="padding:2px 2px 8px;"><button class="btn btn-ghost" onclick="teamMembersCsv()">⤓ ${tr('Member list (CSV)')}</button></div>`;
+  body.appendChild(wrap);
+}
+const TH_RESULT = () => ({ invite: ['ok', tr('will be invited')], invited_now: ['ok', tr('invited')], member: ['mute', tr('already a member')],
+  invited: ['mute', tr('already invited')], no_seat: ['warn', tr('no seat left')], invalid: ['bad', tr('not an email address')] });
+function thChips(list) {
+  const R = TH_RESULT();
+  return list.map(p => { const x = R[p.result] || ['mute', p.result]; return `<span class="th-chip ${x[0]}"><b>${escapeHtml(p.email)}</b> ${x[1]}</span>`; }).join('');
+}
+async function teamBulkCheck() {
+  const out = document.getElementById('thBulkOut'), text = document.getElementById('thBulkText').value;
+  if (!text.trim()) { out.innerHTML = `<div class="th-sub" style="color:var(--accent2);">${tr('Paste at least one email address first.')}</div>`; return; }
+  out.innerHTML = `<div class="th-sub">${tr('Checking…')}</div>`;
+  try {
+    const d = await teamHub('inviteMany', { text, preview: true });
+    const n = d.plan.filter(p => p.result === 'invite').length;
+    const all = d.plan.concat((d.invalid || []).map(e => ({ email: e, result: 'invalid' })));
+    out.innerHTML = `<div class="th-chips">${thChips(all)}</div>
+      ${d.truncated ? `<div class="th-sub">${tr('Only the first 200 addresses were read.')}</div>` : ''}
+      <div class="th-row">${n ? `<button class="btn btn-primary" onclick="teamBulkSend()">${trp(n, 'Send {n} invite', 'Send {n} invites', { n })}</button>` : `<span class="th-sub">${tr('Nobody new to invite in this list.')}</span>`}</div>`;
+  } catch (e) { out.innerHTML = `<div class="th-sub" style="color:var(--accent2);">${escapeHtml(e.message)}</div>`; }
+}
+async function teamBulkSend() {
+  const out = document.getElementById('thBulkOut');
+  const text = document.getElementById('thBulkText').value, role = document.getElementById('thBulkRole').value;
+  out.innerHTML = `<div class="th-sub">${tr('Sending…')}</div>`;
+  try {
+    const d = await teamHub('inviteMany', { text, role });
+    await reloadWorkspace(); renderTeamPanel();
+    const o = document.getElementById('thBulkOut'); if (o) o.innerHTML = `<div class="th-chips">${thChips(d.results)}</div>`;
+    toast(trp(d.sent, '{n} invite sent', '{n} invites sent', { n: d.sent }), 'success');
+  } catch (e) { out.innerHTML = `<div class="th-sub" style="color:var(--accent2);">${escapeHtml(e.message)}</div>`; }
+}
+function teamBulkCount() {
+  const n = document.querySelectorAll('#teamBulk .th-check input:checked').length;
+  const b = document.getElementById('thBulkRemoveBtn'); if (!b) return;
+  b.disabled = !n; b.textContent = n ? trp(n, 'Remove {n} member', 'Remove {n} members', { n }) : tr('Remove selected');
+}
+async function teamBulkRemove() {
+  const uids = [...document.querySelectorAll('#teamBulk .th-check input:checked')].map(i => i.value);
+  if (!uids.length) return;
+  if (!confirm(trp(uids.length, 'Remove {n} member from the team? They lose team access straight away.', 'Remove {n} members from the team? They lose team access straight away.', { n: uids.length }))) return;
+  try { const d = await teamHub('removeMany', { uids }); await reloadWorkspace(); renderTeamPanel();
+        toast(trp(d.removed, '{n} member removed', '{n} members removed', { n: d.removed }), 'success'); }
+  catch (e) { toast(e.message, 'danger'); }
+}
+async function teamBulkResend() {
+  try { const d = await teamHub('resendAll'); await reloadWorkspace(); renderTeamPanel();
+        toast(d.resent ? trp(d.resent, '{n} invite email sent again', '{n} invite emails sent again', { n: d.resent }) : tr('Those were all resent within the last hour.'), d.resent ? 'success' : 'info'); }
+  catch (e) { toast(e.message, 'danger'); }
+}
+async function teamBulkRevoke() {
+  const keys = Object.keys((currentWorkspace.data.invites) || {});
+  if (!keys.length || !confirm(trp(keys.length, 'Revoke {n} pending invite?', 'Revoke {n} pending invites?', { n: keys.length }))) return;
+  try { await teamHub('revokeMany', { emailKeys: keys }); await reloadWorkspace(); renderTeamPanel(); toast(tr('Pending invites revoked'), 'success'); }
+  catch (e) { toast(e.message, 'danger'); }
+}
+function thDownload(name, rows) {
+  const cell = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) || /^[=+\-@]/.test(s) ? '"' + (/^[=+\-@]/.test(s) ? "'" : '') + s.replace(/"/g, '""') + '"' : s; };
+  const blob = new Blob(['﻿' + rows.map(r => r.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function teamMembersCsv() {
+  const ws = currentWorkspace; if (!ws) return;
+  const rows = [['Email', 'Role', 'Status', 'Joined / invited']];
+  Object.values(ws.data.members || {}).forEach(m => rows.push([m.email || '', m.role || '', 'member', m.joinedAt ? new Date(m.joinedAt).toISOString().slice(0, 10) : '']));
+  Object.values(ws.data.invites || {}).forEach(i => rows.push([i.email || '', i.role || '', 'invited', i.createdAt ? new Date(i.createdAt).toISOString().slice(0, 10) : '']));
+  thDownload('pollslide-team-members.csv', rows);
+}
+
+// ── 📚 SHARED LIBRARY ───────────────────────────────────────────────────────
+async function renderTeamLibrary() {
+  const L = _hub.lib;
+  if (!L.loaded) thMsg(tr('Loading your team library…'));
+  try { const d = await teamHub('libList'); L.items = d.items || []; L.canManage = !!d.canManage; L.loaded = true; }
+  catch (e) { if (teamTab === 'library') thMsg(escapeHtml(e.message)); return; }
+  if (teamTab === 'library') paintTeamLibrary();
+}
+function paintTeamLibrary() {
+  const L = _hub.lib, body = document.getElementById('teamBody'); if (!body || teamTab !== 'library') return;
+  const q = L.q.trim().toLowerCase();
+  const shown = L.items.filter(i => (L.filter === 'all' || (L.filter === 'deck' || L.filter === 'question' ? i.kind === L.filter : i.productType === L.filter))
+    && (!q || (i.title + ' ' + (i.preview || []).join(' ') + ' ' + i.by).toLowerCase().includes(q)));
+  const types = [...new Set(L.items.map(i => i.productType))].filter(t => PRODUCTS[t]);
+  const chip = (k, label) => `<button class="th-fchip ${L.filter === k ? 'on' : ''}" onclick="_hub.lib.filter='${k}';paintTeamLibrary()">${label}</button>`;
+  const card = i => `
+    <div class="th-card" id="thItem_${escapeHtml(i.id)}">
+      <div class="th-card-top">
+        <span class="th-ico">${i.kind === 'question' ? '❓' : thIcon(i.productType)}</span>
+        <div style="min-width:0;flex:1;"><div class="th-title">${escapeHtml(i.title)}</div>
+          <div class="th-meta">${i.kind === 'question' ? tr('Question') : trp(i.questionCount, '{n} question', '{n} questions', { n: i.questionCount })} · ${thTypeName(i.productType)}</div></div>
+      </div>
+      ${(i.preview || []).length ? `<ul class="th-prev">${i.preview.slice(0, 3).map(p => `<li>${escapeHtml(p)}</li>`).join('')}</ul>` : ''}
+      <div id="thPrev_${escapeHtml(i.id)}"></div>
+      <div class="th-foot">
+        <span class="th-by">${i.by ? escapeHtml(i.by) : tr('A former member')} · ${timeAgo(i.at)}${i.uses ? ' · ' + trp(i.uses, 'used {n} time', 'used {n} times', { n: i.uses }) : ''}</span>
+        <span class="th-acts">
+          <button class="btn btn-ghost" onclick="teamLibPreview('${escAttr(i.id)}')">${tr('Look inside')}</button>
+          <button class="btn btn-primary" onclick="teamLibUse('${escAttr(i.id)}')">${i.kind === 'question' ? tr('Add to my deck') : tr('Use this deck')}</button>
+          ${(L.canManage || i.byUid === userId) ? `<button class="icon-btn del" title="${escapeHtml(tr('Remove from the library'))}" onclick="teamLibRemove('${escAttr(i.id)}')">🗑</button>` : ''}
+        </span>
+      </div>
+    </div>`;
+  body.innerHTML = `
+    <div class="th-wrap">
+      <div class="th-bar">
+        <input type="search" id="thLibSearch" value="${escapeHtml(L.q)}" placeholder="${escapeHtml(tr('Search the library…'))}" oninput="_hub.lib.q=this.value;paintTeamLibrary();const s=document.getElementById('thLibSearch');s.focus();s.setSelectionRange(s.value.length,s.value.length);" style="margin:0;flex:1;min-width:150px;">
+        <button class="btn btn-primary" onclick="_hub.lib.adding=!_hub.lib.adding;_hub.lib.pick=null;paintTeamLibrary()">${L.adding ? tr('Done adding') : '＋ ' + tr('Add from my decks')}</button>
+      </div>
+      ${L.adding ? teamLibPickerHtml() : ''}
+      ${L.items.length ? `<div class="th-fchips">${chip('all', tr('Everything'))}${chip('deck', tr('Decks'))}${chip('question', tr('Questions'))}${types.map(t => chip(t, thIcon(t) + ' ' + thTypeName(t))).join('')}</div>` : ''}
+      ${shown.length ? `<div class="th-grid">${shown.map(card).join('')}</div>`
+        : L.items.length ? `<div class="th-empty">${tr('Nothing matches that search.')}</div>`
+        : `<div class="th-empty"><div style="font-size:34px;margin-bottom:8px;">📚</div><b>${tr('Your team library is empty — for now.')}</b><br>${tr('Add a deck or a single question, and everyone on your team can use their own copy of it.')}</div>`}
+      <div class="th-note">${tr('Everyone on your team can add to the library and use what is in it. Using a deck gives you your own copy, so nobody’s results or edits ever mix.')}</div>
+    </div>`;
+}
+function teamLibPickerHtml() {
+  const L = _hub.lib;
+  const mine = Object.entries(presentations || {}).filter(([id, p]) => p && !isCollabDeck(id) && toQArr(p.questions).length)
+    .sort((a, b) => (b[1].lastOpenedAt || b[1].createdAt || 0) - (a[1].lastOpenedAt || a[1].createdAt || 0));
+  if (!mine.length) return `<div class="th-picker"><div class="th-sub">${tr('You have no decks with questions yet. Build one first, then add it here.')}</div></div>`;
+  return `<div class="th-picker"><div class="th-lab">${tr('Choose what to share with your team')}</div>${mine.map(([id, p]) => {
+    const qs = toQArr(p.questions), open = L.pick === id;
+    return `<div class="th-prow"><div class="th-prow-top"><span class="th-ico sm">${thIcon(presType(p))}</span>
+        <div style="flex:1;min-width:0;"><div class="th-title sm">${escapeHtml(p.name || tr('Untitled'))}</div><div class="th-meta">${trp(qs.length, '{n} question', '{n} questions', { n: qs.length })}</div></div>
+        <button class="btn btn-ghost" onclick="_hub.lib.pick=${open ? 'null' : `'${escAttr(id)}'`};paintTeamLibrary()">${open ? tr('Hide questions') : tr('Pick questions')}</button>
+        <button class="btn btn-primary" onclick="teamLibAdd('${escAttr(id)}')">＋ ${tr('Whole deck')}</button></div>
+      ${open ? `<div class="th-qs">${qs.map((q, n) => `<div class="th-q"><span>${n + 1}. ${escapeHtml(String(q.text || q.front || tr('Untitled question')).slice(0, 110))}</span><button class="btn btn-ghost" onclick="teamLibAdd('${escAttr(id)}',${n})">＋ ${tr('Add')}</button></div>`).join('')}</div>` : ''}</div>`; }).join('')}</div>`;
+}
+async function teamLibAdd(presId, qIndex) {
+  try {
+    const d = await teamHub('libAdd', qIndex === undefined ? { presId } : { presId, kind: 'question', qIndex });
+    _hub.lib.items.unshift(d.item); paintTeamLibrary();
+    toast(qIndex === undefined ? tr('Deck added to the team library') : tr('Question added to the team library'), 'success');
+  } catch (e) { toast(e.message, 'danger'); }
+}
+async function teamLibPreview(id) {
+  const box = document.getElementById('thPrev_' + id); if (!box) return;
+  if (box.innerHTML) { box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="th-sub" style="padding:8px 0;">${tr('Loading…')}</div>`;
+  try {
+    const d = await teamHub('libGet', { itemId: id });
+    box.innerHTML = `<ol class="th-inside">${(d.questions || []).map(q => {
+      const opts = toQArr(q.options).filter(o => o && o.text);
+      const right = Array.isArray(q.correctAnswer) ? q.correctAnswer.map(Number) : (q.correctAnswer === null || q.correctAnswer === undefined || q.correctAnswer === '' ? [] : [Number(q.correctAnswer)]);
+      return `<li><div>${escapeHtml(String(q.text || q.front || ''))}</div>${q.back ? `<div class="th-sub">${escapeHtml(String(q.back))}</div>` : ''}
+        ${opts.length ? `<div class="th-opts">${opts.map((o, n) => `<span class="${right.includes(n) ? 'right' : ''}">${escapeHtml(String(o.text))}${right.includes(n) ? ' ✓' : ''}</span>`).join('')}</div>` : ''}</li>`; }).join('')}</ol>`;
+  } catch (e) { box.innerHTML = `<div class="th-sub" style="color:var(--accent2);padding:8px 0;">${escapeHtml(e.message)}</div>`; }
+}
+async function teamLibUse(id) {
+  const item = _hub.lib.items.find(i => i.id === id); if (!item) return;
+  if (item.kind === 'question') {
+    // A question goes into the deck you have open — through the same steps as "+ Add question".
+    if (!activePresId) { toast(tr('Open one of your decks first, then add the question to it.'), 'warn'); return; }
+    if (isCollabDeck(activePresId)) { toast(tr('Open one of your own decks first, then add the question to it.'), 'warn'); return; }
+    try {
+      const d = await teamHub('libUse', { itemId: id });
+      const q = JSON.parse(JSON.stringify(d.question || {}));
+      // Normalise BEFORE it goes anywhere near the deck: a list can arrive as an object.
+      if (q.options !== undefined && q.options !== null) q.options = toQArr(q.options);
+      if (!q.text && !q.front) { toast(tr('That library item is damaged.'), 'danger'); return; }
+      const study = presType(presentations[activePresId]) === 'study';
+      if ((q.type === 'flashcard') !== study) { toast(study ? tr('That is a question, and the deck you have open is a study set. Open a poll, survey or quiz first.') : tr('That is a study card. Open a study set first.'), 'warn'); return; }
+      q.id = PSQid.fresh();
+      questions.push(q); presentations[activePresId].questions = questions;
+      syncStudyButtons(); selIdx = questions.length - 1; renderQList(); renderEditor(selIdx); scheduleSave();
+      item.uses = (item.uses || 0) + 1;
+      document.getElementById('teamModal').classList.add('hidden');
+      toast(trf('Added to “{name}”', { name: presentations[activePresId].name || tr('your deck') }), 'success');
+    } catch (e) { toast(e.message, 'danger'); }
+    return;
+  }
+  try {
+    const d = await teamHub('libUse', { itemId: id });
+    await loadPresentations();
+    document.getElementById('teamModal').classList.add('hidden');
+    if (d.presId) selectPresentation(d.presId);
+    toast('✅ ' + trf('“{name}” is yours now — edit it freely', { name: d.name }), 'success');
+  } catch (e) {
+    if (e.data && e.data.limitReached) { document.getElementById('teamModal').classList.add('hidden'); showUpgradePrompt(e.message, tr('Upgrade for unlimited decks.')); }
+    else toast(e.message, 'danger');
+  }
+}
+async function teamLibRemove(id) {
+  if (!confirm(tr('Remove this from the team library? Copies people already made are not affected.'))) return;
+  try { await teamHub('libRemove', { itemId: id }); _hub.lib.items = _hub.lib.items.filter(i => i.id !== id); paintTeamLibrary(); }
+  catch (e) { toast(e.message, 'danger'); }
+}
+/* From a deck's ⋯ menu: straight into the library, no trip through Team admin. */
+async function teamLibAddFromMenu(presId) {
+  try {
+    if (!currentWorkspace) await loadOrCreateWorkspace();
+    const d = await teamHub('libAdd', { presId });
+    if (_hub.lib.loaded) _hub.lib.items.unshift(d.item);
+    toast(tr('Deck added to the team library'), 'success', { label: tr('Open library'), onClick: () => openTeamPanel('library') });
+  } catch (e) { toast(e.message, 'danger'); }
+}
+
+// ── 📈 USAGE ANALYTICS ──────────────────────────────────────────────────────
+/* Product mix is the only multi-colour chart. Categorical hues in a FIXED order (colour
+   follows the product, never its rank), validated for colour-blind separation on both
+   surfaces (dataviz validate_palette: all checks pass). Every segment is also labelled. */
+const TH_MIX = { poll: ['#2a78d6', '#3987e5'], survey: ['#eb6834', '#d95926'], quiz: ['#1baf7a', '#199e70'], study: ['#eda100', '#c98500'] };
+const thMixColor = t => (TH_MIX[t] || ['#7a7a8c', '#8a8a9e'])[document.body.classList.contains('light') ? 0 : 1];
+async function renderTeamUsage(fresh) {
+  if (!teamCanManage()) { thMsg(tr('Only owners and admins can see team usage.')); return; }
+  if (!_hub.usage || fresh) thMsg(tr('Adding up your team’s activity…'));
+  try { const d = await teamHub('usage', fresh ? { fresh: true } : {}); _hub.usage = d.usage; }
+  catch (e) { if (teamTab === 'usage') thMsg(escapeHtml(e.message)); return; }
+  if (teamTab === 'usage') paintTeamUsage();
+}
+function paintTeamUsage() {
+  const u = _hub.usage, body = document.getElementById('teamBody'); if (!u || !body || teamTab !== 'usage') return;
+  const t = u.totals, r30 = u.rows.reduce((a, r) => a + r.responses30, 0);
+  const tile = (big, label, sub) => `<div class="th-tile"><div class="th-big">${big}</div><div class="th-tlab">${label}</div>${sub ? `<div class="th-tsub">${sub}</div>` : ''}</div>`;
+  // Trend: one series (responses per day) → one hue, no legend; the heading names it.
+  const max = Math.max(1, ...u.series), n = u.series.length, W = 600, Hh = 96, gap = 2, bw = (W - gap * (n - 1)) / n;
+  const dayAt = i => new Date(u.at - (n - 1 - i) * 86400000);
+  const bars = u.series.map((v, i) => { const h = v ? Math.max(3, Math.round(v / max * (Hh - 8))) : 0; const x = (i * (bw + gap)).toFixed(2);
+    return `<rect class="th-hit" x="${x}" y="0" width="${(bw + gap).toFixed(2)}" height="${Hh}" fill="transparent" onmouseenter="thTrendHover(${i})"></rect>` +
+           (v ? `<rect class="th-barr" data-i="${i}" x="${x}" y="${Hh - h}" width="${bw.toFixed(2)}" height="${h}" rx="${Math.min(2, bw / 2).toFixed(2)}"></rect>` : ''); }).join('');
+  const mixKeys = Object.keys(TH_MIX).filter(k => t.byType[k]), mixTotal = mixKeys.reduce((a, k) => a + t.byType[k], 0) || 1;
+  const other = Object.keys(t.byType).filter(k => !TH_MIX[k]).reduce((a, k) => a + t.byType[k], 0);
+  const maxResp = Math.max(1, ...u.rows.map(r => r.responses));
+  body.innerHTML = `
+    <div class="th-wrap">
+      <div class="th-bar"><div><div class="th-h" style="padding:0;">${u.orgWide ? tr('Org-wide usage') : tr('Team usage')}</div>
+          <div class="th-sub">${trf('Updated {when}', { when: timeAgo(u.at) })}</div></div>
+        <span style="margin-left:auto;display:flex;gap:8px;">
+          <button class="btn btn-ghost" onclick="renderTeamUsage(true)">↻ ${tr('Refresh')}</button>
+          ${u.orgWide ? `<button class="btn btn-ghost" onclick="teamUsageCsv()">⤓ CSV</button>` : ''}</span></div>
+      <div class="th-tiles">
+        ${tile(u.activeMembers + '<span>/' + u.members + '</span>', tr('Active members'), tr('in the last 30 days'))}
+        ${tile(thNum(r30), tr('Responses'), tr('in the last 30 days'))}
+        ${tile(thNum(t.participants), tr('People reached'), tr('all time'))}
+        ${tile(thNum(t.sessions), tr('Decks run live'), tr('with at least one response'))}
+        ${tile(thNum(t.decks), tr('Decks built'), trp(t.questions, '{n} question', '{n} questions', { n: thNum(t.questions) }))}
+        ${tile(thNum(t.polly), tr('Polly drafts'), tr('this month'))}
+      </div>
+      <div class="th-panel">
+        <div class="th-lab">${trf('Responses per day — last {n} days', { n: u.days })}</div>
+        <svg class="th-trend" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" role="img" aria-label="${escapeHtml(trf('Responses per day — last {n} days', { n: u.days }))}" onmouseleave="thTrendHover(-1)">
+          <line x1="0" y1="${Hh - 0.5}" x2="${W}" y2="${Hh - 0.5}" class="th-axis"></line>${bars}</svg>
+        <div class="th-axisrow"><span>${dayAt(0).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span><span id="thTrendRead">${u.series.some(v => v) ? tr('Point at a day to see its number') : tr('No responses in this period yet')}</span><span>${tr('Today')}</span></div>
+      </div>
+      ${mixTotal > 1 || other ? `<div class="th-panel"><div class="th-lab">${tr('What your team builds')}</div>
+        <div class="th-mix">${mixKeys.map(k => `<span style="flex:${t.byType[k]};background:${thMixColor(k)};" title="${escapeHtml(thTypeName(k))}: ${t.byType[k]}"></span>`).join('')}${other ? `<span style="flex:${other};background:${thMixColor('other')};"></span>` : ''}</div>
+        <div class="th-legend">${mixKeys.map(k => `<span><i style="background:${thMixColor(k)};"></i>${thIcon(k)} ${thTypeName(k)} <b>${thNum(t.byType[k])}</b></span>`).join('')}${other ? `<span><i style="background:${thMixColor('other')};"></i>${tr('Other')} <b>${thNum(other)}</b></span>` : ''}</div></div>` : ''}
+      <div class="th-panel" style="padding:0;overflow:hidden;">
+        <div class="th-lab" style="padding:12px 14px 4px;">${tr('By member')}</div>
+        <div style="overflow-x:auto;"><table class="th-table"><thead><tr><th>${tr('Member')}</th><th class="n">${tr('Decks')}</th><th class="n">${tr('Run live')}</th><th class="n">${tr('Responses')}</th><th class="n">${tr('People')}</th><th class="n">Polly</th><th>${tr('Last seen')}</th></tr></thead>
+        <tbody>${u.rows.map(r => `<tr><td><div class="th-mem"><span class="th-av">${escapeHtml((r.email || '?')[0].toUpperCase())}</span><div><div class="th-em">${escapeHtml(r.email)}</div><div class="th-meta">${escapeHtml(r.role)}</div></div></div></td>
+          <td class="n">${thNum(r.decks)}</td><td class="n">${thNum(r.sessions)}</td>
+          <td class="n"><div class="th-magw"><span class="th-mag" style="width:${Math.round(r.responses / maxResp * 100)}%;"></span><b>${thNum(r.responses)}</b></div></td>
+          <td class="n">${thNum(r.participants)}</td><td class="n">${thNum(r.polly)}</td>
+          <td>${r.lastSeen ? timeAgo(r.lastSeen) : '—'}</td></tr>`).join('')}</tbody></table></div>
+      </div>
+      ${u.orgWide && u.topDecks.length ? `<div class="th-panel"><div class="th-lab">${tr('Most-answered decks')}</div>
+        ${u.topDecks.map((d, i) => `<div class="th-top"><span class="th-rank">${i + 1}</span><span class="th-ico sm">${thIcon(d.type)}</span><div style="flex:1;min-width:0;"><div class="th-title sm">${escapeHtml(d.name)}</div><div class="th-meta">${escapeHtml(d.by)}</div></div>
+          <div class="th-topn"><b>${thNum(d.responses)}</b> ${tr('responses')} · ${thNum(d.participants)} ${tr('people')}</div></div>`).join('')}</div>` : ''}
+      ${u.orgWide ? '' : `<div class="th-lock"><div><b>${tr('Want the org-wide view?')}</b><div class="th-sub">${tr('A 90-day trend, your most-answered decks and a CSV export are part of Team Large.')}</div></div>
+        <button class="btn btn-ghost" onclick="document.getElementById('teamModal').classList.add('hidden');openPlanPicker()">${tr('See Team Large')}</button></div>`}
+      <div class="th-note">🔒 ${tr('You see how much your team uses PollSlide — never what anyone in an audience answered, and never an audience member’s name.')}</div>
+    </div>`;
+}
+function thTrendHover(i) {
+  const u = _hub.usage, el = document.getElementById('thTrendRead'); if (!u || !el) return;
+  document.querySelectorAll('.th-barr').forEach(b => b.classList.toggle('on', Number(b.dataset.i) === i));
+  if (i < 0) { el.textContent = tr('Point at a day to see its number'); return; }
+  const d = new Date(u.at - (u.series.length - 1 - i) * 86400000);
+  el.textContent = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }) + ' — ' + trp(u.series[i], '{n} response', '{n} responses', { n: thNum(u.series[i]) });
+}
+function teamUsageCsv() {
+  const u = _hub.usage; if (!u) return;
+  const rows = [['Member', 'Role', 'Decks', 'Questions', 'Decks run live', 'Responses', 'Responses (30 days)', 'People reached', 'Polly drafts this month', 'Last seen']];
+  u.rows.forEach(r => rows.push([r.email, r.role, r.decks, r.questions, r.sessions, r.responses, r.responses30, r.participants, r.polly, r.lastSeen ? new Date(r.lastSeen).toISOString().slice(0, 10) : '']));
+  rows.push([]); rows.push(['Day', 'Responses']);
+  u.series.forEach((v, i) => rows.push([new Date(u.at - (u.series.length - 1 - i) * 86400000).toISOString().slice(0, 10), v]));
+  thDownload('pollslide-team-usage.csv', rows);
 }
 
 // On login: if this email was invited, join the workspace (respecting seats).

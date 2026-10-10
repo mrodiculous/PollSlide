@@ -289,7 +289,7 @@
     SDK_VERSION: '10.7.1-video-stub', apps,
     initializeApp: (cfg, name) => { const ex = apps.find(a => a.name === (name || '[DEFAULT]')); return ex || makeApp(cfg, name); },
     app: (name) => apps.find(a => a.name === (name || '[DEFAULT]')) || makeApp({}, name),
-    database: Object.assign(() => database, { ServerValue: { TIMESTAMP: { '.sv': 'timestamp' }, increment: (n) => ({ '.sv': { increment: n } }) }, enableLogging() {} }),
+    database: Object.assign(() => database, { DataSnapshot: Snapshot /* same name as the real SDK, so audience-safe.js patches both */, ServerValue: { TIMESTAMP: { '.sv': 'timestamp' }, increment: (n) => ({ '.sv': { increment: n } }) }, enableLogging() {} }),
     auth: Object.assign(() => auth, { GoogleAuthProvider, EmailAuthProvider, Auth: { Persistence: { LOCAL: 'local', SESSION: 'session', NONE: 'none' } } }),
     storage: Object.assign(() => storage, { TaskEvent: { STATE_CHANGED: 'state_changed' }, TaskState: {} }),
   };

@@ -159,7 +159,21 @@ http.createServer(async (req, res) => {
       if (p === '/api/gif-search') return setTimeout(() => json(res, 200, gifAnswer(body)), 120);
       // The app falls back to the same database writes the real /api/team makes when the
       // endpoint is unavailable — exactly what a video needs, with nothing to reimplement.
-      if (p === '/api/team') return json(res, 503, {});
+      if (p === '/api/team') {
+        /* Team hub actions (library, usage, bulk tools) run the REAL lib/team-hub.js against the
+           stage database, so those screens can be built, tested and filmed end to end. Every
+           other team action still answers 503, so the app uses its direct-write fallback. */
+        const Hub = require(path.join(ROOT, 'lib', 'team-hub.js'));
+        if (Hub.HUB_ACTIONS.includes(body.action)) {
+          const who = USERS[(req.headers.referer && new URL(req.headers.referer).searchParams.get('as')) || ''] || USER;
+          const db = stageDb();
+          const ctx = { callerUid: who.uid, callerEmail: who.email, isSiteAdmin: who.email === 'help@pollslide.com',
+            mail: async () => {}, detachMember: async (wsId, uid) => { await db.ref('workspaces/' + wsId + '/members/' + uid).remove(); await db.ref('users/' + uid + '/workspaceId').remove(); await db.ref('users/' + uid + '/tier').set('free'); } };
+          try { const r = await Hub.handle(db, ctx, body); return json(res, r ? r.status : 400, r ? r.body : { error: 'Unknown action' }); }
+          catch (e) { return json(res, 500, { error: e.message }); }
+        }
+        return json(res, 503, {});
+      }
       if (p === '/api/helpbot') {
         /* Slidekick on the stage: the REAL lib/helpbot.js and the real LOCAL model (Ollama on
            this Mac, gemma4 — what production tries first), so it can be tested and filmed
