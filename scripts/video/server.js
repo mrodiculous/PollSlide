@@ -45,18 +45,12 @@ function broadcast(msg) { const s = 'data: ' + JSON.stringify(msg) + '\n\n'; for
 
 // ── canned APIs ───────────────────────────────────────────────────────────────
 const DEMO = Starters.byId ? Starters.byId('demo-quiz') : (Starters.STARTERS || [])[0];
-/* Team videos (2026-10-10): an onboarding quiz "from the handbook" of a made-up company. Stage only —
-   production Polly writes from whatever the presenter pastes. Facts are fictional on purpose. */
-const ONBOARD = [
-  { text: 'How many days do you have to submit an expense claim?', options: ['7 days', '14 days', '30 days', '60 days'], correct: 2 },
-  { text: 'Your laptop is lost or stolen. Who do you contact first?', options: ['Your manager', 'The IT help desk', 'HR', 'Facilities'], correct: 1 },
-  { text: 'When is the weekly team planning meeting?', options: ['Monday 10:00', 'Tuesday 14:00', 'Thursday 9:30', 'Friday 16:00'], correct: 0 },
-  { text: 'What do you need before sharing a customer file outside the company?', options: ['Nothing', 'A colleague\'s OK', 'Written approval from your manager', 'A new file name'], correct: 2 },
-  { text: 'How many days of paid leave do new starters get in their first year?', options: ['20', '25', '28', '30'], correct: 1 },
-];
+/* Team videos (2026-10-10): demo content in each video language — stage-i18n.js. */
+const SI = require(path.join(__dirname, 'stage-i18n.js'));
 function pollyAnswer(body) {
-  if (/handbook|onboard|new starter/i.test(String(body.topic || '') + ' ' + String(body.source || ''))) {
-    return { source: 'cloud', questions: ONBOARD.slice(0, Math.max(1, Number(body.count) || 5)).map(q => ({ text: q.text, options: q.options, correctAnswers: [q.correct], kind: 'single' })) };
+  if (/handbook|onboard|new starter|manual|handbuch|guide d|accueil|integra|inserimento|incorpora/i.test(String(body.topic || '') + ' ' + String(body.source || ''))) {
+    const qs = SI.ONBOARD[SI.L(body.language, SI.ONBOARD)];
+    return { source: 'cloud', questions: qs.slice(0, Math.max(1, Number(body.count) || 5)).map(([text, options, c]) => ({ text, options, correctAnswers: [c], kind: 'single' })) };
   }
   const have = new Set((body.avoid || []).map(a => String(a.text || '').toLowerCase().trim()));
   const qs = DEMO.questions.filter(q => !have.has(q.text.toLowerCase())).slice(0, Math.max(1, Number(body.count) || 4));
@@ -83,28 +77,22 @@ function gifAnswer(body) {
 }
 
 function insightsAnswer(body) {
+  const T = SI.INSIGHTS[SI.L(body.language, SI.INSIGHTS)];
   const texts = (body.texts || []).map(t => String(t || '').trim()).filter(Boolean);
-  const GOOD = /product|great|good|focus|calm|win|happy|smooth|energ/i, HARD = /busy|hectic|tired|stretch|swamp|chaos|long|stress/i;
-  const good = texts.filter(t => GOOD.test(t)), hard = texts.filter(t => HARD.test(t)), other = texts.filter(t => !GOOD.test(t) && !HARD.test(t));
+  const good = texts.filter(t => SI.GOOD.test(t)), hard = texts.filter(t => !SI.GOOD.test(t) && SI.HARD.test(t)), other = texts.filter(t => !SI.GOOD.test(t) && !SI.HARD.test(t));
   const pct = (n) => texts.length ? Math.round(n / texts.length * 100) : 0;
   const themes = [];
-  if (good.length) themes.push({ label: 'A productive week', count: good.length, sentiment: 'positive', example: good[0] });
-  if (hard.length) themes.push({ label: 'Stretched thin', count: hard.length, sentiment: 'negative', example: hard[0] });
-  if (other.length) themes.push({ label: 'Mixed', count: other.length, sentiment: 'neutral', example: other[0] });
+  if (good.length) themes.push({ label: T.good, count: good.length, sentiment: 'positive', example: good[0] });
+  if (hard.length) themes.push({ label: T.hard, count: hard.length, sentiment: 'negative', example: hard[0] });
+  if (other.length) themes.push({ label: T.mixed, count: other.length, sentiment: 'neutral', example: other[0] });
   themes.sort((a, b) => b.count - a.count);
   const pos = pct(good.length), neg = pct(hard.length);
-  return { source: 'cloud', count: texts.length,
-    summary: hard.length >= good.length ? 'Most of the team had a busy week, and a few are feeling stretched. Worth asking what would help.'
-                                        : 'Most of the team had a productive week, though a few are feeling stretched.',
+  return { source: 'cloud', count: texts.length, summary: hard.length > good.length ? T.sHard : T.sGood,
     sentiment: { positive: pos, negative: neg, neutral: Math.max(0, 100 - pos - neg) }, themes };
 }
-function copilotAnswer() {
-  return { source: 'cloud', suggestions: [
-    { text: 'What would help most to get the release out on time?', options: ['More time for testing', 'Fewer meetings this sprint', 'Clearer priorities', 'Help from another team'], answerIndex: null,
-      why: 'The room split almost evenly between the two projects. Ask what is really holding people back.' },
-    { text: 'How confident are you that we hit the release date?', options: ['Very confident', 'Fairly confident', 'Not sure', 'Worried'], answerIndex: null,
-      why: 'A quick confidence check tells you whether the split is about priorities or about risk.' },
-  ] };
+function copilotAnswer(body) {
+  const C = SI.COPILOT[SI.L((body || {}).language, SI.COPILOT)];
+  return { source: 'cloud', suggestions: C.map(([text, options, why]) => ({ text, options, answerIndex: null, why })) };
 }
 
 // ── /api/account on the stage: the REAL lib/account.js against the stage database ──

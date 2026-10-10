@@ -8,7 +8,8 @@
  * fictional onboarding questions in server.js (ONBOARD) when the topic mentions a handbook.
  */
 const NAMES = ['Ana Ruiz', 'Ben Cole', 'Cara Diaz', 'Dev Patel', 'Ella Novak', 'Finn Walsh'];
-const S = (fn) => { const src = fn.toString().replace(/\bNAMES\b/g, JSON.stringify(NAMES)); const f = fn; f.toString = () => src; return f; };
+const TXT = {"en": ["New starter quiz", "Our employee handbook: expenses, IT security, paid leave and the weekly planning meeting", "New starters, October"], "es": ["Quiz de bienvenida", "Nuestro manual del empleado: gastos, seguridad informática, vacaciones y la reunión semanal de planificación", "Nuevas incorporaciones, octubre"], "de": ["Quiz für neue Kolleginnen und Kollegen", "Unser Mitarbeiterhandbuch: Spesen, IT-Sicherheit, Urlaub und das wöchentliche Planungsmeeting", "Neue im Oktober"], "fr": ["Quiz d’accueil", "Notre guide d’accueil : notes de frais, sécurité informatique, congés et réunion de planification hebdomadaire", "Nouveaux arrivants, octobre"], "pt": ["Quiz de integração", "O nosso manual do colaborador: despesas, segurança informática, férias e a reunião semanal de planeamento", "Novos colaboradores, outubro"], "it": ["Quiz per i nuovi arrivati", "Il nostro manuale del dipendente: note spese, sicurezza informatica, ferie e la riunione settimanale di pianificazione", "Nuovi arrivati, ottobre"]};   // deck name, Polly topic, class name — per video language
+const S = (fn) => { const src = fn.toString().replace(/\bNAMES\b/g, JSON.stringify(NAMES)).replace(/\bTXT\b/g, JSON.stringify(TXT)); const f = fn; f.toString = () => src; return f; };
 
 module.exports = {
   t: {"es": {"c1": "Tu manual, como quiz", "c2": "Añade a los nuevos, una vez", "c3": "En vivo o a su ritmo", "c4": "Mira quién lo tiene claro", "c5": "Y que no se olvide", "h1": "Incorpora a gente nueva<br><em>más rápido</em>", "p1": "Del manual al quiz y a las tarjetas", "s2": "👥 Nombres", "s3": "📊 Resultados", "s4": "📚 Estudiar", "h2": "Que cada nueva persona<br>tenga el <em>mismo comienzo</em>", "p2": "Gratis para empezar · nada que instalar"}, "de": {"c1": "Dein Handbuch als Quiz", "c2": "Die Neuen einmal anlegen", "c3": "Live oder im eigenen Tempo", "c4": "Sieh, wer es verstanden hat", "c5": "Dann bleibt es hängen", "h1": "Neue Leute<br><em>schneller</em> einarbeiten", "p1": "Vom Handbuch zum Quiz zu Karteikarten", "s2": "👥 Namen", "s3": "📊 Ergebnisse", "s4": "📚 Lernen", "h2": "Jeder neue Mensch<br>bekommt den <em>gleichen Start</em>", "p2": "Kostenlos starten · nichts zu installieren"}, "fr": {"c1": "Ton guide d’accueil en quiz", "c2": "Ajoute les nouveaux, une fois", "c3": "En direct ou à leur rythme", "c4": "Vois qui a compris", "c5": "Puis ancre-le", "h1": "Intègre les nouveaux<br><em>plus vite</em>", "p1": "Du guide au quiz puis aux cartes", "s2": "👥 Noms", "s3": "📊 Résultats", "s4": "📚 Réviser", "h2": "Le <em>même départ</em><br>pour chaque arrivant", "p2": "Gratuit pour commencer · rien à installer"}, "pt": {"c1": "O seu manual, em quiz", "c2": "Adicione os novos, uma vez", "c3": "Em direto ou ao seu ritmo", "c4": "Veja quem percebeu", "c5": "Depois, que fique", "h1": "Integre pessoas novas<br><em>mais depressa</em>", "p1": "Do manual ao quiz e aos cartões", "s2": "👥 Nomes", "s3": "📊 Resultados", "s4": "📚 Estudar", "h2": "O <em>mesmo início</em><br>para cada pessoa nova", "p2": "Grátis para começar · nada para instalar"}, "it": {"c1": "Il tuo manuale, come quiz", "c2": "Aggiungi i nuovi, una volta", "c3": "Dal vivo o con calma", "c4": "Vedi chi ha capito", "c5": "Poi fallo restare", "h1": "Inserisci i nuovi<br><em>più in fretta</em>", "p1": "Dal manuale al quiz alle flashcard", "s2": "👥 Nomi", "s3": "📊 Risultati", "s4": "📚 Studio", "h2": "Lo <em>stesso inizio</em><br>per ogni nuovo arrivato", "p2": "Gratis per iniziare · niente da installare"}},
@@ -41,10 +42,12 @@ module.exports = {
         D.chip(1, (window.VT || {}).c1 || 'Your handbook, as a quiz');
         await D.click('[onclick="switchProduct(\'quiz\')"]', 'app', { scroll: false, after: 700 });
         await D.click('[onclick="createPresentation()"]', 'app', { after: 800 });
-        await D.type('#renameInput', 'New starter quiz', 'app', { clear: true, cps: 16, scroll: false });
+        const LG = window.VLANG && TXT[window.VLANG] ? window.VLANG : 'en', t = TXT[LG];
+        await D.type('#renameInput', t[0], 'app', { clear: true, cps: 16, scroll: false });
         await D.click('[onclick="doRenamePres()"]', 'app', { scroll: false, after: 800 });
+        D.js((w) => w.setPresLanguage(LG));   // the deck's language: Polly writes in it, phones read it
         await D.click('[onclick="openPolly()"]', 'app', { scroll: false, after: 1000 });
-        await D.type('#pollyTopic', 'Our employee handbook: expenses, IT security, paid leave and the weekly planning meeting', 'app', { cps: 28, scroll: false });
+        await D.type('#pollyTopic', t[1], 'app', { cps: 28, scroll: false });
         await D.type('#pollyCount', '5', 'app', { clear: true, cps: 6, scroll: false });
         await D.click('#pollyGoBtn', 'app', { after: 300 });
         await D.waitFor((d) => d.querySelectorAll('.q-item').length >= 5 ? d.querySelector('.q-item') : null, 'app', 12000);
@@ -57,7 +60,8 @@ module.exports = {
       say: "Add your new starters as a list, once. In PollSlide this is called a class. From then on, every answer is recorded by person.",
       run: S(async (D) => {
         D.chip(2, (window.VT || {}).c2 || 'Add the new starters, once');
-        D.js((w) => { w.prompt = () => 'New starters, October'; });
+        const t = TXT[window.VLANG] || TXT.en;
+        D.js((w) => { w.prompt = () => t[2]; });
         await D.click((d) => d.querySelector('[onclick^="openDeckMenu("]'), 'app', { scroll: false, after: 700 });
         await D.click('.rm-item[onclick*="openClassManager("]', 'app', { scroll: false, after: 900 });
         await D.click('[onclick="createClass()"]', 'app', { scroll: false, after: 900 });
