@@ -2178,6 +2178,23 @@ window.PS_UI = window.PS_UI || {};
   nl: { 'OR': 'OF' }, ja: { 'OR': 'または' }, zh: { 'OR': '或' }, ar: { 'OR': 'أو' }, hi: { 'OR': 'या' },
 });
 
+/* The join image and copied join text the audience reads were English in every language;
+ * the address and code stay in Latin letters, the instructions around them do not (2026-10-11). */
+(function (D) {
+  for (const l in D) { window.PS_UI[l] = Object.assign(window.PS_UI[l] || {}, D[l]); }
+})({
+  es: {"Scan to answer": "Escanea para responder", "No phone? Go to pollslide.com/join": "¿Sin móvil? Entra en pollslide.com/join", "code {x}": "código {x}", "Question {n} slide": "Diapositiva de la pregunta {n}", "Scan the QR — or go to pollslide.com/join and enter code {x}": "Escanea el QR — o entra en pollslide.com/join e introduce el código {x}"},
+  de: {"Scan to answer": "Scannen zum Antworten", "No phone? Go to pollslide.com/join": "Kein Handy? Geh auf pollslide.com/join", "code {x}": "Code {x}", "Question {n} slide": "Folie zu Frage {n}", "Scan the QR — or go to pollslide.com/join and enter code {x}": "Scann den QR-Code — oder geh auf pollslide.com/join und gib den Code {x} ein"},
+  fr: {"Scan to answer": "Scanne pour répondre", "No phone? Go to pollslide.com/join": "Pas de téléphone ? Va sur pollslide.com/join", "code {x}": "code {x}", "Question {n} slide": "Diapositive de la question {n}", "Scan the QR — or go to pollslide.com/join and enter code {x}": "Scanne le QR — ou va sur pollslide.com/join et saisis le code {x}"},
+  pt: {"Scan to answer": "Leia para responder", "No phone? Go to pollslide.com/join": "Sem telemóvel? Aceda a pollslide.com/join", "code {x}": "código {x}", "Question {n} slide": "Diapositivo da pergunta {n}", "Scan the QR — or go to pollslide.com/join and enter code {x}": "Leia o QR — ou aceda a pollslide.com/join e introduza o código {x}"},
+  it: {"Scan to answer": "Scansiona per rispondere", "No phone? Go to pollslide.com/join": "Niente telefono? Vai su pollslide.com/join", "code {x}": "codice {x}", "Question {n} slide": "Slide della domanda {n}", "Scan the QR — or go to pollslide.com/join and enter code {x}": "Scansiona il QR — oppure vai su pollslide.com/join e inserisci il codice {x}"},
+  nl: {"Scan to answer": "Scan om te antwoorden", "No phone? Go to pollslide.com/join": "Geen telefoon? Ga naar pollslide.com/join", "code {x}": "code {x}", "Question {n} slide": "Dia van vraag {n}", "Scan the QR — or go to pollslide.com/join and enter code {x}": "Scan de QR-code — of ga naar pollslide.com/join en voer code {x} in"},
+  ja: {"Scan to answer": "スキャンして回答", "No phone? Go to pollslide.com/join": "スマホがない場合：pollslide.com/join", "code {x}": "コード {x}", "Question {n} slide": "問題 {n} のスライド", "Scan the QR — or go to pollslide.com/join and enter code {x}": "QR をスキャンするか、pollslide.com/join でコード {x} を入力してください"},
+  zh: {"Scan to answer": "扫码作答", "No phone? Go to pollslide.com/join": "没有手机？请访问 pollslide.com/join", "code {x}": "代码 {x}", "Question {n} slide": "第 {n} 题幻灯片", "Scan the QR — or go to pollslide.com/join and enter code {x}": "扫描二维码 — 或访问 pollslide.com/join 并输入代码 {x}"},
+  ar: {"Scan to answer": "امسح للإجابة", "No phone? Go to pollslide.com/join": "لا يوجد هاتف؟ انتقل إلى pollslide.com/join", "code {x}": "الرمز {x}", "Question {n} slide": "شريحة السؤال {n}", "Scan the QR — or go to pollslide.com/join and enter code {x}": "امسح رمز QR — أو انتقل إلى pollslide.com/join وأدخل الرمز {x}"},
+  hi: {"Scan to answer": "जवाब देने के लिए स्कैन करें", "No phone? Go to pollslide.com/join": "फ़ोन नहीं है? pollslide.com/join पर जाएँ", "code {x}": "कोड {x}", "Question {n} slide": "सवाल {n} की स्लाइड", "Scan the QR — or go to pollslide.com/join and enter code {x}": "QR स्कैन करें — या pollslide.com/join पर जाएँ और कोड {x} डालें"},
+});
+
 /* ── Arabic reads right to left (2026-10-11) ────────────────────────────────────────────
  * The app's LAYOUT is not mirrored — sidebars, toolbars and charts stay where they are, so
  * nothing a presenter has learned moves. What changes is each piece of TEXT: with
