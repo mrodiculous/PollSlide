@@ -55,7 +55,14 @@
    "url": "https://pollslide.com/help#present",
    "kind": "section",
    "title": "⛶ Present",
-   "text": "Present mode shows your question full-screen with a QR code your audience scans to answer. Click ⛶ Present on any question. Your audience points their phone camera at the QR code — no app needed. Watch responses roll in live. Switch chart styles anytime. Use 📋 Copy QR box for slide to paste the QR straight onto your own Keynote / PowerPoint / any deck. 📱 No phone to scan the QR? No problem. Anyone on a laptop (or any browser) can join without scanning: they go to pollslide.com/join and type the code shown next to your QR. Same session, same live results. So your audience always has both options, add this line under the QR on your slide : 📱 Scan the QR — or go to pollslide.com/join and enter code ABC123 In the app, the Share / QR window has a “Copy this line” button that fills in your real code for you."
+   "text": "Present mode shows your question full-screen with a QR code your audience scans to answer. Click ⛶ Present on any question. Your audience points their phone camera at the QR code — no app needed. Watch responses roll in live. Switch chart styles anytime. Use 📋 Copy QR box for slide to paste the QR straight onto your own Keynote / PowerPoint / any deck. 📱 No phone to scan the QR? No problem. Anyone on a laptop (or any browser) can join without scanning: they go to pollslide.com/join and type the code shown next to your QR. Same session, same live results. So your audience always has both options, add this line under the QR on your slide : 📱 Scan the QR — or go to pollslide.com/join and enter code ABC123 In the app, the Share / QR window has a “Copy this line” button that fills in your real code for you.",
+   "titles": {
+    "es": "⛶ Presentar",
+    "de": "⛶ Präsentieren",
+    "fr": "⛶ Présenter",
+    "pt": "⛶ Apresentar",
+    "it": "⛶ Presentare"
+   }
   },
   {
    "id": "share",
