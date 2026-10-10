@@ -59,6 +59,29 @@ function walkHtmlFiles(dir, base = '') {
 
 console.log('\nSite asset versions match their files\n' + '─'.repeat(62));
 
+/* The language files i18n.js fetches on demand (2026-10-11). Dutch, Japanese, Chinese, Arabic
+ * and Hindi each live in i18n-<lang>.js and are loaded by script, not by a <script> tag, so the
+ * page scan below can't see them. Their ?v= lives in i18n.js's LAZY map instead — checked
+ * (and rewritten) here FIRST, because rewriting it changes i18n.js, whose own ?v= the page
+ * scan then has to match. */
+{
+  const f = path.join(SITE, 'i18n.js');
+  let src = null; try { src = fs.readFileSync(f, 'utf8'); } catch (e) {}
+  if (src) {
+    const found = [];
+    const out = src.replace(/(const LAZY = \{)([^}]*)(\})/, (w, open, body, close) => open + body.replace(/(\w+):\s*'([^']*)'/g, (m, l, v) => {
+      const want = hashOf(`i18n-${l}.js`);
+      if (!want) { missing++; found.push(`i18n-${l}.js — listed in i18n.js LAZY but not in the repo`); return m; }
+      checked++;
+      if (v === want) return m;
+      stale++; found.push(`i18n-${l}.js — LAZY says ?v=${v}, file hashes to ${want}`);
+      return `${l}: '${want}'`;
+    }) + close);
+    if (WRITE && out !== src) fs.writeFileSync(f, out);
+    if (found.length) { console.log(`  ${WRITE ? '↻' : '✗'} i18n.js (languages loaded on demand)`); found.forEach(x => console.log('      ' + x)); }
+  }
+}
+
 for (const page of walkHtmlFiles(SITE).sort()) {
   const p = path.join(SITE, page);
   let html;

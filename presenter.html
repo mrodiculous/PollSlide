@@ -15,7 +15,7 @@
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=07b79645"></script>
+<script src="/ui-lang.js?v=2e1c1e43"></script>
 <script src="/tickets.js?v=edb362ec"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -826,7 +826,7 @@
       <span style="font-family:'Syne',sans-serif;font-size:11px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);" data-i18n>Live Results</span>
       <div style="display:flex;align-items:center;gap:8px;">
         <span id="respCounter" style="font-family:'Syne',sans-serif;font-weight:700;color:var(--accent);font-size:12px;">—</span>
-        <button data-i18n-title onclick="toggleLiveDetail()" id="liveDetailBtn" title="Live results are showing — click to hide them until you reveal" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">👁</button>
+        <button onclick="toggleLiveDetail()" id="liveDetailBtn" title="Live results are showing — click to hide them until you reveal" style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">👁</button>
         <button onclick="toggleSfx()" id="sfxBtn" title="Sound effects on/off" data-i18n-title style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">🔊</button>
         <button onclick="toggleMaximize()" id="maxBtn" title="Maximize results (great for projecting)" data-i18n-title style="background:var(--surface3);border:1px solid var(--border2);border-radius:6px;width:26px;height:26px;cursor:pointer;color:var(--text);font-size:13px;display:flex;align-items:center;justify-content:center;">⛶</button>
       </div>
@@ -6173,12 +6173,12 @@ function openInbox() {
     <div style="border:1px solid var(--border);border-radius:11px;padding:12px 14px;margin-bottom:9px;">
       <div style="font-family:Syne,sans-serif;font-weight:700;font-size:14px;">${escapeHtml(sh.title)}</div>
       <div style="color:var(--muted);font-size:11.5px;margin-top:2px;">
-        ${trf('from {who}', { who: escapeHtml(sh.from) })} · ${trp(sh.questionCount, '{n} question', '{n} questions')} · ${escapeHtml((sh.productType || 'poll'))}
+        ${trf('from {who}', { who: escapeHtml(sh.from) })} · ${trp(sh.questionCount, '{n} question', '{n} questions')} · ${escapeHtml(tr(sh.productType || 'poll'))}
       </div>
       <div style="font-size:11.5px;margin-top:5px;color:${sh.role === 'edit' ? 'var(--accent)' : 'var(--muted)'};">
         ${sh.role === 'edit'
-          ? '🤝 Build it together — you both edit the same deck. They stay the owner.'
-          : '📤 A copy for you to keep and change. Their version stays as it is.'}
+          ? tr('🤝 Build it together — you both edit the same deck. They stay the owner.')
+          : tr('📤 A copy for you to keep and change. Their version stays as it is.')}
       </div>
       ${sh.note ? `<div style="border-left:3px solid var(--accent);padding-left:10px;margin-top:8px;font-size:12.5px;color:var(--text);">${escapeHtml(sh.note)}</div>` : ''}
       <div style="display:flex;gap:7px;margin-top:11px;">
@@ -7014,13 +7014,22 @@ function copyQRBox(idx) {
     if (src) ctx.drawImage(src, pad, pad, size, size);
     const cx = canvas.width/2, base = size + pad;
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#0b0b15'; ctx.font = 'bold 34px sans-serif';
-    ctx.fillText('Scan to answer', cx, base + 46);
+    /* The audience reads this, so it is in the presenter's language (2026-10-11). The address
+       and the code stay in Latin letters — every phone keyboard types those — but the words
+       telling people what to do with them were English for everyone. A longer translation
+       shrinks to fit rather than running off the image. */
+    if (canvasRTL(UI_LANG)) ctx.direction = 'rtl';
+    const fit = (txt, px, weight) => {
+      ctx.font = weight + px + 'px sans-serif';
+      while (px > 11 && ctx.measureText(txt).width > canvas.width - 24) ctx.font = weight + (--px) + 'px sans-serif';
+    };
+    ctx.fillStyle = '#0b0b15'; fit(tr('Scan to answer'), 34, 'bold ');
+    ctx.fillText(tr('Scan to answer'), cx, base + 46);
     // Laptop / no-phone line so everyone can join off one slide image.
-    ctx.fillStyle = '#555'; ctx.font = '19px sans-serif';
-    ctx.fillText('No phone? Go to pollslide.com/join', cx, base + 82);
-    ctx.fillStyle = '#0b0b15'; ctx.font = 'bold 26px sans-serif';
-    ctx.fillText('code ' + code, cx, base + 118);
+    ctx.fillStyle = '#555'; fit(tr('No phone? Go to pollslide.com/join'), 19, '');
+    ctx.fillText(tr('No phone? Go to pollslide.com/join'), cx, base + 82);
+    ctx.fillStyle = '#0b0b15'; fit(trf('code {x}', { x: code }), 26, 'bold ');
+    ctx.fillText(trf('code {x}', { x: code }), cx, base + 118);
     return canvas;
   };
 
@@ -7054,6 +7063,30 @@ function copyQRBox(idx) {
   }, 150);
 }
 
+/* Canvas text for every script. canvasRTL takes a language code or a piece of text. canvasWrap
+   breaks at spaces, and between any two characters of Chinese/Japanese/Korean (which do not use
+   spaces), and splits a single run that is wider than the line on its own. */
+function canvasRTL(x) {
+  x = String(x || '');
+  return x === 'ar' || /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/.test(x.length > 3 ? x : '');
+}
+function canvasWrap(ctx, text, maxW) {
+  const tokens = String(text).match(/[\u2E80-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF\uFF00-\uFFEF]|[^\s\u2E80-\u9FFF\uAC00-\uD7AF\uF900-\uFAFF\uFF00-\uFFEF]+\s*|\s+/g) || [];
+  const lines = []; let line = '';
+  for (let tk of tokens) {
+    if (!line && !tk.trim()) continue;
+    if (ctx.measureText(line + tk).width <= maxW || !line && ctx.measureText(tk).width <= maxW) { line += tk; continue; }
+    if (line) { lines.push(line.trimEnd()); line = ''; }
+    if (!tk.trim()) continue;
+    for (const ch of Array.from(tk)) {   // one run too long for any line (a URL, a long word)
+      if (line && ctx.measureText(line + ch).width > maxW) { lines.push(line); line = ''; }
+      line += ch;
+    }
+  }
+  if (line.trim()) lines.push(line.trimEnd());
+  return lines;
+}
+
 function copyQuestionSlide(idx) {
   const q = questions[idx];
   const letters = ['A','B','C','D','E','F'];
@@ -7063,21 +7096,23 @@ function copyQuestionSlide(idx) {
   const ctx = canvas.getContext('2d');
   ctx.fillStyle = '#0b0b15'; ctx.fillRect(0,0,W,H);
   ctx.fillStyle = '#6c63ff'; ctx.fillRect(0,0,W,8);
-  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 52px sans-serif'; ctx.textAlign = 'left';
-  const words = (q.text||'').split(' ');
-  let line = '', y = 140; const maxW = W-160;
-  for (const w of words) {
-    const test = line + w + ' ';
-    if (ctx.measureText(test).width > maxW && line) { ctx.fillText(line, 80, y); line = w+' '; y += 64; }
-    else line = test;
-  }
-  if (line) ctx.fillText(line, 80, y);
+  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 52px sans-serif';
+  /* Wrapping went word by word on spaces, so a Japanese or Chinese question — no spaces —
+     ran off the right edge as one line, and Arabic sat left-aligned (2026-10-11). */
+  const rtlQ = canvasRTL(q.text);
+  ctx.direction = rtlQ ? 'rtl' : 'ltr'; ctx.textAlign = rtlQ ? 'right' : 'left';
+  const qx = rtlQ ? W-80 : 80;
+  let y = 140; const maxW = W-160;
+  canvasWrap(ctx, q.text||'', maxW).forEach((ln, i) => { if (i) y += 64; ctx.fillText(ln, qx, y); });
   if (q.options && (q.type==='multiple_choice'||q.type==='multiple_choice_multi')) {
     let oy = y + 70;
     q.options.forEach((o,i) => {
       ctx.fillStyle = '#18182a'; roundRect(ctx, 80, oy-40, W-160, 60, 12); ctx.fill();
+      ctx.direction = 'ltr'; ctx.textAlign = 'left';
       ctx.fillStyle = '#6c63ff'; ctx.font = 'bold 30px sans-serif'; ctx.fillText(letters[i], 104, oy);
-      ctx.fillStyle = '#ffffff'; ctx.font = '32px sans-serif'; ctx.fillText(o.text||'', 160, oy);
+      const rtlO = canvasRTL(o.text);
+      ctx.direction = rtlO ? 'rtl' : 'ltr'; ctx.textAlign = rtlO ? 'right' : 'left';
+      ctx.fillStyle = '#ffffff'; ctx.font = '32px sans-serif'; ctx.fillText(o.text||'', rtlO ? W-104 : 160, oy);
       oy += 78;
     });
   }
@@ -7090,7 +7125,7 @@ function copyQuestionSlide(idx) {
     if (copied) {
       toast(tr('Question slide copied! Paste into your presentation (Cmd+V).'), 'success');
     } else {
-      showImageCopyModal(URL.createObjectURL(blob), 'Question ' + (idx+1) + ' slide');
+      showImageCopyModal(URL.createObjectURL(blob), trf('Question {n} slide', { n: idx+1 }));
     }
   }, 'image/png');
 }
@@ -7770,9 +7805,11 @@ function syncLiveDetailBtn() {
   const b = document.getElementById('liveDetailBtn');
   if (!b) return;
   b.textContent = showLiveDetail ? '👁' : '🙈';
-  b.title = showLiveDetail
+  // Set here in the presenter's language: it changes with the state, so the tagged-title
+  // pass (which remembers one English title) would put the wrong one back (2026-10-11).
+  b.title = tr(showLiveDetail
     ? 'Live results are showing — click to hide them until you reveal'
-    : 'Results stay hidden until you reveal — click to show them live';
+    : 'Results stay hidden until you reveal — click to show them live');
   b.style.color = showLiveDetail ? 'var(--text)' : 'var(--muted)';
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', syncLiveDetailBtn);
@@ -9796,7 +9833,7 @@ function setSlideSnippet() {
 }
 function copySlideSnippet() {
   const code = presentations[activePresId]?.sessionCode || '';
-  const text = 'Scan the QR — or go to pollslide.com/join and enter code ' + code;
+  const text = trf('Scan the QR — or go to pollslide.com/join and enter code {x}', { x: code });
   const done = () => toast(tr('Join text copied — paste it on your slide'), 'success');
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));

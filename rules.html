@@ -59,6 +59,9 @@ var FIREBASE_CONFIG = {
 };
 firebase.initializeApp(FIREBASE_CONFIG);
 var I = window.LoopI18n, t = I ? I.t : function (s, v) { return String(s).replace(/\{(\w+)\}/g, function (m, k) { return v && v[k] != null ? v[k] : m; }); };
+/* The player's language, as on the game itself (play.html): their choice there, else the phone's.
+   This page used t() but never chose a language, so it was English for everyone (2026-10-11). */
+if (I) { I.set(I.stored('ql_viewer_lang') || I.nav()); I.observe(document.body); }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 var CODE = (location.hash.replace('#', '').split(/[\/?&]/)[0] || '').toUpperCase();
 var out = document.getElementById('out');

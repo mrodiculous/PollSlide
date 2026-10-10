@@ -40,7 +40,7 @@ ok('a link-mode loop carries no rules text', L2.compliance.rulesMode === 'link' 
 ok('publishing makes the hosted page the rules link', /norm\.compliance\.rulesUrl = norm\.compliance\.rulesText\.trim\(\)\.length >= 40 \? APP \+ '\/rules#' \+ curCode/.test(st));
 ok('publishing is refused while the template\'s [brackets] are unfilled', /Fill in the \[brackets\] in your official rules\./.test(st));
 ok('rules are saved to the organiser\'s own library and can be picked again', /users\/' \+ user\.uid \+ '\/loop_rules/.test(st) && /function pickRules\(/.test(st));
-ok('the template exists in all six languages', ['en', 'es', 'de', 'fr', 'pt', 'it'].every(l => new RegExp('\\n    ' + l + ': \\[`1\\. ').test(st)));
+ok('the template exists in all eleven languages', ['en', 'es', 'de', 'fr', 'pt', 'it', 'nl', 'ja', 'zh', 'ar', 'hi'].every(l => new RegExp('\\n    ' + l + ': \\[`1\\. ').test(st)));
 ok('new loops default to hosted rules', /rulesUrl: '', aiNote: false, rulesMode: 'hosted' \}/.test(st));
 const rules = read('rules.html');
 ok('rules.html shows the text escaped, never as HTML', /esc\(p\.trim\(\)\)/.test(rules) && !/innerHTML = c\.rulesText/.test(rules));

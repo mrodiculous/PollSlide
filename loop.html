@@ -83,8 +83,8 @@
 <script src="/audience-safe.js?v=db05f20b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 <script src="/gifs.js?v=ed7add18"></script>
-<script src="/loop-i18n.js?v=d62db8ea"></script>
-<script src="/loop-engine.js?v=042b75ae"></script>
+<script src="/loop-i18n.js?v=1c7c7e8c"></script>
+<script src="/loop-engine.js?v=592624d8"></script>
 <script>
 /* LoopSlide Studio — build, publish and run loops for public screens.
  * Data:  users/<uid>/loops/<CODE>   { name, def (draft), publishedAt, updatedAt }  — private
@@ -1067,7 +1067,10 @@ async function saveRules(asNew) {
 function RULES_TEMPLATE(lang, v) {
   const A = { en: v.age ? `${v.age} or older` : '[minimum age, if any]', es: v.age ? `${v.age} años o más` : '[edad mínima, si la hay]',
     de: v.age ? `${v.age} Jahre oder älter` : '[Mindestalter, falls vorhanden]', fr: v.age ? `${v.age} ans ou plus` : '[âge minimum, le cas échéant]',
-    pt: v.age ? `${v.age} anos ou mais` : '[idade mínima, se houver]', it: v.age ? `${v.age} anni o più` : '[età minima, se prevista]' };
+    pt: v.age ? `${v.age} anos ou mais` : '[idade mínima, se houver]', it: v.age ? `${v.age} anni o più` : '[età minima, se prevista]',
+    nl: v.age ? `${v.age} jaar of ouder` : '[minimumleeftijd, indien van toepassing]', ja: v.age ? `${v.age} 歳以上` : '[最低年齢（ある場合）]',
+    zh: v.age ? `${v.age} 岁及以上` : '[最低年龄（如有）]', ar: v.age ? `${v.age} عامًا أو أكثر` : '[الحد الأدنى للعمر، إن وُجد]',
+    hi: v.age ? `${v.age} वर्ष या उससे अधिक` : '[न्यूनतम आयु, यदि कोई हो]' };
   const T = {
     en: [`1. Organiser. This game is run by ${v.org} ("the Organiser"). Contact: ${v.contact}. LoopSlide / PollSlide provides the software only and is not the organiser.`,
       `2. No purchase necessary. You do not need to buy anything to play or to win. Buying something does not improve your chances.`,
@@ -1129,12 +1132,62 @@ function RULES_TEMPLATE(lang, v) {
       `8. Correttezza. L'Organizzatore può escludere chi imbroglia, usa soprannomi offensivi o viola questo regolamento.`,
       `9. I tuoi dati. Solo il tuo soprannome e le tue risposte vengono usati per il gioco e la classifica. Vedi l'informativa privacy di PollSlide.`,
       `10. Domande. Contatta l'Organizzatore all'indirizzo ${v.contact}.`],
+    nl: [`1. Organisator. Dit spel wordt georganiseerd door ${v.org} ('de Organisator'). Contact: ${v.contact}. LoopSlide / PollSlide levert alleen de software en is niet de organisator.`,
+      `2. Geen aankoop vereist. Je hoeft niets te kopen om te spelen of te winnen. Iets kopen vergroot je kansen niet.`,
+      `3. Wie mag meedoen. Open voor personen van ${A.nl} die aanwezig zijn bij [locatie / adres]. Medewerkers van de Organisator en hun huisgenoten kunnen niet winnen. [Voeg andere beperkingen toe.]`,
+      `4. Zo speel je. Scan de QR-code op het scherm, kies een bijnaam en beantwoord de vragen op je telefoon. Goede antwoorden leveren punten op, en snellere antwoorden meer punten.`,
+      `5. Zo worden winnaars bepaald. De winnaar(s) is/zijn de speler(s) met de meeste punten op het scorebord wanneer [de ronde / de avond / datum en tijd] eindigt. Bij een gelijke stand beslist [het vroegste goede antwoord / een schiftingsvraag]. Dit is een spel van kennis en vaardigheid, geen kansspel.`,
+      `6. Prijs. ${v.prize}. Niet inwisselbaar voor geld. [Vermeld hoe en wanneer de prijs kan worden opgehaald, bijv. door het beloningsscherm op je telefoon vóór sluitingstijd aan het personeel te laten zien.]`,
+      `7. Data. Het spel loopt van [startdatum en -tijd] tot [einddatum en -tijd].`,
+      `8. Eerlijk spel. De Organisator kan spelers verwijderen die valsspelen, aanstootgevende bijnamen gebruiken of deze regels overtreden.`,
+      `9. Je gegevens. Alleen je bijnaam en je antwoorden worden gebruikt om het spel te laten draaien en het scorebord te tonen. Zie het privacybeleid van PollSlide voor details.`,
+      `10. Vragen. Neem contact op met de Organisator via ${v.contact}.`],
+    ja: [`1. 主催者。このゲームは ${v.org}（以下「主催者」）が運営します。連絡先：${v.contact}。LoopSlide / PollSlide はソフトウェアを提供するのみで、主催者ではありません。`,
+      `2. 購入不要。プレイや受賞のために何かを購入する必要はありません。購入しても当選の可能性は上がりません。`,
+      `3. 参加資格。[会場 / 住所] にいる ${A.ja} の方が参加できます。主催者の従業員およびその同居家族は受賞できません。[その他の制限を追加してください。]`,
+      `4. 遊び方。画面の QR コードをスキャンし、ニックネームを選んで、スマートフォンで問題に答えます。正解するとポイントが入り、早く答えるほど多くのポイントが入ります。`,
+      `5. 勝者の決め方。[ラウンド / その夜 / 日時] の終了時にランキングで最も多くのポイントを持つプレイヤーが勝者です。同点の場合は [最も早い正解 / 決勝問題] で決めます。これは運ではなく知識と技能によるゲームです。`,
+      `6. 賞品。${v.prize}。現金との交換はできません。[受け取り方法と期限を記載してください。例：閉店前にスマートフォンの特典画面をスタッフに見せる。]`,
+      `7. 期間。ゲームは [開始日時] から [終了日時] まで行われます。`,
+      `8. 公正なプレイ。主催者は、不正行為、不快なニックネームの使用、または本ルールに違反したプレイヤーを除外できます。`,
+      `9. あなたのデータ。ゲームの運営とランキングの表示には、ニックネームと回答のみを使用します。詳しくは PollSlide のプライバシーポリシーをご覧ください。`,
+      `10. お問い合わせ。主催者（${v.contact}）までご連絡ください。`],
+    zh: [`1. 组织者。本游戏由 ${v.org}（“组织者”）举办。联系方式：${v.contact}。LoopSlide / PollSlide 仅提供软件，并非组织者。`,
+      `2. 无需购买。参与游戏或获奖都无需购买任何东西。购买不会提高你的获奖机会。`,
+      `3. 参与资格。面向在 [场地 / 地址] 的 ${A.zh} 人士开放。组织者的员工及其家庭成员不得获奖。[请补充其他限制。]`,
+      `4. 玩法。扫描屏幕上的二维码，选择一个昵称，然后在手机上回答问题。答对可得分，答得越快得分越多。`,
+      `5. 获胜者的确定方式。在 [本回合 / 当晚 / 日期和时间] 结束时，排行榜上得分最多的玩家获胜。如出现平局，由 [最早的正确答案 / 一道加赛题] 决定。这是一项凭知识和技巧取胜的游戏，而非凭运气。`,
+      `6. 奖品。${v.prize}。不可兑换现金。[请说明领取方式和时间，例如在打烊前向工作人员出示手机上的奖励画面。]`,
+      `7. 日期。游戏时间为 [开始日期和时间] 至 [结束日期和时间]。`,
+      `8. 公平竞赛。组织者可移除作弊、使用冒犯性昵称或违反本规则的玩家。`,
+      `9. 你的数据。仅使用你的昵称和答案来运行游戏和显示排行榜。详情请参阅 PollSlide 隐私政策。`,
+      `10. 问题。请通过 ${v.contact} 联系组织者。`],
+    ar: [`1. المنظِّم. يدير هذه اللعبة ${v.org} («المنظِّم»). للتواصل: ${v.contact}. توفّر LoopSlide / PollSlide البرنامج فقط وليست المنظِّم.`,
+      `2. لا يلزم الشراء. لا تحتاج إلى شراء أي شيء للعب أو للفوز. الشراء لا يزيد فرصك.`,
+      `3. من يمكنه اللعب. مفتوحة للأشخاص في عمر ${A.ar} الموجودين في [المكان / العنوان]. لا يحق لموظفي المنظِّم وأفراد أسرهم الفوز. [أضف أي قيود أخرى.]`,
+      `4. طريقة اللعب. امسح رمز QR على الشاشة، واختر لقبًا، وأجب عن الأسئلة على هاتفك. الإجابات الصحيحة تمنح نقاطًا، والأسرع تمنح نقاطًا أكثر.`,
+      `5. كيف يُحدَّد الفائزون. الفائز أو الفائزون هم اللاعبون أصحاب أعلى النقاط في لوحة الصدارة عند انتهاء [الجولة / الأمسية / التاريخ والوقت]. يُحسم التعادل بـ [أبكر الإجابات الصحيحة / سؤال فاصل]. هذه لعبة مهارة لا حظ.`,
+      `6. الجائزة. ${v.prize}. غير قابلة للاستبدال نقدًا. [وضّح كيف ومتى تُستلم، مثل إظهار شاشة المكافأة على الهاتف للموظفين قبل موعد الإغلاق.]`,
+      `7. المواعيد. تُقام اللعبة من [تاريخ ووقت البدء] إلى [تاريخ ووقت الانتهاء].`,
+      `8. اللعب النظيف. يجوز للمنظِّم إزالة اللاعبين الذين يغشّون أو يستخدمون ألقابًا مسيئة أو يخالفون هذه القواعد.`,
+      `9. بياناتك. لا يُستخدم إلا لقبك وإجاباتك لتشغيل اللعبة وعرض لوحة الصدارة. راجع سياسة الخصوصية لدى PollSlide للتفاصيل.`,
+      `10. الأسئلة. تواصل مع المنظِّم على ${v.contact}.`],
+    hi: [`1. आयोजक। यह गेम ${v.org} ("आयोजक") द्वारा चलाया जाता है। संपर्क: ${v.contact}। LoopSlide / PollSlide केवल सॉफ़्टवेयर प्रदान करता है और आयोजक नहीं है।`,
+      `2. कोई ख़रीदारी ज़रूरी नहीं। खेलने या जीतने के लिए आपको कुछ भी ख़रीदने की ज़रूरत नहीं है। कुछ ख़रीदने से आपकी संभावना नहीं बढ़ती।`,
+      `3. कौन खेल सकता है। [स्थान / पता] पर मौजूद ${A.hi} के लोगों के लिए खुला है। आयोजक के कर्मचारी और उनके परिवार के सदस्य नहीं जीत सकते। [कोई अन्य सीमाएँ जोड़ें।]`,
+      `4. कैसे खेलें। स्क्रीन पर दिया QR कोड स्कैन करें, एक उपनाम चुनें और अपने फ़ोन पर सवालों के जवाब दें। सही जवाबों पर अंक मिलते हैं, और तेज़ जवाबों पर ज़्यादा अंक।`,
+      `5. विजेता कैसे तय होते हैं। [राउंड / शाम / तारीख़ और समय] ख़त्म होने पर लीडरबोर्ड पर सबसे ज़्यादा अंक वाले प्लेयर विजेता होते हैं। बराबरी होने पर [सबसे पहले दिए गए सही जवाब / टाई-ब्रेक सवाल] से फ़ैसला होता है। यह कौशल का खेल है, किस्मत का नहीं।`,
+      `6. इनाम। ${v.prize}। नकद में नहीं बदला जा सकता। [बताएँ कि इसे कैसे और कब लेना है, जैसे बंद होने से पहले स्टाफ़ को फ़ोन पर इनाम वाली स्क्रीन दिखाएँ।]`,
+      `7. तारीख़ें। गेम [शुरू होने की तारीख़ और समय] से [ख़त्म होने की तारीख़ और समय] तक चलता है।`,
+      `8. निष्पक्ष खेल। आयोजक उन प्लेयर्स को हटा सकता है जो धोखा देते हैं, आपत्तिजनक उपनाम इस्तेमाल करते हैं या इन नियमों को तोड़ते हैं।`,
+      `9. आपका डेटा। गेम चलाने और लीडरबोर्ड दिखाने के लिए सिर्फ़ आपका उपनाम और आपके जवाब इस्तेमाल होते हैं। विवरण के लिए PollSlide की गोपनीयता नीति देखें।`,
+      `10. सवाल। आयोजक से ${v.contact} पर संपर्क करें।`],
   };
   return T[lang] || T.en;
 }
 function rulesTemplate() {
   const c = cur.compliance, L = E.normalizeLoop(cur);
-  if (String(c.rulesText || '').trim() && !confirm('Replace what you have written with the template?')) return;
+  if (String(c.rulesText || '').trim() && !confirm(T('Replace what you have written with the template?'))) return;
   const org = c.organiser || '[Your business name]', contact = c.contact || '[contact email]';
   const prize = c.prize || (L.reward ? `${L.reward.text} (top ${L.reward.top})` : '[describe the prize]');
   const age = c.minAge ? `${c.minAge} or older` : '[minimum age, if any]';

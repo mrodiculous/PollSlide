@@ -240,10 +240,24 @@ console.log('\nLoopSlide speaks every language, in the house register');
   global.window = global; global.navigator = { language: 'en' };
   require(require('path').join(ROOT, 'loop-i18n.js'));
   const I = global.LoopI18n, D = I.dict;
-  const en = new Set(); ['es','de','fr','pt','it'].forEach(l => Object.keys(D[l]).forEach(k => en.add(k)));
-  const gaps = ['es','de','fr','pt','it'].flatMap(l => [...en].filter(k => !D[l][k]).map(k => l + ': ' + k));
-  ok('every string exists in all five languages', !gaps.length, gaps.slice(0, 5));
-  const ph = [...en].filter(k => /\{\w+\}/.test(k)).flatMap(k => ['es','de','fr','pt','it'].filter(l => (k.match(/\{\w+\}/g) || []).some(x => !D[l][k].includes(x))).map(l => l + ': ' + k));
+  /* All ten non-English languages, the same eleven PollSlide speaks (2026-10-11). LoopSlide
+     stopped at six while the rest of the app went to eleven — uniformity is the point. */
+  const ALL = I.LANGS.filter(l => l !== 'en');
+  ok('LoopSlide offers the same eleven languages as PollSlide', I.LANGS.join() === 'en,es,de,fr,pt,it,nl,ja,zh,ar,hi');
+  const en = new Set(); ALL.forEach(l => Object.keys(D[l]).forEach(k => en.add(k)));
+  const gaps = ALL.flatMap(l => [...en].filter(k => !D[l][k]).map(k => l + ': ' + k));
+  ok('every string exists in all ten languages', !gaps.length, gaps.slice(0, 5));
+  /* Every message the Studio, phones, TV and rules page pass through t()/toast()/confirm()
+     has a translation — a literal nobody added to the dictionary shows English everywhere. */
+  const fs2 = require('fs'), lits = new Set();
+  ['loop.html', 'play.html', 'screen.html', 'tv.html', 'rules.html'].forEach(f => {
+    const src = fs2.readFileSync(require('path').join(ROOT, f), 'utf8');
+    const re = /\b(?:T|t|toast|I\.t|tt)\(\s*(['"`])((?:\\.|(?!\1).)*?)\1/g; let m;
+    while ((m = re.exec(src))) { const k = m[2].replace(/\\'/g, "'"); if (/[A-Za-z]{2}/.test(k) && !/\$\{/.test(k)) lits.add(k); }
+  });
+  const untr = [...lits].filter(k => ALL.some(l => !D[l][k]));
+  ok('every message the LoopSlide pages show has all ten translations', !untr.length, untr.slice(0, 5));
+  const ph = [...en].filter(k => /\{\w+\}/.test(k)).flatMap(k => ALL.filter(l => (k.match(/\{\w+\}/g) || []).some(x => !D[l][k].includes(x))).map(l => l + ': ' + k));
   ok('every translation keeps its {placeholders}', !ph.length, ph.slice(0, 5));
   const vals = l => Object.values(D[l]).join(' | ');
   ok('German uses du, never Sie', !/\b[A-ZÄÖÜ][a-zäöüß]+en Sie\b|\bIhr(e|en|em)?\b/.test(vals('de')));
