@@ -1,0 +1,59 @@
+{
+  "_note": "One entry per scene, in order. Register: es tú, de du, fr tu, pt European (você implied, 3rd person), it tu. *_say = how the voice reads a web address.",
+  "cues": [
+    {
+      "es": "La incorporación es mucha charla y la esperanza de que algo quede. Así la conviertes en algo que puedes medir, en unos dos minutos.",
+      "de": "Einarbeitung ist viel Reden und die Hoffnung, dass etwas hängen bleibt. So machst du daraus etwas Messbares – in etwa zwei Minuten.",
+      "fr": "L’intégration, c’est beaucoup de paroles et l’espoir que ça reste. Voici comment en faire quelque chose de mesurable, en deux minutes environ.",
+      "pt": "A integração é muita conversa e a esperança de que fique alguma coisa. Veja como a transformar em algo que pode medir, em cerca de dois minutos.",
+      "it": "L’inserimento è tanta conversazione e la speranza che qualcosa resti. Ecco come trasformarlo in qualcosa di misurabile, in circa due minuti."
+    },
+    {
+      "es": "Crea un quiz y pídeselo a Polly. Describe tu manual o pégalo, y Polly escribe las preguntas en segundos. Léelas y corrige lo que haga falta antes de que nadie las vea.",
+      "de": "Erstelle ein Quiz und frag Polly. Beschreib dein Handbuch oder füge es ein, und Polly schreibt die Fragen in Sekunden. Lies sie und korrigiere alles, bevor jemand sie sieht.",
+      "fr": "Crée un quiz et demande à Polly. Décris ton guide d’accueil ou colle-le, et Polly écrit les questions en quelques secondes. Relis-les et corrige ce qu’il faut avant que quiconque les voie.",
+      "pt": "Crie um quiz e peça ao Polly. Descreva o seu manual ou cole-o, e o Polly escreve as perguntas em segundos. Leia-as e corrija o que for preciso antes de alguém as ver.",
+      "it": "Crea un quiz e chiedi a Polly. Descrivi il tuo manuale o incollalo, e Polly scrive le domande in pochi secondi. Leggile e correggi quello che serve prima che qualcuno le veda."
+    },
+    {
+      "es": "Añade a las nuevas incorporaciones como lista, una sola vez. En PollSlide se llama clase. A partir de ahí, cada respuesta se registra por persona.",
+      "de": "Leg die Neuen einmal als Liste an. In PollSlide heißt das Klasse. Ab dann wird jede Antwort pro Person festgehalten.",
+      "fr": "Ajoute les nouveaux arrivants sous forme de liste, une seule fois. Dans PollSlide, ça s’appelle une classe. Dès lors, chaque réponse est enregistrée par personne.",
+      "pt": "Adicione os novos colaboradores como lista, uma única vez. No PollSlide chama-se turma. A partir daí, cada resposta fica registada por pessoa.",
+      "it": "Aggiungi i nuovi arrivati come elenco, una volta sola. In PollSlide si chiama classe. Da lì in poi, ogni risposta viene registrata per persona."
+    },
+    {
+      "es": "Hazlo en vivo en su sesión de la primera semana, o envía el enlace para que respondan a su ritmo. En ambos casos ves quién ha respondido, por nombre.",
+      "de": "Mach es live in ihrer Sitzung in der ersten Woche, oder schick den Link, damit sie in ihrem Tempo antworten. So oder so siehst du, wer geantwortet hat – mit Namen.",
+      "fr": "Fais-le en direct pendant leur session de première semaine, ou envoie le lien pour qu’ils répondent à leur rythme. Dans les deux cas, tu vois qui a répondu, par nom.",
+      "pt": "Faça-o em direto na sessão da primeira semana, ou envie o link para responderem ao seu ritmo. Em ambos os casos, vê quem respondeu, pelo nome.",
+      "it": "Fallo dal vivo nella sessione della prima settimana, oppure invia il link perché rispondano con calma. In entrambi i casi vedi chi ha risposto, per nome."
+    },
+    {
+      "es": "El informe muestra a cada persona y su puntuación, así ves quién lo tiene claro y quién necesita una charla rápida. También puedes permitir un segundo intento.",
+      "de": "Der Bericht zeigt jede Person mit ihrer Punktzahl. So siehst du, wer es verstanden hat und wer ein kurzes Gespräch braucht. Du kannst auch einen zweiten Versuch erlauben.",
+      "fr": "Le rapport liste chaque personne et son score : tu vois qui a compris, et qui a besoin d’un petit échange. Tu peux aussi autoriser une deuxième tentative.",
+      "pt": "O relatório mostra cada pessoa e a sua pontuação, para ver quem percebeu e quem precisa de uma conversa rápida. Também pode permitir uma segunda tentativa.",
+      "it": "Il report elenca ogni persona e il suo punteggio, così vedi chi ha capito e chi ha bisogno di una breve chiacchierata. Puoi anche consentire un secondo tentativo."
+    },
+    {
+      "es": "Después, convierte la misma presentación en un set de estudio. La repetición espaciada vuelve a mostrar las tarjetas que cada persona sigue fallando.",
+      "de": "Mach danach aus derselben Präsentation ein Lernset. Verteilte Wiederholung bringt die Karten zurück, die jemand immer wieder verfehlt.",
+      "fr": "Ensuite, transforme la même présentation en paquet d’étude. La répétition espacée fait revenir les cartes que chacun rate encore.",
+      "pt": "Depois, transforme a mesma apresentação num conjunto de estudo. A repetição espaçada volta a mostrar os cartões que cada pessoa continua a falhar.",
+      "it": "Poi trasforma la stessa presentazione in un set di studio. La ripetizione dilazionata ripropone le carte che ciascuno continua a sbagliare."
+    },
+    {
+      "es": "Guarda la presentación en la biblioteca del equipo, para que cada responsable dé a cada grupo nuevo el mismo comienzo. Pruébalo gratis en app.pollslide.com.",
+      "es_say": "Guarda la presentación en la biblioteca del equipo, para que cada responsable dé a cada grupo nuevo el mismo comienzo. Pruébalo gratis en app punto pollslide punto com.",
+      "de": "Leg die Präsentation in die Team-Bibliothek, damit jede Führungskraft jeder neuen Gruppe den gleichen Start gibt. Probier es kostenlos aus: app.pollslide.com.",
+      "de_say": "Leg die Präsentation in die Team-Bibliothek, damit jede Führungskraft jeder neuen Gruppe den gleichen Start gibt. Probier es kostenlos aus: app punkt pollslide punkt com.",
+      "fr": "Garde la présentation dans la bibliothèque de l’équipe, pour que chaque manager donne à chaque nouveau groupe le même départ. Essaie-le gratuitement sur app.pollslide.com.",
+      "fr_say": "Garde la présentation dans la bibliothèque de l’équipe, pour que chaque manager donne à chaque nouveau groupe le même départ. Essaie-le gratuitement sur app point pollslide point com.",
+      "pt": "Guarde a apresentação na biblioteca da equipa, para que cada responsável dê a cada novo grupo o mesmo início. Experimente grátis em app.pollslide.com.",
+      "pt_say": "Guarde a apresentação na biblioteca da equipa, para que cada responsável dê a cada novo grupo o mesmo início. Experimente grátis em app ponto pollslide ponto com.",
+      "it": "Tieni la presentazione nella libreria del team, così ogni responsabile dà a ogni nuovo gruppo lo stesso inizio. Provalo gratis su app.pollslide.com.",
+      "it_say": "Tieni la presentazione nella libreria del team, così ogni responsabile dà a ogni nuovo gruppo lo stesso inizio. Provalo gratis su app punto pollslide punto com."
+    }
+  ]
+}

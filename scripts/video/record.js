@@ -51,7 +51,11 @@ if (CAPS && CAPS.length !== SCRIPT.scenes.length) { console.error('captions.json
 const sayOf = (s, i) => LANG === 'en' ? s.say : (CAPS[i][LANG + '_say'] || CAPS[i][LANG]);
 const textOf = (s, i) => LANG === 'en' ? s.say : CAPS[i][LANG];
 const WORK = path.join(os.tmpdir(), 'ps-video-' + OID); const OUT = path.join(HERE, 'out');
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+/* PS_CHROME: another Chrome/Chromium (e.g. a Linux sandbox doing a --dry run). */
+const CHROME = process.env.PS_CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+/* --dry: drive every scene and capture frames, but skip the macOS-only assembly. For checking a
+   new scene script end to end before recording it for real. Frames stay in the work folder. */
+const DRY = args.includes('--dry');
 const PORT = 8161, DBG = 9337;
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
@@ -171,6 +175,7 @@ async function cdpConnect() {
     fs.writeFileSync(path.join(OUT, ID + '.cues.json'), JSON.stringify(cues, null, 1));
   } else fs.writeFileSync(path.join(OUT, OID + '.vtt'), vtt);
 
+  if (DRY) { console.log('dry run — frames in', path.join(WORK, 'frames')); return; }
   // ── 3. assemble ──
   execFileSync('swift', [path.join(HERE, 'assemble.swift'), path.join(WORK, 'manifest.json')], { stdio: 'inherit' });
   execFileSync('python3', [path.join(HERE, 'make-preview.py'), path.join(WORK, 'manifest.json'), path.join(OUT, OID)], { stdio: 'inherit' });

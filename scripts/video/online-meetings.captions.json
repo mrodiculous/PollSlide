@@ -1,0 +1,71 @@
+{
+  "_note": "One entry per scene, in order. Register: es tú, de du, fr tu, pt European (você implied, 3rd person), it tu. *_say = how the voice reads a web address.",
+  "cues": [
+    {
+      "es": "Las reuniones en línea pierden a la gente rápido. Así mantienes viva tu reunión semanal en Zoom, Teams o Meet, en unos dos minutos.",
+      "de": "Online-Meetings verlieren Leute schnell. So hältst du dein Wochenmeeting in Zoom, Teams oder Meet lebendig – in etwa zwei Minuten.",
+      "fr": "Les réunions en ligne perdent vite les gens. Voici comment garder ta réunion hebdo vivante sur Zoom, Teams ou Meet, en deux minutes environ.",
+      "pt": "Nas reuniões online perde-se as pessoas depressa. Veja como manter viva a reunião semanal no Zoom, Teams ou Meet, em cerca de dois minutos.",
+      "it": "Nelle riunioni online le persone si perdono in fretta. Ecco come tenere viva la riunione settimanale su Zoom, Teams o Meet, in circa due minuti."
+    },
+    {
+      "es": "Esta es la presentación de nuestra reunión del lunes. La reutilizamos cada semana: una ronda de una palabra y una votación rápida sobre qué hacer después.",
+      "de": "Das ist unsere Präsentation fürs Montagsmeeting. Wir nutzen sie jede Woche: ein Ein-Wort-Check-in, dann eine schnelle Abstimmung, was als Nächstes kommt.",
+      "fr": "Voici la présentation de notre réunion du lundi. On la réutilise chaque semaine : un tour de table en un mot, puis un vote rapide sur la suite.",
+      "pt": "Esta é a apresentação da reunião de segunda-feira. Usamo-la todas as semanas: uma ronda de uma palavra e uma votação rápida sobre o que fazer a seguir.",
+      "it": "Questa è la presentazione della riunione del lunedì. La riusiamo ogni settimana: un giro di una parola, poi un voto veloce su cosa fare dopo."
+    },
+    {
+      "es": "Comparte tu pantalla en la llamada y pulsa Presentar. La gente escanea el código con el móvil o lo escribe en pollslide.com/join. Nada que instalar.",
+      "es_say": "Comparte tu pantalla en la llamada y pulsa Presentar. La gente escanea el código con el móvil o lo escribe en pollslide punto com barra join. Nada que instalar.",
+      "de": "Teile im Call deinen Bildschirm und klicke auf Präsentieren. Alle scannen den Code mit dem Handy oder tippen ihn auf pollslide.com/join ein. Nichts zu installieren.",
+      "de_say": "Teile im Call deinen Bildschirm und klicke auf Präsentieren. Alle scannen den Code mit dem Handy oder tippen ihn auf pollslide punkt com schrägstrich join ein. Nichts zu installieren.",
+      "fr": "Partage ton écran dans l’appel et clique sur Présenter. Chacun scanne le code avec son téléphone ou le tape sur pollslide.com/join. Rien à installer.",
+      "fr_say": "Partage ton écran dans l’appel et clique sur Présenter. Chacun scanne le code avec son téléphone ou le tape sur pollslide point com barre oblique join. Rien à installer.",
+      "pt": "Partilhe o ecrã na chamada e carregue em Apresentar. As pessoas leem o código com o telemóvel ou escrevem-no em pollslide.com/join. Nada para instalar.",
+      "pt_say": "Partilhe o ecrã na chamada e carregue em Apresentar. As pessoas leem o código com o telemóvel ou escrevem-no em pollslide ponto com barra join. Nada para instalar.",
+      "it": "Condividi lo schermo nella chiamata e premi Presenta. Le persone scansionano il codice con il telefono o lo digitano su pollslide.com/join. Niente da installare.",
+      "it_say": "Condividi lo schermo nella chiamata e premi Presenta. Le persone scansionano il codice con il telefono o lo digitano su pollslide punto com barra join. Niente da installare."
+    },
+    {
+      "es": "Empieza con una ronda de una palabra. Todos responden en el móvil y las palabras aparecen en la pantalla compartida según llegan.",
+      "de": "Starte mit einem Ein-Wort-Check-in. Alle antworten auf dem Handy, und die Wörter erscheinen auf dem geteilten Bildschirm, sobald sie eintreffen.",
+      "fr": "Commence par un tour de table en un mot. Chacun répond sur son téléphone, et les mots s’affichent sur l’écran partagé à mesure qu’ils arrivent.",
+      "pt": "Comece com uma ronda de uma palavra. Todos respondem no telemóvel, e as palavras aparecem no ecrã partilhado à medida que chegam.",
+      "it": "Inizia con un giro di una parola. Tutti rispondono dal telefono, e le parole compaiono sullo schermo condiviso man mano che arrivano."
+    },
+    {
+      "es": "En tu propia pantalla, AI Insights lee todas las respuestas y te da el ánimo y los temas en segundos. Aquí, la mayoría tuvo una buena semana y algunos van justos.",
+      "de": "Auf deinem eigenen Bildschirm liest AI Insights jede Antwort und zeigt dir in Sekunden Stimmung und Themen. Hier hatten die meisten eine gute Woche, und ein paar sind am Limit.",
+      "fr": "Sur ton propre écran, AI Insights lit chaque réponse et te donne l’humeur et les thèmes en quelques secondes. Ici, la plupart ont passé une bonne semaine, et quelques-uns sont sous pression.",
+      "pt": "No seu próprio ecrã, o AI Insights lê cada resposta e mostra o ambiente e os temas em segundos. Aqui, a maioria teve uma boa semana, e alguns estão sobrecarregados.",
+      "it": "Sul tuo schermo, AI Insights legge ogni risposta e ti mostra umore e temi in pochi secondi. Qui, quasi tutti hanno avuto una buona settimana, e qualcuno è sotto pressione."
+    },
+    {
+      "es": "Luego, una votación rápida. La sala se divide casi a partes iguales, así que pregunta al copiloto. Sugiere una pregunta de seguimiento que llega a lo que de verdad frena al equipo.",
+      "de": "Dann eine schnelle Abstimmung. Der Raum ist fast genau gespalten, also frag den Co-Pilot. Er schlägt eine Anschlussfrage vor, die zeigt, was das Team wirklich bremst.",
+      "fr": "Ensuite, un vote rapide. La salle se partage presque à égalité, alors demande au copilote. Il propose une question de suivi qui va au fond de ce qui bloque vraiment.",
+      "pt": "A seguir, uma votação rápida. A sala divide-se quase ao meio, por isso pergunte ao copiloto. Ele sugere uma pergunta de seguimento que vai ao que realmente trava a equipa.",
+      "it": "Poi un voto veloce. La sala si divide quasi a metà, quindi chiedi al copilota. Suggerisce una domanda di approfondimento che arriva a cosa frena davvero il team."
+    },
+    {
+      "es": "Deja abiertas las preguntas del público. Llegan durante la reunión, la gente vota las que le importan y las más pedidas suben arriba.",
+      "de": "Lass die Publikumsfragen offen. Sie kommen während des Meetings, alle stimmen für die, die ihnen wichtig sind, und die gefragtesten wandern nach oben.",
+      "fr": "Laisse les questions du public ouvertes. Elles arrivent pendant la réunion, chacun vote pour celles qui comptent, et les plus demandées remontent.",
+      "pt": "Deixe as perguntas do público abertas. Chegam durante a reunião, as pessoas votam nas que lhes importam, e as mais pedidas sobem ao topo.",
+      "it": "Tieni aperte le domande del pubblico. Arrivano durante la riunione, le persone votano quelle che contano, e le più richieste salgono in cima."
+    },
+    {
+      "es": "Al terminar, envía a todos el enlace del resumen y guarda la presentación en la biblioteca del equipo para la próxima semana. Pruébalo en tu próxima reunión: app.pollslide.com.",
+      "es_say": "Al terminar, envía a todos el enlace del resumen y guarda la presentación en la biblioteca del equipo para la próxima semana. Pruébalo en tu próxima reunión: app punto pollslide punto com.",
+      "de": "Schick danach allen den Link zum Rückblick und leg die Präsentation für nächste Woche in die Team-Bibliothek. Probier es im nächsten Meeting aus: app.pollslide.com.",
+      "de_say": "Schick danach allen den Link zum Rückblick und leg die Präsentation für nächste Woche in die Team-Bibliothek. Probier es im nächsten Meeting aus: app punkt pollslide punkt com.",
+      "fr": "Après, envoie à tous le lien du récap, et garde la présentation dans la bibliothèque de l’équipe pour la semaine prochaine. Essaie-le à ta prochaine réunion : app.pollslide.com.",
+      "fr_say": "Après, envoie à tous le lien du récap, et garde la présentation dans la bibliothèque de l’équipe pour la semaine prochaine. Essaie-le à ta prochaine réunion : app point pollslide point com.",
+      "pt": "No fim, envie a todos o link do resumo e guarde a apresentação na biblioteca da equipa para a próxima semana. Experimente na próxima reunião: app.pollslide.com.",
+      "pt_say": "No fim, envie a todos o link do resumo e guarde a apresentação na biblioteca da equipa para a próxima semana. Experimente na próxima reunião: app ponto pollslide ponto com.",
+      "it": "Dopo, invia a tutti il link del riepilogo e tieni la presentazione nella libreria del team per la prossima settimana. Provalo alla tua prossima riunione: app.pollslide.com.",
+      "it_say": "Dopo, invia a tutti il link del riepilogo e tieni la presentazione nella libreria del team per la prossima settimana. Provalo alla tua prossima riunione: app punto pollslide punto com."
+    }
+  ]
+}

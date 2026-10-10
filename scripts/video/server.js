@@ -21,11 +21,14 @@ const MEMBER = { uid: 'demoMember02', email: 'jamie@example.com', displayName: '
 // Support staff, for filming and testing Admin → Accounts (?as=admin).
 const ADMINU = { uid: 'demoAdmin00', email: 'help@pollslide.com', displayName: 'Support', createdAt: Date.now() };
 const USERS = { owner: USER, member: MEMBER, admin: ADMINU };
+/* Demo accounts have already accepted the Terms; otherwise the real sign-up consent gate opens
+   mid-video (it checks users/<uid>/signupConsent). */
+const CONSENT = { age16: true, termsAndPrivacy: true, at: Date.now(), via: 'stage' };
 function seed() {
   return { users: {
-    [USER.uid]: { email: USER.email, name: 'Alex', displayName: 'Alex', tier: 'free', createdAt: USER.createdAt, lang: 'en', onboarded: true },
-    [MEMBER.uid]: { email: MEMBER.email, name: 'Jamie', displayName: 'Jamie', tier: 'free', createdAt: MEMBER.createdAt, lang: 'en', onboarded: true },
-    [ADMINU.uid]: { email: ADMINU.email, name: 'Support', tier: 'free', createdAt: ADMINU.createdAt } } };
+    [USER.uid]: { email: USER.email, name: 'Alex', displayName: 'Alex', tier: 'free', createdAt: USER.createdAt, lang: 'en', onboarded: true, signupConsent: CONSENT },
+    [MEMBER.uid]: { email: MEMBER.email, name: 'Jamie', displayName: 'Jamie', tier: 'free', createdAt: MEMBER.createdAt, lang: 'en', onboarded: true, signupConsent: CONSENT },
+    [ADMINU.uid]: { email: ADMINU.email, name: 'Support', tier: 'free', createdAt: ADMINU.createdAt, signupConsent: CONSENT } } };
 }
 let TREE = seed();
 const split = (p) => String(p || '').split('/').filter(Boolean);
@@ -42,7 +45,19 @@ function broadcast(msg) { const s = 'data: ' + JSON.stringify(msg) + '\n\n'; for
 
 // ── canned APIs ───────────────────────────────────────────────────────────────
 const DEMO = Starters.byId ? Starters.byId('demo-quiz') : (Starters.STARTERS || [])[0];
+/* Team videos (2026-10-10): an onboarding quiz "from the handbook" of a made-up company. Stage only —
+   production Polly writes from whatever the presenter pastes. Facts are fictional on purpose. */
+const ONBOARD = [
+  { text: 'How many days do you have to submit an expense claim?', options: ['7 days', '14 days', '30 days', '60 days'], correct: 2 },
+  { text: 'Your laptop is lost or stolen. Who do you contact first?', options: ['Your manager', 'The IT help desk', 'HR', 'Facilities'], correct: 1 },
+  { text: 'When is the weekly team planning meeting?', options: ['Monday 10:00', 'Tuesday 14:00', 'Thursday 9:30', 'Friday 16:00'], correct: 0 },
+  { text: 'What do you need before sharing a customer file outside the company?', options: ['Nothing', 'A colleague\'s OK', 'Written approval from your manager', 'A new file name'], correct: 2 },
+  { text: 'How many days of paid leave do new starters get in their first year?', options: ['20', '25', '28', '30'], correct: 1 },
+];
 function pollyAnswer(body) {
+  if (/handbook|onboard|new starter/i.test(String(body.topic || '') + ' ' + String(body.source || ''))) {
+    return { source: 'cloud', questions: ONBOARD.slice(0, Math.max(1, Number(body.count) || 5)).map(q => ({ text: q.text, options: q.options, correctAnswers: [q.correct], kind: 'single' })) };
+  }
   const have = new Set((body.avoid || []).map(a => String(a.text || '').toLowerCase().trim()));
   const qs = DEMO.questions.filter(q => !have.has(q.text.toLowerCase())).slice(0, Math.max(1, Number(body.count) || 4));
   return { source: 'cloud', questions: qs.map(q => ({ text: q.text, options: q.options.map(o => o.text), correctAnswers: [q.correctAnswer], kind: 'single' })) };
@@ -65,6 +80,31 @@ function gifAnswer(body) {
   const slot = gifSlot(body.q); const m = slot && Media[slot];
   const list = m ? [m, ...(m.alts || [])] : [Media.q0o2, Media.q3];   // an unknown term still gets something safe
   return { attribution: 'Powered by GIPHY', provider: 'giphy', results: list.map(g => ({ url: g.url, still: g.still, alt: g.alt, id: g.id, source: 'giphy', width: 200, height: 200 })) };
+}
+
+function insightsAnswer(body) {
+  const texts = (body.texts || []).map(t => String(t || '').trim()).filter(Boolean);
+  const GOOD = /product|great|good|focus|calm|win|happy|smooth|energ/i, HARD = /busy|hectic|tired|stretch|swamp|chaos|long|stress/i;
+  const good = texts.filter(t => GOOD.test(t)), hard = texts.filter(t => HARD.test(t)), other = texts.filter(t => !GOOD.test(t) && !HARD.test(t));
+  const pct = (n) => texts.length ? Math.round(n / texts.length * 100) : 0;
+  const themes = [];
+  if (good.length) themes.push({ label: 'A productive week', count: good.length, sentiment: 'positive', example: good[0] });
+  if (hard.length) themes.push({ label: 'Stretched thin', count: hard.length, sentiment: 'negative', example: hard[0] });
+  if (other.length) themes.push({ label: 'Mixed', count: other.length, sentiment: 'neutral', example: other[0] });
+  themes.sort((a, b) => b.count - a.count);
+  const pos = pct(good.length), neg = pct(hard.length);
+  return { source: 'cloud', count: texts.length,
+    summary: hard.length >= good.length ? 'Most of the team had a busy week, and a few are feeling stretched. Worth asking what would help.'
+                                        : 'Most of the team had a productive week, though a few are feeling stretched.',
+    sentiment: { positive: pos, negative: neg, neutral: Math.max(0, 100 - pos - neg) }, themes };
+}
+function copilotAnswer() {
+  return { source: 'cloud', suggestions: [
+    { text: 'What would help most to get the release out on time?', options: ['More time for testing', 'Fewer meetings this sprint', 'Clearer priorities', 'Help from another team'], answerIndex: null,
+      why: 'The room split almost evenly between the two projects. Ask what is really holding people back.' },
+    { text: 'How confident are you that we hit the release date?', options: ['Very confident', 'Fairly confident', 'Not sure', 'Worried'], answerIndex: null,
+      why: 'A quick confidence check tells you whether the split is about priorities or about risk.' },
+  ] };
 }
 
 // ── /api/account on the stage: the REAL lib/account.js against the stage database ──
@@ -157,6 +197,10 @@ http.createServer(async (req, res) => {
       const body = req.method === 'POST' ? JSON.parse((await readBody(req)).toString() || '{}') : {};
       if (p === '/api/polly') return setTimeout(() => json(res, 200, pollyAnswer(body)), 1800);   // Polly takes a moment
       if (p === '/api/gif-search') return setTimeout(() => json(res, 200, gifAnswer(body)), 120);
+      /* AI Insights and the live co-pilot on the stage: worked out from the answers actually on
+         screen (counted, not invented), so a video shows numbers that match the room. */
+      if (p === '/api/insights') return setTimeout(() => json(res, 200, insightsAnswer(body)), 1600);
+      if (p === '/api/copilot') return setTimeout(() => json(res, 200, copilotAnswer(body)), 1600);
       // The app falls back to the same database writes the real /api/team makes when the
       // endpoint is unavailable — exactly what a video needs, with nothing to reimplement.
       if (p === '/api/team') {
