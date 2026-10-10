@@ -46,6 +46,11 @@ ok('Portuguese is European (no você, ecrã/telemóvel not tela/celular)', !/\b(
 const MAC = path.resolve(os.homedir(), 'Downloads', 'PollSlide', 'xCode App Companion Pollslide', 'PollSlideCompanion', 'PollSlideCompanion');
 if (fs.existsSync(path.join(MAC, 'L10n.swift'))) {
   console.log('\nMac app (1.3.5)');
+  /* The Mac APP's own menus are in six languages (English + these five); the hosted companion
+     PAGE is in eleven. Everything in this block compares against the app's Swift source, so
+     it must use the app's list — with the page's ten, it demanded Dutch/Japanese/… menu text
+     the app has never had. (Only this Mac has the Swift source, so the cloud run skipped it.) */
+  const LANGS = ['es', 'de', 'fr', 'pt', 'it'];
   const L = fs.readFileSync(path.join(MAC, 'L10n.swift'), 'utf8');
   const A = fs.readFileSync(path.join(MAC, 'PollSlideCompanionApp.swift'), 'utf8');
   const P = fs.readFileSync(path.join(MAC, 'PairingView.swift'), 'utf8');
