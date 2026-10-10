@@ -3491,6 +3491,29 @@ function deckOwnerUid(id) {
   return (c && c.ownerUid) ? c.ownerUid : userId;
 }
 function deckPath(id) { return `users/${deckOwnerUid(id)}/presentations/${id}`; }
+/* Session ownership (2026-10-10). quiz_builder/<code> is what every phone, big screen and add-in
+   reads, and it used to be writable by ANY signed-in account — including the anonymous one the
+   Mac companion uses — so anyone holding a room code could rewrite that session's questions.
+   Each code now carries owner (+ deck, so a collaborator's edit grant still counts), and the
+   database rule only lets the owner, an editor of that deck, or support write there.
+   The owner stamps it here, once per code, before the first write: on sign-in for every deck,
+   and right before a new code gets its questions. A code already stamped is left alone. */
+const _qbClaims = {};
+function ensureClaim(code, presId) {
+  if (!code || !userId) return Promise.resolve();
+  if (_qbClaims[code]) return _qbClaims[code];
+  _qbClaims[code] = db.ref(`quiz_builder/${code}/owner`).get().then(snap => {
+    if (snap.exists()) return;
+    const owner = (presId && presentations[presId]) ? deckOwnerUid(presId) : userId;
+    if (owner !== userId) return;                      // a collaborator never claims someone else's code
+    return db.ref(`quiz_builder/${code}`).update({ owner: userId, deck: presId || null });
+  }).catch(() => { delete _qbClaims[code]; });
+  return _qbClaims[code];
+}
+function claimAllMyCodes() {
+  return Promise.all(Object.keys(presentations).filter(id => isDeckOwner(id) && presentations[id] && presentations[id].sessionCode)
+    .map(id => ensureClaim(presentations[id].sessionCode, id)));
+}
 function isCollabDeck(id) { return !!collabDecks[id]; }
 function isDeckOwner(id) { return !isCollabDeck(id); }
 
@@ -3537,6 +3560,7 @@ async function loadPresentations() {
   await loadCollabDecks();   // decks other people let me edit
   await loadMyGrants();      // ...and which of mine other people can edit
 
+  claimAllMyCodes();   // stamp ownership on every deck's session code (no-op once done)
   // Restore last active — and land on its product tab so it's visible in the list.
   const lastActive = localStorage.getItem('ql_active_pres');
   if (lastActive && presentations[lastActive]) {
@@ -3587,6 +3611,7 @@ async function saveCurrentPresentation() {
     // ALSO mirror questions to quiz_builder/sessionCode so participants can find them by QR.
     // Publish productType too so the participant page knows whether to grade (quiz) or not.
     if (pres.sessionCode && pres.questions) {
+      await ensureClaim(pres.sessionCode, activePresId);
       await db.ref(`quiz_builder/${pres.sessionCode}/questions`).set(pres.questions);
       await db.ref(`quiz_builder/${pres.sessionCode}/homes`).set(PSQid.homesMap(pres.questions));
       /* A2 — order changed (a move, a delete, an undo): now that phones can see the new
@@ -3747,7 +3772,7 @@ function selectPresentation(id) {
   // The saved POSITION goes stale if the deck was reordered elsewhere; the id cannot.
   resyncLiveIdx();
   // Mirror questions to quiz_builder path so participants can find them
-  if (pres.sessionCode && questions.length > 0) {
+  if (pres.sessionCode && questions.length > 0) ensureClaim(pres.sessionCode, id).then(() => {
     db.ref(`quiz_builder/${pres.sessionCode}/questions`).set(questions).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/homes`).set(PSQid.homesMap(questions)).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/productType`).set(presType(pres)).catch(()=>{});
@@ -3755,7 +3780,7 @@ function selectPresentation(id) {
     db.ref(`quiz_builder/${pres.sessionCode}/focusTrack`).set(!!pres.focusTrack).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/madeWithOff`).set(madeWithOff() || null).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/retakes`).set(pres.retakes ? PSRetakes.retakePolicy(pres.retakes) : null).catch(()=>{});
-  }
+  });
 
   // Update topbar
   document.getElementById('activePres').innerHTML = `<strong>${pres.name}</strong> <span style="font-size:11px;color:var(--muted);margin-left:4px;">· ${pres.sessionCode}</span>`;
@@ -3954,6 +3979,7 @@ async function doDuplicatePresentation() {
   await db.ref(`users/${userId}/presentations/${newId}`).set(presentations[newId]);
 
   // Mirror questions to quiz_builder so participants can find them
+  await ensureClaim(newCode, newId);
   await db.ref(`quiz_builder/${newCode}/questions`).set(questions);
   await db.ref(`quiz_builder/${newCode}/productType`).set(presType(source));
 
@@ -4024,6 +4050,7 @@ async function makeStudySet(srcId) {
     createdAt: Date.now(), productType: 'study', questions: cards
   };
   await db.ref(deckPath(id)).set(presentations[id]);
+  await ensureClaim(code, id);
   await db.ref(`quiz_builder/${code}/questions`).set(cards);
   await db.ref(`quiz_builder/${code}/productType`).set('study');
 
@@ -4070,6 +4097,7 @@ async function copyPresToProduct(srcId, targetType) {
   const base = src.name.replace(/ — (Poll|Survey|Quiz|Study)$/, '');
   presentations[id] = { id, name: base + ' — ' + PRODUCTS[targetType].name.replace('Slide',''), sessionCode: code, createdAt: Date.now(), productType: targetType, questions: newQs };
   await db.ref(deckPath(id)).set(presentations[id]);
+  await ensureClaim(code);
   await db.ref(`quiz_builder/${code}/questions`).set(newQs);
   await db.ref(`quiz_builder/${code}/productType`).set(targetType);
   activeProduct = targetType;
@@ -4135,6 +4163,7 @@ async function doCopyQuestion(targetPresId) {
 
   const code = presentations[targetPresId].sessionCode;
   await db.ref(deckPath(targetPresId) + '/questions').set(targetQs);
+  await ensureClaim(code, targetPresId);
   await db.ref(`quiz_builder/${code}/questions`).set(targetQs);
   await db.ref(`quiz_builder/${code}/homes`).set(PSQid.homesMap(targetQs));
   await db.ref(`quiz_builder/${code}/productType`).set(presType(presentations[targetPresId]));
@@ -5428,7 +5457,7 @@ async function clearDeckGifs(deckId) {
 async function publishDeckGifs(deckId) {
   const p = presentations[deckId];
   if (!p || !p.sessionCode) return;
-  try { await db.ref(`quiz_builder/${p.sessionCode}/questions`).set(p.questions || []); } catch (e) {}
+  try { await ensureClaim(p.sessionCode); await db.ref(`quiz_builder/${p.sessionCode}/questions`).set(p.questions || []); } catch (e) {}
 }
 
 /* Second attempts, per deck. Two choices, and they are genuinely separate: whether a
@@ -6278,7 +6307,8 @@ async function doReset() {
     await db.ref(`sessions/${code}/responses`).remove();
     await clearRevealState(code);
     if (questions.length > 0) {
-      await db.ref(`quiz_builder/${code}/questions`).set(questions);
+      await ensureClaim(code, activePresId);
+  await db.ref(`quiz_builder/${code}/questions`).set(questions);
     }
     clearRightPanel();
     renderQList();
@@ -6325,7 +6355,8 @@ async function doResetPres() {
     await db.ref(`sessions/${code}/qa`).remove(); // clear audience Q&A for the next event too
     await clearRevealState(code);
     if (qs.length > 0) {
-      await db.ref(`quiz_builder/${code}/questions`).set(qs);
+      await ensureClaim(code);
+  await db.ref(`quiz_builder/${code}/questions`).set(qs);
     }
 
     // Step 3: Now update UI — Firebase is already empty so re-attaching listeners is safe

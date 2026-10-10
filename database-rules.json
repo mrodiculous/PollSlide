@@ -76,7 +76,13 @@
     "quiz_builder": {
       "$sessionCode": {
         ".read": true,
-        ".write": "auth != null"
+        ".write": "auth != null && auth.provider !== 'anonymous' && ((!data.child('owner').exists() && newData.child('owner').val() === auth.uid) || data.child('owner').val() === auth.uid || (data.child('owner').exists() && data.child('deck').exists() && root.child('deckGrants').child(data.child('owner').val() + '').child(data.child('deck').val() + '').child(auth.uid).val() === 'edit') || auth.token.email === 'help@pollslide.com')",
+        "owner": {
+          ".validate": "newData.isString() && (!data.exists() || data.val() === newData.val() || auth.token.email === 'help@pollslide.com')"
+        },
+        "deck": {
+          ".validate": "newData.isString() && newData.val().length <= 80"
+        }
       }
     },
     "sessions": {

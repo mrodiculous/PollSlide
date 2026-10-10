@@ -1789,6 +1789,10 @@ async function publishDeck(){
              noTranslate: !!s.question.noTranslate }; });
   try{
     if(questions.length){
+      /* Session ownership (2026-10-10): stamp owner once, before the first write — the database
+         only lets a code's owner (or an editor of its deck) write its questions. */
+      const _u=fbAuth&&fbAuth.currentUser;
+      if(_u&&!_u.isAnonymous){ const _o=await fbDb.ref('quiz_builder/'+code+'/owner').get(); if(!_o.exists()) await fbDb.ref('quiz_builder/'+code).update({owner:_u.uid}); }
       await fbDb.ref('quiz_builder/'+code+'/questions').set(questions);
       await fbDb.ref('quiz_builder/'+code+'/productType').set(live[0].kind==='study'?'study':live[0].kind);
       await fbDb.ref('quiz_builder/'+code+'/language').set(LANG);
