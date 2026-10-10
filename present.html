@@ -22,7 +22,7 @@
 -->
 <link href="/fonts/fonts.css?v=9f799e41" rel="stylesheet">
 <script src="/errors.js?v=25c25f5f"></script>
-<script src="/ui-lang.js?v=cb53c73d"></script>
+<script src="/ui-lang.js?v=3540b368"></script>
 <script src="/ui-tr.js?v=3f24378f"></script>
 <script src="/qid.js?v=f6f81595"></script>
 <script src="/present-display.js?v=b01c9c51"></script>
@@ -251,6 +251,15 @@
   .live .lq{font-family:var(--theme-font);font-weight:800;font-size:calc(5.4cqw * var(--q-scale,1));color:var(--slide-text,#fff);line-height:1.12;margin-bottom:1cqw;}
   .live .tag{font-family:'DM Sans',sans-serif;font-weight:700;font-size:1.6cqw;letter-spacing:.08em;color:var(--muted);margin-bottom:2cqw;}
   .live .tag.rev{color:var(--accent3);}
+  /* Live: a green dot that blinks, so the room (and you) can see answers are open. 2026-10-10 */
+  .live .tag.on{color:#43e97b;}
+  .live .tag .ldot{display:inline-block;width:1.15cqw;height:1.15cqw;border-radius:50%;background:#43e97b;box-shadow:0 0 1.2cqw #43e97b;margin-right:.8cqw;vertical-align:.05em;animation:pLive 1.2s ease-in-out infinite;}
+  @keyframes pLive{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.25;transform:scale(1.35)}}
+  /* Reveal: the right answer gets a green frame and glow, and pops once — on every chart style. */
+  .p-correct{border-radius:1.4cqw;background:rgba(67,233,123,.12);box-shadow:0 0 0 .3cqw #43e97b,0 0 2.6cqw rgba(67,233,123,.5);animation:pReveal .7s cubic-bezier(.2,.9,.3,1.3) both;}
+  .bar.p-correct{padding:.9cqw 1.3cqw;margin-left:-1.3cqw;margin-right:-1.3cqw;}
+  @keyframes pReveal{0%{transform:scale(.96);box-shadow:0 0 0 0 rgba(67,233,123,0)}60%{transform:scale(1.045)}100%{transform:scale(1.02)}}
+  @media (prefers-reduced-motion: reduce){ .live .tag .ldot,.p-correct{animation:none;} }
   .bar{margin-bottom:calc(1.7cqw * var(--r-scale,1));}
   .bar-top{display:flex;justify-content:space-between;font-family:'DM Sans',sans-serif;font-weight:600;font-size:calc(2.2cqw * var(--r-scale,1));margin-bottom:.6cqw;}
   .bar-track{height:calc(1.7cqw * var(--r-scale,1));background:rgba(255,255,255,.1);border-radius:100px;overflow:hidden;}
@@ -1445,7 +1454,7 @@ function _txt(r){ let a=r.answer; try{const v=JSON.parse(a);a=(typeof v==='strin
 // At reveal the wrong options step back (dim + desaturate) so the correct one carries
 // the screen. A green fill alone can't do it — green is also a normal palette colour.
 function renderBars(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q),hasC=cor.length>0; return (q.options||[]).map((o,i)=>{const p=tot?Math.round(c[i]/tot*100):0,sc=_revealed&&cor.includes(i),wr=_revealed&&hasC&&!cor.includes(i);
-  return `<div class="bar" style="transition:opacity .4s,filter .4s,transform .4s;${wr?'opacity:0.28;filter:grayscale(0.9);':''}${sc?'transform:scale(1.02);':''}"><div class="bar-top"><span>${LET[i]}. ${rich(o.text||'')}${sc?' ✓':''}</span><span>${c[i]} (${p}%)</span></div><div class="bar-track"><div class="bar-fill ${sc?'correct':''}" style="width:${p}%"></div></div></div>`;}).join(''); }
+  return `<div class="bar${sc?' p-correct':''}" style="transition:opacity .4s,filter .4s,transform .4s;${wr?'opacity:0.28;filter:grayscale(0.9);':''}"><div class="bar-top"><span>${LET[i]}. ${rich(o.text||'')}${sc?' ✓':''}</span><span>${c[i]} (${p}%)</span></div><div class="bar-track"><div class="bar-fill ${sc?'correct':''}" style="width:${p}%"></div></div></div>`;}).join(''); }
 function renderRating(q,r){ const m=q.ratingMax||5,tot=r.length,c={}; for(let i=1;i<=m;i++)c[i]=0; r.forEach(x=>{try{const v=JSON.parse(x.answer);if(v&&c[v]!=null)c[v]++;}catch(e){}}); const avg=tot?(Object.entries(c).reduce((s,[k,v])=>s+(+k*v),0)/tot).toFixed(1):'—';
   return `<div class="metric">★ ${avg} <span>${trf('avg of {n}', { n: tot })}</span></div>`+Object.entries(c).map(([v,n])=>{const p=tot?Math.round(n/tot*100):0;return `<div class="bar"><div class="bar-top"><span>★ ${v}</span><span>${n} (${p}%)</span></div><div class="bar-track"><div class="bar-fill" style="width:${p}%"></div></div></div>`;}).join(''); }
 function renderFree(q,r){ if(q.displayMode==='word_cloud')return renderWC(q,r); const it=r.map(_txt).filter(a=>a&&a!=='__none__'); if(!it.length)return `<div style="color:var(--muted)">${t('present.waiting')}</div>`;
@@ -1462,14 +1471,16 @@ function renderDonut(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q); const
   const segs=(q.options||[]).map((o,i)=>{ const len=(tot?c[i]/tot:0)*C; const col=(_revealed&&cor.includes(i))?'#43e97b':_PAL[i%_PAL.length];
     const s=`<circle r="${R}" cx="60" cy="60" fill="none" stroke="${col}" stroke-width="16" stroke-dasharray="${len.toFixed(2)} ${(C-len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 60 60)"></circle>`; off+=len; return s; }).join('');
   const legend=(q.options||[]).map((o,i)=>{ const pct=tot?Math.round(c[i]/tot*100):0; const col=(_revealed&&cor.includes(i))?'#43e97b':_PAL[i%_PAL.length];
-    return `<div style="display:flex;align-items:center;gap:1cqw;font-size:2cqw;margin-bottom:.9cqw;"><span style="width:1.5cqw;height:1.5cqw;border-radius:.4cqw;background:${col};flex-shrink:0;"></span><span style="flex:1;">${LET[i]}. ${rich(o.text||'')}</span><span>${c[i]} (${pct}%)</span></div>`; }).join('');
+    const ok=_revealed&&cor.includes(i);
+    return `<div class="${ok?'p-correct':''}" style="display:flex;align-items:center;gap:1cqw;font-size:2cqw;margin-bottom:.9cqw;${ok?'padding:.6cqw 1cqw;':''}${_revealed&&cor.length&&!ok?'opacity:.35;':''}"><span style="width:1.5cqw;height:1.5cqw;border-radius:.4cqw;background:${col};flex-shrink:0;"></span><span style="flex:1;">${LET[i]}. ${rich(o.text||'')}${ok?' ✓':''}</span><span>${c[i]} (${pct}%)</span></div>`; }).join('');
   return `<div style="display:flex;gap:3.4cqw;align-items:center;flex-wrap:wrap;"><svg viewBox="0 0 120 120" style="flex-shrink:0;width:24cqw;height:24cqw;">${segs}<text x="60" y="67" text-anchor="middle" fill="#fff" font-size="22" font-family="Syne" font-weight="800">${tot}</text></svg><div style="flex:1;min-width:26cqw;">${legend}</div></div>`; }
 function renderColumn(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q); const mx=Math.max(1,...c);
   return `<div style="display:flex;gap:2cqw;align-items:flex-end;height:30cqw;padding-top:2.6cqw;">`+(q.options||[]).map((o,i)=>{ const h=Math.round(c[i]/mx*100),pct=tot?Math.round(c[i]/tot*100):0,col=(_revealed&&cor.includes(i))?'#43e97b':_PAL[i%_PAL.length];
-    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;"><div style="font-weight:700;font-size:1.9cqw;margin-bottom:.7cqw;">${pct}%</div><div style="width:68%;height:${h}%;min-height:.5cqw;background:${col};border-radius:1cqw 1cqw 0 0;transition:height .5s;"></div><div style="margin-top:1cqw;font-weight:600;font-size:1.8cqw;text-align:center;">${LET[i]}<div style="color:var(--muted);font-size:.8em;">${esc((o.text||'').slice(0,16))}</div></div></div>`; }).join('')+`</div>`; }
+    const ok=_revealed&&cor.includes(i);
+    return `<div class="${ok?'p-correct':''}" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;padding:.6cqw;${_revealed&&cor.length&&!ok?'opacity:.35;':''}"><div style="font-weight:700;font-size:1.9cqw;margin-bottom:.7cqw;">${pct}%</div><div style="width:68%;height:${h}%;min-height:.5cqw;background:${col};border-radius:1cqw 1cqw 0 0;transition:height .5s;"></div><div style="margin-top:1cqw;font-weight:600;font-size:1.8cqw;text-align:center;">${LET[i]}<div style="color:var(--muted);font-size:.8em;">${esc((o.text||'').slice(0,16))}</div></div></div>`; }).join('')+`</div>`; }
 function renderBig(q,r){ const tot=r.length,c=_counts(q,r),cor=_corr(q);
   return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(18cqw,1fr));gap:2.4cqw;">`+(q.options||[]).map((o,i)=>{ const pct=tot?Math.round(c[i]/tot*100):0,ok=_revealed&&cor.includes(i);
-    return `<div><div style="font-family:var(--theme-font);font-weight:800;font-size:7cqw;color:${ok?'#43e97b':'var(--accent)'};line-height:1;">${c[i]}</div><div style="font-weight:600;font-size:2.1cqw;margin-top:.7cqw;">${LET[i]}. ${rich(o.text||'')}${ok?' ✓':''}</div><div style="color:var(--muted);font-size:1.6cqw;">${pct}%</div></div>`; }).join('')+`</div>`; }
+    return `<div class="${ok?'p-correct':''}" style="padding:1cqw 1.3cqw;${_revealed&&cor.length&&!ok?'opacity:.35;':''}"><div style="font-family:var(--theme-font);font-weight:800;font-size:7cqw;color:${ok?'#43e97b':'var(--accent)'};line-height:1;">${c[i]}</div><div style="font-weight:600;font-size:2.1cqw;margin-top:.7cqw;">${LET[i]}. ${rich(o.text||'')}${ok?' ✓':''}</div><div style="color:var(--muted);font-size:1.6cqw;">${pct}%</div></div>`; }).join('')+`</div>`; }
 function renderMC(q,r){ switch(q.displayMode){ case 'donut':return renderDonut(q,r); case 'column':return renderColumn(q,r); case 'bignum':return renderBig(q,r); case 'wordcloud':return renderWC(q,r); default:return renderBars(q,r); } }
 const RESULT_RENDERERS={ multiple_choice:renderMC, multiple_choice_multi:renderMC, number:renderMC, rating:renderRating, free_text:renderFree, word_cloud:renderWC, ranking:renderRank, nps:renderNps };
 function buildResult(q,r){ return (RESULT_RENDERERS[q.type]||renderBars)(q,r); }
@@ -1609,7 +1620,7 @@ function paintLive(s){ const st=document.getElementById('pStage'); st.querySelec
   applySizes(st, s);
   const q=s.question, r=respFor(s), tot=r.length; const node=document.createElement('div'); node.innerHTML=`
     <div class="respc">${tot?t('present.responses',{n:tot}):t('present.waiting')}</div>
-    <div class="slide-inner" style="font-family:var(--theme-font);"><div class="fit"><div class="live"><div class="tag ${_revealed?'rev':''}">${_revealed?t('present.revealed'):t('present.live')}</div>
+    <div class="slide-inner" style="font-family:var(--theme-font);"><div class="fit"><div class="live"><div class="tag ${_revealed?'rev':'on'}">${_revealed?t('present.revealed'):'<span class="ldot"></span>'+esc(String(t('present.live')).replace(/^●\s*/,''))}</div>
       <div class="lq">${rich(q.text||'')}</div>${buildResult(q,r)}</div></div></div>
     ${qrPresent(s)}`;
   while(node.firstChild) st.insertBefore(node.firstChild, st.querySelector('.p-logo'));

@@ -10,7 +10,7 @@
 <script src="/errors.js?v=25c25f5f"></script>
 <script src="/qid.js?v=f6f81595"></script>
 <script src="/present-display.js?v=b01c9c51"></script>
-<script src="/ui-lang.js?v=cb53c73d"></script>
+<script src="/ui-lang.js?v=3540b368"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
@@ -648,9 +648,13 @@ function renderJoinBanner(code) {
   document.getElementById('jbCode').textContent = code;
   const box = document.getElementById('jbQr');
   box.innerHTML = '';
-  new QRCode(box, { text: `${BASE_URL}#${code}`, width: 128, height: 128,
-    colorDark: '#0b0b15', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H });
-  psBrandQR(box);
+  /* If the QR library failed to load, the code + join link above still work — and the rest of
+     startWatching() (questions, warm-up) must still run, so this can never throw. */
+  try {
+    new QRCode(box, { text: `${BASE_URL}#${code}`, width: 128, height: 128,
+      colorDark: '#0b0b15', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H });
+    psBrandQR(box);
+  } catch (e) {}
 }
 
 function leaveSession() {

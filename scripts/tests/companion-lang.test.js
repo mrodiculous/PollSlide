@@ -8,7 +8,7 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const C = fs.readFileSync(path.join(ROOT, 'companion.html'), 'utf8');
 let pass = 0, fail = 0;
 const ok = (n, c, x) => c ? (pass++, console.log('  ✓ ' + n)) : (fail++, console.log('  ✗ ' + n + (x !== undefined ? '  → ' + JSON.stringify(x).slice(0, 400) : '')));
-const LANGS = ['es', 'de', 'fr', 'pt', 'it'];
+const LANGS = ['es', 'de', 'fr', 'pt', 'it', 'nl', 'ja', 'zh', 'ar', 'hi'];   // 11 with English (2026-10-10)
 
 // Load the page's own language code with a given address.
 function load(search) {

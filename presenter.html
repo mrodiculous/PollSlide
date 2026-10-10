@@ -14,7 +14,7 @@
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=cb53c73d"></script>
+<script src="/ui-lang.js?v=3540b368"></script>
 <script src="/tickets.js?v=edb362ec"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -675,6 +675,7 @@
         <button data-i18n-title class="btn btn-ghost" id="makeStudyBtn" onclick="studyThisDeck()" style="display:none;" title="Turn this deck into a StudySlide set of flashcards you can revise with" data-i18n>📚 Study this deck</button>
         <div class="more-group" data-i18n>Results</div>
         <button class="btn btn-ghost" id="reportBtn" onclick="window.open('/report'+(activePresId?('?pres='+encodeURIComponent(activePresId)):''),'_blank')" disabled title="Open the full report" data-i18n-title data-i18n>📊 Report</button>
+        <button data-i18n-title class="btn btn-ghost" id="recapMenuBtn" disabled onclick="window.open('/report?recap=1'+(activePresId?('&pres='+encodeURIComponent(activePresId)):''),'_blank')" title="A page to send everyone after the session: the winner, the trickiest question and the highlights" data-i18n>🎁 Share recap</button>
         <button class="btn btn-reset" id="resetBtn" onclick="confirmResetAll()" disabled data-i18n>↺ Reset All Tallies</button>
         <div class="more-sep"></div>
         <button class="btn btn-ghost" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark" data-i18n-title>🌙</button>
@@ -2012,7 +2013,11 @@ function copilotReady() {
   return (textCount + voteCount) >= 3;
 }
 function copilotBtnHtml() {
-  if (!copilotReady()) return '';
+  /* Shown from the first moment a question is live, so presenters know it exists — it used to
+     appear out of nowhere at the 3rd answer, and nobody found it (2026-10-10). */
+  if (!copilotReady()) return window._psCopilot
+    ? `<div title="${tr('Polly reads how the room just answered and suggests a follow-up question you can launch instantly')}" style="display:inline-flex;align-items:center;gap:6px;margin:2px 0 10px;padding:7px 12px;border:1px dashed var(--border2);border-radius:10px;font-size:12px;color:var(--muted);">🎯 ${tr('Follow-up ideas unlock after 3 answers')}</div>`
+    : '';
   return `<button onclick="runCopilot()" title="${tr('Polly reads how the room just answered and suggests a follow-up question you can launch instantly')}" style="display:inline-flex;align-items:center;gap:6px;margin:2px 0 10px;padding:8px 14px;background:linear-gradient(120deg,#43e97b,#38d9f5);border:none;color:#06281a;border-radius:10px;font-family:Syne,sans-serif;font-weight:800;font-size:13px;cursor:pointer;box-shadow:0 4px 14px rgba(67,233,123,.3);">🎯 Suggest a follow-up</button>`;
 }
 async function runCopilot() {
@@ -3758,6 +3763,7 @@ function selectPresentation(id) {
   document.getElementById('presentBtn').disabled = false;
   document.getElementById('resetBtn').disabled = false;
   document.getElementById('reportBtn').disabled = false;
+  { const rb = document.getElementById('recapMenuBtn'); if (rb) rb.disabled = false; }
   document.getElementById('bigScreenBtn').disabled = false;
   document.getElementById('qaBtn').disabled = false;
   syncTeamModeBtn();
@@ -3822,6 +3828,7 @@ async function doDeletePres() {
     document.getElementById('presentBtn').disabled = true;
     document.getElementById('resetBtn').disabled = true;
     document.getElementById('reportBtn').disabled = true;
+    { const rb = document.getElementById('recapMenuBtn'); if (rb) rb.disabled = true; }
     document.getElementById('qaBtn').disabled = true;
     document.getElementById('bigScreenBtn').disabled = true;
     showSetup();
@@ -4218,6 +4225,7 @@ function switchProduct(key) {
     document.getElementById('presentBtn').disabled = true;
     document.getElementById('resetBtn').disabled = true;
     document.getElementById('reportBtn').disabled = true;
+    { const rb = document.getElementById('recapMenuBtn'); if (rb) rb.disabled = true; }
     document.getElementById('bigScreenBtn').disabled = true;
     document.getElementById('qaBtn').disabled = true;
   }
@@ -5844,7 +5852,7 @@ function openPresentPicker() {
           'Full screen in this window, with live results built in. You control the questions from the same screen.',
           'Best for: most sessions — nothing else to set up')}
     ${opt('closePresentPicker();openBigScreen()', '🖥️', 'Big screen',
-          'Opens the join screen and live results in a second window — put it on the projector and keep this one for yourself.',
+          'Opens the join screen and live results in a second window — put it on the projector and keep this one for yourself. While people arrive, it plays warm-up trivia under the join code.',
           'Best for: a projector or second display')}
     ${opt('closePresentPicker();goPresentSlide()', '🎬', 'Build a full deck around it',
           'Take it into PresentSlide: import your slides, weave these questions in, pick a theme and present the whole thing.',
@@ -8318,9 +8326,11 @@ function toggleTeamMode() {
   const pres = presentations[activePresId];
   pres.teamMode = !pres.teamMode;
   scheduleSave();
-  if (pres.sessionCode) db.ref(`quiz_builder/${pres.sessionCode}/teamMode`).set(!!pres.teamMode).catch(()=>{});
+  if (pres.sessionCode) {
+    db.ref(`quiz_builder/${pres.sessionCode}/teamMode`).set(!!pres.teamMode).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/focusTrack`).set(!!pres.focusTrack).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/retakes`).set(pres.retakes ? PSRetakes.retakePolicy(pres.retakes) : null).catch(()=>{});
+  }
   syncTeamModeBtn();
   toast(pres.teamMode
     ? tr('👥 Team play ON — the audience will pick or create a team when they join. Leaderboards rank teams (average member score).')
@@ -11461,6 +11471,23 @@ function renderModePicker() {
     <h2 data-i18n style="margin-bottom:2px;">How do you want to run this?</h2>
     <p data-i18n style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">Changes how points are scored and shown. Your questions, reveal and results all work the same either way — you can switch between rounds.</p>
     ${cards}
+    ${(() => {
+      /* Team play lived only in the ⋯ menu, where nobody found it (2026-10-10). This is where a
+         presenter decides how the session plays, so it is offered here too — same flag. */
+      const teams = isTeamMode();
+      const b = (on, icon, name, sub) => `<button onclick="pickTeams(${on})" style="flex:1;text-align:left;padding:10px 12px;border-radius:11px;cursor:pointer;font-family:inherit;
+          background:${teams === on ? 'rgba(108,99,255,0.16)' : 'var(--surface2)'};border:1px solid ${teams === on ? 'var(--accent)' : 'var(--border)'};color:var(--text);">
+          <span style="display:block;font-size:16px;line-height:1.1;">${icon}</span>
+          <span data-i18n style="display:block;font-family:Syne,sans-serif;font-weight:700;font-size:12.5px;margin-top:3px;">${name}</span>
+          <span data-i18n style="display:block;font-size:10.5px;color:var(--muted);margin-top:1px;line-height:1.35;">${sub}</span></button>`;
+      return `<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+        <div data-i18n style="font-family:Syne,sans-serif;font-weight:800;font-size:13px;margin-bottom:2px;">Players</div>
+        <p data-i18n style="color:var(--muted);font-size:12px;margin-bottom:9px;line-height:1.5;">With teams, people pick or create a team on their phone after their name, and the leaderboard ranks teams by their average score.</p>
+        <div style="display:flex;gap:8px;">
+          ${b(false, '🙋', 'Everyone for themselves', 'One leaderboard of people')}
+          ${b(true, '👥', 'Teams (pub quiz)', 'Tables play together')}
+        </div></div>`;
+    })()}
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
       <div data-i18n style="font-family:Syne,sans-serif;font-weight:800;font-size:13px;margin-bottom:2px;">Atmosphere</div>
       <p data-i18n style="color:var(--muted);font-size:12px;margin-bottom:9px;line-height:1.5;">What the room hears and sees while it waits. Nothing here changes the questions or the scoring — it is only how the wait feels. Remembered per deck.</p>
@@ -11503,6 +11530,7 @@ function renderModePicker() {
   m.style.display = 'flex';
 }
 function pickMode(id) { _pickedMode = psModeOk(id); renderModePicker(); }
+function pickTeams(on) { if (isTeamMode() !== !!on) toggleTeamMode(); renderModePicker(); }
 function pickAtmosphere(id) { _pickedAtmos = PSAtmosphere.atmosphereFor(id).id; renderModePicker(); }
 function pickDisplay(id) {
   _presentDisplay = (id === 'window') ? 'window' : 'fullscreen';
