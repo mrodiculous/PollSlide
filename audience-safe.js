@@ -20,6 +20,7 @@
  * WHAT IT TOUCHES — only what the audience can write:
  *   sessions/<code>/responses | qa | teams | attempts | study
  *   users/<uid>/archives               (saved copies of old answers)
+ *   loop_answers | loop_scores | loop_react   (LoopSlide: every byte there is a player's)
  * Presenter-authored data (questions, decks, settings) is left exactly as it is.
  *
  * WHAT IT DELIBERATELY DOES NOT DO
@@ -45,6 +46,7 @@
   }
 
   var SUB = { responses: 1, qa: 1, teams: 1, attempts: 1, study: 1 };   // audience-writable, per session
+  var LOOP = { loop_answers: 1, loop_scores: 1, loop_react: 1 };          // audience-only trees (owner can just delete)
 
   function cleanSession(v) {
     if (!v || typeof v !== 'object') return v;
@@ -60,6 +62,7 @@
     if (v === null || v === undefined) return v;
     var p = String(path || '').split('?')[0].replace(/^[a-z]+:\/\/[^/]+/i, '').split('/').filter(Boolean)
       .map(function (s) { try { return decodeURIComponent(s); } catch (e) { return s; } });
+    if (LOOP[p[0]]) return clean(v);
     if (p[0] === 'sessions') {
       if (p.length >= 3) return SUB[p[2]] ? clean(v) : v;
       if (p.length === 2) return cleanSession(v);

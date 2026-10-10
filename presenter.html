@@ -14,7 +14,7 @@
 <script src="/atmosphere.js?v=25b328fe"></script>
 <script src="/starters.js?v=2aadb83b"></script>
 <script src="/starter-media.js?v=fe372f90"></script>
-<script src="/ui-lang.js?v=ced1d8c8"></script>
+<script src="/ui-lang.js?v=3909522b"></script>
 <script src="/tickets.js?v=edb362ec"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
@@ -675,6 +675,7 @@
         <button data-i18n-title class="btn btn-ghost" id="makeStudyBtn" onclick="studyThisDeck()" style="display:none;" title="Turn this deck into a StudySlide set of flashcards you can revise with" data-i18n>📚 Study this deck</button>
         <div class="more-group" data-i18n>Results</div>
         <button class="btn btn-ghost" id="reportBtn" onclick="window.open('/report'+(activePresId?('?pres='+encodeURIComponent(activePresId)):''),'_blank')" disabled title="Open the full report" data-i18n-title data-i18n>📊 Report</button>
+        <button data-i18n-title class="btn btn-ghost" id="recapMenuBtn" disabled onclick="window.open('/report?recap=1'+(activePresId?('&pres='+encodeURIComponent(activePresId)):''),'_blank')" title="A page to send everyone after the session: the winner, the trickiest question and the highlights" data-i18n>🎁 Share recap</button>
         <button class="btn btn-reset" id="resetBtn" onclick="confirmResetAll()" disabled data-i18n>↺ Reset All Tallies</button>
         <div class="more-sep"></div>
         <button class="btn btn-ghost" id="themeBtn" onclick="toggleTheme()" title="Toggle light/dark" data-i18n-title>🌙</button>
@@ -1251,7 +1252,7 @@
 <script src="/ps-env.js?v=717fca7b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
 <!-- Audience text can never become markup: must load right after the database SDK. -->
-<script src="/audience-safe.js?v=c2b0a002"></script>
+<script src="/audience-safe.js?v=db05f20b"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 <script>
@@ -1328,6 +1329,12 @@ function normalizeTier(t) {
   return TIERS[t] ? t : 'free';
 }
 let userTier = 'free';
+/* "Made with PollSlide" on audience phones (2026-10-10). After someone answers, their phone
+   shows one small line linking to pollslide.com — every session quietly shows the product
+   to the room. Paid plans may switch it off (Account settings → Audience phones); on Free
+   it always shows. Published per session as quiz_builder/<code>/madeWithOff. */
+let hideMadeWith = false;
+function madeWithOff() { return !!hideMadeWith && normalizeTier(userTier) !== 'free'; }
 function tierLimits() { return TIERS[normalizeTier(userTier)] || TIERS.free; }
 
 // ── Polly AI monthly quota ──────────────────────────────────────────────────
@@ -1514,6 +1521,7 @@ auth.onAuthStateChanged(user => {
     } catch(e) {}
     // Load the user's plan tier, then reconcile team membership (accept any pending
     // invite for this email; downgrade if removed from a workspace) before loading.
+    db.ref(`users/${userId}/settings/hideMadeWith`).once('value').then(s => { hideMadeWith = s.val() === true; }).catch(() => {});
     db.ref(`users/${userId}/tier`).once('value').then(async snap => {
       const t = snap.val();
       userTier = ['pro','team','white','team_small','team_large'].includes(t) ? t : 'free';
@@ -2005,7 +2013,11 @@ function copilotReady() {
   return (textCount + voteCount) >= 3;
 }
 function copilotBtnHtml() {
-  if (!copilotReady()) return '';
+  /* Shown from the first moment a question is live, so presenters know it exists — it used to
+     appear out of nowhere at the 3rd answer, and nobody found it (2026-10-10). */
+  if (!copilotReady()) return window._psCopilot
+    ? `<div title="${tr('Polly reads how the room just answered and suggests a follow-up question you can launch instantly')}" style="display:inline-flex;align-items:center;gap:6px;margin:2px 0 10px;padding:7px 12px;border:1px dashed var(--border2);border-radius:10px;font-size:12px;color:var(--muted);">🎯 ${tr('Follow-up ideas unlock after 3 answers')}</div>`
+    : '';
   return `<button onclick="runCopilot()" title="${tr('Polly reads how the room just answered and suggests a follow-up question you can launch instantly')}" style="display:inline-flex;align-items:center;gap:6px;margin:2px 0 10px;padding:8px 14px;background:linear-gradient(120deg,#43e97b,#38d9f5);border:none;color:#06281a;border-radius:10px;font-family:Syne,sans-serif;font-weight:800;font-size:13px;cursor:pointer;box-shadow:0 4px 14px rgba(67,233,123,.3);">🎯 Suggest a follow-up</button>`;
 }
 async function runCopilot() {
@@ -2238,8 +2250,8 @@ function openPlanPicker() {
       const card = document.createElement('div');
       card.style.cssText = 'padding:22px 18px;border-right:' + (isLast?'none':'1px solid '+D.border) + ';display:flex;flex-direction:column;gap:0;position:relative;' + (p.popular?'background:rgba(108,99,255,0.12);':'') + (isCurrent?'background:rgba(255,255,255,0.06);':'');
 
-      const feats = p.features.map(f => '<div style="font-size:12px;display:flex;gap:7px;margin-bottom:6px;color:'+D.text+'"><span style="color:'+D.accent3+';flex-shrink:0;">✓</span><span>' + f + '</span></div>').join('');
-      const miss = (p.missing||[]).map(f => '<div style="font-size:12px;display:flex;gap:7px;margin-bottom:6px;color:'+D.muted+'"><span style="flex-shrink:0;">—</span><span>' + f + '</span></div>').join('');
+      const feats = p.features.map(f => '<div style="font-size:12px;display:flex;gap:7px;margin-bottom:6px;color:'+D.text+'"><span style="color:'+D.accent3+';flex-shrink:0;">✓</span><span>' + tr(f) + '</span></div>').join('');
+      const miss = (p.missing||[]).map(f => '<div style="font-size:12px;display:flex;gap:7px;margin-bottom:6px;color:'+D.muted+'"><span style="flex-shrink:0;">—</span><span>' + tr(f) + '</span></div>').join('');
 
       // Enterprise has no Stripe price behind it at all — it can never go through
       // checkout OR the billing portal, so it needs its own branch ahead of the
@@ -2262,11 +2274,11 @@ function openPlanPicker() {
       // Excludes Enterprise: there is no subscription for the portal to switch.
       const isPaidSwitch = isPaidUser && !isCurrent && p.key !== 'free' && !isEnterprise;
       const ctaText = isCurrent
-        ? (isEnterprise ? 'Your plan' : isPaidUser ? 'Manage billing' : 'Current plan')
+        ? (isEnterprise ? tr('Your plan') : isPaidUser ? tr('Manage billing') : tr('Current plan'))
         : isEnterprise ? 'Contact us'
         : isDowngradeToFree ? 'Downgrade (cancel plan)'
         : isPaidSwitch ? 'Switch to ' + p.name
-        : 'Upgrade to ' + p.name;
+        : trf('Upgrade to {plan}', { plan: p.name });
       // An enterprise account's OWN card, viewed by itself, must not offer "Manage
       // billing" — most enterprise deals are invoiced by hand and have no Stripe
       // subscription for the portal to open, which would dead-end exactly like the
@@ -2286,7 +2298,7 @@ function openPlanPicker() {
 
       card.innerHTML =
         (p.popular ? '<div style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:'+D.accent+';color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:0 0 8px 8px;">★ Most popular</div>' : '') +
-        (isCurrent ? '<div style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:'+D.surface2+';border:1px solid '+D.border2+';color:'+D.muted+';font-size:10px;font-weight:600;padding:3px 10px;border-radius:0 0 8px 8px;">Your plan</div>' : '') +
+        (isCurrent ? '<div style="position:absolute;top:-1px;left:50%;transform:translateX(-50%);background:'+D.surface2+';border:1px solid '+D.border2+';color:'+D.muted+';font-size:10px;font-weight:600;padding:3px 10px;border-radius:0 0 8px 8px;">' + tr('Your plan') + '</div>' : '') +
         '<div style="font-family:Syne,sans-serif;font-weight:800;font-size:16px;margin-bottom:4px;color:' + 
           (p.color==='var(--muted)'?D.muted:p.color==='var(--accent)'?D.accent:p.color==='var(--accent3)'?D.accent3:p.color==='var(--accent4)'?D.accent4:p.color) + 
           ';">' + p.name + '</div>' +
@@ -2670,6 +2682,15 @@ async function openAccountSettings(focus) {
           <button class="btn btn-ghost btn-sm" onclick="closeAccountSettings();openPlanPicker()" data-i18n>✨ See plans & upgrade</button>`}
     </div>
 
+    <div style="${card}" id="acctMadeWithCard">
+      <div style="${h}" data-i18n>${tr('Audience phones')}</div>
+      <label style="display:flex;gap:9px;align-items:flex-start;font-size:13px;line-height:1.5;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);cursor:${tierKey === 'free' ? 'default' : 'pointer'};">
+        <input type="checkbox" id="acctMadeWith" style="margin-top:3px;" ${(tierKey === 'free' || !hideMadeWith) ? 'checked' : ''} ${tierKey === 'free' ? 'disabled' : ''} onchange="acctSetMadeWith(this.checked)">
+        <span data-i18n>${tr('Show “Made with PollSlide” on phones after people answer')}</span>
+      </label>
+      <div style="${note};margin-top:6px;" data-i18n>${tierKey === 'free' ? tr('Paid plans can turn this off.') : tr('One small line at the bottom of the phone, after someone answers. Changes apply to every deck the next time you open or present it.')}</div>
+    </div>
+
     <div style="${card}" id="acctEmailCard">
       <div style="${h}" data-i18n>${tr('Change email address')}</div>
       ${pending ? `<div id="acctPending" style="background:rgba(247,183,49,.12);border:1px solid rgba(247,183,49,.35);border-radius:9px;padding:9px 11px;font-size:12.5px;line-height:1.5;margin-bottom:9px;">
@@ -2721,7 +2742,35 @@ async function openAccountSettings(focus) {
   m.style.display = 'flex';
   if (focus === 'delete') setTimeout(() => document.getElementById('acctDeleteCard')?.scrollIntoView({ block: 'center' }), 60);
 }
+/* Deck-menu labels, translated — including the two that carry data ("Class: <name>",
+   "Retakes: 3 tries, best counts"). 2026-10-10: the whole menu was English in every language. */
+/* The teacher's one-line description of the retake policy, translated (retakes.js keeps the
+   English source used by its tests and the student phone). */
+function retakeTeacherText(pol) {
+  const p = PSRetakes.retakePolicy(pol);
+  if (!p.allowed) return tr('One answer per question. A second answer is refused.');
+  const which = p.counts === 'best' ? 'best' : p.counts === 'last' ? 'most recent' : 'first';
+  return p.max === 2 ? tr(`Students can answer twice. The ${which} attempt is graded; every attempt is kept in the report.`)
+                     : trf(`Students can answer up to {n} times. The ${which} attempt is graded; every attempt is kept in the report.`, { n: p.max });
+}
+function trMenu(l) {
+  let m;
+  if ((m = /^Class: (.*)$/.exec(l))) return trf('Class: {name}', { name: m[1] });
+  if ((m = /^Retakes: (\d+) tries, (best|last|first) counts$/.exec(l))) return trf('Retakes: {n} tries, ' + m[2] + ' counts', { n: m[1] });
+  return tr(l);
+}
 function closeAccountSettings() { const m = document.getElementById('acctModal'); if (m) m.remove(); }
+async function acctSetMadeWith(show) {
+  if (normalizeTier(userTier) === 'free') return;          // the checkbox is disabled on Free anyway
+  hideMadeWith = !show;
+  try {
+    await db.ref(`users/${userId}/settings/hideMadeWith`).set(hideMadeWith || null);
+    // Apply straight away to the deck that is open, so a session already running follows.
+    const pres = activePresId && presentations[activePresId];
+    if (pres && pres.sessionCode) db.ref(`quiz_builder/${pres.sessionCode}/madeWithOff`).set(madeWithOff() || null).catch(()=>{});
+    toast(tr('Saved'), 'success');
+  } catch (e) { toast(tr('Something went wrong. Please try again.'), 'danger'); }
+}
 /* Each section answers inside itself, right under the button that was pressed — a message at
    the bottom of the window scrolled people away from what they were doing. */
 function acctSay(msg, kind, where) {
@@ -3314,7 +3363,7 @@ function openRosterEditor(cid) {
   const dupes = PSRoster.possibleDuplicates(c.students || {});
   m.innerHTML = `<div class="modal" style="max-width:520px;">
     <h2 style="margin-bottom:2px;">${escapeHtml(c.name || 'Class')}</h2>
-    <p style="color:var(--muted);font-size:12.5px;margin-bottom:12px;">Paste your class list — one name per line, or straight out of a spreadsheet. Re-paste any time to add or remove people; nobody's past answers are ever lost.</p>
+    <p style="color:var(--muted);font-size:12.5px;margin-bottom:12px;">${tr("Paste your class list — one name per line, or straight out of a spreadsheet. Re-paste any time to add or remove people; nobody's past answers are ever lost.")}</p>
     <textarea id="rosterPaste" placeholder="Ana Ruiz\nBen Cole\nCara Diaz" style="width:100%;height:150px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;padding:10px;font-size:13px;font-family:inherit;">${current.map(s => escapeHtml(s.name)).join('\n')}</textarea>
     ${dupes.length ? `<div style="margin-top:10px;padding:10px 12px;background:rgba(247,183,49,.12);border-left:3px solid var(--accent4);border-radius:0 8px 8px 0;font-size:12.5px;color:var(--muted);">
       <b style="color:var(--accent4);">${tr('Two names look like one person')}</b><br>${dupes.map(p => escapeHtml(p[0].name) + ' / ' + escapeHtml(p[1].name)).join('<br>')}<br>
@@ -3326,8 +3375,8 @@ function openRosterEditor(cid) {
       const opt = (id, icon, name, sub) => `<button onclick="setVerifyMode('${escAttr(cid)}','${id}')" style="flex:1;text-align:left;padding:9px 10px;border-radius:10px;cursor:pointer;font-family:inherit;
         background:${id===mode?'rgba(108,99,255,.16)':'var(--surface2)'};border:1px solid ${id===mode?'var(--accent)':'var(--border)'};color:var(--text);">
         <span style="display:block;font-size:15px;line-height:1.1;">${icon}</span>
-        <span style="display:block;font-family:Syne,sans-serif;font-weight:700;font-size:12px;margin-top:3px;">${name}</span>
-        <span style="display:block;font-size:10px;color:var(--muted);margin-top:1px;line-height:1.35;">${sub}</span></button>`;
+        <span style="display:block;font-family:Syne,sans-serif;font-weight:700;font-size:12px;margin-top:3px;">${tr(name)}</span>
+        <span style="display:block;font-size:10px;color:var(--muted);margin-top:1px;line-height:1.35;">${tr(sub)}</span></button>`;
       return `<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
         <div style="font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">${tr("How students prove it's them")}</div>
         <div style="display:flex;gap:7px;">
@@ -3336,9 +3385,9 @@ function openRosterEditor(cid) {
           ${opt('email','✉️','Emailed codes','Needs student emails')}
         </div>
         <div style="margin-top:9px;padding:9px 11px;background:${comp.collectsPersonalData?'rgba(255,101,132,.10)':'var(--surface2)'};border-left:3px solid ${comp.collectsPersonalData?'var(--accent2)':'var(--border2)'};border-radius:0 8px 8px 0;">
-          <div style="font-size:11.5px;font-weight:600;color:${comp.collectsPersonalData?'var(--accent2)':'var(--text)'};margin-bottom:4px;">${escapeHtml(comp.title)}</div>
+          <div style="font-size:11.5px;font-weight:600;color:${comp.collectsPersonalData?'var(--accent2)':'var(--text)'};margin-bottom:4px;">${escapeHtml(tr(comp.title))}</div>
           <ul style="margin:0;padding-left:16px;font-size:11.5px;color:var(--muted);line-height:1.55;">
-            ${comp.points.map(pt => `<li>${escapeHtml(pt)}</li>`).join('')}
+            ${comp.points.map(pt => `<li>${escapeHtml(tr(pt))}</li>`).join('')}
           </ul>
           ${comp.needsAttestation ? (c.attestedAt
             ? `<div style="font-size:11px;color:var(--accent3);margin-top:6px;">✓ ${trf('Confirmed {d} — recorded for your records.', { d: new Date(c.attestedAt).toLocaleDateString() })}</div>`
@@ -3459,6 +3508,29 @@ function deckOwnerUid(id) {
   return (c && c.ownerUid) ? c.ownerUid : userId;
 }
 function deckPath(id) { return `users/${deckOwnerUid(id)}/presentations/${id}`; }
+/* Session ownership (2026-10-10). quiz_builder/<code> is what every phone, big screen and add-in
+   reads, and it used to be writable by ANY signed-in account — including the anonymous one the
+   Mac companion uses — so anyone holding a room code could rewrite that session's questions.
+   Each code now carries owner (+ deck, so a collaborator's edit grant still counts), and the
+   database rule only lets the owner, an editor of that deck, or support write there.
+   The owner stamps it here, once per code, before the first write: on sign-in for every deck,
+   and right before a new code gets its questions. A code already stamped is left alone. */
+const _qbClaims = {};
+function ensureClaim(code, presId) {
+  if (!code || !userId) return Promise.resolve();
+  if (_qbClaims[code]) return _qbClaims[code];
+  _qbClaims[code] = db.ref(`quiz_builder/${code}/owner`).get().then(snap => {
+    if (snap.exists()) return;
+    const owner = (presId && presentations[presId]) ? deckOwnerUid(presId) : userId;
+    if (owner !== userId) return;                      // a collaborator never claims someone else's code
+    return db.ref(`quiz_builder/${code}`).update({ owner: userId, deck: presId || null });
+  }).catch(() => { delete _qbClaims[code]; });
+  return _qbClaims[code];
+}
+function claimAllMyCodes() {
+  return Promise.all(Object.keys(presentations).filter(id => isDeckOwner(id) && presentations[id] && presentations[id].sessionCode)
+    .map(id => ensureClaim(presentations[id].sessionCode, id)));
+}
 function isCollabDeck(id) { return !!collabDecks[id]; }
 function isDeckOwner(id) { return !isCollabDeck(id); }
 
@@ -3505,6 +3577,7 @@ async function loadPresentations() {
   await loadCollabDecks();   // decks other people let me edit
   await loadMyGrants();      // ...and which of mine other people can edit
 
+  claimAllMyCodes();   // stamp ownership on every deck's session code (no-op once done)
   // Restore last active — and land on its product tab so it's visible in the list.
   const lastActive = localStorage.getItem('ql_active_pres');
   if (lastActive && presentations[lastActive]) {
@@ -3555,6 +3628,7 @@ async function saveCurrentPresentation() {
     // ALSO mirror questions to quiz_builder/sessionCode so participants can find them by QR.
     // Publish productType too so the participant page knows whether to grade (quiz) or not.
     if (pres.sessionCode && pres.questions) {
+      await ensureClaim(pres.sessionCode, activePresId);
       await db.ref(`quiz_builder/${pres.sessionCode}/questions`).set(pres.questions);
       await db.ref(`quiz_builder/${pres.sessionCode}/homes`).set(PSQid.homesMap(pres.questions));
       /* A2 — order changed (a move, a delete, an undo): now that phones can see the new
@@ -3565,6 +3639,7 @@ async function saveCurrentPresentation() {
       await db.ref(`quiz_builder/${pres.sessionCode}/language`).set(pres.language || 'en');
       await db.ref(`quiz_builder/${pres.sessionCode}/teamMode`).set(!!pres.teamMode);
       await db.ref(`quiz_builder/${pres.sessionCode}/focusTrack`).set(!!pres.focusTrack);
+      db.ref(`quiz_builder/${pres.sessionCode}/madeWithOff`).set(madeWithOff() || null).catch(()=>{});
       db.ref(`quiz_builder/${pres.sessionCode}/retakes`).set(pres.retakes ? PSRetakes.retakePolicy(pres.retakes) : null).catch(()=>{});
       await publishRosterFor(pres);
     }
@@ -3714,14 +3789,15 @@ function selectPresentation(id) {
   // The saved POSITION goes stale if the deck was reordered elsewhere; the id cannot.
   resyncLiveIdx();
   // Mirror questions to quiz_builder path so participants can find them
-  if (pres.sessionCode && questions.length > 0) {
+  if (pres.sessionCode && questions.length > 0) ensureClaim(pres.sessionCode, id).then(() => {
     db.ref(`quiz_builder/${pres.sessionCode}/questions`).set(questions).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/homes`).set(PSQid.homesMap(questions)).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/productType`).set(presType(pres)).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/teamMode`).set(!!pres.teamMode).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/focusTrack`).set(!!pres.focusTrack).catch(()=>{});
+    db.ref(`quiz_builder/${pres.sessionCode}/madeWithOff`).set(madeWithOff() || null).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/retakes`).set(pres.retakes ? PSRetakes.retakePolicy(pres.retakes) : null).catch(()=>{});
-  }
+  });
 
   // Update topbar
   document.getElementById('activePres').innerHTML = `<strong>${pres.name}</strong> <span style="font-size:11px;color:var(--muted);margin-left:4px;">· ${pres.sessionCode}</span>`;
@@ -3729,6 +3805,7 @@ function selectPresentation(id) {
   document.getElementById('presentBtn').disabled = false;
   document.getElementById('resetBtn').disabled = false;
   document.getElementById('reportBtn').disabled = false;
+  { const rb = document.getElementById('recapMenuBtn'); if (rb) rb.disabled = false; }
   document.getElementById('bigScreenBtn').disabled = false;
   document.getElementById('qaBtn').disabled = false;
   syncTeamModeBtn();
@@ -3793,6 +3870,7 @@ async function doDeletePres() {
     document.getElementById('presentBtn').disabled = true;
     document.getElementById('resetBtn').disabled = true;
     document.getElementById('reportBtn').disabled = true;
+    { const rb = document.getElementById('recapMenuBtn'); if (rb) rb.disabled = true; }
     document.getElementById('qaBtn').disabled = true;
     document.getElementById('bigScreenBtn').disabled = true;
     showSetup();
@@ -3918,6 +3996,7 @@ async function doDuplicatePresentation() {
   await db.ref(`users/${userId}/presentations/${newId}`).set(presentations[newId]);
 
   // Mirror questions to quiz_builder so participants can find them
+  await ensureClaim(newCode, newId);
   await db.ref(`quiz_builder/${newCode}/questions`).set(questions);
   await db.ref(`quiz_builder/${newCode}/productType`).set(presType(source));
 
@@ -3988,6 +4067,7 @@ async function makeStudySet(srcId) {
     createdAt: Date.now(), productType: 'study', questions: cards
   };
   await db.ref(deckPath(id)).set(presentations[id]);
+  await ensureClaim(code, id);
   await db.ref(`quiz_builder/${code}/questions`).set(cards);
   await db.ref(`quiz_builder/${code}/productType`).set('study');
 
@@ -4034,6 +4114,7 @@ async function copyPresToProduct(srcId, targetType) {
   const base = src.name.replace(/ — (Poll|Survey|Quiz|Study)$/, '');
   presentations[id] = { id, name: base + ' — ' + PRODUCTS[targetType].name.replace('Slide',''), sessionCode: code, createdAt: Date.now(), productType: targetType, questions: newQs };
   await db.ref(deckPath(id)).set(presentations[id]);
+  await ensureClaim(code);
   await db.ref(`quiz_builder/${code}/questions`).set(newQs);
   await db.ref(`quiz_builder/${code}/productType`).set(targetType);
   activeProduct = targetType;
@@ -4099,6 +4180,7 @@ async function doCopyQuestion(targetPresId) {
 
   const code = presentations[targetPresId].sessionCode;
   await db.ref(deckPath(targetPresId) + '/questions').set(targetQs);
+  await ensureClaim(code, targetPresId);
   await db.ref(`quiz_builder/${code}/questions`).set(targetQs);
   await db.ref(`quiz_builder/${code}/homes`).set(PSQid.homesMap(targetQs));
   await db.ref(`quiz_builder/${code}/productType`).set(presType(presentations[targetPresId]));
@@ -4146,7 +4228,7 @@ function renderProductTabs() {
   const total = Object.values(presentations).filter(pr => !pr.archived).length;
   const tabs = [`<div class="product-tab ${typeFilter==='all'?'active':''}" onclick="switchProduct('all')" title="${tr('Everything, whatever its type')}">
       <span class="product-tab-icon">🗂️</span>
-      <span class="product-tab-label">All${total?` (${total})`:''}</span>
+      <span class="product-tab-label">${tr('All')}${total?` (${total})`:''}</span>
     </div>`].concat(PRODUCT_ORDER.map(key => {
     const p = PRODUCTS[key];
     const n = Object.values(presentations).filter(pr => presType(pr) === key && !pr.archived).length;
@@ -4189,6 +4271,7 @@ function switchProduct(key) {
     document.getElementById('presentBtn').disabled = true;
     document.getElementById('resetBtn').disabled = true;
     document.getElementById('reportBtn').disabled = true;
+    { const rb = document.getElementById('recapMenuBtn'); if (rb) rb.disabled = true; }
     document.getElementById('bigScreenBtn').disabled = true;
     document.getElementById('qaBtn').disabled = true;
   }
@@ -4610,7 +4693,7 @@ function popMenu(ev, items) {
   m.id = 'rowMenu';
   m.innerHTML = items.map(it => it === '-'
     ? '<div class="rm-sep"></div>'
-    : `<button class="rm-item ${it.danger ? 'danger' : ''}" onclick="closeRowMenu();${it.act}">${it.icon} ${escapeHtml(it.label)}</button>`).join('');
+    : `<button class="rm-item ${it.danger ? 'danger' : ''}" onclick="closeRowMenu();${it.act}">${it.icon} ${escapeHtml(trMenu(it.label))}</button>`).join('');
   document.body.appendChild(m);
   const r = ev.currentTarget.getBoundingClientRect();
   m.style.top  = Math.min(r.bottom + 4, window.innerHeight - m.offsetHeight - 10) + 'px';
@@ -5391,7 +5474,7 @@ async function clearDeckGifs(deckId) {
 async function publishDeckGifs(deckId) {
   const p = presentations[deckId];
   if (!p || !p.sessionCode) return;
-  try { await db.ref(`quiz_builder/${p.sessionCode}/questions`).set(p.questions || []); } catch (e) {}
+  try { await ensureClaim(p.sessionCode); await db.ref(`quiz_builder/${p.sessionCode}/questions`).set(p.questions || []); } catch (e) {}
 }
 
 /* Second attempts, per deck. Two choices, and they are genuinely separate: whether a
@@ -5414,7 +5497,7 @@ function openRetakeModal(deckId) {
     ['first', 'First attempt', 'The retake is recorded for you to see, but the original is graded.'],
   ].map(([v, label, why]) => `<button class="rt-mode ${pol.counts === v ? 'on' : ''}"
       onclick="setRetakes('${escAttr(deckId)}',true,${pol.max},'${v}')" ${pol.allowed ? '' : 'disabled'}>
-      <b>${label}</b><span>${why}</span></button>`).join('');
+      <b>${tr(label)}</b><span>${tr(why)}</span></button>`).join('');
 
   m.innerHTML = `<div class="modal" style="max-width:470px;">
     <h2 style="margin-bottom:2px;">${tr('Second attempts')}</h2>
@@ -5436,7 +5519,7 @@ function openRetakeModal(deckId) {
       ${tr('Which attempt is graded')}</p>
     ${modes}
     <p style="color:var(--muted);font-size:12px;margin-top:12px;line-height:1.5;">
-      ${escapeHtml(PSRetakes.describePolicy(pol, 'teacher'))}</p>
+      ${escapeHtml(retakeTeacherText(pol))}</p>
     <button class="btn btn-ghost" style="width:100%;margin-top:12px;" onclick="closeRetakeModal()">Done</button>
   </div>`;
   m.style.display = 'flex';
@@ -5642,7 +5725,7 @@ function openDeckShareModal(id, asCollab) {
     <textarea id="deckShareNote" rows="2" placeholder="${tr("Here's the Unit 3 quiz we talked about.")}"
            style="width:100%;margin:6px 0 14px;padding:9px 10px;background:var(--surface2);color:var(--text);border:1px solid var(--border2);border-radius:9px;font-size:13px;font-family:inherit;resize:vertical;"></textarea>
     <div id="deckShareErr" style="display:none;color:var(--accent2);font-size:12px;margin-bottom:10px;"></div>
-    <button class="btn btn-primary" id="deckShareSendBtn" style="width:100%;" onclick="doDeckShare('${escAttr(id)}')">${_shareRole === 'edit' ? '🤝 Send invite' : '📤 Send copy'}</button>
+    <button class="btn btn-primary" id="deckShareSendBtn" style="width:100%;" onclick="doDeckShare('${escAttr(id)}')">${_shareRole === 'edit' ? tr('🤝 Send invite') : tr('📤 Send copy')}</button>
     <button class="btn btn-ghost" style="width:100%;margin-top:8px;" onclick="closeDeckShareModal()">Cancel</button>
     <p style="color:var(--muted);font-size:11px;line-height:1.5;margin-top:12px;text-align:center;">
       ${tr("They don't need a PollSlide account yet — it'll be waiting when they sign in.")}
@@ -5802,9 +5885,9 @@ function openPresentPicker() {
     <button onclick="${act}" style="display:flex;gap:13px;align-items:flex-start;text-align:left;width:100%;margin-bottom:8px;padding:13px 14px;border-radius:12px;cursor:pointer;font-family:inherit;background:var(--surface2);border:1px solid var(--border);color:var(--text);">
       <span style="font-size:22px;line-height:1.1;flex-shrink:0;">${icon}</span>
       <span style="flex:1;min-width:0;">
-        <span style="display:block;font-family:Syne,sans-serif;font-weight:800;font-size:14px;">${name}</span>
-        <span style="display:block;font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:2px;">${sub}</span>
-        <span style="display:block;font-size:11px;color:var(--accent3);margin-top:4px;">${best}</span>
+        <span style="display:block;font-family:Syne,sans-serif;font-weight:800;font-size:14px;">${tr(name)}</span>
+        <span style="display:block;font-size:12.5px;color:var(--muted);line-height:1.5;margin-top:2px;">${tr(sub)}</span>
+        <span style="display:block;font-size:11px;color:var(--accent3);margin-top:4px;">${tr(best)}</span>
       </span>
     </button>`;
 
@@ -5815,7 +5898,7 @@ function openPresentPicker() {
           'Full screen in this window, with live results built in. You control the questions from the same screen.',
           'Best for: most sessions — nothing else to set up')}
     ${opt('closePresentPicker();openBigScreen()', '🖥️', 'Big screen',
-          'Opens the join screen and live results in a second window — put it on the projector and keep this one for yourself.',
+          'Opens the join screen and live results in a second window — put it on the projector and keep this one for yourself. While people arrive, it plays warm-up trivia under the join code.',
           'Best for: a projector or second display')}
     ${opt('closePresentPicker();goPresentSlide()', '🎬', 'Build a full deck around it',
           'Take it into PresentSlide: import your slides, weave these questions in, pick a theme and present the whole thing.',
@@ -6024,8 +6107,10 @@ async function openCollabModal(id) {
   try {
     const d = await shareApi('collaborators', { presId: id });
     const list = document.getElementById('collabList');
-    list.innerHTML = d.collaborators.length
-      ? d.collaborators.map(c => `<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-top:1px solid var(--border);">
+    const cs = (d && Array.isArray(d.collaborators)) ? d.collaborators : null;
+    if (!cs) throw new Error('no list');
+    list.innerHTML = cs.length
+      ? cs.map(c => `<div style="display:flex;align-items:center;gap:9px;padding:9px 0;border-top:1px solid var(--border);">
            <span style="flex:1;color:var(--text);font-size:13px;">${escapeHtml(c.email || c.uid)}</span>
            <span class="pill" style="font-size:10px;">${tr('can edit')}</span>
            <button class="btn btn-ghost btn-sm" onclick="revokeCollab('${escAttr(id)}','${escAttr(c.uid)}')">${tr('Remove')}</button>
@@ -6033,7 +6118,7 @@ async function openCollabModal(id) {
       : '<p style="padding:10px 0;">'+tr('Nobody else can edit this yet.')+'</p>';
   } catch (e) {
     const list = document.getElementById('collabList');
-    if (list) list.textContent = 'Could not load: ' + e.message;
+    if (list) list.textContent = tr('Could not load the list. Check your connection and try again.');
   }
 }
 function closeCollabModal() { const m = document.getElementById('collabModal'); if (m) m.remove(); }
@@ -6241,7 +6326,8 @@ async function doReset() {
     await db.ref(`sessions/${code}/responses`).remove();
     await clearRevealState(code);
     if (questions.length > 0) {
-      await db.ref(`quiz_builder/${code}/questions`).set(questions);
+      await ensureClaim(code, activePresId);
+  await db.ref(`quiz_builder/${code}/questions`).set(questions);
     }
     clearRightPanel();
     renderQList();
@@ -6288,7 +6374,8 @@ async function doResetPres() {
     await db.ref(`sessions/${code}/qa`).remove(); // clear audience Q&A for the next event too
     await clearRevealState(code);
     if (qs.length > 0) {
-      await db.ref(`quiz_builder/${code}/questions`).set(qs);
+      await ensureClaim(code);
+  await db.ref(`quiz_builder/${code}/questions`).set(qs);
     }
 
     // Step 3: Now update UI — Firebase is already empty so re-attaching listeners is safe
@@ -8280,7 +8367,7 @@ function syncTeamModeBtn() {
   // only ever restyled the label, so the button was never clickable. Keep this line.
   b.disabled = !activePresId;
   const on = isTeamMode();
-  b.textContent = on ? '👥 Teams: On' : '👥 Teams: Off';
+  b.textContent = tr(on ? '👥 Teams: On' : '👥 Teams: Off');
   b.style.color = on ? 'var(--accent3)' : '';
   b.style.borderColor = on ? 'var(--accent3)' : '';
 }
@@ -8289,9 +8376,11 @@ function toggleTeamMode() {
   const pres = presentations[activePresId];
   pres.teamMode = !pres.teamMode;
   scheduleSave();
-  if (pres.sessionCode) db.ref(`quiz_builder/${pres.sessionCode}/teamMode`).set(!!pres.teamMode).catch(()=>{});
+  if (pres.sessionCode) {
+    db.ref(`quiz_builder/${pres.sessionCode}/teamMode`).set(!!pres.teamMode).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/focusTrack`).set(!!pres.focusTrack).catch(()=>{});
     db.ref(`quiz_builder/${pres.sessionCode}/retakes`).set(pres.retakes ? PSRetakes.retakePolicy(pres.retakes) : null).catch(()=>{});
+  }
   syncTeamModeBtn();
   toast(pres.teamMode
     ? tr('👥 Team play ON — the audience will pick or create a team when they join. Leaderboards rank teams (average member score).')
@@ -10877,7 +10966,7 @@ async function openReport() {
   if (!qs.length) { toast(tr('No questions to report on.'),'info'); return; }
 
   document.getElementById('reportTitle').textContent = (pres.name || 'Untitled') + ' — Response Report';
-  document.getElementById('reportMeta').textContent = 'Session: ' + code + ' · ' + qs.length + ' questions · Generated ' + new Date().toLocaleString();
+  document.getElementById('reportMeta').textContent = trf('Session: {code} · {n} questions · Generated {when}', { code, n: qs.length, when: new Date().toLocaleString(UI_LANG || undefined) });
 
   // Fetch all responses for this presentation
   let allData = {};
@@ -10925,7 +11014,7 @@ async function openReport() {
   _reportData = { pres, report, participants, totalParticipants, totalResponses, totalCorrect };
 
   // ── RENDER STATS ────────────────────────────────────────────────────────────
-  const statBox = (val, label) => '<div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:14px 16px;"><div style="font-family:Syne,sans-serif;font-weight:800;font-size:26px;">' + val + '</div><div style="font-size:11px;color:var(--muted);margin-top:3px;">' + label + '</div></div>';
+  const statBox = (val, label) => '<div style="background:var(--surface);border:1px solid var(--border2);border-radius:12px;padding:14px 16px;"><div style="font-family:Syne,sans-serif;font-weight:800;font-size:26px;">' + val + '</div><div style="font-size:11px;color:var(--muted);margin-top:3px;">' + tr(label) + '</div></div>';
   document.getElementById('reportStats').innerHTML =
     statBox(totalParticipants, 'Participants') +
     statBox(totalResponses, 'Total responses') +
@@ -10964,7 +11053,7 @@ async function openReport() {
 
     return '<div style="background:var(--surface);border:1px solid var(--border2);border-radius:14px;padding:18px;margin-bottom:14px;">' +
       '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">' +
-      '<div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;">Q' + (r.idx+1) + ' · ' + (q.type||'').replace(/_/g,' ') + '</div>' +
+      '<div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;">Q' + (r.idx+1) + ' · ' + escapeHtml(tr((q.type||'').replace(/_/g,' '))) + '</div>' +
       '<div style="font-family:Syne,sans-serif;font-weight:800;font-size:15px;">' + escapeHtml(q.text||'Untitled') + '</div></div>' +
       '<div style="text-align:right;flex-shrink:0;"><div style="font-family:Syne,sans-serif;font-weight:800;font-size:20px;">' + r.totalResponses + '</div>' +
       '<div style="font-size:10px;color:var(--muted);">'+tr('responses')+'</div>' +
@@ -10983,11 +11072,11 @@ async function openReport() {
   const sortedParts = Object.values(participants).sort((a,b) => b.correct - a.correct || b.total - a.total);
   document.getElementById('reportParticipants').innerHTML =
     '<div style="background:var(--surface);border:1px solid var(--border2);border-radius:14px;overflow:hidden;">' +
-    '<div style="padding:13px 16px;border-bottom:1px solid var(--border);font-family:Syne,sans-serif;font-weight:700;font-size:13px;">Participants (' + sortedParts.length + ')</div>' +
+    '<div style="padding:13px 16px;border-bottom:1px solid var(--border);font-family:Syne,sans-serif;font-weight:700;font-size:13px;">' + tr('Participants') + ' (' + sortedParts.length + ')</div>' +
     '<table style="width:100%;border-collapse:collapse;">' +
-    '<thead><tr><th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);">Name</th>' +
-    '<th style="padding:9px 14px;text-align:center;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);">Answered</th>' +
-    (hasQuiz ? '<th style="padding:9px 14px;text-align:center;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);">Correct</th>' : '') +
+    '<thead><tr><th style="padding:9px 14px;text-align:left;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);">' + tr('Name') + '</th>' +
+    '<th style="padding:9px 14px;text-align:center;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);">' + tr('Answered') + '</th>' +
+    (hasQuiz ? '<th style="padding:9px 14px;text-align:center;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;border-bottom:1px solid var(--border);">' + tr('Correct') + '</th>' : '') +
     '</tr></thead><tbody>' +
     sortedParts.map(p =>
       '<tr><td style="padding:8px 14px;font-size:13px;border-bottom:1px solid var(--border);">' + escapeHtml(p.name) + '</td>' +
@@ -11432,6 +11521,23 @@ function renderModePicker() {
     <h2 data-i18n style="margin-bottom:2px;">How do you want to run this?</h2>
     <p data-i18n style="color:var(--muted);font-size:12.5px;margin-bottom:14px;">Changes how points are scored and shown. Your questions, reveal and results all work the same either way — you can switch between rounds.</p>
     ${cards}
+    ${(() => {
+      /* Team play lived only in the ⋯ menu, where nobody found it (2026-10-10). This is where a
+         presenter decides how the session plays, so it is offered here too — same flag. */
+      const teams = isTeamMode();
+      const b = (on, icon, name, sub) => `<button onclick="pickTeams(${on})" style="flex:1;text-align:left;padding:10px 12px;border-radius:11px;cursor:pointer;font-family:inherit;
+          background:${teams === on ? 'rgba(108,99,255,0.16)' : 'var(--surface2)'};border:1px solid ${teams === on ? 'var(--accent)' : 'var(--border)'};color:var(--text);">
+          <span style="display:block;font-size:16px;line-height:1.1;">${icon}</span>
+          <span data-i18n style="display:block;font-family:Syne,sans-serif;font-weight:700;font-size:12.5px;margin-top:3px;">${name}</span>
+          <span data-i18n style="display:block;font-size:10.5px;color:var(--muted);margin-top:1px;line-height:1.35;">${sub}</span></button>`;
+      return `<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+        <div data-i18n style="font-family:Syne,sans-serif;font-weight:800;font-size:13px;margin-bottom:2px;">Players</div>
+        <p data-i18n style="color:var(--muted);font-size:12px;margin-bottom:9px;line-height:1.5;">With teams, people pick or create a team on their phone after their name, and the leaderboard ranks teams by their average score.</p>
+        <div style="display:flex;gap:8px;">
+          ${b(false, '🙋', 'Everyone for themselves', 'One leaderboard of people')}
+          ${b(true, '👥', 'Teams (pub quiz)', 'Tables play together')}
+        </div></div>`;
+    })()}
     <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
       <div data-i18n style="font-family:Syne,sans-serif;font-weight:800;font-size:13px;margin-bottom:2px;">Atmosphere</div>
       <p data-i18n style="color:var(--muted);font-size:12px;margin-bottom:9px;line-height:1.5;">What the room hears and sees while it waits. Nothing here changes the questions or the scoring — it is only how the wait feels. Remembered per deck.</p>
@@ -11474,6 +11580,7 @@ function renderModePicker() {
   m.style.display = 'flex';
 }
 function pickMode(id) { _pickedMode = psModeOk(id); renderModePicker(); }
+function pickTeams(on) { if (isTeamMode() !== !!on) toggleTeamMode(); renderModePicker(); }
 function pickAtmosphere(id) { _pickedAtmos = PSAtmosphere.atmosphereFor(id).id; renderModePicker(); }
 function pickDisplay(id) {
   _presentDisplay = (id === 'window') ? 'window' : 'fullscreen';

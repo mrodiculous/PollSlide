@@ -3,7 +3,7 @@
 Living punch list. Updated as things land. Owner-only items are things only Rod can do
 (they need a console login, a card, or a lawyer).
 
-Last updated: 2026-10-01 (question reordering planned)
+Last updated: 2026-10-10 (security fix verified, "Made with PollSlide", phone language QA)
 
 ---
 
@@ -17,6 +17,19 @@ Last updated: 2026-10-01 (question reordering planned)
 | ✅ | Leaderboards score people, not devices | `psStandings` folds a student's two devices; a second device is not a free retry. |
 | ✅ | Attempts / retakes | `retakes.js`. Off by default. Teacher picks tries (2/3/5) and which attempt is graded (best/last/first). Every attempt kept at `sessions/$code/attempts`. |
 | ✅ | Gradebook CSV export | `gradebook.js`. One row per student. A blank is not a zero; ungraded questions excluded; formula-injection neutralised (this also fixed the existing answers export). |
+
+## 2026-10-10 — security, growth line, language QA
+
+| | Item | Notes |
+|---|---|---|
+| ✅ | **Audience text can never become markup** | `audience-safe.js`, loaded right after the database SDK on all 16 app pages. Verified against the **real Firebase 10.7.1 compat SDK** in Chromium (val, exportVal, child().val, forEach) — not just the stage stand-in. Now also covers LoopSlide's `loop_answers`/`loop_scores`/`loop_react`. Locked by `scripts/tests/audience-safe.test.js` (50 checks, incl. "every page loads the guard straight after the database script"). |
+| 📝 | No database rule rejecting `<` `>` | Deliberately: it would reject honest answers like "x < 5". The read-side guard is the protection. |
+| ⏸ | PowerPoint LIVE add-in (`powerpoint-content/`) not patched | Frozen for Microsoft review. Add `audience-safe.js` after approval. |
+| ✅ | **Session questions: owner-only writes** (code + rules ready, rules NOT yet published) | `quiz_builder/$code` was writable by any signed-in account incl. anonymous — anyone with a room code could rewrite a session. Now each code carries `owner` (+ `deck`); the rule allows only the owner, an editor of that deck (`deckGrants`), or support. The presenter stamps ownership before its first write (`ensureClaim`, all 8 question-write paths + every deck on sign-in); PresentSlide too. **Verified on Google's real rules engine (emulator):** 48 scenarios (all legit writers allowed, every attack denied; the same attacks succeed on today's rules), plus the REAL presenter driven through 14 flows — its 91 session writes replayed in order, all allowed, owner stamped first on every code incl. a pre-existing unclaimed one. Tests: `scripts/tests/session-owner-rules.test.js`. |
+| ⬜ | **Rollout (Rod), in this order** | 1) merge + deploy the app (owners start stamping themselves on sign-in) · 2) `node scripts/claim-session-owners.js` (dry run) then `--write` — same service-account setup as `scripts/backup.js` · 3) Firebase console → Realtime Database → Rules → paste `database-rules.json` → Publish. Undo = re-publish the previous rules; the owner fields are harmless on their own. |
+| ⬜ | `sessions/$code/currentQuestion` (live pointer) still writable by any signed-in account | Left open on purpose: the Mac companion writes it with an anonymous sign-in, so locking it would cut the companion off. Fix with Mac app 1.3.6: the app registers its anonymous id under the owner (a device grant) and the rule accepts owner + registered devices. Lower risk than the questions node: phones load the question itself from `quiz_builder`. |
+| ✅ | **"Made with PollSlide — run your own, free"** | Last line of the phone's answer card, only after someone answers. 11 languages, right-to-left for Arabic. Links to `pollslide.com/?ref=phone`. Paid plans can switch it off: Account settings → Audience phones (`users/$uid/settings/hideMadeWith`, published per session as `quiz_builder/$code/madeWithOff`). Free always shows it. |
+| ✅ | Phone hard-coded English removed | 32 strings (self-paced quiz/survey, score screen + share text, study-session end, Q&A errors) now in all 11 languages. Every phone key present in every language (142/142). |
 
 ## Next up — found during the 2026-08-31 review
 
